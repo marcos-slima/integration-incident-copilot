@@ -10,6 +10,18 @@ catálogo de APIs/documentos via RAG, identifica o provável ponto de
 falha, sugere causa raiz e próximos passos, e gera um relatório em
 Markdown.
 
+**Por que este projeto existe:** o SAP AI Core exige HANA Cloud como
+camada obrigatória (dezenas de milhares de euros/ano, independente do
+consumo de IA), o que exclui estruturalmente quem ainda está em ECC
+on-premise ou não tem orçamento/infra para BTP — cerca de 40-45% da
+base de clientes SAP ECC no mundo, segundo Gartner/IDC. Este projeto é
+a prova técnica de que dá para levar IA de diagnóstico real (RAG +
+agente + conectores) para esse público, rodando local ou sobre um
+provedor que o cliente já tenha — ver
+[TCO_SAP_AI_CORE_VS_SELF_HOSTED.md](docs/TCO_SAP_AI_CORE_VS_SELF_HOSTED.md).
+E não fica restrito a SAP: o mesmo contrato de conector (`app/connectors/`)
+já cobre um sistema não-SAP (ServiceNow) de verdade, não só mock.
+
 ## Arquitetura
 
 ```
@@ -21,38 +33,56 @@ Frontend/API client
       ▼
 Orquestração via LangGraph
       │
-   ┌──┴───────────────────────┐
-   ▼                          ▼
-RAG Retriever          Conectores SAP
-(PDF/MD/CSV)            (OData/RFC)
-   │                          │
-   └──────────┬───────────────┘
-              ▼
-         LLM / Agente
-              │
-              ▼
-   Resposta + Relatório Markdown
+   ┌──┴────────────────────────────┐
+   ▼                                ▼
+RAG Retriever              Conectores SAP + não-SAP
+(PDF/MD/CSV)             (OData/RFC mock, ServiceNow real)
+   │                                │
+   └──────────────┬─────────────────┘
+                   ▼
+         LLM Gateway (Ollama / OpenAI / Azure OpenAI)
+                   │
+                   ▼
+      Resposta + Relatório Markdown
 ```
+
+Ver [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) para o detalhamento
+por camada (API / orquestração / LLM Gateway / RAG / conectores).
 
 ## Stack
 
 - **API**: FastAPI + Pydantic
 - **Orquestração**: LangGraph
-- **RAG**: LangChain + Qdrant (vector store) + Neo4j (grafo de
-  relacionamento entre interfaces/documentos)
-- **Observabilidade**: Langfuse (tracing de todo o fluxo do agente)
-- **LLM local**: Ollama (qwen2.5-coder / qwen3)
-- **Conectores SAP**: OData / RFC
+- **LLM Gateway**: plugável — Ollama (default, local-first), OpenAI ou
+  Azure OpenAI (`app/llm/factory.py`), sem trocar código do grafo
+- **RAG**: LangChain + Qdrant (vector store)
+- **Observabilidade**: Langfuse (opcional; tracing de todo o fluxo do
+  agente quando configurado)
+- **Conectores**: OData / RFC (SAP, mock) + ServiceNow (chamada HTTP
+  real via Table API, cai em mock só sem instância configurada)
 
 ## Desenvolvimento local
+
+Opção 1 — self-contained, sem depender de infraestrutura pessoal
+(recomendado para rodar/demonstrar este repositório isoladamente):
+
+```bash
+docker compose up -d      # sobe Ollama + Qdrant + a API
+docker compose exec ollama ollama pull qwen2.5-coder:32b
+docker compose exec ollama ollama pull nomic-embed-text
+```
+
+Opção 2 — ambiente de desenvolvimento local (fora de container):
 
 ```bash
 uv sync
 uv run uvicorn app.main:app --reload
 ```
 
-Pré-requisitos: stack Docker local (Qdrant + Neo4j + Langfuse) rodando
-em `~/ai-stack`, Ollama ativo.
+Pré-requisitos da Opção 2: Qdrant e Ollama acessíveis (localmente ou
+via `~/ai-stack`, que também traz Neo4j reservado para uso futuro e o
+stack completo do Langfuse — ver nota em
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)).
 
 ## Status
 
@@ -249,3 +279,62 @@ o que era real do que era falso alarme ou já havia sido corrigido:
   suíte completa de novo. Lição: ao adotar saída estruturada via
   schema, texto explícito no prompt continua necessário para lógica
   de preenchimento — o schema garante a forma, não o conteúdo.
+
+### 10. LLM Gateway plugável (não hardcoded em Ollama)
+
+**Contexto:** o projeto nasceu 100% Ollama/local por decisão
+deliberada (custo zero de API para prototipar). O posicionamento do
+produto evoluiu para viabilizar IA em clientes que não conseguem
+adotar o SAP AI Core — o que não significa que todo cliente rodará
+100% local: alguns já têm OpenAI/Azure OpenAI contratado, ou querem
+mais capacidade do que o hardware local aguenta para um caso
+específico. `diagnose_node` instanciava `ChatOllama` diretamente,
+então trocar de provedor exigiria editar o grafo.
+
+**Decisão:** extrair a escolha do provedor para `app/llm/factory.py`
+(`get_chat_model()`), selecionado via `Settings.llm_provider`
+(ollama/openai/azure_openai). Deliberadamente **não** foi criada uma
+interface própria (tipo um `LLMProvider.generate()` do zero) — o
+factory devolve direto um `BaseChatModel` do LangChain, já que todo o
+resto do grafo (`with_structured_output`, callbacks do Langfuse) já
+depende do contrato do LangChain. Reaproveitar o polimorfismo que a
+lib já oferece é menos código e menos superfície de bug do que
+reimplementar o mesmo contrato — uma escolha de "reuso vs.
+reinvenção", não só "adicionar abstração".
+
+**Validação:** falha alto e claro (`ConfigurationError`), nunca
+silenciosa, quando o provedor escolhido não tem a configuração
+necessária (ex: `openai` sem `OPENAI_API_KEY`) — mesma filosofia dos
+guardrails determinísticos das seções 1 e 3.
+
+### 11. Conector real para sistema não-SAP (ServiceNow) e caminho RFC honesto
+
+**Contexto:** até aqui, os conectores (`ODataConnector`,
+`RFCConnector`) eram mocks assumidos como tal — corretos para
+prototipagem, mas insuficientes para provar a promessa de "integração
+SAP + não-SAP" que o posicionamento atual do produto assume.
+
+**Decisão:** `ServiceNowConnector` faz chamada HTTP real contra a
+Table API do ServiceNow (`GET /api/now/table/incident`) quando
+`SERVICENOW_INSTANCE_URL` está configurado, caindo em modo demo/mock
+apenas na ausência dessa configuração — mesmo princípio dos conectores
+SAP mock (funcionar sem depender de credencial de cliente real), não
+uma limitação técnica. Testado via `httpx.MockTransport`, exercitando
+o código HTTP de verdade (parâmetros de query, autenticação, parsing
+de resposta, tratamento de erro de rede) sem precisar de uma instância
+ServiceNow real.
+
+Em paralelo, `RFCConnector` ganhou um modo `use_real=True` com
+detecção de feature do `pyrfc` (SAP NetWeaver RFC SDK — binário da
+SAP, fora do PyPI): sem o SDK instalado, pedir `use_real=True` falha
+com `ConfigurationError` explicando exatamente o que falta, em vez de
+cair silenciosamente no mock. RFC (não só OData) é o caminho mais
+relevante para o público-alvo do projeto: clientes ainda em ECC
+on-premise tipicamente só têm RFC/BAPI como via de automação.
+
+**Por que isso importa para o posicionamento:** prova com código —
+não só com docstring de intenção — que o "e outras plataformas" da
+proposta de valor do projeto é real: existe pelo menos um sistema
+não-SAP com integração de fato funcional, ao lado de um caminho SAP
+(RFC) claramente desenhado para o cliente mais restrito (ECC
+on-premise), que é justamente quem não consegue pagar SAP AI Core.

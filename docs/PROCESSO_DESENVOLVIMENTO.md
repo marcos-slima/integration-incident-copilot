@@ -20,8 +20,9 @@
 | 4 | Observabilidade & Configuração | ✅ Concluída |
 | 5 | Segurança & Release | ✅ Concluída |
 | 6 | Governança & Documentação | 🔄 Contínua |
-| 7 | Domínio Real (conectores SAP de verdade) | 🔄 Parcial — ver Fase 8 |
+| 7 | Domínio Real (conectores SAP de verdade) | ✅ Concluída — ver Fase 9 |
 | 8 | Acessibilidade & Multi-Vendor (LLM Gateway, ServiceNow real) | ✅ Concluída |
+| 9 | Fechamento das Fases Futuras (multi-vendor completo, GraphRAG, A2A) | ✅ Concluída |
 
 ---
 
@@ -163,14 +164,99 @@ do código — não maior, não menor.
 código relevante, verificar se a documentação ainda bate com a
 realidade antes de considerar o trabalho concluído.
 
-## Fase 7 — Domínio Real (não iniciada)
+## Fase 7 — Domínio Real (concluída na Fase 9)
 
-**Objetivo:** substituir os conectores mock por integração real com
-um sistema SAP (mesmo que sandbox/trial), fechando a lacuna entre
-"demo bem construída" e "ferramenta que toca produção".
+**Objetivo original:** substituir os conectores mock por integração
+real com um sistema SAP (mesmo que sandbox/trial), fechando a lacuna
+entre "demo bem construída" e "ferramenta que toca produção".
 
-Fica registrada como próxima fase natural do roteiro, não como parte
-deste ciclo já concluído.
+Ficou registrada por várias sessões como "próxima fase natural do
+roteiro, não iniciada". Foi fechada em duas etapas: RFC (`use_real`)
+na Fase 8, OData (`use_real`) na Fase 9 — ver seção correspondente
+abaixo. "Real" aqui significa código de produção completo e testado
+via mock de transporte (HTTP/RPC), não validação contra um sistema SAP
+de produção real (que este projeto nunca teve acesso a um) — essa
+ressalva permanece, documentada explicitamente em vez de escondida.
+
+## Fase 8 — Acessibilidade & Multi-Vendor (LLM Gateway, ServiceNow real)
+
+**Objetivo:** viabilizar o posicionamento de "acesso à IA para quem
+não pode adotar SAP AI Core" com código real, não só intenção de
+negócio — LLM plugável (não travado em Ollama) e pelo menos um
+conector não-SAP genuinamente funcional.
+
+**Atividades realizadas:**
+- `app/llm/factory.py` — LLM Gateway plugável (Ollama/OpenAI/Azure
+  OpenAI) reaproveitando o `BaseChatModel` do LangChain, sem interface
+  própria reinventada
+- `ServiceNowConnector` — primeiro conector não-SAP com chamada HTTP
+  real (Table API), escolhido por ter a API pública mais simples de
+  validar com `httpx.MockTransport`
+- `RFCConnector.use_real` — caminho real via `pyrfc`/`BAPI_IDOC_STATUS`,
+  com detecção de feature e `ConfigurationError` claro na ausência do
+  SDK
+- `docker-compose.yml` self-contained (Ollama + Qdrant + API, sem
+  depender do stack pessoal `~/ai-stack`)
+- Documentação: `ARCHITECTURE.md` preenchido, `TCO_SAP_AI_CORE_VS_SELF_HOSTED.md`,
+  tutorial completo da fase
+
+**Gap identificado ao final desta fase (corrigido na Fase 9):** o CI
+(`.github/workflows/tests.yml`) só rodava `tests/test_connectors.py` —
+os 6 testes novos do LLM Gateway (`test_llm_factory.py`) nunca eram
+executados automaticamente, só localmente.
+
+**Critério de saída:** LLM Gateway com 3 provedores testados, 1
+conector não-SAP real validado, stack local reproduzível sem ambiente
+pessoal.
+
+## Fase 9 — Fechamento das Fases Futuras (multi-vendor completo, GraphRAG, A2A)
+
+**Objetivo:** fechar, com código real e testado (ou com estrutura real
+pronta para ativar, quando o "real de verdade" dependia de infra
+externa indisponível neste ambiente), tudo que estava documentado como
+"reservado para uso futuro" ou "arquivado" em fases anteriores — em
+vez de deixar esses itens como débito técnico permanente.
+
+**Atividades realizadas:**
+1. **Multi-vendor completo:** `SalesforceConnector`, `WorkdayConnector`,
+   `AribaConnector` implementados no mesmo padrão do `ServiceNowConnector`
+   (OAuth2 client credentials + REST real, mock só sem configuração) —
+   fecha os 4 cenários de referência do posicionamento do produto.
+   `ODataConnector` ganhou o mesmo esqueleto `use_real` que o
+   `RFCConnector` já tinha, fechando uma assimetria entre os dois
+   conectores SAP.
+2. **GraphRAG (Neo4j) deixou de ser só campo de configuração:**
+   `app/rag/graph_store.py` implementa escrita/consulta real do grafo
+   de incidentes, ligado por uma única flag (`GRAPH_RAG_ENABLED`) e
+   testado com uma sessão Neo4j fake — desligado por default (decisão
+   de negócio inalterada), mas com estrutura real, não mais um
+   parágrafo de intenção.
+3. **Camada A2A implementada:** `app/a2a/` (Agent Card, task manager,
+   servidor JSON-RPC 2.0), satisfazendo os pré-requisitos que mantinham
+   a proposta arquivada. A ressalva sobre a GA inbound do Joule
+   (Q4/2026) foi preservada explicitamente, não removida.
+4. **Gap de CI corrigido:** `.github/workflows/tests.yml` passou a
+   rodar `pytest tests/ -m "not integration"` (toda a suíte
+   não-integração) em vez de só um arquivo — fechando o gap
+   identificado ao final da Fase 8.
+
+**Escopo deliberadamente fora desta fase:** a lista de ferramentas de
+sustentação de infraestrutura em
+`docs/ferramentas-sustentacao-ecossistema.md` (Ansible, Terraform,
+Prometheus/Grafana, Loki, Dependabot, mypy, ADRs formais, etc.) não é
+"fase futura" da arquitetura da *solução* — é uma lista de
+oportunidades de tooling de *operação pessoal*, priorizada à parte
+naquele documento. Implementar tudo ali junto com esta fase seria
+exatamente o tipo de dispersão de escopo que este projeto já decidiu
+evitar (ver instrução do autor citada informalmente nas decisões
+recentes: foco no que gera prova de capacidade real, não em
+completude por completude).
+
+**Critério de saída:** 47 testes não-integração passando (22 de
+conectores, incluindo os 3 novos + OData real; 9 de GraphRAG; 9 de
+A2A; 6 de LLM Gateway; 1 de health check), `ruff check` limpo, CI
+reproduzido localmente do zero (`rm -rf .venv && uv sync --extra openai`)
+antes de cada commit.
 
 ## Nota de atualização — Fase 6 (continuação)
 

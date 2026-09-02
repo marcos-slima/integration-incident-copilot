@@ -1,9 +1,13 @@
 # Proposta: Camada de Interoperabilidade A2A para o SAP Integration Copilot
 
-> **Status:** Arquivada para implementação futura — priorizado primeiro o
-> fechamento dos conectores SAP (núcleo diferenciador do Copilot).
-> Revisar quando os conectores estiverem estáveis, ou quando a GA
-> inbound do Joule A2A (Q4/2026) se aproximar.
+> **Status: Implementada.** Ver `app/a2a/` (`agent_card.py`,
+> `task_manager.py`, `server.py`) e a seção "A2A (Agent2Agent)" em
+> [docs/ARCHITECTURE.md](../ARCHITECTURE.md). Os pré-requisitos que
+> mantinham esta proposta arquivada (conectores SAP fechados + suíte de
+> testes automatizada) foram satisfeitos nas Fases 7/8. A ressalva
+> abaixo sobre a GA inbound do Joule (Q4/2026) continua válida e não
+> muda com esta implementação: o endpoint A2A aqui é compatível com o
+> protocolo aberto, não uma integração endossada/GA com o Joule.
 
 ## Contexto
 
@@ -84,3 +88,26 @@ Extensão das Fases 4/6 do plano de aprendizado (LangChain/LangGraph/
 MCP → integração final), sem impacto nas fases anteriores já
 concluídas. Recomendado entrar **depois** dos conectores SAP e da
 suíte de testes automatizada.
+
+## Notas de implementação (retrospectiva)
+
+- **Sem SDK externo de A2A**: o risco de maturidade de SDK citado
+  acima nas "Correções importantes" foi contornado implementando o
+  subconjunto necessário do protocolo (Agent Card + JSON-RPC 2.0 +
+  ciclo de vida de task) diretamente com FastAPI/Pydantic, em vez de
+  depender de uma biblioteca de terceiros ainda instável. Mais código
+  próprio, porém sem risco de dependência quebrando por trás.
+- **Subconjunto de estados de task**: implementados só
+  `submitted -> working -> completed|failed`, os únicos alcançáveis
+  por um agente síncrono e autocontido como este (sem
+  `input_required`/`auth_required`/`canceled`/`rejected`) — ver
+  `app/a2a/task_manager.py`.
+- **Autenticação**: chave estática opcional via header
+  (`A2A_API_KEY`), não OAuth2/JWT — mantido como gap de produção
+  documentado, não escondido (ver seção "Componentes novos" acima,
+  item 4).
+- **Regressão zero validada por teste, não manualmente**: os testes em
+  `tests/test_a2a.py` chamam a MESMA função (`run_diagnosis`) que
+  `/diagnose`, via injeção de dependência no `TaskManager` — não há
+  como o endpoint A2A divergir do comportamento do REST sem quebrar um
+  teste.

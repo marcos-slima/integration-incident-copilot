@@ -20,46 +20,56 @@ agente + conectores) para esse público, rodando local ou sobre um
 provedor que o cliente já tenha — ver
 [TCO_SAP_AI_CORE_VS_SELF_HOSTED.md](docs/TCO_SAP_AI_CORE_VS_SELF_HOSTED.md).
 E não fica restrito a SAP: o mesmo contrato de conector (`app/connectors/`)
-já cobre um sistema não-SAP (ServiceNow) de verdade, não só mock.
+já cobre cinco sistemas de referência não-SAP/multi-vendor de verdade
+(ServiceNow, Salesforce, Workday, SAP Ariba), não só mock — ver seção
+"Conectores" em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Arquitetura
 
 ```
-Frontend/API client
-      │
-      ▼
-   FastAPI
-      │
-      ▼
-Orquestração via LangGraph
-      │
-   ┌──┴────────────────────────────┐
-   ▼                                ▼
-RAG Retriever              Conectores SAP + não-SAP
-(PDF/MD/CSV)             (OData/RFC mock, ServiceNow real)
-   │                                │
-   └──────────────┬─────────────────┘
-                   ▼
-         LLM Gateway (Ollama / OpenAI / Azure OpenAI)
-                   │
-                   ▼
-      Resposta + Relatório Markdown
+Frontend/API client            Agente externo (A2A)
+      │                               │
+      ▼                               ▼
+   FastAPI /diagnose          app/a2a/ (Agent Card + JSON-RPC)
+      │                               │
+      └───────────────┬───────────────┘
+                       ▼
+           Orquestração via LangGraph
+                       │
+   ┌───────────────────┼───────────────────────┐
+   ▼                   ▼                       ▼
+RAG Retriever    GraphRAG (opt-in)     Conectores SAP + multi-vendor
+(Qdrant)         (Neo4j, desligado    (OData/RFC/ServiceNow/Salesforce/
+                  por default)         Workday/Ariba — reais quando
+   │                   │                configurados, mock por default)
+   └───────────────────┼───────────────────────┘
+                        ▼
+          LLM Gateway (Ollama / OpenAI / Azure OpenAI)
+                        │
+                        ▼
+           Resposta + Relatório Markdown
 ```
 
 Ver [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) para o detalhamento
-por camada (API / orquestração / LLM Gateway / RAG / conectores).
+por camada (API / A2A / orquestração / LLM Gateway / RAG+GraphRAG /
+conectores).
 
 ## Stack
 
 - **API**: FastAPI + Pydantic
+- **A2A**: Agent Card + servidor JSON-RPC 2.0 (`app/a2a/`), em paralelo
+  ao REST, mesma orquestração por trás — ver
+  [proposta original](docs/proposals/a2a-interoperability-layer.md)
 - **Orquestração**: LangGraph
 - **LLM Gateway**: plugável — Ollama (default, local-first), OpenAI ou
   Azure OpenAI (`app/llm/factory.py`), sem trocar código do grafo
-- **RAG**: LangChain + Qdrant (vector store)
+- **RAG**: LangChain + Qdrant (vector store) + GraphRAG opt-in via Neo4j
+  (`app/rag/graph_store.py`, desligado por default)
 - **Observabilidade**: Langfuse (opcional; tracing de todo o fluxo do
   agente quando configurado)
-- **Conectores**: OData / RFC (SAP, mock) + ServiceNow (chamada HTTP
-  real via Table API, cai em mock só sem instância configurada)
+- **Conectores**: OData / RFC / ServiceNow / Salesforce / Workday / SAP
+  Ariba — todos reais (chamada HTTP/OAuth2 de verdade) quando
+  configurados, caem em mock só sem credencial/endpoint informado
 
 ## Desenvolvimento local
 
@@ -338,3 +348,111 @@ proposta de valor do projeto é real: existe pelo menos um sistema
 não-SAP com integração de fato funcional, ao lado de um caminho SAP
 (RFC) claramente desenhado para o cliente mais restrito (ECC
 on-premise), que é justamente quem não consegue pagar SAP AI Core.
+
+### 12. Fechando os conectores multi-vendor (Salesforce, Workday, SAP Ariba) e o caminho real do OData
+
+**Contexto:** a seção anterior fechou 1 dos 4 cenários de referência
+multi-vendor do posicionamento do produto (ServiceNow), escolhido
+primeiro por ter a API pública mais simples de implementar de verdade
+— não por prioridade de negócio. Isso deixava uma dívida técnica
+explícita: Salesforce, Workday e SAP Ariba continuavam mock puro, e o
+`ODataConnector` não tinha nem o esqueleto `use_real` que o `RFCConnector`
+já tinha ganhado.
+
+**Decisão:** os três conectores restantes (`SalesforceConnector`,
+`WorkdayConnector`, `AribaConnector`) foram implementados seguindo
+**exatamente** o mesmo critério do `ServiceNowConnector` — OAuth2 (client
+credentials em todos os três casos) contra o token endpoint documentado
+de cada fornecedor, seguido da chamada REST real; ausência de
+configuração cai em mock, presença ativa o caminho real, sem mudar
+nenhum outro arquivo do projeto. `ODataConnector` ganhou o mesmo padrão
+`use_real`/`ConfigurationError` que o `RFCConnector` já tinha, fechando
+a assimetria entre os dois conectores SAP mock.
+
+**Validação:** cada conector tem teste via `httpx.MockTransport`
+simulando as duas chamadas (token OAuth2 + recurso), provando que o
+código de produção (montagem do request, header `Authorization: Bearer`,
+parsing da resposta, tratamento de erro HTTP/rede) funciona de verdade
+— sem, para nenhum dos três, uma conta/sandbox real disponível para
+validar contra produção (mesma ressalva já feita para
+`RFCConnector._fetch_real` desde a Fase 8, agora consistente em todo o
+projeto, não uma exceção isolada).
+
+**O que isso NÃO é:** uma alegação de que os 4 cenários de referência
+(SuccessFactors↔Workday, Salesforce↔SAP, SAP Ariba↔S/4HANA,
+ServiceNow↔SAP) estão "prontos para produção" — estão prontos para
+**demonstração técnica com credenciais reais em 10 minutos** (trocar
+`.env`, sem tocar código), o que é uma barra bem mais alta que "mock
+bonito", mas ainda abaixo de "testado contra um cliente real".
+
+### 13. GraphRAG (Neo4j) deixa de ser só campo de configuração
+
+**Contexto:** desde a Fase 4, `Settings` tinha campos para Neo4j e a
+documentação dizia explicitamente "reservado para uso futuro, nenhum
+código usa isso hoje" — um campo de configuração sem nenhuma
+implementação por trás, o tipo exato de coisa que este projeto
+criticou no `genai-engineering-template` (documentação descrevendo
+funcionalidade que o código não entrega).
+
+**Decisão:** implementar o código real (`app/rag/graph_store.py`) —
+grava cada diagnóstico no Neo4j como grafo relacional
+(Incident/Interface/System/Document) e consulta esse grafo por
+histórico de incidentes na mesma interface antes de gerar um novo
+diagnóstico — mas manter **desligado por default**
+(`GRAPH_RAG_ENABLED=false`). A decisão de negócio de não priorizar
+GraphRAG não mudou (Qdrant resolve o caso de uso principal; grafo só
+compensa com meses de histórico real acumulado); o que mudou é que
+agora existe uma estrutura real e testada para ligar quando fizer
+sentido, em vez de só um parágrafo de intenção.
+
+**Validação:** `tests/test_graph_store.py` usa uma sessão Neo4j FAKE
+(implementa só `.run()`, mesmo espírito do `httpx.MockTransport`) para
+provar que as queries Cypher corretas são disparadas e os dados voltam
+mapeados certo. Também validado que `build_graph()` produz o MESMO
+grafo LangGraph de antes desta fase quando a flag está desligada
+(nenhum node novo é adicionado) — mudança de comportamento zero no
+caminho default.
+
+**Honestidade mantida:** não testado contra um Neo4j real (sem Docker
+daemon disponível no ambiente onde isso foi construído) — mesma
+ressalva já aplicada ao `RFCConnector._fetch_real`.
+
+### 14. Camada A2A (Agent2Agent) implementada, com a ressalva de GA preservada
+
+**Contexto:** a proposta em
+[docs/proposals/a2a-interoperability-layer.md](docs/proposals/a2a-interoperability-layer.md)
+estava arquivada desde antes da Fase 8, com dois pré-requisitos
+explícitos para sair do papel: conectores SAP fechados e suíte de
+testes automatizada madura. As Fases 7/8 (e a seção 12 acima)
+satisfazem os dois.
+
+**Decisão:** implementar o subconjunto do protocolo A2A necessário
+para o critério de aceite original — Agent Card (`GET
+/.well-known/agent-card.json`), task manager e servidor JSON-RPC 2.0
+(`POST /a2a`, métodos `message/send` e `tasks/get`) — em `app/a2a/`,
+sem depender de nenhum SDK externo de A2A (a proposta original já
+citava a imaturidade dessas SDKs como risco a validar antes de
+começar). O task manager chama a MESMA função (`run_diagnosis`) que o
+`/diagnose` REST — zero lógica de diagnóstico duplicada entre os dois
+protocolos.
+
+**Simplificação deliberada:** dos 8 estados de task do protocolo A2A,
+só os 4 alcançáveis por um agente síncrono e autocontido como este
+foram implementados (`submitted -> working -> completed|failed`).
+Autenticação é uma chave estática opcional via header, não OAuth2/JWT
+— documentado como gap de produção, não escondido.
+
+**Validação:** `tests/test_a2a.py` prova o critério de aceite original
+mecanicamente — o endpoint A2A produz o mesmo relatório que o
+`/diagnose` para a mesma entrada (via injeção de dependência do
+`diagnosis_fn` no `TaskManager`, sem precisar de um LLM real no ar para
+o teste), e uma falha na orquestração vira task `failed` (erro de
+negócio), não um HTTP 500 (erro de transporte) — a diferença que
+importa para um agente externo saber se deve tentar de novo ou não.
+
+**Ressalva que NÃO muda com esta implementação:** o suporte A2A do
+Joule continua unidirecional (outbound) hoje — o Agent Gateway que
+habilitaria o Joule a chamar este Copilot como par (inbound) está
+pré-GA, previsto para Q4/2026. Este endpoint é compatível com o
+protocolo aberto A2A (padrão vendor-neutral, Linux Foundation), não uma
+integração já consumível pelo Joule.

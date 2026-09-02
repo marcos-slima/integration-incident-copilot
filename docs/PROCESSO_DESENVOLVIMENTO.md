@@ -20,7 +20,8 @@
 | 4 | Observabilidade & Configuração | ✅ Concluída |
 | 5 | Segurança & Release | ✅ Concluída |
 | 6 | Governança & Documentação | 🔄 Contínua |
-| 7 | Domínio Real (conectores SAP de verdade) | ⬜ Não iniciada |
+| 7 | Domínio Real (conectores SAP de verdade) | 🔄 Parcial — ver Fase 8 |
+| 8 | Acessibilidade & Multi-Vendor (LLM Gateway, ServiceNow real) | ✅ Concluída |
 
 ---
 

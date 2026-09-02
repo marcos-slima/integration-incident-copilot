@@ -11,6 +11,38 @@
       "justMyCode": true
     },
     {
+      "name": "Debug: graph.py (ServiceNow - alerta ITSM)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "app.agent.graph",
+      "args": [
+        "Alerta ServiceNow aberto automaticamente",
+        "--interface",
+        "servicenow",
+        "--id",
+        "INC0010001",
+        "--debug"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Debug: graph.py (RFC - pool esgotado)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "app.agent.graph",
+      "args": [
+        "Chamada RFC sincrona travando sob carga batch",
+        "--interface",
+        "rfc",
+        "--id",
+        "RFC-GWY-POOL-TIMEOUT-DEMO",
+        "--debug"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
       "name": "Debug: graph.py (texto livre)",
       "type": "debugpy",
       "request": "launch",

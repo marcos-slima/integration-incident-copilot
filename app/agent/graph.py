@@ -400,7 +400,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("description", nargs="*", default=[])
-    parser.add_argument("--interface", choices=["odata", "rfc"], default=None)
+    parser.add_argument("--interface", choices=["odata", "rfc", "servicenow"], default=None)
     parser.add_argument("--id", dest="identifier", default=None)
     parser.add_argument("--model", dest="llm_model", default=None, help="Override do modelo LLM")
     parser.add_argument("--debug", action="store_true")

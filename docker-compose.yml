@@ -35,6 +35,24 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
 
+  # GraphRAG (opt-in) - NAO sobe com "docker compose up" default, so
+  # com "docker compose --profile graphrag up -d neo4j" (decisao
+  # consciente de manter o stack default leve, ver Decisao de
+  # Arquitetura #9 no README e docs/ARCHITECTURE.md). Ativar de verdade
+  # exige tambem GRAPH_RAG_ENABLED=true no .env - ver
+  # app/rag/graph_store.py.
+  neo4j:
+    image: neo4j:5-community
+    profiles: ["graphrag"]
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-changeme123}
+    volumes:
+      - neo4j_data:/data
+
 volumes:
   ollama_data:
   qdrant_data:
+  neo4j_data:

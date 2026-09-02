@@ -30,6 +30,7 @@ Uso:
 import json
 import os
 from typing import TypedDict
+from uuid import uuid4
 
 from app.config import settings
 
@@ -52,6 +53,11 @@ from pydantic import BaseModel, Field
 from app.connectors import ConnectorResult, get_connector
 from app.llm.factory import get_chat_model
 from app.models import DiagnosisResponse, IncidentRequest
+from app.rag.graph_store import (
+    format_graph_context_for_prompt,
+    graph_context,
+    upsert_incident_graph,
+)
 from app.rag.retriever import retrieve
 
 _langfuse_handler = CallbackHandler()
@@ -116,6 +122,7 @@ class CopilotState(TypedDict, total=False):
     llm_model: str
     connector_data: ConnectorResult | None
     retrieved_context: list[dict]
+    graph_history: list
     diagnosis: dict
     report_markdown: str
     debug: bool
@@ -144,6 +151,36 @@ def _effective_query(state: CopilotState) -> str:
 def retrieve_node(state: CopilotState) -> CopilotState:
     hits = retrieve(_effective_query(state), target="incidents", top_k=3)
     return {"retrieved_context": hits}
+
+
+@observe(name="graph_enrich")
+def graph_enrich_node(state: CopilotState) -> CopilotState:
+    """So entra no grafo quando GRAPH_RAG_ENABLED=true (ver
+    build_graph()) - consulta o Neo4j por incidentes anteriores na
+    mesma interface, para enriquecer o prompt com recorrencia."""
+    related = graph_context(state.get("interface_type"), state.get("identifier"))
+    return {"graph_history": related}
+
+
+@observe(name="graph_write")
+def graph_write_node(state: CopilotState) -> CopilotState:
+    """So entra no grafo quando GRAPH_RAG_ENABLED=true - grava o
+    diagnostico concluido no Neo4j para alimentar consultas futuras de
+    `graph_enrich_node`. No-op (via upsert_incident_graph) se nao houver
+    interface/identificador associado a este incidente."""
+    diagnosis = state.get("diagnosis", {})
+    data = state.get("connector_data")
+    upsert_incident_graph(
+        incident_id=str(uuid4()),
+        description=state["description"],
+        interface_type=state.get("interface_type"),
+        identifier=state.get("identifier"),
+        source_system=data.source_system if data else None,
+        root_cause=diagnosis.get("probable_root_cause", ""),
+        confidence=float(diagnosis.get("confidence", 0.0)),
+        matched_document=diagnosis.get("matched_source"),
+    )
+    return {}
 
 
 def _truncate(text: str, limit: int) -> str:
@@ -193,6 +230,8 @@ Dados coletados diretamente do sistema SAP (via conector {data.source_system}{" 
   detalhe bruto: {data.raw}{fallback_warning}
 """
 
+    graph_block = format_graph_context_for_prompt(state.get("graph_history", []))
+
     extras = ""
     if state.get("logs"):
         extras += f"\nLogs:\n{_truncate(state['logs'], MAX_LOGS_IN_PROMPT)}\n"
@@ -206,7 +245,7 @@ Incidente reportado:
 {extras}{connector_block}
 Contexto recuperado da base de conhecimento de incidentes:
 {context_block}
-{others_note}
+{others_note}{graph_block}
 Regra importante: baseie sua resposta EXCLUSIVAMENTE no documento de
 contexto acima e, se disponivel, nos dados reais do conector (que tem
 prioridade sobre a descricao textual do usuario, pois vem diretamente
@@ -337,6 +376,12 @@ def report_node(state: CopilotState) -> CopilotState:
 
 
 def build_graph():
+    """O grafo tem duas formas: linear (default) ou com enriquecimento
+    de GraphRAG intercalado, dependendo de `settings.graph_rag_enabled`
+    - decidido uma vez na construcao, nao a cada execucao. Com
+    GraphRAG desligado (default), o grafo e IDENTICO ao de antes desta
+    fase - zero custo/comportamento novo. Ver app/rag/graph_store.py
+    para como ativar de verdade."""
     graph = StateGraph(CopilotState)
     graph.add_node("connector", connector_node)
     graph.add_node("retrieve", retrieve_node)
@@ -345,8 +390,18 @@ def build_graph():
 
     graph.set_entry_point("connector")
     graph.add_edge("connector", "retrieve")
-    graph.add_edge("retrieve", "diagnose")
-    graph.add_edge("diagnose", "report")
+
+    if settings.graph_rag_enabled:
+        graph.add_node("graph_enrich", graph_enrich_node)
+        graph.add_node("graph_write", graph_write_node)
+        graph.add_edge("retrieve", "graph_enrich")
+        graph.add_edge("graph_enrich", "diagnose")
+        graph.add_edge("diagnose", "graph_write")
+        graph.add_edge("graph_write", "report")
+    else:
+        graph.add_edge("retrieve", "diagnose")
+        graph.add_edge("diagnose", "report")
+
     graph.add_edge("report", END)
 
     return graph.compile()
@@ -400,7 +455,11 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("description", nargs="*", default=[])
-    parser.add_argument("--interface", choices=["odata", "rfc", "servicenow"], default=None)
+    parser.add_argument(
+        "--interface",
+        choices=["odata", "rfc", "servicenow", "salesforce", "workday", "ariba"],
+        default=None,
+    )
     parser.add_argument("--id", dest="identifier", default=None)
     parser.add_argument("--model", dest="llm_model", default=None, help="Override do modelo LLM")
     parser.add_argument("--debug", action="store_true")

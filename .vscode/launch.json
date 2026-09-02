@@ -43,6 +43,54 @@
       "justMyCode": true
     },
     {
+      "name": "Debug: graph.py (Salesforce - Case sem sync SAP)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "app.agent.graph",
+      "args": [
+        "Case Salesforce sobre pedido nao sincronizado com o SAP",
+        "--interface",
+        "salesforce",
+        "--id",
+        "SF-CASE-00847-DEMO",
+        "--debug"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Debug: graph.py (Workday - falha de sync SuccessFactors)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "app.agent.graph",
+      "args": [
+        "Evento de integracao Workday falhou ao replicar dado do SuccessFactors",
+        "--interface",
+        "workday",
+        "--id",
+        "WD-SYNC-FAIL-DEMO",
+        "--debug"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Debug: graph.py (Ariba - PO bloqueado por fornecedor)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "app.agent.graph",
+      "args": [
+        "Pedido de compra bloqueado na Ariba Network por divergencia de fornecedor",
+        "--interface",
+        "ariba",
+        "--id",
+        "ARIBA-PO-BLOCKED-DEMO",
+        "--debug"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
       "name": "Debug: graph.py (texto livre)",
       "type": "debugpy",
       "request": "launch",
@@ -65,7 +113,25 @@
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
-      "args": ["tests/test_connectors.py", "-v"],
+      "args": ["tests/", "-m", "not integration", "-v"],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Debug: pytest (so A2A)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["tests/test_a2a.py", "-v"],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Debug: pytest (so GraphRAG)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["tests/test_graph_store.py", "-v"],
       "console": "integratedTerminal",
       "justMyCode": true
     },

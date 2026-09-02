@@ -1,14 +1,21 @@
-"""Factory de conectores - SAP (OData, RFC) e nao-SAP (ServiceNow)."""
+"""Factory de conectores - SAP (OData, RFC) e nao-SAP (ServiceNow,
+Salesforce, Workday, SAP Ariba)."""
 
+from app.connectors.ariba_connector import AribaConnector
 from app.connectors.base import ConnectorResult, ExternalSystemConnector, SAPConnector
 from app.connectors.odata_connector import ODataConnector
 from app.connectors.rfc_connector import RFCConnector
+from app.connectors.salesforce_connector import SalesforceConnector
 from app.connectors.servicenow_connector import ServiceNowConnector
+from app.connectors.workday_connector import WorkdayConnector
 
 _REGISTRY: dict[str, type[SAPConnector]] = {
     "odata": ODataConnector,
     "rfc": RFCConnector,
     "servicenow": ServiceNowConnector,
+    "salesforce": SalesforceConnector,
+    "workday": WorkdayConnector,
+    "ariba": AribaConnector,
 }
 
 
@@ -20,11 +27,14 @@ def get_connector(interface_type: str) -> SAPConnector:
 
 
 __all__ = [
+    "AribaConnector",
     "ConnectorResult",
     "ExternalSystemConnector",
     "ODataConnector",
     "RFCConnector",
     "SAPConnector",
+    "SalesforceConnector",
     "ServiceNowConnector",
+    "WorkdayConnector",
     "get_connector",
 ]

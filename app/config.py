@@ -56,13 +56,51 @@ class Settings(BaseSettings):
     sap_user: str = ""
     sap_password: str = ""
 
+    # OData/CPI real (app/connectors/odata_connector.py) - OAuth2
+    # client_credentials contra o token endpoint do CPI/Integration
+    # Suite, seguido de GET no servico OData real. Vazio (default) =
+    # modo demo/mock, mesmo criterio dos demais conectores.
+    odata_service_url: str = ""
+    odata_oauth_token_url: str = ""
+    odata_client_id: str = ""
+    odata_client_secret: str = ""
+
+    # Salesforce (app/connectors/salesforce_connector.py) - OAuth2
+    # Client Credentials Flow (Connected App) + SOQL via REST API.
+    # Representa o cenario de referencia Salesforce<->SAP.
+    salesforce_instance_url: str = ""
+    salesforce_client_id: str = ""
+    salesforce_client_secret: str = ""
+    salesforce_api_version: str = "v61.0"
+
+    # Workday (app/connectors/workday_connector.py) - OAuth2 Client
+    # Credentials Grant + REST API. Representa o cenario de referencia
+    # SuccessFactors<->Workday (replicacao de dados de funcionario).
+    workday_tenant: str = ""
+    workday_rest_base_url: str = ""  # ex: https://wd2-impl-services1.workday.com
+    workday_client_id: str = ""
+    workday_client_secret: str = ""
+
+    # SAP Ariba / Business Network (app/connectors/ariba_connector.py) -
+    # OAuth2 Client Credentials contra o token endpoint da Ariba, REST
+    # sobre o status de pedido de compra na rede. Representa o cenario
+    # de referencia SAP Ariba<->S/4HANA.
+    ariba_oauth_token_url: str = ""
+    ariba_base_url: str = ""
+    ariba_client_id: str = ""
+    ariba_client_secret: str = ""
+
     # Qdrant
     qdrant_url: str = "http://127.0.0.1:6333"
 
-    # Neo4j - reservado para uso futuro (GraphRAG entre
-    # interfaces/documentos, ver docs/ARCHITECTURE.md); nao e lido pelo
-    # pipeline de RAG atual (app/rag/ingest.py e app/rag/retriever.py
-    # usam so Qdrant hoje)
+    # Neo4j / GraphRAG (app/rag/graph_store.py) - desligado por default
+    # (graph_rag_enabled=False). Ligar exige DUAS coisas: (1) subir o
+    # Neo4j real (`docker compose --profile graphrag up -d neo4j`) e
+    # (2) GRAPH_RAG_ENABLED=true no .env. O codigo de escrita/consulta
+    # ao grafo ja existe e e testado (com driver fake, ver
+    # tests/test_graph_store.py) - nao ha nada para "descomentar" no
+    # Python, so essa flag + a infra de fato existir.
+    graph_rag_enabled: bool = False
     neo4j_uri: str = "bolt://127.0.0.1:7687"
     neo4j_user: str = "neo4j"
     neo4j_password: str = ""
@@ -82,6 +120,13 @@ class Settings(BaseSettings):
     servicenow_instance_url: str = ""
     servicenow_username: str = ""
     servicenow_password: str = ""
+
+    # A2A (Agent2Agent) - camada de interoperabilidade externa,
+    # ver app/a2a/ e docs/proposals/a2a-interoperability-layer.md.
+    # a2a_api_key vazio (default) = autenticacao desabilitada no
+    # endpoint /a2a - aceitavel para portfolio/demo local, documentado
+    # como gap de producao (ver proposta original).
+    a2a_api_key: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

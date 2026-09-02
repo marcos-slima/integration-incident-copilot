@@ -15,8 +15,8 @@ class IncidentRequest(BaseModel):
     description: str = Field(max_length=MAX_DESCRIPTION_LENGTH)
     logs: str | None = Field(default=None, max_length=MAX_LOGS_LENGTH)
     payload: str | None = Field(default=None, max_length=MAX_PAYLOAD_LENGTH)
-    interface_type: Literal["odata", "rfc"] | None = None
-    identifier: str | None = None  # ex: nome do iFlow, RFC destination, numero de IDoc
+    interface_type: Literal["odata", "rfc", "servicenow"] | None = None
+    identifier: str | None = None  # ex: nome do iFlow, RFC destination, numero de IDoc/incidente
 
 
 class DiagnosisResponse(BaseModel):

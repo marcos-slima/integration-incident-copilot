@@ -14,6 +14,12 @@ Correcoes aplicadas apos code review:
   - confidence validado por Field(ge=0,le=1) + clamp defensivo no codigo
   - logs/payload truncados antes de entrar no prompt (protege contexto)
 
+O node `diagnose` obtem o chat model via `app.llm.factory.get_chat_model()`
+(o "LLM Gateway"), nao instancia `ChatOllama` diretamente - o provedor
+(Ollama local, OpenAI, Azure OpenAI) vem de `Settings.llm_provider`,
+sem precisar tocar neste arquivo (ver Decisao de Arquitetura #10 no
+README).
+
 Uso:
     from app.agent.graph import run_diagnosis
     from app.models import IncidentRequest
@@ -38,13 +44,13 @@ os.environ.setdefault("LANGFUSE_SECRET_KEY", settings.langfuse_secret_key)
 os.environ.setdefault("LANGFUSE_HOST", settings.langfuse_host)
 os.environ.setdefault("LANGFUSE_BASE_URL", settings.langfuse_host)
 
-from langchain_ollama import ChatOllama
 from langfuse import get_client, observe
 from langfuse.langchain import CallbackHandler
 from langgraph.graph import END, StateGraph
 from pydantic import BaseModel, Field
 
 from app.connectors import ConnectorResult, get_connector
+from app.llm.factory import get_chat_model
 from app.models import DiagnosisResponse, IncidentRequest
 from app.rag.retriever import retrieve
 
@@ -253,7 +259,7 @@ def _apply_confidence_guardrails(diagnosis: dict, state: CopilotState) -> dict:
 @observe(name="diagnose")
 def diagnose_node(state: CopilotState) -> CopilotState:
     model_name = state.get("llm_model") or settings.llm_model
-    llm = ChatOllama(model=model_name, temperature=0.0, seed=42)
+    llm = get_chat_model(model_name)
     prompt = _build_diagnosis_prompt(state)
 
     structured_llm = llm.with_structured_output(DiagnosisModel, include_raw=True)

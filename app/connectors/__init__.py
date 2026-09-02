@@ -1,12 +1,14 @@
-"""Factory de conectores SAP."""
+"""Factory de conectores - SAP (OData, RFC) e nao-SAP (ServiceNow)."""
 
-from app.connectors.base import ConnectorResult, SAPConnector
+from app.connectors.base import ConnectorResult, ExternalSystemConnector, SAPConnector
 from app.connectors.odata_connector import ODataConnector
 from app.connectors.rfc_connector import RFCConnector
+from app.connectors.servicenow_connector import ServiceNowConnector
 
 _REGISTRY: dict[str, type[SAPConnector]] = {
     "odata": ODataConnector,
     "rfc": RFCConnector,
+    "servicenow": ServiceNowConnector,
 }
 
 
@@ -17,4 +19,12 @@ def get_connector(interface_type: str) -> SAPConnector:
     return cls()
 
 
-__all__ = ["ConnectorResult", "ODataConnector", "RFCConnector", "SAPConnector", "get_connector"]
+__all__ = [
+    "ConnectorResult",
+    "ExternalSystemConnector",
+    "ODataConnector",
+    "RFCConnector",
+    "SAPConnector",
+    "ServiceNowConnector",
+    "get_connector",
+]

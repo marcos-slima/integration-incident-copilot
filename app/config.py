@@ -13,27 +13,75 @@ mascarando senhas/chaves - util pra depurar "por que esta apontando
 pro lugar errado" sem depender de mais ninguem.
 """
 
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # Ollama
+    # LLM provider - "ollama" (default, local-first, sem custo de API)
+    # ou "openai"/"azure_openai" (para clientes que ja tem essa assinatura,
+    # ou como fallback de capacidade quando o hardware local nao aguenta
+    # um modelo maior). Ver docs/ARCHITECTURE.md e a Decisao de
+    # Arquitetura #10 no README sobre por que isso e plugavel em vez de
+    # hardcoded: o modelo de negocio do projeto (viabilizar IA para quem
+    # nao pode/nao quer pagar SAP AI Core) exige rodar tanto 100% local
+    # quanto, quando fizer sentido para o cliente, sobre um provedor que
+    # ele ja tenha contratado - sem reescrever o grafo.
+    llm_provider: Literal["ollama", "openai", "azure_openai"] = "ollama"
+
+    # Ollama (default local-first)
     ollama_host: str = "http://127.0.0.1:11434"
     llm_model: str = "qwen2.5-coder:32b"
     embedding_model: str = "nomic-embed-text"
 
+    # OpenAI / compativel com OpenAI (inclui endpoints locais tipo
+    # vLLM/LM Studio que implementam a mesma API) - so relevante se
+    # llm_provider="openai"
+    openai_api_key: str = ""
+    openai_base_url: str = ""  # vazio = API oficial da OpenAI
+
+    # Azure OpenAI - so relevante se llm_provider="azure_openai"
+    azure_openai_endpoint: str = ""
+    azure_openai_api_key: str = ""
+    azure_openai_deployment: str = ""
+    azure_openai_api_version: str = "2024-10-21"
+
+    # SAP RFC (conexao direta via pyrfc) - so relevante para
+    # RFCConnector(use_real=True); modo demo/mock (default) nao le
+    # nenhum destes campos
+    sap_ashost: str = ""
+    sap_sysnr: str = "00"
+    sap_client: str = "100"
+    sap_user: str = ""
+    sap_password: str = ""
+
     # Qdrant
     qdrant_url: str = "http://127.0.0.1:6333"
 
-    # Neo4j
+    # Neo4j - reservado para uso futuro (GraphRAG entre
+    # interfaces/documentos, ver docs/ARCHITECTURE.md); nao e lido pelo
+    # pipeline de RAG atual (app/rag/ingest.py e app/rag/retriever.py
+    # usam so Qdrant hoje)
     neo4j_uri: str = "bolt://127.0.0.1:7687"
     neo4j_user: str = "neo4j"
     neo4j_password: str = ""
 
-    # Langfuse
+    # Langfuse - opcional; se as chaves ficarem vazias o SDK nao envia
+    # trace nenhum (nao quebra), entao rodar sem observabilidade
+    # completa (ex: docker-compose.yml deste repo, que nao sobe o stack
+    # completo do Langfuse) continua funcional
     langfuse_host: str = "http://127.0.0.1:3000"
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
+
+    # ServiceNow - conector opcional para cenarios que envolvem ITSM
+    # nao-SAP (ver app/connectors/servicenow_connector.py); se
+    # servicenow_instance_url ficar vazio, o conector roda em modo
+    # demo (mock), do mesmo jeito que os conectores SAP
+    servicenow_instance_url: str = ""
+    servicenow_username: str = ""
+    servicenow_password: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

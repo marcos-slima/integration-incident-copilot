@@ -33,7 +33,10 @@ promptfoo-output*
 
 # Editores / assistentes
 .cursor/
-.vscode/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/doc-maker-instructions.md
 .claude/settings.local.json
 
 # Backups locais (não versionados)

@@ -1,15 +1,40 @@
+# Python
 __pycache__/
 *.pyc
-.venv/
-.env
-data/*.local
-.pytest_cache/
-.ruff_cache/
 *.egg-info/
 dist/
 build/
+
+# Ambiente virtual e variáveis
+.venv/
+.env
+.env.*
+!.env.example
+
+# Caches de ferramentas
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Node (promptfoo)
+node_modules/
+
+# Dados locais e knowledge base
+data/**/*.local
 data/reference_library/
 data/knowledge_base/
 data/.ingest_state_*.json
+
+# Promptfoo
 .promptfoo/
 promptfoo-output*
+
+# Editores / assistentes
+.cursor/
+.vscode/
+.claude/settings.local.json
+
+# Backups locais (não versionados)
+scripts/backup-scripts/

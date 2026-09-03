@@ -79,7 +79,9 @@ def test_upsert_incident_graph_writes_expected_params():
 
 def test_graph_context_returns_empty_when_disabled(monkeypatch):
     monkeypatch.setattr("app.rag.graph_store.settings", Settings(graph_rag_enabled=False))
-    session = FakeSession(records=[{"root_cause": "x", "source_system": "RFC", "matched_document": None}])
+    session = FakeSession(
+        records=[{"root_cause": "x", "source_system": "RFC", "matched_document": None}]
+    )
     result = graph_context("rfc", "RFC-GWY-POOL-TIMEOUT-DEMO", session=session)
     assert result == []
     assert session.calls == []  # nem chega a consultar o Neo4j

@@ -66,7 +66,9 @@ def test_message_send_runs_diagnosis_and_returns_completed_task():
     assert body["id"] == 1
     result = body["result"]
     assert result["status"]["state"] == "completed"
-    assert result["artifacts"][0]["parts"][0]["text"] == "## Diagnostico\n\nCausa raiz de teste (stub)"
+    assert (
+        result["artifacts"][0]["parts"][0]["text"] == "## Diagnostico\n\nCausa raiz de teste (stub)"
+    )
     assert result["metadata"]["probable_root_cause"] == "Causa raiz de teste (stub)"
 
 

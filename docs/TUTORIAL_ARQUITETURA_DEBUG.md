@@ -221,7 +221,7 @@ Três verificações em sequência, todas de código, nenhuma delas depende do L
 | `[tool.pytest.ini_options]` `markers` | Declara o marker `integration` | É o que permite `pytest -m integration` filtrar só os testes que precisam da stack |
 | `[tool.ruff]` `line-length` | Regra de lint/format | Reflete diretamente no que `ruff-format` reescreve no seu código |
 
-### `.env` (na raiz de `~/sap-integration-copilot`)
+### `.env` (na raiz de `~/integration-incident-copilot`)
 
 Cada variável mapeia 1:1 pra um campo de `app/config.py::Settings`:
 

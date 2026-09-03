@@ -1,5 +1,5 @@
 [project]
-name = "sap-integration-copilot"
+name = "integration-incident-copilot"
 version = "0.1.0"
 description = "Assistente de IA para diagnóstico de incidentes de integração SAP (RAG + agentes + conectores SAP)"
 requires-python = ">=3.12"
@@ -53,8 +53,10 @@ dev = [
     "debugpy>=1.8.21",
     "httpx>=0.28.1",
     "httpx2>=2.12.0",
+    "langchain-openai>=1.6.0",
     "pre-commit>=4.6.1",
     "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
     "ruff>=0.16.1",
 ]
 

@@ -180,7 +180,7 @@ por você mesmo, numa máquina nova).
 ### O que já está certo
 
 - **Separação de ambientes por propósito**: `~/ai-lab` (Python de
-  estudo/experimentação) é isolado de `~/sap-integration-copilot`
+  estudo/experimentação) é isolado de `~/integration-incident-copilot`
   (o projeto em si) — cada um com seu próprio `uv`/Python 3.12,
   sem contaminação cruzada de dependências
 - **`uv` como gerenciador único**: resolve, trava e instala

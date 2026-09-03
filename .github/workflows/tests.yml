@@ -1,36 +1,47 @@
-name: tests
+name: Pytest
 
 on:
   push:
-    branches: [master, main]
+    branches: [main]
   pull_request:
-    branches: [master, main]
+    branches: [main]
+  workflow_dispatch:
+
+# Cancela execuções antigas do mesmo branch quando um novo push chega
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  unit-tests:
+  test:
+    name: lint + tests
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+    timeout-minutes: 10
 
-      - uses: astral-sh/setup-uv@v3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          cache-dependency-glob: "uv.lock"
 
-      - name: Instalar dependencias
-        # extra "openai" e necessario aqui: tests/test_llm_factory.py
-        # exercita o provedor ChatOpenAI/AzureChatOpenAI do LLM Gateway
-        # (com chave falsa, sem chamada de rede real), o que exige o
-        # pacote langchain-openai instalado.
-        run: uv sync --extra openai
+      - name: Instalar Python
+        # Lê a versão de .python-version (3.12.13), a mesma do ambiente local
+        run: uv python install
 
-      - name: Lint (ruff)
+      - name: Sincronizar dependências
+        run: uv sync --dev
+
+      - name: Ruff — lint
         run: uv run ruff check .
 
-      - name: Rodar testes unitarios
-        # Toda a pasta tests/, exceto os marcados @pytest.mark.integration
-        # (esses precisam de Qdrant/Ollama locais, que nao existem no
-        # runner do GitHub). Antes so test_connectors.py era executado
-        # aqui - test_llm_factory.py (LLM Gateway) ficava sem cobertura
-        # de CI. Isso testa conectores, o LLM Gateway, contratos e
-        # regras de negocio puras, sem depender de infraestrutura externa.
-        run: uv run pytest tests/ -m "not integration" -v
+      - name: Ruff — formatação
+        run: uv run ruff format --check .
+
+      - name: Pytest
+        # Exclui testes marcados como integration: eles exigem Qdrant e Ollama,
+        # que não existem no runner do GitHub
+        run: uv run pytest -m "not integration" -v --tb=short

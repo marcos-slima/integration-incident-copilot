@@ -32,8 +32,7 @@ _MOCK_SCENARIOS: dict[str, ConnectorResult] = {
         status="error",
         error_code="1 - Critical",
         message=(
-            "Incidente ITSM: alerta de monitoramento aponta RFC destination "
-            "indisponivel no SAP"
+            "Incidente ITSM: alerta de monitoramento aponta RFC destination " "indisponivel no SAP"
         ),
         raw=(
             "number=INC0010001\n"

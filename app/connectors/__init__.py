@@ -3,6 +3,7 @@ Salesforce, Workday, SAP Ariba)."""
 
 from app.connectors.ariba_connector import AribaConnector
 from app.connectors.base import ConnectorResult, ExternalSystemConnector, SAPConnector
+from app.connectors.cap_connector import CAPConnector
 from app.connectors.odata_connector import ODataConnector
 from app.connectors.rfc_connector import RFCConnector
 from app.connectors.salesforce_connector import SalesforceConnector
@@ -16,6 +17,7 @@ _REGISTRY: dict[str, type[SAPConnector]] = {
     "salesforce": SalesforceConnector,
     "workday": WorkdayConnector,
     "ariba": AribaConnector,
+    "cap": CAPConnector,
 }
 
 
@@ -28,6 +30,7 @@ def get_connector(interface_type: str) -> SAPConnector:
 
 __all__ = [
     "AribaConnector",
+    "CAPConnector",
     "ConnectorResult",
     "ExternalSystemConnector",
     "ODataConnector",

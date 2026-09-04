@@ -90,6 +90,17 @@ class Settings(BaseSettings):
     ariba_client_id: str = ""
     ariba_client_secret: str = ""
 
+    # SAP CAP (app/connectors/cap_connector.py) - OData v4 (protocolo
+    # default de qualquer servico CAP, caminho recomendado pelo Clean
+    # Core) + XSUAA (OAuth2 Client Credentials, Basic Auth no token
+    # endpoint - client vinculado a um subaccount/service instance do
+    # BTP, diferente de um client OAuth2 "solto"). Vazio (default) =
+    # modo demo/mock, mesmo criterio dos demais conectores.
+    cap_service_url: str = ""
+    cap_xsuaa_token_url: str = ""
+    cap_client_id: str = ""
+    cap_client_secret: str = ""
+
     # Qdrant
     qdrant_url: str = "http://127.0.0.1:6333"
 

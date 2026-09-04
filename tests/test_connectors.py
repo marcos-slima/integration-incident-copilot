@@ -71,7 +71,8 @@ def test_rfc_connector_use_real_without_pyrfc_raises_configuration_error():
         RFCConnector(use_real=True)
 
 
-def test_servicenow_connector_demo_mode_known_scenario():
+def test_servicenow_connector_demo_mode_known_scenario(monkeypatch):
+    monkeypatch.setattr("app.connectors.servicenow_connector.settings.servicenow_instance_url", "")
     connector = get_connector("servicenow")
     assert isinstance(connector, ServiceNowConnector)
 
@@ -81,7 +82,8 @@ def test_servicenow_connector_demo_mode_known_scenario():
     assert "RFC" in result.message
 
 
-def test_servicenow_connector_demo_mode_unknown_identifier_returns_fallback():
+def test_servicenow_connector_demo_mode_unknown_identifier_returns_fallback(monkeypatch):
+    monkeypatch.setattr("app.connectors.servicenow_connector.settings.servicenow_instance_url", "")
     result = ServiceNowConnector().fetch("INC-NAO-EXISTE")
     assert result.is_mock is True
     assert result.is_fallback is True
@@ -213,7 +215,8 @@ def test_odata_connector_use_real_without_service_url_raises_configuration_error
         ODataConnector(use_real=True)
 
 
-def test_salesforce_connector_demo_mode_known_scenario():
+def test_salesforce_connector_demo_mode_known_scenario(monkeypatch):
+    monkeypatch.setattr("app.connectors.salesforce_connector.settings.salesforce_instance_url", "")
     connector = get_connector("salesforce")
     assert isinstance(connector, SalesforceConnector)
 
@@ -277,7 +280,8 @@ def test_salesforce_connector_real_mode_not_found(monkeypatch):
     assert result.is_fallback is True
 
 
-def test_workday_connector_demo_mode_known_scenario():
+def test_workday_connector_demo_mode_known_scenario(monkeypatch):
+    monkeypatch.setattr("app.connectors.workday_connector.settings.workday_tenant", "")
     connector = get_connector("workday")
     assert isinstance(connector, WorkdayConnector)
 
@@ -336,7 +340,8 @@ def test_workday_connector_real_mode_not_found(monkeypatch):
     assert result.is_fallback is True
 
 
-def test_ariba_connector_demo_mode_known_scenario():
+def test_ariba_connector_demo_mode_known_scenario(monkeypatch):
+    monkeypatch.setattr("app.connectors.ariba_connector.settings.ariba_base_url", "")
     connector = get_connector("ariba")
     assert isinstance(connector, AribaConnector)
 

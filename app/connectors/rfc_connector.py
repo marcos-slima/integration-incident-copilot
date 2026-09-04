@@ -18,6 +18,19 @@ conectado a um sistema real quando nao esta. A chamada real (comentada
 abaixo) mostra a forma esperada de uma leitura de status de IDoc via
 BAPI de monitoramento (`BAPI_IDOC_STATUS` / `RFC_READ_TABLE` sobre
 EDIDC/EDID4, dependendo do que o cliente autorizar).
+
+ATUALIZACAO (setembro/2026): o bloqueio deste conector ficou mais
+definitivo, nao menos. A propria SAP arquivou `PyRFC` (ultimo release
+jan/2024, fim de manutencao anunciado jul/2024, repositorio arquivado
+em 28/mai/2026) - mesmo com a licenca do SDK, o binding Python nao
+tem mais manutencao ativa. Existe uma alternativa "SDK-free" real
+(`open-rfc`, https://github.com/marianfoo/open-rfc, reimplementa o
+protocolo RFC sem depender do SDK proprietario) - mas e exclusiva de
+Node.js/TypeScript, sem equivalente Python conhecido. O `OWASP pysap`
+(referencia de protocolo usada pelo proprio open-rfc) e um toolkit de
+pesquisa/packet-crafting, nao uma biblioteca de aplicacao pronta -
+portar essa abordagem para Python seria um projeto proprio de meses,
+fora do escopo deste portfolio. RFC continua bloqueado.
 """
 
 from app.config import settings

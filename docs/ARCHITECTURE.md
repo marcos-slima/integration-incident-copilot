@@ -86,7 +86,7 @@ codigo Python para ativar - so preencher variaveis no `.env`.
 |---|---|---|
 | `ODataConnector` | **Real** (OAuth2 client_credentials + OData v2) quando `ODATA_SERVICE_URL` configurado | Um tenant CPI/Integration Suite real para validar contra producao |
 | `RFCConnector` | `use_real=True` chama `BAPI_IDOC_STATUS` de verdade via `pyrfc` | `pyrfc` + SAP NetWeaver RFC SDK (binario da SAP, fora do PyPI) + um sistema SAP acessivel |
-| `ServiceNowConnector` | **Real** (Table API via HTTP) quando `SERVICENOW_INSTANCE_URL` configurado | Uma instancia ServiceNow real para validar |
+| `ServiceNowConnector` | **Real, validado contra ServiceNow PDI real** (Table API via HTTP, Basic Auth) | Nada - segundo conector com validacao ponta-a-ponta contra sistema real |
 | `SalesforceConnector` | **Real, validado contra Salesforce Developer Edition real** (OAuth2 Client Credentials + SOQL) | Nada - primeiro conector com validacao ponta-a-ponta contra sistema real, nao so mock |
 | `WorkdayConnector` | **Real** (OAuth2 + REST) quando `WORKDAY_TENANT` configurado | Um tenant Workday real |
 | `AribaConnector` | **Real** (OAuth2 + REST) quando `ARIBA_BASE_URL` configurado | Acesso a Ariba Network/API Business Hub |

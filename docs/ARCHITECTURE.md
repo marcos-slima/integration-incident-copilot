@@ -91,6 +91,23 @@ codigo Python para ativar - so preencher variaveis no `.env`.
 | `WorkdayConnector` | **Real** (OAuth2 + REST) quando `WORKDAY_TENANT` configurado | Um tenant Workday real |
 | `AribaConnector` | **Real** (OAuth2 + REST) quando `ARIBA_BASE_URL` configurado | Acesso a Ariba Network/API Business Hub |
 
+**Nota sobre a assimetria SuccessFactors↔Workday:** o cenario de
+referencia "SuccessFactors↔Workday" e representado hoje SO pelo lado
+Workday - "SuccessFactors" aparece apenas como contexto narrativo no
+payload mock do `WorkdayConnector` (`grep -rn "SuccessFactors" app/`
+confirma isso: zero classe/modulo, so docstring/comentario). Nao ha
+`SuccessFactorsConnector` implementado. Isso e uma decisao implicita,
+nao documentada ate agora - registrada aqui para nao parecer descuido.
+
+Por que ainda nao foi fechado: SuccessFactors expoe OData v2 (SFAPI)
+com autenticacao via SAML bearer assertion, mais complexa que o
+padrao OAuth2 client_credentials ja usado nos demais conectores -
+exigiria um mecanismo de auth novo, nao reuso do que ja existe.
+Registrado como proximo item de backlog de conectores, nao
+implementado nesta fase (mesma disciplina de "um conector por vez,
+validado, antes do proximo" aplicada aos demais).
+
+
 "Real" aqui quer dizer: o codigo de producao (fetch de token OAuth2,
 montagem do header, parsing da resposta) e exercitado de verdade nos
 testes via `httpx.MockTransport` simulando a API documentada de cada

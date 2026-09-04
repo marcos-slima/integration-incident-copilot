@@ -34,19 +34,32 @@ Frontend/API client            Agente externo (A2A)
       │                               │
       └───────────────┬───────────────┘
                        ▼
-           Orquestração via LangGraph
+        Orquestração via LangGraph (app/agent/graph.py)
                        │
-   ┌───────────────────┼───────────────────────┐
-   ▼                   ▼                       ▼
-RAG Retriever    GraphRAG (opt-in)     Conectores SAP + multi-vendor
-(Qdrant)         (Neo4j, desligado    (OData/RFC/ServiceNow/Salesforce/
-                  por default)         Workday/Ariba — reais quando
-   │                   │                configurados, mock por default)
-   └───────────────────┼───────────────────────┘
-                        ▼
-          LLM Gateway (Ollama / OpenAI / Azure OpenAI)
-                        │
-                        ▼
+                       ▼
+             connector (SAP + multi-vendor: OData/RFC/
+          ServiceNow/Salesforce/Workday/Ariba — reais
+                quando configurados, mock por default)
+                       │
+                       ▼
+          retrieve (RAG híbrido dense+sparse BM25,
+                Qdrant, fusão RRF, score_threshold)
+                       │
+                       ▼
+        [graph_enrich] (GraphRAG opt-in, Neo4j,
+                 desligado por default)
+                       │
+                       ▼
+        diagnose (LLM Gateway — Ollama/OpenAI/
+        Azure OpenAI — + guardrails determinísticos)
+                       │
+                       ▼
+        [graph_write] (GraphRAG opt-in, Neo4j)
+                       │
+                       ▼
+                    report
+                       │
+                       ▼
            Resposta + Relatório Markdown
 ```
 

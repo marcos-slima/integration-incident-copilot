@@ -17,7 +17,7 @@ IncidentRequest (FastAPI POST /diagnose, OU app/a2a/ via A2A message/send)
         │              │            │                  │           └─ grava no Neo4j (GraphRAG, opt-in)
         │              │            │                  └─ LLM Gateway (app/llm/factory.py) + guardrails
         │              │            └─ historico da interface no Neo4j (GraphRAG, opt-in)
-        │              └─ Qdrant (app/rag/retriever.py), score_threshold
+        │              └─ Qdrant hibrido (dense+sparse BM25, fusao RRF) via app/rag/retriever.py, score_threshold
         └─ conector SAP/nao-SAP (app/connectors/), mock ou real
 ```
 

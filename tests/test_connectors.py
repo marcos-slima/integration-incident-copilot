@@ -17,7 +17,8 @@ from app.connectors.workday_connector import WorkdayConnector
 from app.exceptions import ConfigurationError
 
 
-def test_odata_connector_known_scenario():
+def test_odata_connector_known_scenario(monkeypatch):
+    monkeypatch.setattr("app.connectors.odata_connector.settings.odata_service_url", "")
     connector = get_connector("odata")
     assert isinstance(connector, ODataConnector)
 

@@ -12,15 +12,16 @@ projeto so falava com SAP; o contrato em si sempre foi generico
 o alias recomendado para conectores novos que nao sao SAP - ver
 `app/connectors/servicenow_connector.py`.
 
-NOTA sobre "mock": OData e RFC ainda sao MOCKS - simulam respostas
-realistas de sistemas SAP para fins de prototipagem/portfolio, sem
-depender de acesso a um sistema real (trocar por chamadas reais e um
-passo futuro que NAO exige mudar o restante do grafo, gracas a essa
-interface comum). O ServiceNowConnector, por outro lado, faz chamadas
-HTTP reais de verdade quando configurado (`SERVICENOW_INSTANCE_URL` no
-.env) - cai em modo demo/mock só na ausencia dessa configuracao, pelo
-mesmo motivo que os conectores SAP mock existem: funcionar sem
-depender de credenciais de um cliente real.
+NOTA sobre "mock": todo conector segue o MESMO criterio - config
+ausente = modo demo/mock (simula respostas realistas para fins de
+prototipagem/portfolio, sem depender de acesso a um sistema real);
+config presente = chamada real (HTTP/OAuth2 de verdade). RFC continua
+mock-only ate `use_real=True` + pyrfc + SAP NetWeaver RFC SDK estarem
+disponiveis (SDK exige S-user de cliente/parceiro, nao ha atalho
+gratuito). Todos os demais (OData, ServiceNow, Salesforce, Workday,
+Ariba, CAP) suportam o caminho real hoje - ver ARCHITECTURE.md,
+secao "Conectores - mock vs. real, hoje" para o estado de validacao
+de cada um.
 """
 
 from abc import ABC, abstractmethod

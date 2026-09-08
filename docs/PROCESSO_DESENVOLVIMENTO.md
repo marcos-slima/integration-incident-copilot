@@ -267,3 +267,61 @@ contínua da Fase 6 — reforça a prática de auditar criticamente
 qualquer sugestão (própria ou externa) antes de aplicar, em vez de
 aceitar ou rejeitar por autoridade da fonte. Ver seção 9 das
 "Decisões de Arquitetura" no README para o detalhamento completo.
+
+## Fase 10 — Validação Real Multi-Vendor + Sétimo Conector (CAP)
+
+1. **`CAPConnector` implementado** (OData v4 + autenticação XSUAA via
+   Client Credentials, Basic Auth no token endpoint) — sétimo conector
+   do projeto, seguindo exatamente o mesmo padrão dos demais
+   (config ausente = mock, config presente = chamada real).
+2. **Três conectores validados ponta-a-ponta contra sistema real, não
+   só mock:** `SalesforceConnector` (Developer Edition gratuita),
+   `ServiceNowConnector` (Personal Developer Instance gratuita), e
+   `CAPConnector` (serviço SAP CAP real, deployado num BTP Trial
+   single-tenant simplificado — HANA Cloud e XSUAA reais, não
+   simulados). Cada validação documentada em `ARCHITECTURE.md` com o
+   resultado real obtido, não só "testado".
+3. **Dois bugs de isolamento de teste corrigidos:** os testes
+   `*_demo_mode_*` de 5 conectores (ServiceNow×2, Salesforce, Workday,
+   Ariba) e 2 do CAP dependiam implicitamente do `.env` local estar
+   vazio — quebraram silenciosamente assim que a primeira credencial
+   real (Salesforce) foi configurada. Corrigido com `monkeypatch`
+   explícito forçando o campo de gating vazio, independente do `.env`
+   real.
+4. **Correção factual sobre RFC/`pyrfc`:** a própria SAP arquivou o
+   `PyRFC` (fim de manutenção anunciado jul/2024, repositório arquivado
+   maio/2026) — o caminho antigo ("esperar o SDK licenciado") já não é
+   mais válido como estava documentado. Existe uma alternativa
+   SDK-free (`open-rfc`), mas exclusiva de Node.js, sem equivalente
+   Python. Achado adicional, mais importante para o posicionamento do
+   produto: o bloqueio de acesso ao SDK é **pessoal ao autor** (sem
+   S-user vinculado a contrato SAP) — um cliente real com licença SAP
+   ativa baixa o mesmo SDK sem custo adicional, como parte da licença
+   que já paga. O bloqueio documentado nunca foi comercial para o
+   cliente-alvo do produto.
+5. **Diagrama do README corrigido:** mostrava `RAG`, `GraphRAG` e
+   `Conectores` como três ramos paralelos convergindo para um "LLM
+   Gateway" final — o fluxo real é sequencial
+   (`connector → retrieve → [graph_enrich] → diagnose → [graph_write] → report`),
+   com o LLM Gateway invocado de dentro do node `diagnose`, não uma
+   etapa própria depois de tudo convergir.
+6. **Assimetria SuccessFactors/Workday documentada explicitamente:** o
+   cenário de referência "SuccessFactors↔Workday" é representado hoje
+   só pelo lado Workday — não havia `SuccessFactorsConnector`
+   implementado, e isso nunca tinha sido registrado como decisão
+   consciente. Corrigido em `ARCHITECTURE.md`, com o motivo (SFAPI usa
+   SAML bearer assertion, mais complexo que o padrão client_credentials
+   já usado) e status de backlog explícito.
+
+**Escopo deliberadamente fora desta fase:** `APIManagementConnector`
+(sinal de infraestrutura de API via Analytics do Integration Suite)
+continua só documentado como próximo passo, não implementado — mesma
+disciplina de "um conector por vez, validado, antes do próximo"
+mantida desde a Fase 9. Validação real de ServiceNow/Workday/Ariba
+adicionais e RFC continuam bloqueadas por falta de sandbox
+gratuito/SDK acessível, não por falta de esforço.
+
+**Critério de saída:** 65 testes não-integração passando, 3 de 7
+conectores com execução real comprovada (não só mockada) documentada,
+achado factual sobre `pyrfc` registrado com fonte verificada em
+`app/connectors/rfc_connector.py`.

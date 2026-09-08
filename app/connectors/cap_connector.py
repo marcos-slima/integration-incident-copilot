@@ -31,6 +31,8 @@ Uso:
     result = CAPConnector().fetch("PO-APPROVAL-00042")
 """
 
+from urllib.parse import quote
+
 import httpx
 
 from app.config import settings
@@ -97,9 +99,13 @@ class CAPConnector(ExternalSystemConnector):
         client = self._injected_client or httpx.Client(timeout=self.timeout)
         try:
             token = self._get_access_token(client)
+            # httpx codifica espaco como "+" (form-urlencoded) quando usa
+            # params={} - o parser OData do CAP exige %20 (RFC 3986
+            # estrito) e rejeita "+" com erro de parsing. Monta a URL
+            # manualmente com encoding correto em vez de usar params=.
+            filter_expr = quote(f"code eq '{identifier}'", safe="()'")
             response = client.get(
-                settings.cap_service_url.rstrip("/"),
-                params={"$filter": f"ID eq '{identifier}'"},
+                f"{settings.cap_service_url.rstrip('/')}?$filter={filter_expr}",
                 headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
             )
         except httpx.HTTPStatusError as exc:
@@ -150,11 +156,19 @@ class CAPConnector(ExternalSystemConnector):
             )
 
         record = records[0]
+        # Mapeamento generico - o schema real de cada servico CAP varia
+        # (validado aqui contra SalesCatalogService.Products, entidade
+        # de dado mestre, nao um registro de incidente propriamente
+        # dito - ver nota de validacao no docstring do modulo). Tenta
+        # campos comuns de descricao/categoria antes de cair no record
+        # bruto, para nao quebrar contra um schema diferente.
+        description = record.get("description") or record.get("name") or str(record)
+        category = record.get("type_code") or record.get("status") or ""
         return ConnectorResult(
             source_system="SAP CAP",
             status="ok",
-            error_code=str(record.get("status", "")),
-            message=str(record.get("message", record)),
+            error_code=str(category),
+            message=str(description),
             raw=str(record),
             is_mock=False,
         )

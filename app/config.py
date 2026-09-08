@@ -101,6 +101,11 @@ class Settings(BaseSettings):
     cap_client_id: str = ""
     cap_client_secret: str = ""
 
+    apim_analytics_url: str = ""
+    apim_oauth_token_url: str = ""
+    apim_client_id: str = ""
+    apim_client_secret: str = ""
+
     # Qdrant
     qdrant_url: str = "http://127.0.0.1:6333"
 

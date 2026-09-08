@@ -23,7 +23,8 @@ externo com HTTP 422, ao inves de processar a aprovacao.
    validacao nova
 
 ## Resolucao tipica
-Alinhar o payload do consumidor externo ao contrato atual do servico
-(campo obrigatorio ausente), ou, se a mudanca de contrato foi
-intencional, versionar o endpoint OData v4 para nao quebrar
-consumidores existentes.
+Corrigir a anotacao `@mandatory`/`@assert.range` no modelo CDS para
+ficar menos restritiva, ou publicar uma nova revisao do endpoint
+(ex: `PurchaseOrderApprovalsV2`) no deploy do CAP, para nao forcar
+clientes ja integrados a se adaptarem de imediato as validacoes mais
+rigidas do modelo de dados.

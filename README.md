@@ -38,8 +38,9 @@ Frontend/API client            Agente externo (A2A)
                        │
                        ▼
              connector (SAP + multi-vendor: OData/RFC/
-          ServiceNow/Salesforce/Workday/Ariba — reais
-                quando configurados, mock por default)
+          ServiceNow/Salesforce/Workday/Ariba/CAP/
+          APIManagement — reais quando configurados,
+                mock por default)
                        │
                        ▼
           retrieve (RAG híbrido dense+sparse BM25,
@@ -81,7 +82,8 @@ conectores).
 - **Observabilidade**: Langfuse (opcional; tracing de todo o fluxo do
   agente quando configurado)
 - **Conectores**: OData / RFC / ServiceNow / Salesforce / Workday / SAP
-  Ariba — todos reais (chamada HTTP/OAuth2 de verdade) quando
+  Ariba / SAP CAP / SAP API Management (schema especulativo, ver
+  ARCHITECTURE.md) — reais (chamada HTTP/OAuth2 de verdade) quando
   configurados, caem em mock só sem credencial/endpoint informado
 
 ## Desenvolvimento local

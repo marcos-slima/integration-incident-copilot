@@ -10,6 +10,15 @@
 > `.vscode/launch.json` já configurado (ver Fase 4 do
 > `docs/PROCESSO_DESENVOLVIMENTO.md`).
 
+> **Nota de atualização:** este tutorial foi escrito quando o projeto
+> tinha só 2 conectores (OData/RFC, ambos mock) e 4 nodes no grafo. Hoje
+> sao 8 conectores (a maioria real quando configurado) e o grafo pode
+> ter ate 6 nodes com GraphRAG habilitado
+> (`connector → retrieve → [graph_enrich] → diagnose → [graph_write] → report`).
+> O roteiro de debug abaixo continua correto para o caso RFC guiado na
+> Seção 5, mas nao cobre os nodes/conectores novos — ver
+> `docs/ARCHITECTURE.md` para o estado completo e atual.
+
 ---
 
 ## 1. Mapa Geral da Solução
@@ -71,7 +80,7 @@ OData/RFC)        + embeddings              │
 | Contratos de dados | `app/models.py` | `IncidentRequest` (entrada), `DiagnosisResponse` (saída) |
 | Configuração central | `app/config.py` | Única fonte de verdade — URLs, modelo, credenciais, lida do `.env` |
 | Orquestração (o "workflow") | `app/agent/graph.py` | Define os 4 nodes e as arestas entre eles |
-| Busca de dados no sistema SAP | `app/connectors/` | `base.py` (contrato), `odata_connector.py`, `rfc_connector.py` |
+| Busca de dados no sistema SAP + multi-vendor | `app/connectors/` | `base.py` (contrato comum), 8 conectores (OData, RFC, ServiceNow, Salesforce, Workday, Ariba, CAP, APIManagement) - maioria real quando configurado |
 | Busca de conhecimento (RAG) | `app/rag/ingest.py`, `app/rag/retriever.py` | Indexação e consulta no Qdrant |
 | Testes | `tests/` | Regressão automatizada de tudo acima |
 
@@ -98,10 +107,11 @@ Só o que o projeto **realmente usa** — não a API inteira de cada lib.
 | **langchain-community** (`PyPDFLoader`) | Extração de texto de PDF | Usado só na ingestão da biblioteca de referência (livros), não no fluxo de diagnóstico | `PyPDFLoader(path).load()` |
 | **qdrant-client** | Cliente Python do Qdrant (vector DB) | Busca por similaridade vetorial — é o "motor de busca" do RAG | `QdrantClient(url=...)`, `.create_collection()`, `.upsert()`, `.query_points()` |
 | **Ollama** (runtime) | Servidor de inferência local de LLMs | Roda modelo local (`qwen2.5-coder:32b`) sem depender de API paga/nuvem — decisão alinhada ao seu hardware (APU com ROCm) | Não é chamado diretamente pelo código do Copilot — o `langchain-ollama` fala com ele via HTTP em `settings.ollama_host` |
+| **LLM Gateway** (`app/llm/factory.py`) | Abstracao interna, nao uma lib externa | Permite trocar Ollama por OpenAI/Azure OpenAI via `Settings.llm_provider`, sem tocar no grafo | `get_chat_model()` retorna um `BaseChatModel` do LangChain, seja qual for o provedor escolhido |
 | **Langfuse** | Observabilidade de agentes/LLM | Visibilidade de tempo/tokens/payload de cada etapa, sem isso o sistema era uma caixa-preta | `@observe` (decorator), `CallbackHandler` (LangChain), `get_client().flush()` |
 | **pytest** | Framework de testes | Padrão de mercado Python; `conftest.py` implementa skip automático de testes de integração se a stack estiver fora do ar | `@pytest.mark.parametrize`, `@pytest.mark.integration`, fixtures |
 | **promptfoo** | Comparação/regressão de prompt e modelo | Usado *fora* do código de produção — ferramenta de decisão, não dependência do Copilot em si | `providers` (exec customizado chamando `run_diagnosis` de verdade), `tests`/`assert` |
-| **pyRFC** | Binding Python pro SAP NetWeaver RFC SDK | **Ainda não integrado** — é o que faria o conector RFC real (hoje é mock). Bloqueado por licenciamento do SDK (exige S-user com autorização de download), não por falta de código | N/A hoje — ver `docs/PROCESSO_DESENVOLVIMENTO.md`, Fase 7 |
+| **pyRFC** | Binding Python pro SAP NetWeaver RFC SDK | O `RFCConnector` ja tem `use_real=True` implementado e pronto, mas **`pyrfc` foi arquivado pela propria SAP** (mai/2026) - bloqueio persiste, agora por falta de binding mantido, alem do SDK licenciado (que e gratuito pra cliente real com S-user, so nao pra este portfolio) | Ver `app/connectors/rfc_connector.py`, docstring atualizada |
 
 ### Analogia ABAP
 
@@ -228,7 +238,7 @@ Cada variável mapeia 1:1 pra um campo de `app/config.py::Settings`:
 | Variável no `.env` | Campo em `Settings` | O que muda no comportamento |
 |---|---|---|
 | (não setado, usa default) | `llm_model` | Qual modelo o `diagnose_node` chama — foi editando isso indiretamente (via `sed` no código, antes do `app/config.py` existir) que trocamos de `qwen3:30b-a3b` pra `qwen2.5-coder:32b` |
-| `NEO4J_PASSWORD` | `neo4j_password` | Ainda não usado por nenhum node — provisionado, não conectado |
+| `NEO4J_PASSWORD` | `neo4j_password` | Usado pelo GraphRAG (`app/rag/graph_store.py`) quando `GRAPH_RAG_ENABLED=true` — desligado por default, mas implementado e testado (nao mais so provisionado) |
 | `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_HOST` | `langfuse_*` | Sem essas três, o `CallbackHandler()` do Langfuse falha silenciosamente em autenticar — os traces simplesmente não aparecem em `localhost:3000` |
 
 **Para ver a configuração efetiva sem ler código:** `uv run python -m app.config`

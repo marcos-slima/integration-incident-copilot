@@ -43,7 +43,7 @@ nenhuma logica duplicada entre eles: o endpoint REST `/diagnose`
 | Orquestracao | `app/agent/graph.py` | Grafo LangGraph, prompt, guardrails |
 | LLM Gateway | `app/llm/factory.py` | Escolhe o `BaseChatModel` (Ollama/OpenAI/Azure OpenAI) a partir de `Settings` |
 | RAG | `app/rag/` | Ingestao (`ingest.py`), busca vetorial (`retriever.py`) via Qdrant, e GraphRAG opt-in (`graph_store.py`) via Neo4j |
-| Conectores | `app/connectors/` | Um por sistema externo (OData, RFC, ServiceNow, Salesforce, Workday, SAP Ariba); interface comum em `base.py` |
+| Conectores | `app/connectors/` | Um por sistema externo (OData, RFC, ServiceNow, Salesforce, Workday, SAP Ariba, SAP CAP, SAP API Management); interface comum em `base.py` |
 | Config | `app/config.py` | Unica fonte de verdade (`.env` + defaults), nunca hardcoded espalhado |
 | Modelos | `app/models.py` | Contratos Pydantic da API (`IncidentRequest`/`DiagnosisResponse`) |
 

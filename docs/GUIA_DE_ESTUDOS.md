@@ -163,4 +163,4 @@ Lista completa: docs/ferramentas-sustentacao-ecossistema.md
 - Entender o fluxo com debugger: docs/TUTORIAL_ARQUITETURA_DEBUG.md
 - Ver o processo completo: docs/PROCESSO_DESENVOLVIMENTO.md
 - Tese de posicionamento (TCO): docs/TCO_SAP_AI_CORE_VS_SELF_HOSTED.md
-- Próximos passos: APIManagementConnector (documentado, não implementado), validação real de Workday/Ariba/RFC (bloqueados), definir corte de v1.0
+- Próximos passos: validar schema real do APIManagementConnector contra tenant real (implementado, mas especulativo), validação real de Workday/Ariba/RFC (bloqueados), definir corte de v1.0

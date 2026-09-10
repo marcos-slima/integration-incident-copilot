@@ -1,3 +1,74 @@
+# Guia de Estudos - Integration Incident Copilot
+
+> Documento de sintese, para releitura e consolidacao de aprendizado.
+> Nao e um log da construcao do projeto - e o que restou depois de
+> filtrar tentativa e erro. Para a investigacao completa de qualquer
+> item, os documentos-fonte estao linkados ao final de cada secao.
+
+---
+
+## 1. Resumo Executivo
+
+O **Integration Incident Copilot** e um agente de IA que diagnostica
+incidentes de integracao - SAP e nao-SAP. Dado um incidente - texto
+livre e/ou dados estruturados de um conector - ele recupera o caso de
+troubleshooting mais parecido numa base de conhecimento vetorial
+(busca hibrida: densa + esparsa), usa um LLM para produzir causa
+raiz e proximos passos, e devolve um relatorio em Markdown.
+
+**Por que existe:** o SAP AI Core exige HANA Cloud como camada
+obrigatoria, independente do quanto de IA for consumido - isso exclui
+estruturalmente ~40-45% da base de clientes SAP ECC do mundo (Gartner/
+IDC), que deve permanecer em sistemas legados alem de 2027. Este
+projeto e a prova tecnica de que da pra levar IA de diagnostico real
+(RAG + agente + conectores) pra esse publico, rodando local ou sobre
+um provedor que o cliente ja tenha - ver
+docs/TCO_SAP_AI_CORE_VS_SELF_HOSTED.md.
+
+**Stack:** Python (uv), FastAPI, LangGraph, LangChain, Qdrant (RAG
+hibrido dense+sparse), Neo4j (GraphRAG opt-in), Ollama/OpenAI/Azure
+OpenAI (LLM Gateway plugavel), Langfuse (observabilidade), pytest,
+promptfoo, Docker Compose, GitHub Actions.
+
+**Por que importa como peca de portfolio:** nao e so "um RAG que
+funciona" - e um agente com guardrails deterministicos (nao confia
+cegamente no LLM), decisoes de modelo embasadas em comparacao formal,
+oito conectores multi-vendor (tres validados contra sistema real, nao
+so mock), camada A2A real (protocolo aberto), e um historico
+documentado de bugs reais encontrados e corrigidos com metodologia,
+nao achismo.
+
+Repositorio: github.com/marcos-slima/sap-integration-copilot
+
+---
+
+## 2. Arquitetura
+
+```mermaid
+flowchart TD
+    A["Frontend / API client"] -->|"POST /diagnose"| C["FastAPI"]
+    B["Agente externo (A2A)"] -->|"JSON-RPC 2.0"| D["app/a2a/<br/>Agent Card + Task Manager"]
+    C --> E["Orquestracao via LangGraph<br/>app/agent/graph.py"]
+    D --> E
+    E --> F["<b>connector</b><br/>SAP + multi-vendor: OData - RFC - ServiceNow<br/>Salesforce - Workday - Ariba - CAP - APIManagement<br/><i>reais quando configurados, mock por default</i>"]
+    F --> G["<b>retrieve</b><br/>RAG hibrido dense+sparse BM25<br/>Qdrant, fusao RRF, score_threshold"]
+    G --> H{"GraphRAG<br/>habilitado?"}
+    H -->|"sim (opt-in)"| I["graph_enrich<br/>Neo4j"]
+    H -->|"nao (default)"| J["<b>diagnose</b><br/>LLM Gateway: Ollama - OpenAI - Azure OpenAI<br/>+ guardrails deterministicos"]
+    I --> J
+    J --> K{"GraphRAG<br/>habilitado?"}
+    K -->|"sim (opt-in)"| L["graph_write<br/>Neo4j"]
+    K -->|"nao (default)"| M["<b>report</b>"]
+    L --> M
+    M --> N["Resposta + Relatorio Markdown"]
+
+    style H fill:#f5f5f5,stroke:#999
+    style K fill:#f5f5f5,stroke:#999
+    style F fill:#e8f0fe,stroke:#4285f4
+    style G fill:#e8f0fe,stroke:#4285f4
+    style J fill:#e8f0fe,stroke:#4285f4
+```
+
 
 **Princípio central:** o connector roda antes do retrieve — dado
 estruturado de sistema (quando disponível) tem prioridade sobre

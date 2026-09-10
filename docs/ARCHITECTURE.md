@@ -7,18 +7,25 @@ foram resolvidos), ver a secao "Decisoes de Arquitetura" no
 
 ## Fluxo
 
-```
-IncidentRequest (FastAPI POST /diagnose, OU app/a2a/ via A2A message/send)
-        │
-        ▼
-   LangGraph: connector -> retrieve -> [graph_enrich] -> diagnose -> [graph_write] -> report -> END
-        │              │            │                  │           │              │
-        │              │            │                  │           │              └─ monta o Markdown final
-        │              │            │                  │           └─ grava no Neo4j (GraphRAG, opt-in)
-        │              │            │                  └─ LLM Gateway (app/llm/factory.py) + guardrails
-        │              │            └─ historico da interface no Neo4j (GraphRAG, opt-in)
-        │              └─ Qdrant hibrido (dense+sparse BM25, fusao RRF) via app/rag/retriever.py, score_threshold
-        └─ conector SAP/nao-SAP (app/connectors/), mock ou real
+```mermaid
+flowchart TD
+    A["IncidentRequest<br/>FastAPI POST /diagnose<br/>OU A2A message/send"] --> B["<b>connector</b><br/>SAP/nao-SAP (app/connectors/)<br/>mock ou real"]
+    B --> C["<b>retrieve</b><br/>Qdrant hibrido dense+sparse BM25<br/>fusao RRF, score_threshold"]
+    C --> D{"GraphRAG<br/>opt-in?"}
+    D -->|"sim"| E["graph_enrich<br/>historico da interface no Neo4j"]
+    D -->|"nao (default)"| F["<b>diagnose</b><br/>LLM Gateway (app/llm/factory.py)<br/>+ guardrails"]
+    E --> F
+    F --> G{"GraphRAG<br/>opt-in?"}
+    G -->|"sim"| H["graph_write<br/>grava no Neo4j"]
+    G -->|"nao (default)"| I["<b>report</b><br/>monta o Markdown final"]
+    H --> I
+    I --> J["END"]
+
+    style D fill:#f5f5f5,stroke:#999
+    style G fill:#f5f5f5,stroke:#999
+    style B fill:#e8f0fe,stroke:#4285f4
+    style C fill:#e8f0fe,stroke:#4285f4
+    style F fill:#e8f0fe,stroke:#4285f4
 ```
 
 Os nodes `graph_enrich`/`graph_write` (GraphRAG) so entram no grafo

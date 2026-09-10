@@ -26,42 +26,29 @@ já cobre cinco sistemas de referência não-SAP/multi-vendor de verdade
 
 ## Arquitetura
 
-```
-Frontend/API client            Agente externo (A2A)
-      │                               │
-      ▼                               ▼
-   FastAPI /diagnose          app/a2a/ (Agent Card + JSON-RPC)
-      │                               │
-      └───────────────┬───────────────┘
-                       ▼
-        Orquestração via LangGraph (app/agent/graph.py)
-                       │
-                       ▼
-             connector (SAP + multi-vendor: OData/RFC/
-          ServiceNow/Salesforce/Workday/Ariba/CAP/
-          APIManagement — reais quando configurados,
-                mock por default)
-                       │
-                       ▼
-          retrieve (RAG híbrido dense+sparse BM25,
-                Qdrant, fusão RRF, score_threshold)
-                       │
-                       ▼
-        [graph_enrich] (GraphRAG opt-in, Neo4j,
-                 desligado por default)
-                       │
-                       ▼
-        diagnose (LLM Gateway — Ollama/OpenAI/
-        Azure OpenAI — + guardrails determinísticos)
-                       │
-                       ▼
-        [graph_write] (GraphRAG opt-in, Neo4j)
-                       │
-                       ▼
-                    report
-                       │
-                       ▼
-           Resposta + Relatório Markdown
+```mermaid
+flowchart TD
+    A["Frontend / API client"] -->|"POST /diagnose"| C["FastAPI"]
+    B["Agente externo (A2A)"] -->|"JSON-RPC 2.0"| D["app/a2a/<br/>Agent Card + Task Manager"]
+    C --> E["Orquestracao via LangGraph<br/>app/agent/graph.py"]
+    D --> E
+    E --> F["<b>connector</b><br/>SAP + multi-vendor: OData - RFC - ServiceNow<br/>Salesforce - Workday - Ariba - CAP - APIManagement<br/><i>reais quando configurados, mock por default</i>"]
+    F --> G["<b>retrieve</b><br/>RAG hibrido dense+sparse BM25<br/>Qdrant, fusao RRF, score_threshold"]
+    G --> H{"GraphRAG<br/>habilitado?"}
+    H -->|"sim (opt-in)"| I["graph_enrich<br/>Neo4j"]
+    H -->|"nao (default)"| J["<b>diagnose</b><br/>LLM Gateway: Ollama - OpenAI - Azure OpenAI<br/>+ guardrails deterministicos"]
+    I --> J
+    J --> K{"GraphRAG<br/>habilitado?"}
+    K -->|"sim (opt-in)"| L["graph_write<br/>Neo4j"]
+    K -->|"nao (default)"| M["<b>report</b>"]
+    L --> M
+    M --> N["Resposta + Relatorio Markdown"]
+
+    style H fill:#f5f5f5,stroke:#999
+    style K fill:#f5f5f5,stroke:#999
+    style F fill:#e8f0fe,stroke:#4285f4
+    style G fill:#e8f0fe,stroke:#4285f4
+    style J fill:#e8f0fe,stroke:#4285f4
 ```
 
 Ver [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) para o detalhamento

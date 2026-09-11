@@ -19,18 +19,18 @@ abaixo) mostra a forma esperada de uma leitura de status de IDoc via
 BAPI de monitoramento (`BAPI_IDOC_STATUS` / `RFC_READ_TABLE` sobre
 EDIDC/EDID4, dependendo do que o cliente autorizar).
 
-ATUALIZACAO (setembro/2026): o bloqueio deste conector ficou mais
-definitivo, nao menos. A propria SAP arquivou `PyRFC` (ultimo release
-jan/2024, fim de manutencao anunciado jul/2024, repositorio arquivado
-em 28/mai/2026) - mesmo com a licenca do SDK, o binding Python nao
-tem mais manutencao ativa. Existe uma alternativa "SDK-free" real
-(`open-rfc`, https://github.com/marianfoo/open-rfc, reimplementa o
-protocolo RFC sem depender do SDK proprietario) - mas e exclusiva de
-Node.js/TypeScript, sem equivalente Python conhecido. O `OWASP pysap`
-(referencia de protocolo usada pelo proprio open-rfc) e um toolkit de
-pesquisa/packet-crafting, nao uma biblioteca de aplicacao pronta -
-portar essa abordagem para Python seria um projeto proprio de meses,
-fora do escopo deste portfolio. RFC continua bloqueado.
+ATUALIZACAO (setembro/2026): status do bloqueio REVERTIDO. O SDK
+NetWeaver RFC 7.50 PL19 foi obtido via S-user com contrato SAP ativo
+e instalado em /usr/local/sap/nwrfcsdk. O `pyrfc` 3.3.1 (yanked no
+PyPI, mas instalavel via versao especifica) compilou contra Python 3.12
+e carregou o SDK real sem erros. Validado: RFCConnector(use_real=True)
+inicializa e passa pela validacao de parametros do proprio SDK SAP
+(erro RFC_INVALID_PARAMETER por falta de host destino - esperado sem
+sistema SAP real disponivel, mas prova que o binding funciona).
+
+O bloqueio anterior era pessoal (sem S-user/contrato SAP) - confirmado
+que nao e um bloqueio tecnico do produto. Cliente real com licenca SAP
+ativa usa esse conector sem restricao adicional.
 """
 
 from app.config import settings

@@ -63,11 +63,13 @@ def test_rfc_connector_gateway_pool_timeout_scenario():
     assert "pool" in result.message.lower()
 
 
-def test_rfc_connector_use_real_without_pyrfc_raises_configuration_error():
-    # No ambiente de CI/dev nao ha pyrfc/SAP RFC SDK instalado - o
-    # objetivo deste teste e garantir que isso falha alto e claro,
-    # nunca cai silenciosamente no mock quando use_real=True foi pedido
-    # explicitamente.
+def test_rfc_connector_use_real_without_pyrfc_raises_configuration_error(monkeypatch):
+    # Simula o ambiente de CI onde pyrfc/SAP RFC SDK nao esta instalado.
+    # Localmente o SDK pode estar disponivel (SDK 7.50 PL19 instalado em
+    # /usr/local/sap/nwrfcsdk) - por isso forcamos HAS_PYRFC=False via
+    # monkeypatch para garantir que o guardrail funciona independente do
+    # ambiente local.
+    monkeypatch.setattr("app.connectors.rfc_connector.HAS_PYRFC", False)
     with pytest.raises(ConfigurationError, match="pyrfc"):
         RFCConnector(use_real=True)
 

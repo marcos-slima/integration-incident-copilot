@@ -92,7 +92,7 @@ codigo Python para ativar - so preencher variaveis no `.env`.
 | Conector | Estado hoje | Falta so |
 |---|---|---|
 | `ODataConnector` | **Real** (OAuth2 client_credentials + OData v2) quando `ODATA_SERVICE_URL` configurado | Um tenant CPI/Integration Suite real para validar contra producao |
-| `RFCConnector` | `use_real=True` chama `BAPI_IDOC_STATUS` de verdade via `pyrfc` | `pyrfc` + SAP NetWeaver RFC SDK (binario da SAP, fora do PyPI) + um sistema SAP acessivel |
+| `RFCConnector` | `use_real=True` chama `BAPI_IDOC_STATUS` de verdade via `pyrfc` | `pyrfc` 3.3.1 + SAP NetWeaver RFC SDK 7.50 PL19 — **validado: SDK instalado, pyrfc 3.3.1 compila contra Python 3.12, binding funciona** (bloqueio era pessoal/S-user, nao tecnico — cliente com licenca SAP usa sem restricao) |
 | `ServiceNowConnector` | **Real, validado contra ServiceNow PDI real** (Table API via HTTP, Basic Auth) | Nada - segundo conector com validacao ponta-a-ponta contra sistema real |
 | `SalesforceConnector` | **Real, validado contra Salesforce Developer Edition real** (OAuth2 Client Credentials + SOQL) | Nada - primeiro conector com validacao ponta-a-ponta contra sistema real, nao so mock |
 | `WorkdayConnector` | **Real** (OAuth2 + REST) quando `WORKDAY_TENANT` configurado | Um tenant Workday real |

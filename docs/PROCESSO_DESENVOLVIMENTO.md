@@ -325,3 +325,48 @@ gratuito/SDK acessível, não por falta de esforço.
 conectores com execução real comprovada (não só mockada) documentada,
 achado factual sobre `pyrfc` registrado com fonte verificada em
 `app/connectors/rfc_connector.py`.
+
+## Fase 11 — Desbloqueio Real do RFC + ABAP Cloud Developer Trial
+
+1. **SAP NetWeaver RFC SDK 7.50 PL19 obtido e instalado** em
+   `/usr/local/sap/nwrfcsdk/` via S-user com contrato SAP ativo —
+   confirmando que o bloqueio documentado na Fase 10 era **pessoal**
+   (ausência de S-user/contrato no portfolio individual), não técnico.
+   Clientes reais com licença SAP usam o SDK sem custo adicional.
+
+2. **`pyrfc` 3.3.1 instalado e validado contra Python 3.12** — o
+   pacote foi retirado do índice padrão do PyPI (yanked), mas é
+   instalável via versão específica (`uv pip install "pyrfc==3.3.1"`).
+   Compilou contra o SDK real sem erros.
+
+3. **ABAP Cloud Developer Trial 2025 rodando via Docker** —
+   imagem oficial da SAP (`sapse/abap-cloud-developer-trial:2025`,
+   22GB comprimida), sistema A4H, release 754, HANA 2.0. Scripts de
+   start/stop criados em `~/start-abap-trial.sh` e
+   `~/stop-abap-trial.sh`. Primeira inicialização: ~30-45 minutos.
+
+4. **`RFCConnector(use_real=True)` validado ponta-a-ponta contra
+   sistema ABAP real** — `RFC_SYSTEM_INFO` chamado com sucesso
+   (`sysId=A4H`, `saprl=754`). `BAPI_IDOC_STATUS` indisponível no
+   Trial (ABAP Cloud nao inclui BAPIs clássicas de IDoc por padrão);
+   para validar a BAPI específica, criar função Z no Trial ou usar
+   landscape de cliente real.
+
+5. **`APIManagementConnector` implementado** (oitavo conector) com
+   schema marcado explicitamente como ESPECULATIVO — endpoint e
+   formato de resposta inferidos por analogia, não confirmados contra
+   documentação oficial do SAP API Management. Validação real
+   pendente.
+
+6. **Correção de colisão de retrieval RAG** — adição do documento
+   `cap_custom_purchase_approval_failure.md` à base de conhecimento
+   causou regressão em dois testes (`odata_timeout_cpi.md` deixou de
+   ser top-1 para a query "iFlow travando ao consumir OData sem
+   retorno"). Corrigido reescrevendo o trecho de resolução do documento
+   CAP para usar vocabulário mais específico de domínio CDS/CAP, sem
+   termos genéricos que competiam com o documento correto.
+
+**Critério de saída:** 68 testes passando (65 não-integração + 3 do
+`APIManagementConnector`), `RFCConnector` com conexão real validada
+contra ABAP Cloud Trial, quatro conectores com execução ponta-a-ponta
+comprovada (Salesforce, ServiceNow, CAP, RFC).

@@ -41,3 +41,5 @@ promptfoo-output*
 
 # Backups locais (não versionados)
 scripts/backup-scripts/
+*.trc
+dev_rfc.log

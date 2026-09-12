@@ -274,7 +274,7 @@ aceitar ou rejeitar por autoridade da fonte. Ver seção 9 das
    Client Credentials, Basic Auth no token endpoint) — sétimo conector
    do projeto, seguindo exatamente o mesmo padrão dos demais
    (config ausente = mock, config presente = chamada real).
-2. **Três conectores validados ponta-a-ponta contra sistema real, não
+2. **Quatro conectores validados ponta-a-ponta contra sistema real** (Salesforce, ServiceNow, CAP, RFC via ABAP Cloud Trial A4H) — nao
    só mock:** `SalesforceConnector` (Developer Edition gratuita),
    `ServiceNowConnector` (Personal Developer Instance gratuita), e
    `CAPConnector` (serviço SAP CAP real, deployado num BTP Trial

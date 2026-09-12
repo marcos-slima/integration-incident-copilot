@@ -33,7 +33,7 @@ promptfoo, Docker Compose, GitHub Actions.
 **Por que importa como peca de portfolio:** nao e so "um RAG que
 funciona" - e um agente com guardrails deterministicos (nao confia
 cegamente no LLM), decisoes de modelo embasadas em comparacao formal,
-oito conectores multi-vendor (tres validados contra sistema real, nao
+oito conectores multi-vendor (quatro validados contra sistema real: Salesforce, ServiceNow, CAP, RFC/ABAP Trial — nao
 so mock), camada A2A real (protocolo aberto), e um historico
 documentado de bugs reais encontrados e corrigidos com metodologia,
 nao achismo.

@@ -32,7 +32,7 @@ class Settings(BaseSettings):
 
     # Ollama (default local-first)
     ollama_host: str = "http://127.0.0.1:11434"
-    llm_model: str = "qwen2.5-coder:32b"
+    llm_model: str = "qwen3-coder-next:latest"
     embedding_model: str = "nomic-embed-text"
 
     # OpenAI / compativel com OpenAI (inclui endpoints locais tipo

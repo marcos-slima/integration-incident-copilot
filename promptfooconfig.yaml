@@ -1,13 +1,13 @@
-description: "Comparacao qwen3.8:27b vs qwen2.5-coder:32b no diagnostico do SAP Integration Copilot (pipeline real: conector + RAG + guardrails)"
+description: "Avaliacao qwen3-coder-next:latest (producao) no diagnostico do SAP Integration Copilot (pipeline real: conector + RAG + guardrails)"
 
 prompts:
   - file://prompts/case.txt
 
+concurrency: 1
+
 providers:
-  - id: "exec:uv run python3 scripts/promptfoo_provider.py qwen3.8:27b"
-    label: "qwen3.8:27b (candidato)"
-  - id: "exec:uv run python3 scripts/promptfoo_provider.py qwen2.5-coder:32b"
-    label: "qwen2.5-coder:32b (atual - producao)"
+  - id: "exec:uv run python3 scripts/promptfoo_provider.py qwen3-coder-next:latest"
+    label: "qwen3-coder-next (producao atual)"
 
 tests:
   - description: "401 sem conector"

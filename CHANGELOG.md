@@ -42,6 +42,21 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 
 ---
 
+## [2.0.1] — 2026-09-15
+
+### Corrigido (double check P0/P1/P2)
+
+- **P1 — Prompt injection** — sanitização em todos os campos não confiáveis
+  (`description`, `logs`, `payload`, chunks do RAG) via `sanitize_untrusted_input()`
+  em `app/agent/nodes.py`; neutraliza padrões conhecidos antes de entrar no prompt LLM
+- **P2 — Imagens Docker fixadas** — `ollama/ollama:0.34.1`, `neo4j:5.26.0-community`
+  (qdrant:v1.19.0 já estava fixado); reprodutibilidade garantida em todos os serviços
+- **P2 — Ollama local** — atualizado para v0.34.1 (alinhado com docker-compose.yml)
+
+---
+
+## [2.0.0] — 2026-09-15
+
 ## [1.0.0] — 2026-09-15
 
 Primeira versão estável. Pipeline completo de diagnóstico de incidentes de integração SAP e multi-vendor, com interface web, 8 conectores (4 validados contra sistema real), camada A2A, GraphRAG opt-in e documentação de produto completa.

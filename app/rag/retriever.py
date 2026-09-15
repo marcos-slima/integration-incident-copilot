@@ -19,6 +19,7 @@ from fastembed import SparseTextEmbedding
 from langchain_ollama import OllamaEmbeddings
 from qdrant_client import QdrantClient
 from qdrant_client.models import Fusion, FusionQuery, Prefetch, SparseVector
+from sentence_transformers import CrossEncoder
 
 from app.config import settings
 
@@ -28,6 +29,8 @@ QDRANT_URL = settings.qdrant_url
 
 DEFAULT_SCORE_THRESHOLD = 0.5
 HYBRID_PREFETCH_LIMIT = 20  # candidatos por perna (dense/sparse) antes da fusao
+RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+RERANKER_TOP_K = 3  # quantos candidatos retornar apos o reranking
 
 COLLECTIONS = {
     "incidents": "sap_incident_docs",
@@ -143,6 +146,40 @@ def _retrieve_dense_only(
     ]
 
 
+@lru_cache(maxsize=1)
+def _get_reranker() -> CrossEncoder:
+    """Carrega o cross-encoder de reranking (cache — carrega uma vez por processo).
+    Modelo: ms-marco-MiniLM-L-6-v2 (~22MB, rapido, preciso para recuperacao
+    de documentos tecnicos).
+    """
+    return CrossEncoder(RERANKER_MODEL)
+
+
+def rerank(query: str, hits: list[dict], top_k: int = RERANKER_TOP_K) -> list[dict]:
+    """Reranqueia candidatos RAG usando cross-encoder semantico.
+
+    O cross-encoder avalia cada par (query, chunk) individualmente —
+    muito mais preciso que similaridade de cosseno, que avalia query
+    e chunk de forma independente no espaco de embeddings.
+
+    O score do reranker substitui o score composto RRF para a ordenacao
+    final, mas o score cosseno original e preservado para os guardrails
+    (que sao calibrados para escala cosseno).
+    """
+    if not hits:
+        return hits
+
+    reranker = _get_reranker()
+    pairs = [(query, h["text"]) for h in hits]
+    scores = reranker.predict(pairs)
+
+    for hit, score in zip(hits, scores):
+        hit["rerank_score"] = float(score)
+
+    reranked = sorted(hits, key=lambda h: h["rerank_score"], reverse=True)
+    return reranked[:top_k]
+
+
 def _retrieve_unified(
     query: str,
     top_k: int,
@@ -190,7 +227,14 @@ def _retrieve_unified(
             seen[key] = hit
 
     results = sorted(seen.values(), key=lambda r: r["score"], reverse=True)
-    return results[:top_k]
+    candidates = results[: top_k * 3]  # passa mais candidatos pro reranker
+
+    if len(candidates) > 1:
+        candidates = rerank(query, candidates, top_k=top_k)
+    else:
+        candidates = candidates[:top_k]
+
+    return candidates
 
 
 def retrieve(

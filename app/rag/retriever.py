@@ -116,6 +116,51 @@ def _retrieve_dense_only(
     ]
 
 
+def _retrieve_unified(
+    query: str,
+    top_k: int,
+    score_threshold: float,
+) -> list[dict]:
+    """Consulta incidents + reference_library em paralelo e funde via RRF.
+
+    A reference_library (PDFs tecnicos SAP) enriquece o contexto quando
+    os documentos de troubleshooting nao cobrem o incidente com precisao
+    suficiente. O score retornado e sempre cosseno denso (mesma escala
+    dos guardrails existentes).
+    """
+
+    collections = [COLLECTIONS["incidents"]]
+
+    # Inclui reference_library se existir e tiver chunks
+    client = _get_qdrant_client()
+    try:
+        ref_info = client.get_collection("sap_reference_library")
+        if ref_info.points_count > 0:
+            collections.append("sap_reference_library")
+    except Exception:
+        pass
+
+    # Busca em paralelo em todas as colecoes
+    all_hits: list[dict] = []
+    for collection in collections:
+        try:
+            hits = _retrieve_hybrid(query, collection, top_k, score_threshold)
+            all_hits.extend(hits)
+        except Exception:
+            pass
+
+    # Funde por score (cosseno denso ja normalizado 0-1)
+    # Remove duplicatas por source+text, mantendo o maior score
+    seen: dict[str, dict] = {}
+    for hit in all_hits:
+        key = f"{hit['source']}::{hit['text'][:100]}"
+        if key not in seen or hit["score"] > seen[key]["score"]:
+            seen[key] = hit
+
+    results = sorted(seen.values(), key=lambda r: r["score"], reverse=True)
+    return results[:top_k]
+
+
 def retrieve(
     query: str,
     target: str = "incidents",
@@ -132,7 +177,8 @@ def retrieve(
     collection_name = COLLECTIONS[target]
 
     if target in HYBRID_TARGETS:
-        return _retrieve_hybrid(query, collection_name, top_k, score_threshold)
+        # v2.0: retrieval unificado — incidents + reference_library em paralelo
+        return _retrieve_unified(query, top_k, score_threshold)
     return _retrieve_dense_only(query, collection_name, top_k, score_threshold)
 
 

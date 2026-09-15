@@ -29,6 +29,7 @@ Uso:
 
 import json
 import os
+import re as re_module
 from typing import TypedDict
 from uuid import uuid4
 
@@ -46,9 +47,11 @@ os.environ.setdefault("LANGFUSE_HOST", settings.langfuse_host)
 os.environ.setdefault("LANGFUSE_BASE_URL", settings.langfuse_host)
 
 from ddgs import DDGS
+from langchain_core.tools import tool as lc_tool
 from langfuse import get_client, observe
 from langfuse.langchain import CallbackHandler
 from langgraph.graph import END, StateGraph
+from langgraph.prebuilt import create_react_agent
 from pydantic import BaseModel, Field
 
 from app.connectors import ConnectorResult, get_connector
@@ -373,47 +376,118 @@ def _apply_confidence_guardrails(diagnosis: dict, state: CopilotState) -> dict:
     return diagnosis
 
 
+def _make_web_search_tool(state):
+    """Fabrica um tool de busca web contextualizado com o interface_type
+    do incidente — o agente ReAct decide quando chamar."""
+    interface_type = state.get("interface_type") or ""
+    SITE_MAP = {
+        "odata": "site:help.sap.com OR site:community.sap.com",
+        "rfc": "site:help.sap.com/docs/SAP_NETWEAVER OR site:community.sap.com OR site:github.com/SAP",
+        "cap": "site:cap.cloud.sap OR site:github.com/SAP/cloud-cap-samples OR site:community.sap.com",
+        "servicenow": "site:developer.servicenow.com OR site:community.sap.com",
+        "salesforce": "site:developer.salesforce.com OR site:community.sap.com",
+        "workday": "site:community.workday.com OR site:community.sap.com",
+        "ariba": "site:help.sap.com/docs/ARIBA OR site:community.sap.com",
+        "apim": "site:help.sap.com/docs/SAP_API_MANAGEMENT OR site:community.sap.com",
+    }
+    site_filter = SITE_MAP.get(interface_type, "site:community.sap.com OR site:help.sap.com")
+
+    @lc_tool
+    def web_search_tool(query: str) -> str:
+        """Busca informacao tecnica sobre incidente SAP em SAP Community e SAP Help.
+        Use apenas termos tecnicos genericos — nunca dados sensiveis do cliente.
+
+        Args:
+            query: Termos tecnicos de busca (ex: 'BAPI_MATERIAL_SAVEDATA authorization error')
+        """
+        try:
+            with DDGS() as ddgs:
+                hits = list(ddgs.text(f"{query} {site_filter}", max_results=5))
+            return "\n\n".join(
+                f"Titulo: {h.get('title', '')}\nURL: {h.get('href', '')}\nResumo: {h.get('body', '')}"
+                for h in hits
+            )
+        except Exception as e:
+            return f"Erro na busca: {e}"
+
+    return web_search_tool
+
+
 @observe(name="diagnose")
 def diagnose_node(state: CopilotState) -> CopilotState:
     model_name = state.get("llm_model") or settings.llm_model
     llm = get_chat_model(model_name)
     prompt = _build_diagnosis_prompt(state)
 
-    structured_llm = llm.with_structured_output(DiagnosisModel, include_raw=True)
-    result = structured_llm.invoke(prompt, config={"callbacks": [_langfuse_handler]})
-    raw_message = result["raw"]
-    parsed: DiagnosisModel | None = result["parsed"]
-
     if state.get("debug"):
         print("=" * 60)
-        print("PROMPT ENVIADO AO LLM:")
+        print("PROMPT ENVIADO AO LLM (ReAct v1.3):")
         print("=" * 60)
         print(prompt)
         print("=" * 60)
-        print("RESPOSTA BRUTA DO LLM:")
-        print("=" * 60)
-        print(raw_message.content if raw_message else "(sem conteudo bruto)")
+
+    # v1.3 - agente ReAct: o modelo decide autonomamente quando e
+    # quantas vezes buscar na web antes de retornar o diagnostico.
+    web_tool = _make_web_search_tool(state)
+    react_agent = create_react_agent(llm, tools=[web_tool])
+    # Instrucao adicional para forcar JSON na resposta final do agente ReAct
+    json_instruction = """
+
+Apos sua analise (usando o tool de busca se necessario), retorne OBRIGATORIAMENTE
+um JSON valido com exatamente esta estrutura (sem texto adicional antes ou depois):
+{
+  "matched_source": "nome_do_arquivo.md ou null",
+  "probable_root_cause": "causa raiz em uma ou duas frases",
+  "confidence": 0.0,
+  "next_steps": ["passo 1", "passo 2"]
+}"""
+
+    react_result = react_agent.invoke(
+        {"messages": [{"role": "user", "content": prompt + json_instruction}]},
+        config={"callbacks": [_langfuse_handler]},
+    )
+
+    last_msg = react_result["messages"][-1]
+    raw = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
+
+    if state.get("debug"):
+        print("ITERACOES DO AGENTE ReAct:")
+        for msg in react_result["messages"]:
+            role = getattr(msg, "type", "msg")
+            content = str(getattr(msg, "content", ""))
+            if content:
+                print(f"  [{role}] {content[:200]}")
         print("=" * 60)
 
-    if parsed is not None:
-        diagnosis = parsed.model_dump()
-    else:
-        raw = (raw_message.content or "").strip() if raw_message else ""
-        if raw.startswith("```"):
-            raw = raw.strip("`")
-            raw = raw.removeprefix("json")
-            raw = raw.strip()
+    # Extrai JSON estruturado da resposta final do agente
+    json_match = re_module.search(r'\{[^{}]*"probable_root_cause"[^{}]*\}', raw, re_module.DOTALL)
+    if json_match:
         try:
-            diagnosis = json.loads(raw)
-        except json.JSONDecodeError:
-            diagnosis = {
-                "probable_root_cause": "Nao foi possivel estruturar a resposta do modelo.",
-                "confidence": 0.0,
-                "next_steps": [f"Resposta bruta do modelo: {raw[:500]}"],
-            }
+            diagnosis = DiagnosisModel(**json.loads(json_match.group(0))).model_dump()
+        except Exception:
+            diagnosis = _fallback_diagnosis(raw)
+    else:
+        code_match = re_module.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re_module.DOTALL)
+        if code_match:
+            try:
+                diagnosis = json.loads(code_match.group(1))
+            except Exception:
+                diagnosis = _fallback_diagnosis(raw)
+        else:
+            diagnosis = _fallback_diagnosis(raw)
 
     diagnosis = _apply_confidence_guardrails(diagnosis, state)
     return {"diagnosis": diagnosis}
+
+
+def _fallback_diagnosis(raw: str) -> dict:
+    """Fallback quando o agente ReAct nao retornou JSON estruturado."""
+    return {
+        "probable_root_cause": raw[:500] if raw else "Nao foi possivel estruturar a resposta.",
+        "confidence": 0.2,
+        "matched_source": None,
+        "next_steps": ["Verifique os logs do agente para mais detalhes."],
+    }
 
 
 @observe(name="report")

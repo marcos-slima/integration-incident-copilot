@@ -102,6 +102,10 @@ class Settings(BaseSettings):
     cap_client_secret: str = ""
 
     apim_analytics_url: str = ""
+
+    # Web search fallback (v1.1+)
+    web_search_enabled: bool = True
+    web_search_threshold: float = 0.6
     apim_oauth_token_url: str = ""
     apim_client_id: str = ""
     apim_client_secret: str = ""

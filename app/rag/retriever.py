@@ -137,7 +137,7 @@ def _retrieve_unified(
         ref_info = client.get_collection("sap_reference_library")
         if ref_info.points_count > 0:
             collections.append("sap_reference_library")
-    except Exception:
+    except (ValueError, RuntimeError):
         pass
 
     # Busca em paralelo em todas as colecoes
@@ -146,7 +146,7 @@ def _retrieve_unified(
         try:
             hits = _retrieve_hybrid(query, collection, top_k, score_threshold)
             all_hits.extend(hits)
-        except Exception:
+        except (ValueError, RuntimeError):
             pass
 
     # Funde por score (cosseno denso ja normalizado 0-1)

@@ -92,17 +92,28 @@ def find_files(source_dir: Path, excludes: list[str]) -> list[Path]:
     return sorted(files)
 
 
-def load_state(state_file: Path) -> set[str]:
-    if state_file.exists():
-        return set(json.loads(state_file.read_text(encoding="utf-8")))
-    return set()
+def load_state(state_file: Path) -> dict[str, str]:
+    """Carrega estado de ingestao.
+    Formato novo: {hash_key: filepath} — detecta mudancas por conteudo.
+    Formato legado: lista de paths — convertida automaticamente.
+    """
+    if not state_file.exists():
+        return {}
+    data = json.loads(state_file.read_text(encoding="utf-8"))
+    if isinstance(data, list):
+        # Converte formato legado (lista de paths) para dict
+        return {p: p for p in data}
+    return data
 
 
-def save_state(state_file: Path, processed: set[str]) -> None:
+def _state_key(path: Path) -> str:
+    """Chave de estado: hash:filename — detecta mudancas mesmo com renomeacao."""
+    return f"{file_hash(path)}:{path.name}"
+
+
+def save_state(state_file: Path, processed: dict[str, str]) -> None:
     state_file.parent.mkdir(parents=True, exist_ok=True)
-    state_file.write_text(
-        json.dumps(sorted(processed), ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    state_file.write_text(json.dumps(processed, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def extract_text(path: Path) -> str:
@@ -260,8 +271,8 @@ def run_ingest(target: str, limit: int | None, excludes: list[str], reset: bool)
     all_files = find_files(source_dir, excludes)
     print(f"[{target}] {len(all_files)} arquivo(s) encontrados (.md + .pdf, recursivo)")
 
-    processed = set() if reset else load_state(cfg["state_file"])
-    pending = [f for f in all_files if str(f) not in processed]
+    processed = {} if reset else load_state(cfg["state_file"])
+    pending = [f for f in all_files if _state_key(f) not in processed]
     print(f"[{target}] {len(processed)} ja processados anteriormente, {len(pending)} pendentes")
 
     if limit:
@@ -301,7 +312,7 @@ def run_ingest(target: str, limit: int | None, excludes: list[str], reset: bool)
                 pages = extract_pages_with_metadata(path)
                 if not pages:
                     print("    [aviso] nenhum texto extraido do PDF, pulando")
-                    processed.add(str(path))
+                    processed[_state_key(path)] = str(path)
                     save_state(cfg["state_file"], processed)
                     continue
                 chunks = []
@@ -331,7 +342,7 @@ def run_ingest(target: str, limit: int | None, excludes: list[str], reset: bool)
             print(f"    [ERRO] falhou em {rel}: {exc} -- pulando este arquivo")
             continue
 
-        processed.add(str(path))
+        processed[_state_key(path)] = str(path)
         save_state(cfg["state_file"], processed)
 
     print(f"[{target}] Concluido. Total processado ate agora: {len(processed)} arquivo(s).")

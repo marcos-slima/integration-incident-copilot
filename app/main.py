@@ -2,14 +2,40 @@
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException, Request, Security, status
 from fastapi.responses import FileResponse
+from fastapi.security import APIKeyHeader
 from langfuse import get_client
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from app.a2a.agent_card import get_agent_card
 from app.a2a.server import router as a2a_router
 from app.agent.graph import run_diagnosis
+from app.config import settings
 from app.models import DiagnosisResponse, IncidentRequest
+
+# ─── Rate limiting ─────────────────────────────────────────────────────────
+# Limite por IP: 10 diagnosticos por minuto (configuravel via RATE_LIMIT no .env)
+limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
+
+# ─── API Key (opcional) ────────────────────────────────────────────────────
+# Se API_KEY nao estiver configurado no .env, autenticacao e desabilitada.
+# Para habilitar: API_KEY=sua-chave-secreta no .env
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+def verify_api_key(api_key: str | None = Security(api_key_header)) -> None:
+    """Valida API Key se configurada. Se nao configurada, permite tudo."""
+    configured_key = getattr(settings, "api_key", None)
+    if not configured_key:
+        return  # API Key nao configurada — modo aberto
+    if api_key != configured_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="X-API-Key invalida ou ausente",
+        )
 
 
 @asynccontextmanager
@@ -25,9 +51,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 
 @app.get("/")
-def index():
+def index() -> FileResponse:
     return FileResponse("static/index.html")
 
 
@@ -36,14 +65,21 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/diagnose", response_model=DiagnosisResponse)
-def diagnose(request: IncidentRequest) -> DiagnosisResponse:
-    return run_diagnosis(request)
+@app.post(
+    "/diagnose",
+    response_model=DiagnosisResponse,
+    dependencies=[Depends(verify_api_key)],
+)
+@limiter.limit("10/minute")
+def diagnose(request: Request, body: IncidentRequest) -> DiagnosisResponse:
+    """Diagnostica um incidente de integracao SAP.
+
+    Rate limit: 10 requisicoes por minuto por IP.
+    Autenticacao: X-API-Key header (se API_KEY configurado no .env).
+    """
+    return run_diagnosis(body)
 
 
-# Camada A2A (Agent2Agent) - endpoint em paralelo ao /diagnose, mesma
-# orquestracao por tras. Ver docs/proposals/a2a-interoperability-layer.md
-# e app/a2a/.
 @app.get("/.well-known/agent-card.json")
 def agent_card() -> dict:
     return get_agent_card()

@@ -29,6 +29,7 @@ dependencies = [
     "ddgs>=9.16.0",
     "pymupdf4llm>=1.28.2",
     "sentence-transformers>=6.0.1",
+    "slowapi>=0.1.10",
 ]
 
 [project.optional-dependencies]

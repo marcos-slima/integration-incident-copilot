@@ -106,6 +106,9 @@ class Settings(BaseSettings):
     # Web search fallback (v1.1+)
     web_search_enabled: bool = True
     web_search_threshold: float = 0.6
+
+    # Auth (opcional — se vazio, API aberta)
+    api_key: str = ""
     apim_oauth_token_url: str = ""
     apim_client_id: str = ""
     apim_client_secret: str = ""

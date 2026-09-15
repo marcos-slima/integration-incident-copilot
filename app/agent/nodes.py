@@ -160,6 +160,75 @@ def web_search_node(state: CopilotState) -> CopilotState:
     return {"web_search_results": results}
 
 
+# Padroes de prompt injection mais comuns em contexto SAP/LLM
+_INJECTION_PATTERNS = [
+    # Instrucoes diretas ao modelo
+    r"(?i)ignore\s+(all\s+)?(previous|prior|above)\s+instructions?",
+    r"(?i)disregard\s+(all\s+)?(previous|prior|above)\s+instructions?",
+    r"(?i)forget\s+(all\s+)?(previous|prior|above)\s+instructions?",
+    r"(?i)you\s+are\s+now\s+a",
+    r"(?i)act\s+as\s+(a\s+)?(?:different|new|another)",
+    r"(?i)new\s+instructions?:",
+    r"(?i)system\s*:\s*you",
+    r"(?i)\[system\]",
+    r"(?i)\<\s*system\s*\>",
+    # Exfiltracao de dados
+    r"(?i)print\s+(all\s+)?(your\s+)?(system\s+)?prompt",
+    r"(?i)reveal\s+(your\s+)?(system\s+)?prompt",
+    r"(?i)show\s+(me\s+)?(your\s+)?(instructions?|prompt|context)",
+    # Jailbreak comum
+    r"(?i)DAN\s+mode",
+    r"(?i)developer\s+mode",
+    r"(?i)jailbreak",
+]
+
+_INJECTION_RE = None
+
+
+def _get_injection_re():
+    global _INJECTION_RE
+    if _INJECTION_RE is None:
+        import re
+
+        _INJECTION_RE = re.compile("|".join(_INJECTION_PATTERNS))
+    return _INJECTION_RE
+
+
+def sanitize_untrusted_input(text: str | None, field_name: str = "input") -> str:
+    """Sanitiza entrada nao confiavel antes de incluir no prompt LLM.
+
+    Remove ou neutraliza padroes de prompt injection conhecidos.
+    Nao e uma protecao completa — defense in depth, nao silver bullet.
+    Campos sanitizados: description, logs, payload, connector_data,
+    chunks do RAG (que podem vir de PDFs externos).
+
+    Args:
+        text: Texto a sanitizar
+        field_name: Nome do campo (para logging)
+
+    Returns:
+        Texto sanitizado, ou string vazia se None
+    """
+    if not text:
+        return ""
+
+    original_len = len(text)
+    pattern = _get_injection_re()
+
+    # Substitui padroes de injection por marcador explicito
+    sanitized = pattern.sub("[CONTEUDO_REMOVIDO_INJECTION]", text)
+
+    if len(sanitized) != original_len:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "Possivel prompt injection detectado no campo '%s' — conteudo neutralizado",
+            field_name,
+        )
+
+    return sanitized
+
+
 def _truncate(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
@@ -211,9 +280,11 @@ Dados coletados diretamente do sistema SAP (via conector {data.source_system}{" 
 
     extras = ""
     if state.get("logs"):
-        extras += f"\nLogs:\n{_truncate(state['logs'], MAX_LOGS_IN_PROMPT)}\n"
+        safe_logs = sanitize_untrusted_input(state["logs"], "logs")
+        extras += f"\nLogs:\n{_truncate(safe_logs, MAX_LOGS_IN_PROMPT)}\n"
     if state.get("payload"):
-        extras += f"\nPayload:\n{_truncate(state['payload'], MAX_PAYLOAD_IN_PROMPT)}\n"
+        safe_payload = sanitize_untrusted_input(state["payload"], "payload")
+        extras += f"\nPayload:\n{_truncate(safe_payload, MAX_PAYLOAD_IN_PROMPT)}\n"
 
     web_results = state.get("web_search_results", [])
     web_block = ""

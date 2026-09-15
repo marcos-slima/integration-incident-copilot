@@ -22,7 +22,7 @@ services:
       - ./data/sample_docs:/app/data/sample_docs:ro
 
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.34.0
     ports:
       - "11434:11434"
     volumes:
@@ -42,7 +42,7 @@ services:
   # exige tambem GRAPH_RAG_ENABLED=true no .env - ver
   # app/rag/graph_store.py.
   neo4j:
-    image: neo4j:5-community
+    image: neo4j:5.26.0-community
     profiles: ["graphrag"]
     ports:
       - "7474:7474"

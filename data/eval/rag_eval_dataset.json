@@ -1,0 +1,122 @@
+[
+  {
+    "query": "IDoc travado com status 51",
+    "expected_sources": ["idoc_status_51.md"],
+    "expected_keywords": ["material", "centro", "BD87"],
+    "interface_type": "rfc",
+    "difficulty": "easy",
+    "notes": "caso canonico — documento exato na base"
+  },
+  {
+    "query": "iFlow retornando HTTP 401 ao autenticar via OAuth2",
+    "expected_sources": ["cpi_http_401.md"],
+    "expected_keywords": ["token", "OAuth2", "Security Material"],
+    "interface_type": "odata",
+    "difficulty": "easy",
+    "notes": "caso canonico — documento exato na base"
+  },
+  {
+    "query": "RFC connection refused na porta 3300",
+    "expected_sources": ["rfc_connection_refused.md"],
+    "expected_keywords": ["SM59", "gateway", "dispatcher"],
+    "interface_type": "rfc",
+    "difficulty": "easy",
+    "notes": "caso canonico — documento exato na base"
+  },
+  {
+    "query": "timeout ao consumir servico OData sem filtro retornando muitos registros",
+    "expected_sources": ["odata_timeout_cpi.md"],
+    "expected_keywords": ["paginacao", "top", "filter"],
+    "interface_type": "odata",
+    "difficulty": "easy",
+    "notes": "caso canonico — documento exato na base"
+  },
+  {
+    "query": "SAP Gateway pool de conexoes RFC esgotado",
+    "expected_sources": ["rfc_gateway_pool_timeout.md"],
+    "expected_keywords": ["pool", "gateway", "work process"],
+    "interface_type": "rfc",
+    "difficulty": "medium",
+    "notes": "query semantica sem termos exatos do documento"
+  },
+  {
+    "query": "pedido de compra Ariba fornecedor diferente do SAP",
+    "expected_sources": ["ariba_po_supplier_mismatch.md"],
+    "expected_keywords": ["VENDNR", "LIFNR", "CIG"],
+    "interface_type": "ariba",
+    "difficulty": "medium",
+    "notes": "query semantica — documento tem termos tecnicos especificos"
+  },
+  {
+    "query": "caso ServiceNow nao sincroniza com SAP",
+    "expected_sources": ["servicenow_itsm_alert.md"],
+    "expected_keywords": ["ITSM", "webhook", "RFC"],
+    "interface_type": "servicenow",
+    "difficulty": "medium",
+    "notes": "query generica — documento especifico"
+  },
+  {
+    "query": "Salesforce case nao atualiza no SAP",
+    "expected_sources": ["salesforce_case_sap_sync_failure.md"],
+    "expected_keywords": ["OAuth", "CPI", "sync"],
+    "interface_type": "salesforce",
+    "difficulty": "medium",
+    "notes": "query generica — documento especifico"
+  },
+  {
+    "query": "campo obrigatorio faltando no servico CAP BTP retorna 422",
+    "expected_sources": ["cap_custom_purchase_approval_failure.md"],
+    "expected_keywords": ["CDS", "mandatory", "payload"],
+    "interface_type": "cap",
+    "difficulty": "hard",
+    "notes": "facil confundir com OData timeout — teste de discriminacao"
+  },
+  {
+    "query": "erro de sincronizacao Workday SuccessFactors",
+    "expected_sources": ["workday_successfactors_sync_error.md"],
+    "expected_keywords": ["HCM", "employee", "sync"],
+    "interface_type": "workday",
+    "difficulty": "hard",
+    "notes": "base tem pouco contexto deste dominio"
+  },
+  {
+    "query": "IDoc ORDERS com status 51 material nao cadastrado na planta",
+    "expected_sources": ["idoc_status_51.md"],
+    "expected_keywords": ["material", "centro", "MM03"],
+    "interface_type": "rfc",
+    "difficulty": "easy",
+    "notes": "variante com mais contexto do caso canonico"
+  },
+  {
+    "query": "SM59 nao consegue conectar no sistema destino",
+    "expected_sources": ["rfc_connection_refused.md"],
+    "expected_keywords": ["SM59", "connection refused", "port"],
+    "interface_type": "rfc",
+    "difficulty": "easy",
+    "notes": "query com terminologia SAP especifica"
+  },
+  {
+    "query": "autenticacao falhou no adapter HTTP do iFlow Integration Suite",
+    "expected_sources": ["cpi_http_401.md"],
+    "expected_keywords": ["401", "token", "credential"],
+    "interface_type": "odata",
+    "difficulty": "medium",
+    "notes": "query mais generica que o caso canonico"
+  },
+  {
+    "query": "integracao SAP EWM tarefa de armazem nao encontrada",
+    "expected_sources": [],
+    "expected_keywords": [],
+    "interface_type": "rfc",
+    "difficulty": "out_of_scope",
+    "notes": "fora do escopo da base — deve retornar baixa confianca"
+  },
+  {
+    "query": "erro desconhecido sistema indisponivel",
+    "expected_sources": [],
+    "expected_keywords": [],
+    "interface_type": null,
+    "difficulty": "out_of_scope",
+    "notes": "query ambigua — deve retornar baixa confianca"
+  }
+]

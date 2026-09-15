@@ -5,6 +5,25 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 
 ---
 
+## [1.2.0] — 2026-09-15
+
+### Adicionado
+
+**Web search direcionada por interface_type (v1.2)**
+- Busca web agora usa fontes específicas por protocolo:
+  - `rfc` → help.sap.com/docs/SAP_NETWEAVER + community.sap.com + github.com/SAP/PyRFC
+  - `odata` → help.sap.com + community.sap.com/technology-blogs-by-sap
+  - `cap` → cap.cloud.sap + github.com/SAP/cloud-cap-samples + community.sap.com
+  - `servicenow` → developer.servicenow.com + community.sap.com
+  - `salesforce` → developer.salesforce.com + community.sap.com
+  - `ariba` → help.sap.com/docs/ARIBA + community.sap.com
+  - `apim` → help.sap.com/docs/SAP_API_MANAGEMENT + community.sap.com
+  - fallback genérico para casos sem interface_type
+- Threshold configurável via `.env`: `WEB_SEARCH_THRESHOLD=0.6` (default)
+- Web search desligável via `WEB_SEARCH_ENABLED=false`
+
+---
+
 ## [1.1.0] — 2026-09-15
 
 ### Adicionado

@@ -24,6 +24,8 @@ dependencies = [
     "httpx>=0.27",
     "fastembed>=0.8.0",
     "numpy>=2.5.1",
+    "aiofiles>=25.1.0",
+    "duckduckgo-search>=8.1.1",
 ]
 
 [project.optional-dependencies]

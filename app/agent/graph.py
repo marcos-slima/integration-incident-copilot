@@ -45,6 +45,7 @@ os.environ.setdefault("LANGFUSE_SECRET_KEY", settings.langfuse_secret_key)
 os.environ.setdefault("LANGFUSE_HOST", settings.langfuse_host)
 os.environ.setdefault("LANGFUSE_BASE_URL", settings.langfuse_host)
 
+from langchain_community.tools import DuckDuckGoSearchRun
 from langfuse import get_client, observe
 from langfuse.langchain import CallbackHandler
 from langgraph.graph import END, StateGraph
@@ -124,6 +125,7 @@ class CopilotState(TypedDict, total=False):
     retrieved_context: list[dict]
     graph_history: list
     diagnosis: dict
+    web_search_results: list[dict]
     report_markdown: str
     debug: bool
 
@@ -183,6 +185,43 @@ def graph_write_node(state: CopilotState) -> CopilotState:
     return {}
 
 
+@observe(name="web_search")
+def web_search_node(state: CopilotState) -> CopilotState:
+    """Busca web via DuckDuckGo - ativada apenas quando o RAG local
+    nao encontrou contexto suficiente (todos os hits com score baixo
+    ou nenhum hit). Direciona a busca para SAP Community e GitHub SAP
+    para resultados mais relevantes ao contexto SAP/integracao.
+
+    Privacidade: usa apenas a descricao textual do incidente, NUNCA
+    dados do conector (que podem conter informacoes sensiveis do
+    cliente como numeros de IDoc, nomes de sistema, etc.).
+
+    So ativa quando confidence_threshold nao foi atingido pelo RAG
+    local - nao substitui o RAG, e um fallback complementar."""
+    hits = state.get("retrieved_context", [])
+    top_score = hits[0]["score"] if hits else 0.0
+
+    # Threshold: so busca na web se o melhor resultado RAG for fraco
+    if top_score >= 0.6:
+        return {"web_search_results": []}
+
+    description = state["description"]
+    interface_type = state.get("interface_type", "")
+
+    # Query direcionada para SAP Community e GitHub SAP
+    site_filter = "site:community.sap.com OR site:github.com/SAP OR site:help.sap.com"
+    query = f"{description} SAP integration {interface_type} {site_filter}".strip()
+
+    try:
+        tool = DuckDuckGoSearchRun()
+        raw = tool.run(query)
+        results = [{"source": "web_search", "text": raw, "score": 0.0}]
+    except Exception as e:
+        results = [{"source": "web_search_error", "text": str(e), "score": 0.0}]
+
+    return {"web_search_results": results}
+
+
 def _truncate(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
@@ -238,6 +277,15 @@ Dados coletados diretamente do sistema SAP (via conector {data.source_system}{" 
     if state.get("payload"):
         extras += f"\nPayload:\n{_truncate(state['payload'], MAX_PAYLOAD_IN_PROMPT)}\n"
 
+    web_results = state.get("web_search_results", [])
+    web_block = ""
+    if web_results and web_results[0].get("source") == "web_search":
+        web_block = f"""
+Resultado de busca web (SAP Community / GitHub SAP) como contexto adicional:
+{web_results[0]["text"][:2000]}
+[Fonte: busca web - use como referencia secundaria, prefira o documento RAG acima se disponivel]
+"""
+
     return f"""Voce e um especialista em integracao SAP (OData, IDoc, RFC, CPI).
 
 Incidente reportado:
@@ -245,7 +293,7 @@ Incidente reportado:
 {extras}{connector_block}
 Contexto recuperado da base de conhecimento de incidentes:
 {context_block}
-{others_note}{graph_block}
+{others_note}{graph_block}{web_block}
 Regra importante: baseie sua resposta EXCLUSIVAMENTE no documento de
 contexto acima e, se disponivel, nos dados reais do conector (que tem
 prioridade sobre a descricao textual do usuario, pois vem diretamente
@@ -385,21 +433,23 @@ def build_graph():
     graph = StateGraph(CopilotState)
     graph.add_node("connector", connector_node)
     graph.add_node("retrieve", retrieve_node)
+    graph.add_node("web_search", web_search_node)
     graph.add_node("diagnose", diagnose_node)
     graph.add_node("report", report_node)
 
     graph.set_entry_point("connector")
     graph.add_edge("connector", "retrieve")
+    graph.add_edge("retrieve", "web_search")
 
     if settings.graph_rag_enabled:
         graph.add_node("graph_enrich", graph_enrich_node)
         graph.add_node("graph_write", graph_write_node)
-        graph.add_edge("retrieve", "graph_enrich")
+        graph.add_edge("web_search", "graph_enrich")
         graph.add_edge("graph_enrich", "diagnose")
         graph.add_edge("diagnose", "graph_write")
         graph.add_edge("graph_write", "report")
     else:
-        graph.add_edge("retrieve", "diagnose")
+        graph.add_edge("web_search", "diagnose")
         graph.add_edge("diagnose", "report")
 
     graph.add_edge("report", END)

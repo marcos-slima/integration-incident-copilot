@@ -22,7 +22,7 @@ services:
       - ./data/sample_docs:/app/data/sample_docs:ro
 
   ollama:
-    image: ollama/ollama:0.34.0
+    image: ollama/ollama:0.34.1
     ports:
       - "11434:11434"
     volumes:

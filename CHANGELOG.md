@@ -1,0 +1,81 @@
+# Changelog
+
+Todas as mudanças relevantes do projeto são documentadas aqui.
+Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
+
+---
+
+## [1.0.0] — 2026-09-15
+
+Primeira versão estável. Pipeline completo de diagnóstico de incidentes de integração SAP e multi-vendor, com interface web, 8 conectores (4 validados contra sistema real), camada A2A, GraphRAG opt-in e documentação de produto completa.
+
+### Adicionado
+
+**Pipeline de diagnóstico (agente)**
+- Orquestração via LangGraph (connector → retrieve → diagnose → report)
+- GraphRAG opt-in via Neo4j (graph_enrich / graph_write, desligado por default)
+- Guardrails determinísticos: teto de confiança 0.4 para fallback de conector, 0.3 para ausência de contexto RAG
+- Validação estruturada de saída do LLM via with_structured_output(DiagnosisModel) com fallback tolerante
+- Seed fixo (seed=42) para reproducibilidade com temperature=0
+
+**Interface web**
+- Frontend React servido pelo FastAPI em / (static/index.html)
+- Formulário completo: descrição, sistema de origem, identificador, logs, payload (campos avançados)
+- Resultado: causa raiz, badge de confiança colorido, próximos passos numerados, relatório Markdown expansível
+- Histórico de diagnósticos da sessão e status da stack
+- Funciona também como arquivo standalone no browser
+
+**API e protocolos**
+- REST: POST /diagnose, GET /health (FastAPI + Pydantic)
+- A2A (Agent2Agent): Agent Card, JSON-RPC 2.0 (message/send, tasks/get) — protocolo aberto Linux Foundation
+- Documentação interativa Swagger em /docs
+
+**Conectores (8)**
+- ODataConnector — OAuth2 Client Credentials + OData v2/v4
+- RFCConnector — pyrfc 3.3.1 + SDK 7.50 PL19 · validado: ABAP Cloud Trial A4H rel 754
+- ServiceNowConnector — Table API REST · validado: PDI real
+- SalesforceConnector — OAuth2 + REST · validado: Developer Edition
+- WorkdayConnector — OAuth2 + REST (sandbox gratuito indisponível)
+- AribaConnector — OAuth2 + REST (sandbox incompatível)
+- CAPConnector — OData v4 + XSUAA · validado: BTP Trial (HANA Cloud)
+- APIManagementConnector — schema especulativo, não validado
+
+**RAG e base de conhecimento**
+- Busca híbrida dense + sparse BM25, fusão RRF via Qdrant
+- Base de conhecimento local em data/sample_docs/ (10 documentos)
+- Indexador incremental com suporte a .md e .pdf
+
+**LLM Gateway plugável**
+- qwen3-coder-next:latest como modelo de produção (MoE 80B/3B ativo, 262K ctx)
+- Suporte a Ollama (default), OpenAI, Azure OpenAI e OpenRouter
+
+**Qualidade e CI**
+- 68 testes (54 unitários + 14 de integração)
+- GitHub Actions: lint + testes a cada push/PR
+- pre-commit: ruff, gitleaks, check-yaml, check-added-large-files
+- Duas comparações formais de modelo via promptfoo (pipeline real)
+
+**Documentação**
+- docs/GETTING_STARTED.md — do zero ao primeiro diagnóstico em 10 minutos
+- docs/USER_GUIDE.md — guia de produto com orientações de prompt, casos típicos, glossário SAP
+- docs/ARCHITECTURE.md — detalhamento técnico por camada
+- docs/PROCESSO_DESENVOLVIMENTO.md — 12 fases de desenvolvimento
+- docs/TUTORIAL_ARQUITETURA_DEBUG.md — roteiro de debug no VS Code
+- Diagramas Mermaid em todos os documentos principais
+
+### Fora do escopo desta versão (roadmap)
+- Validação real de Workday e Ariba
+- APIManagementConnector com schema real
+- Multi-tenancy CAP (MTX + Service Manager)
+- Integração inbound A2A com Joule (aguardando GA Q4/2026)
+- Autenticação JWT/OAuth2 na API
+- Persistência de histórico entre sessões
+
+---
+
+O desenvolvimento foi feito em 12 fases documentadas em
+docs/PROCESSO_DESENVOLVIMENTO.md.
+
+---
+
+*Integration Incident Copilot · github.com/marcos-slima/sap-integration-copilot*

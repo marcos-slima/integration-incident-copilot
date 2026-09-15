@@ -82,17 +82,38 @@ def _retrieve_hybrid(
         with_vectors=["dense"],
     ).points
 
+    # Score composto: combina cosseno denso (semantica) com rank RRF
+    # (que captura contribuicao do BM25 esparso).
+    # alpha=0.7: semantica tem peso maior, mas BM25 ainda influencia
+    # quando um termo exato (codigo de erro, nome de transacao) aparece
+    # no documento mas nao no espaco semantico do embedding.
+    # k=60: constante padrao do RRF (1/(k+rank) normalizado).
+    ALPHA = 0.7
+    RRF_K = 60
+
     results = []
-    for hit in fused:
+    for rank, hit in enumerate(fused):
         stored_dense = hit.vector["dense"] if isinstance(hit.vector, dict) else hit.vector
         cosine_score = _cosine_similarity(dense_query, stored_dense)
+
+        # Normaliza o rank RRF para [0, 1] usando a formula padrao
+        rrf_score = 1.0 / (RRF_K + rank + 1)
+        rrf_normalized = rrf_score / (1.0 / (RRF_K + 1))  # normaliza pelo score maximo possivel
+
+        composite_score = ALPHA * cosine_score + (1 - ALPHA) * rrf_normalized
+
+        # Threshold aplicado sobre o cosseno denso (preserva calibracao
+        # dos guardrails existentes — todos calibrados para escala cosseno)
         if cosine_score < score_threshold:
             continue
+
         results.append(
             {
                 "source": hit.payload.get("source"),
                 "text": hit.payload.get("text"),
-                "score": cosine_score,
+                "score": composite_score,
+                "cosine_score": cosine_score,
+                "rrf_rank": rank,
             }
         )
     results.sort(key=lambda r: r["score"], reverse=True)
@@ -111,7 +132,13 @@ def _retrieve_dense_only(
         score_threshold=score_threshold,
     ).points
     return [
-        {"source": hit.payload.get("source"), "text": hit.payload.get("text"), "score": hit.score}
+        {
+            "source": hit.payload.get("source"),
+            "text": hit.payload.get("text"),
+            "score": hit.score,
+            "cosine_score": hit.score,
+            "rrf_rank": None,
+        }
         for hit in results
     ]
 
@@ -141,10 +168,15 @@ def _retrieve_unified(
         pass
 
     # Busca em paralelo em todas as colecoes
+    # incidents: hybrid (dense+sparse BM25) — vetores nomeados
+    # reference_library: dense puro — vetores anonimos (schema antigo)
     all_hits: list[dict] = []
     for collection in collections:
         try:
-            hits = _retrieve_hybrid(query, collection, top_k, score_threshold)
+            if collection == COLLECTIONS["incidents"]:
+                hits = _retrieve_hybrid(query, collection, top_k, score_threshold)
+            else:
+                hits = _retrieve_dense_only(query, collection, top_k, score_threshold)
             all_hits.extend(hits)
         except (ValueError, RuntimeError):
             pass

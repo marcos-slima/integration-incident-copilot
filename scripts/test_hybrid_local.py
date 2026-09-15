@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Teste local do Hybrid Retriever, SEM Docker/servidor Qdrant.
 
 Usa QdrantClient(":memory:") - modo embutido do proprio cliente

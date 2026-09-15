@@ -45,7 +45,7 @@ os.environ.setdefault("LANGFUSE_SECRET_KEY", settings.langfuse_secret_key)
 os.environ.setdefault("LANGFUSE_HOST", settings.langfuse_host)
 os.environ.setdefault("LANGFUSE_BASE_URL", settings.langfuse_host)
 
-from langchain_community.tools import DuckDuckGoSearchRun
+from ddgs import DDGS
 from langfuse import get_client, observe
 from langfuse.langchain import CallbackHandler
 from langgraph.graph import END, StateGraph
@@ -213,8 +213,12 @@ def web_search_node(state: CopilotState) -> CopilotState:
     query = f"{description} SAP integration {interface_type} {site_filter}".strip()
 
     try:
-        tool = DuckDuckGoSearchRun()
-        raw = tool.run(query)
+        with DDGS() as ddgs:
+            hits = list(ddgs.text(query, max_results=5))
+        raw = "\n\n".join(
+            f"Titulo: {h.get('title', '')}\nURL: {h.get('href', '')}\nResumo: {h.get('body', '')}"
+            for h in hits
+        )
         results = [{"source": "web_search", "text": raw, "score": 0.0}]
     except Exception as e:
         results = [{"source": "web_search_error", "text": str(e), "score": 0.0}]

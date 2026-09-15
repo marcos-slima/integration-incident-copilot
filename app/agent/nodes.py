@@ -20,6 +20,7 @@ from ddgs import DDGS
 from langchain_core.tools import tool as lc_tool
 from langfuse import observe
 from langfuse.langchain import CallbackHandler
+from langgraph.prebuilt import create_react_agent
 
 from app.agent.state import CopilotState, DiagnosisModel
 from app.connectors import get_connector
@@ -32,6 +33,9 @@ from app.rag.graph_store import (
 from app.rag.retriever import retrieve
 
 _langfuse_handler = CallbackHandler()
+
+MAX_LOGS_IN_PROMPT = 3_000
+MAX_PAYLOAD_IN_PROMPT = 3_000
 
 
 def connector_node(state: CopilotState) -> CopilotState:

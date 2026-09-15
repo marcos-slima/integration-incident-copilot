@@ -9,7 +9,7 @@ Ver docs/ARCHITECTURE.md para detalhamento por camada.
 
 import os
 
-from langfuse import observe
+from langfuse import get_client, observe
 
 from app.agent.nodes import (
     connector_node,

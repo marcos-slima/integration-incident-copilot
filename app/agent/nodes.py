@@ -5,6 +5,7 @@ Instrumentado com Langfuse via @observe.
 """
 
 import json
+import logging
 import os
 import re as re_module
 from uuid import uuid4
@@ -18,7 +19,7 @@ os.environ.setdefault("LANGFUSE_BASE_URL", settings.langfuse_host)
 
 from ddgs import DDGS
 from langchain_core.tools import tool as lc_tool
-from langfuse import observe
+from langfuse import get_client, observe
 from langfuse.langchain import CallbackHandler
 from langgraph.prebuilt import create_react_agent
 
@@ -394,9 +395,42 @@ def _fallback_diagnosis(raw: str) -> dict:
     }
 
 
+def _record_quality_metrics(state: CopilotState, diagnosis: dict) -> None:
+    """Grava metricas de qualidade no trace Langfuse atual.
+
+    Metricas gravadas:
+    - confidence: confianca do diagnostico (0-1)
+    - has_matched_source: 1 se encontrou documento, 0 se nao (proxy de hallucination)
+    - rerank_top_score: score do reranker no top resultado (qualidade do retrieval)
+    - web_search_used: 1 se a busca web foi ativada nesta execucao
+    """
+    try:
+        client = get_client()
+        confidence = float(diagnosis.get("confidence", 0.0))
+        has_source = 1.0 if diagnosis.get("matched_source") else 0.0
+        web_used = (
+            1.0
+            if state.get("web_search_results")
+            and state["web_search_results"]
+            and state["web_search_results"][0].get("source") == "web_search"
+            else 0.0
+        )
+
+        top_hit = state.get("retrieved_context", [{}])[0] if state.get("retrieved_context") else {}
+        rerank_score = float(top_hit.get("rerank_score", top_hit.get("score", 0.0)))
+
+        client.score_current_trace(name="confidence", value=confidence)
+        client.score_current_trace(name="has_matched_source", value=has_source)
+        client.score_current_trace(name="rerank_top_score", value=rerank_score)
+        client.score_current_trace(name="web_search_used", value=web_used)
+    except Exception:
+        logging.getLogger(__name__).debug("Langfuse metrics error", exc_info=True)
+
+
 @observe(name="report")
 def report_node(state: CopilotState) -> CopilotState:
     diagnosis = state.get("diagnosis", {})
+    _record_quality_metrics(state, diagnosis)
     sources = ", ".join(sorted({h["source"] for h in state.get("retrieved_context", [])})) or (
         "nenhuma fonte relevante encontrada"
     )

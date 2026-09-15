@@ -136,6 +136,7 @@ Duas mudanças:
    ```python
    try:
        import pyrfc
+
        HAS_PYRFC = True
    except ImportError:
        pyrfc = None
@@ -250,6 +251,7 @@ do `ServiceNowConnector` via `httpx.MockTransport`:
 def handler(request: httpx.Request) -> httpx.Response:
     assert request.url.params["sysparm_query"] == "number=INC0099999"
     return httpx.Response(200, json={"result": [{...}]})
+
 
 client = httpx.Client(transport=httpx.MockTransport(handler))
 result = ServiceNowConnector(client=client).fetch("INC0099999")

@@ -93,6 +93,7 @@ class SAPConnector(ABC):  # alias ExternalSystemConnector para nao-SAP
     def fetch(self, identifier: str) -> ConnectorResult:
         raise NotImplementedError
 
+
 @dataclass
 class ConnectorResult:
     source_system: str
@@ -126,6 +127,7 @@ class Settings(BaseSettings):
     graph_rag_enabled: bool = False
     model_config = SettingsConfigDict(env_file=".env")
 
+
 settings = Settings()
 # Verificação: uv run python -m app.config
 ```
@@ -139,6 +141,7 @@ class DiagnosisModel(BaseModel):
     probable_root_cause: str = Field(description="...")
     confidence: float = Field(ge=0.0, le=1.0, description="...")
     next_steps: list[str] = Field(default_factory=list)
+
 
 def _apply_confidence_guardrails(diagnosis: dict, state) -> dict:
     diagnosis["confidence"] = max(0.0, min(1.0, float(diagnosis.get("confidence", 0.0))))

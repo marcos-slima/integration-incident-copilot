@@ -209,6 +209,16 @@ def ensure_collection(
         print(f"Collection '{collection_name}' criada ({'hybrid' if hybrid else 'dense-only'}).")
 
 
+def deterministic_point_id(document_id: str, chunk_index: int) -> str:
+    """ID deterministico baseado em document_id + chunk_index.
+    Permite upsert idempotente sem delete-before-insert:
+    reindexar o mesmo documento sobrescreve os pontos existentes
+    em vez de criar duplicatas.
+    """
+    raw = f"{document_id}::{chunk_index}"
+    return str(hashlib.md5(raw.encode()).hexdigest())
+
+
 def delete_existing_points_for_source(client: QdrantClient, collection: str, source: str) -> None:
     client.delete(
         collection_name=collection,
@@ -230,7 +240,6 @@ def embed_and_upsert(
     hybrid: bool,
     doc_meta: dict | None = None,
 ) -> None:
-    delete_existing_points_for_source(client, collection, source)
     doc_meta = doc_meta or {}
     ingested_at = datetime.now(UTC).isoformat()
 
@@ -258,7 +267,8 @@ def embed_and_upsert(
                 "category": doc_meta.get("category", "general"),
                 "ingested_at": ingested_at,
             }
-            points.append(PointStruct(id=str(uuid4()), vector=vector, payload=payload))
+            point_id = deterministic_point_id(doc_meta.get("document_id", source), i + j)
+            points.append(PointStruct(id=point_id, vector=vector, payload=payload))
 
         client.upsert(collection_name=collection, points=points)
 

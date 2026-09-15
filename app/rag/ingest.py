@@ -14,12 +14,14 @@ Uso:
 """
 
 import argparse
+import hashlib
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
+import pymupdf4llm
 from fastembed import SparseTextEmbedding
-from langchain_community.document_loaders import PyPDFLoader
 from langchain_ollama import OllamaEmbeddings
 from langchain_text_splitters import MarkdownTextSplitter
 from qdrant_client import QdrantClient
@@ -104,10 +106,54 @@ def save_state(state_file: Path, processed: set[str]) -> None:
 
 
 def extract_text(path: Path) -> str:
-    if path.suffix.lower() == ".pdf":
-        pages = PyPDFLoader(str(path)).load()
-        return "\n\n".join(p.page_content for p in pages)
     return path.read_text(encoding="utf-8", errors="ignore")
+
+
+def extract_pages_with_metadata(path: Path) -> list[dict]:
+    md_pages = pymupdf4llm.to_markdown(str(path), page_chunks=True)
+    result = []
+    for page in md_pages:
+        t = page.get("text", "").strip()
+        if t:
+            result.append(
+                {
+                    "text": t,
+                    "page_number": page.get("metadata", {}).get("page", 0) + 1,
+                }
+            )
+    return result
+
+
+def file_hash(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        h.update(f.read(65536))
+    return h.hexdigest()[:16]
+
+
+def infer_category(filename: str) -> str:
+    name = filename.lower()
+    if any(k in name for k in ["security", "authorization", "auth", "xsuaa"]):
+        return "security"
+    if any(k in name for k in ["abap", "rap", "bapi", "rfc"]):
+        return "abap"
+    if any(k in name for k in ["integration", "cpi", "iflow", "idoc", "odata", "api"]):
+        return "integration"
+    if any(k in name for k in ["cap", "btp", "cloud"]):
+        return "cap_btp"
+    if any(k in name for k in ["fiori", "ui5", "frontend"]):
+        return "ui"
+    if any(k in name for k in ["hana", "sql", "database", "db"]):
+        return "database"
+    if any(k in name for k in ["successfactor", "hcm", "hr", "payroll"]):
+        return "hcm"
+    if any(k in name for k in ["finance", "fi", "co", "accounting"]):
+        return "finance"
+    if any(k in name for k in ["mm", "material", "procurement", "ariba", "vendor"]):
+        return "procurement"
+    if any(k in name for k in ["sd", "sales", "order", "crm"]):
+        return "sales"
+    return "general"
 
 
 def probe_vector_size(embeddings: OllamaEmbeddings) -> int:
@@ -165,25 +211,43 @@ def _sparse_vector_for(text: str) -> SparseVector:
 
 
 def embed_and_upsert(
-    client, collection, embeddings, chunks: list[str], source: str, hybrid: bool
+    client,
+    collection,
+    embeddings,
+    chunks: list[dict],
+    source: str,
+    hybrid: bool,
+    doc_meta: dict | None = None,
 ) -> None:
     delete_existing_points_for_source(client, collection, source)
+    doc_meta = doc_meta or {}
+    ingested_at = datetime.now(UTC).isoformat()
 
     for i in range(0, len(chunks), EMBED_BATCH_SIZE):
         batch = chunks[i : i + EMBED_BATCH_SIZE]
-        dense_vectors = embeddings.embed_documents(batch)
+        texts = [c["text"] for c in batch]
+        dense_vectors = embeddings.embed_documents(texts)
 
         points = []
-        for text, dense_vec in zip(batch, dense_vectors):
+        for j, (chunk_data, dense_vec) in enumerate(zip(batch, dense_vectors)):
+            chunk_text = chunk_data["text"]
             if hybrid:
-                vector = {"dense": dense_vec, "sparse": _sparse_vector_for(text)}
+                vector = {"dense": dense_vec, "sparse": _sparse_vector_for(chunk_text)}
             else:
                 vector = dense_vec
-            points.append(
-                PointStruct(
-                    id=str(uuid4()), vector=vector, payload={"source": source, "text": text}
-                )
-            )
+            payload = {
+                "source": source,
+                "text": chunk_text,
+                "filename": doc_meta.get("filename", source),
+                "page_number": chunk_data.get("page_number"),
+                "document_id": doc_meta.get("document_id", str(uuid4())),
+                "chunk_index": i + j,
+                "file_hash": doc_meta.get("file_hash", ""),
+                "title": doc_meta.get("title", Path(source).stem),
+                "category": doc_meta.get("category", "general"),
+                "ingested_at": ingested_at,
+            }
+            points.append(PointStruct(id=str(uuid4()), vector=vector, payload=payload))
 
         client.upsert(collection_name=collection, points=points)
 
@@ -221,15 +285,48 @@ def run_ingest(target: str, limit: int | None, excludes: list[str], reset: bool)
         rel = path.relative_to(source_dir)
         print(f"[{target}] ({idx}/{len(pending)}) processando: {rel}")
         try:
-            text = extract_text(path)
-            chunks = splitter.split_text(text)
+            filename = path.name
+            fhash = file_hash(path)
+            category = infer_category(filename)
+            document_id = str(uuid4())
+            doc_meta = {
+                "filename": filename,
+                "file_hash": fhash,
+                "category": category,
+                "document_id": document_id,
+                "title": path.stem,
+            }
+
+            if path.suffix.lower() == ".pdf":
+                pages = extract_pages_with_metadata(path)
+                if not pages:
+                    print("    [aviso] nenhum texto extraido do PDF, pulando")
+                    processed.add(str(path))
+                    save_state(cfg["state_file"], processed)
+                    continue
+                chunks = []
+                for page in pages:
+                    for chunk_text in splitter.split_text(page["text"]):
+                        chunks.append({"text": chunk_text, "page_number": page["page_number"]})
+            else:
+                chunks = [
+                    {"text": c, "page_number": None}
+                    for c in splitter.split_text(extract_text(path))
+                ]
+
             if not chunks:
-                print("    [aviso] nenhum texto extraido, pulando")
+                print("    [aviso] nenhum chunk gerado, pulando")
             else:
                 embed_and_upsert(
-                    client, cfg["collection"], embeddings, chunks, str(rel), cfg["hybrid"]
+                    client,
+                    cfg["collection"],
+                    embeddings,
+                    chunks,
+                    str(rel),
+                    cfg["hybrid"],
+                    doc_meta,
                 )
-                print(f"    {len(chunks)} chunk(s) indexados")
+                print(f"    {len(chunks)} chunk(s) indexados (categoria: {category})")
         except Exception as exc:  # noqa: BLE001
             print(f"    [ERRO] falhou em {rel}: {exc} -- pulando este arquivo")
             continue

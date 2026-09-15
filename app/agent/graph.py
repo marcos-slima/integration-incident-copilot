@@ -249,7 +249,7 @@ def web_search_node(state: CopilotState) -> CopilotState:
             for h in hits
         )
         results = [{"source": "web_search", "text": raw, "score": 0.0}]
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError) as e:
         results = [{"source": "web_search_error", "text": str(e), "score": 0.0}]
 
     return {"web_search_results": results}
@@ -407,7 +407,7 @@ def _make_web_search_tool(state):
                 f"Titulo: {h.get('title', '')}\nURL: {h.get('href', '')}\nResumo: {h.get('body', '')}"
                 for h in hits
             )
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             return f"Erro na busca: {e}"
 
     return web_search_tool
@@ -464,14 +464,14 @@ um JSON valido com exatamente esta estrutura (sem texto adicional antes ou depoi
     if json_match:
         try:
             diagnosis = DiagnosisModel(**json.loads(json_match.group(0))).model_dump()
-        except Exception:
+        except (json.JSONDecodeError, ValueError, KeyError):
             diagnosis = _fallback_diagnosis(raw)
     else:
         code_match = re_module.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re_module.DOTALL)
         if code_match:
             try:
                 diagnosis = json.loads(code_match.group(1))
-            except Exception:
+            except json.JSONDecodeError:
                 diagnosis = _fallback_diagnosis(raw)
         else:
             diagnosis = _fallback_diagnosis(raw)

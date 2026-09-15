@@ -202,15 +202,41 @@ def web_search_node(state: CopilotState) -> CopilotState:
     top_score = hits[0]["score"] if hits else 0.0
 
     # Threshold: so busca na web se o melhor resultado RAG for fraco
-    if top_score >= 0.6:
+    # Configuravel via WEB_SEARCH_THRESHOLD no .env (default: 0.6)
+    if not settings.web_search_enabled or top_score >= settings.web_search_threshold:
         return {"web_search_results": []}
 
     description = state["description"]
     interface_type = state.get("interface_type", "")
 
-    # Query direcionada para SAP Community e GitHub SAP
-    site_filter = "site:community.sap.com OR site:github.com/SAP OR site:help.sap.com"
-    query = f"{description} SAP integration {interface_type} {site_filter}".strip()
+    # Mapeamento de interface_type para fontes mais relevantes —
+    # cada protocolo tem documentacao e comunidade especifica.
+    # Fallback generico cobre casos sem interface_type definido.
+    SITE_MAP = {
+        "odata": "site:help.sap.com OR site:community.sap.com/t5/technology-blogs-by-sap",
+        "rfc": "site:help.sap.com/docs/SAP_NETWEAVER OR site:community.sap.com OR site:github.com/SAP/PyRFC",
+        "cap": "site:cap.cloud.sap OR site:github.com/SAP/cloud-cap-samples OR site:community.sap.com",
+        "servicenow": "site:developer.servicenow.com OR site:community.sap.com OR site:help.sap.com",
+        "salesforce": "site:developer.salesforce.com OR site:community.sap.com OR site:github.com/SAP",
+        "workday": "site:community.workday.com OR site:community.sap.com",
+        "ariba": "site:help.sap.com/docs/ARIBA OR site:community.sap.com",
+        "apim": "site:help.sap.com/docs/SAP_API_MANAGEMENT OR site:community.sap.com",
+    }
+    site_filter = SITE_MAP.get(
+        interface_type, "site:community.sap.com OR site:github.com/SAP OR site:help.sap.com"
+    )
+    tech_term = {
+        "odata": "OData SAP Gateway",
+        "rfc": "RFC ABAP BAPI",
+        "cap": "SAP CAP CDS BTP",
+        "servicenow": "ServiceNow SAP integration",
+        "salesforce": "Salesforce SAP integration",
+        "workday": "Workday SAP integration",
+        "ariba": "SAP Ariba integration",
+        "apim": "SAP API Management",
+    }.get(interface_type, "SAP integration")
+
+    query = f"{description} {tech_term} {site_filter}".strip()
 
     try:
         with DDGS() as ddgs:

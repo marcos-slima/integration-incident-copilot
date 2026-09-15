@@ -370,3 +370,43 @@ achado factual sobre `pyrfc` registrado com fonte verificada em
 `APIManagementConnector`), `RFCConnector` com conexão real validada
 contra ABAP Cloud Trial, quatro conectores com execução ponta-a-ponta
 comprovada (Salesforce, ServiceNow, CAP, RFC).
+
+## Fase 12 — Interface Web, Documentação de Produto e Modelo de Produção
+
+1. **Troca do modelo de produção para `qwen3-coder-next:latest`** —
+   modelo MoE (80B total / 3B ativos por token, janela 262K tokens),
+   avaliado formalmente via `promptfoo` com `concurrency: 1` (um modelo
+   por vez — dois modelos simultâneos de 51GB + 20GB esgotam a RAM).
+   Resultado: 10/10 PASS, empate técnico com `qwen2.5-coder:32b`.
+   Decisão de troca baseada no alinhamento com roadmap de agentes
+   (long-horizon, tool use, A2A) — não em superioridade nos casos
+   atuais.
+
+2. **Interface web React integrada ao FastAPI** — frontend standalone
+   (`static/index.html`) servido em `/` pelo FastAPI via `FileResponse`.
+   Chama a API real `/diagnose`, exibe todos os campos de
+   `DiagnosisResponse` (causa raiz, confiança com badge colorido,
+   próximos passos numerados, relatório Markdown expansível). Funciona
+   também como arquivo standalone abrindo diretamente no browser, com
+   configuração de endereço do servidor via campo na interface.
+
+3. **`docs/USER_GUIDE.md` criado** — guia de produto completo: o que
+   é, para quem, como funciona (pipeline não-técnico), como usar
+   (interface web, API REST, CLI), orientações de como construir um
+   bom prompt (com exemplos ruins/bons lado a lado), casos de uso
+   típicos (IDoc 51, timeout OData, 401 CPI, RFC refused), interpretação
+   do badge de confiança, limitações conhecidas e glossário de 13
+   termos SAP.
+
+4. **`docs/GETTING_STARTED.md` criado** — do zero ao primeiro
+   diagnóstico em menos de 10 minutos. Destaque para o fluxo de
+   extensão da base de conhecimento: o agente consulta apenas
+   `data/sample_docs/` (base local curada), não a internet. Inclui
+   estrutura de documento de conhecimento, exemplo completo anotado,
+   boas práticas de curadoria, configuração de conectores reais e
+   provedores LLM alternativos (OpenAI, Azure OpenAI, OpenRouter).
+
+**Critério de saída:** interface web funcional chamando API real,
+`qwen3-coder-next` validado com 10/10 no promptfoo, USER_GUIDE e
+GETTING_STARTED commitados, documentação de produto alinhada com o
+estado real do projeto.

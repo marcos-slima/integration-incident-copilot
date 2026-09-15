@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Integration Incident Copilot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/marked@9/marked.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body,#root{height:100%}
+body{
+  font-family:'Inter',sans-serif;
+  background:#0A1628;
+  color:#F8FAFC;
+  font-size:14px;
+  line-height:1.5;
+}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:#0A1628}
+::-webkit-scrollbar-thumb{background:#1E3A5F;border-radius:2px}
+
+/* Layout */
+.app{display:flex;height:100vh;overflow:hidden}
+.sidebar{
+  width:220px;flex-shrink:0;
+  background:#0F2040;
+  border-right:1px solid #1E3A5F;
+  display:flex;flex-direction:column;
+  padding:20px 0;
+}
+.main{flex:1;overflow-y:auto;background:#0F2040}
+.view{max-width:720px;margin:0 auto;padding:28px 24px}
+
+/* Brand */
+.brand{padding:0 16px 24px;display:flex;align-items:center;gap:10px}
+.brand-icon{
+  width:30px;height:30px;border-radius:7px;
+  background:linear-gradient(135deg,#0EA5E9,#0369A1);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0
+}
+.brand-name{font-size:13px;font-weight:600;line-height:1.2}
+.brand-sub{font-size:10px;color:#94A3B8;margin-top:1px}
+
+/* Nav */
+nav{flex:1;padding:0 8px}
+.nav-btn{
+  width:100%;display:flex;align-items:center;gap:9px;
+  padding:9px 10px;border-radius:6px;border:none;
+  cursor:pointer;margin-bottom:2px;font-size:13px;
+  text-align:left;transition:all 0.12s;
+  font-family:'Inter',sans-serif;
+  background:transparent;color:#94A3B8;
+}
+.nav-btn:hover{background:#1E3A5F22;color:#F8FAFC}
+.nav-btn.active{background:#0EA5E918;color:#0EA5E9;font-weight:500}
+.nav-badge{
+  margin-left:auto;font-size:10px;font-weight:600;
+  background:#0EA5E933;color:#0EA5E9;
+  border-radius:10px;padding:1px 6px
+}
+
+/* Model info */
+.model-info{
+  margin:0 8px;padding:10px 12px;
+  background:#0A1628;border-radius:6px;
+  border:1px solid #1E3A5F
+}
+.model-label{font-size:10px;color:#475569;margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em}
+.model-name{font-family:'JetBrains Mono',monospace;font-size:11px;color:#94A3B8}
+.model-meta{font-family:'JetBrains Mono',monospace;font-size:9px;color:#475569;margin-top:1px}
+
+/* Page header */
+.page-title{font-size:20px;font-weight:600;margin-bottom:4px}
+.page-sub{font-size:13px;color:#94A3B8;margin-bottom:22px;line-height:1.6}
+
+/* Form card */
+.form-card{
+  background:#0A1628;border:1px solid #1E3A5F;
+  border-radius:10px;padding:20px;margin-bottom:16px
+}
+.field-label{
+  display:block;font-size:11px;font-weight:500;
+  color:#94A3B8;margin-bottom:6px
+}
+.field-input{
+  width:100%;background:#0F2040;
+  border:1px solid #1E3A5F;border-radius:6px;
+  color:#F8FAFC;padding:9px 12px;
+  font-size:13px;outline:none;
+  transition:border-color .15s;
+  font-family:'Inter',sans-serif
+}
+.field-input:focus{border-color:#0EA5E9}
+.field-input::placeholder{color:#475569}
+textarea.field-input{resize:vertical;line-height:1.6}
+.mono-input{font-family:'JetBrains Mono',monospace;font-size:12px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.field-row{margin-bottom:14px}
+
+/* Advanced toggle */
+.advanced-toggle{
+  display:flex;align-items:center;gap:6px;
+  font-size:12px;color:#94A3B8;cursor:pointer;
+  background:none;border:none;padding:0;margin-bottom:14px;
+  font-family:'Inter',sans-serif
+}
+.advanced-toggle:hover{color:#F8FAFC}
+
+/* Error */
+.form-error{
+  font-size:12px;color:#FCA5A5;
+  background:#EF444418;border:1px solid #EF444433;
+  border-radius:6px;padding:8px 12px;margin-bottom:12px
+}
+
+/* Submit btn */
+.submit-btn{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:9px 20px;border-radius:6px;border:none;
+  background:#0EA5E9;color:#fff;
+  font-size:13px;font-weight:600;cursor:pointer;
+  font-family:'Inter',sans-serif;transition:all .15s
+}
+.submit-btn:hover{background:#0284C7}
+.submit-btn:disabled{background:#0EA5E955;cursor:not-allowed}
+.btn-row{display:flex;justify-content:flex-end}
+
+/* Loading */
+.loading-card{
+  background:#0A1628;border:1px solid #1E3A5F;
+  border-radius:10px;padding:32px;
+  display:flex;flex-direction:column;align-items:center;gap:14px;
+  margin-bottom:16px
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{
+  width:36px;height:36px;border-radius:50%;
+  border:2px solid #1E3A5F;border-top-color:#0EA5E9;
+  animation:spin .9s linear infinite
+}
+.loading-title{font-size:14px;font-weight:500}
+.loading-sub{font-size:12px;color:#94A3B8}
+
+/* Result */
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.result-card{
+  background:#0A1628;border:1px solid #1E3A5F;
+  border-radius:10px;overflow:hidden;margin-bottom:16px;
+  animation:fadeUp .25s ease forwards
+}
+.result-header{
+  padding:13px 20px;border-bottom:1px solid #1E3A5F;
+  display:flex;align-items:center;justify-content:space-between
+}
+.result-header-title{font-size:13px;font-weight:500}
+.result-body{padding:20px}
+.section-label{
+  font-size:10px;font-weight:500;color:#94A3B8;
+  letter-spacing:.06em;text-transform:uppercase;margin-bottom:9px
+}
+.root-cause{font-size:14px;line-height:1.7;color:#F8FAFC;margin-bottom:20px}
+.steps-list{list-style:none;display:flex;flex-direction:column;gap:6px;margin-bottom:20px}
+.step-item{
+  display:flex;gap:10px;align-items:flex-start;
+  padding:9px 12px;border-radius:6px;
+  background:#0F2040;border:1px solid #1E3A5F
+}
+.step-num{
+  width:20px;height:20px;border-radius:50%;flex-shrink:0;
+  background:#0EA5E922;color:#0EA5E9;
+  font-size:10px;font-weight:700;
+  display:flex;align-items:center;justify-content:center
+}
+.step-text{font-size:12px;line-height:1.6;color:#F8FAFC}
+.ref-doc{
+  display:flex;align-items:center;gap:8px;
+  padding:9px 12px;border-radius:6px;
+  background:#0EA5E90D;border:1px solid #0EA5E933;
+  margin-bottom:20px
+}
+.ref-label{font-size:12px;color:#94A3B8}
+.ref-name{
+  font-family:'JetBrains Mono',monospace;font-size:11px;
+  color:#0EA5E9;background:#0EA5E918;
+  padding:2px 8px;border-radius:4px
+}
+
+/* Markdown report */
+.report-section{margin-top:4px}
+.report-toggle{
+  display:flex;align-items:center;gap:6px;
+  font-size:12px;color:#94A3B8;cursor:pointer;
+  background:none;border:none;padding:0;margin-bottom:10px;
+  font-family:'Inter',sans-serif
+}
+.report-toggle:hover{color:#F8FAFC}
+.report-body{
+  background:#0F2040;border:1px solid #1E3A5F;
+  border-radius:6px;padding:16px;
+  font-size:13px;line-height:1.7;color:#CBD5E1
+}
+.report-body h1,.report-body h2,.report-body h3{color:#F8FAFC;font-weight:600;margin:12px 0 6px}
+.report-body h1{font-size:16px}
+.report-body h2{font-size:14px}
+.report-body h3{font-size:13px}
+.report-body p{margin-bottom:8px}
+.report-body ul,.report-body ol{padding-left:18px;margin-bottom:8px}
+.report-body li{margin-bottom:4px}
+.report-body code{
+  font-family:'JetBrains Mono',monospace;font-size:11px;
+  background:#0A1628;padding:1px 5px;border-radius:3px;color:#0EA5E9
+}
+.report-body pre{
+  background:#0A1628;border:1px solid #1E3A5F;
+  border-radius:6px;padding:12px;overflow-x:auto;margin-bottom:8px
+}
+.report-body pre code{background:none;padding:0;color:#CBD5E1}
+.report-body strong{color:#F8FAFC;font-weight:600}
+.report-body hr{border:none;border-top:1px solid #1E3A5F;margin:12px 0}
+
+/* Confidence badge */
+.badge{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:3px 10px;border-radius:20px;
+  font-size:12px;font-weight:500
+}
+.badge-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.badge-high{background:#10B98122;color:#10B981}
+.badge-high .badge-dot{background:#10B981}
+.badge-mid{background:#F59E0B22;color:#F59E0B}
+.badge-mid .badge-dot{background:#F59E0B}
+.badge-low{background:#EF444422;color:#EF4444}
+.badge-low .badge-dot{background:#EF4444}
+
+/* Demo IDs */
+.demo-ids{margin-top:16px}
+.demo-label{font-size:11px;color:#475569;margin-bottom:7px}
+.demo-chips{display:flex;gap:6px;flex-wrap:wrap}
+.demo-chip{
+  border:1px solid #1E3A5F;border-radius:4px;
+  padding:3px 9px;font-size:11px;color:#94A3B8;
+  background:transparent;cursor:pointer;
+  font-family:'JetBrains Mono',monospace;transition:all .12s
+}
+.demo-chip:hover{border-color:#0EA5E9;color:#0EA5E9}
+
+/* History */
+.history-empty{
+  text-align:center;padding:48px 0;color:#475569
+}
+.history-empty svg{margin:0 auto 10px;display:block;opacity:.35}
+.history-item{
+  background:#0A1628;border:1px solid #1E3A5F;
+  border-radius:10px;padding:14px 16px;margin-bottom:10px;
+  animation:fadeUp .2s ease forwards
+}
+.history-row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:7px}
+.history-desc{font-size:13px;color:#F8FAFC;flex:1;line-height:1.5}
+.history-meta{display:flex;gap:7px;align-items:center}
+.sys-tag{
+  font-family:'JetBrains Mono',monospace;font-size:10px;
+  color:#0EA5E9;background:#0EA5E918;
+  padding:1px 6px;border-radius:3px
+}
+.hist-id{font-family:'JetBrains Mono',monospace;font-size:10px;color:#475569}
+.hist-time{font-size:10px;color:#475569;margin-left:auto}
+.history-cause{
+  font-size:12px;color:#94A3B8;margin-top:7px;line-height:1.5;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden
+}
+
+/* Status */
+.status-section{margin-bottom:22px}
+.status-section-label{
+  font-size:10px;font-weight:500;color:#475569;
+  letter-spacing:.06em;text-transform:uppercase;margin-bottom:9px
+}
+.status-row{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 12px;border-radius:6px;
+  background:#0A1628;border:1px solid #1E3A5F;
+  margin-bottom:4px
+}
+.status-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.status-dot-ok{background:#10B981}
+.status-dot-warn{background:#F59E0B}
+.status-dot-mock{background:#475569}
+.status-name{font-family:'JetBrains Mono',monospace;font-size:11px;color:#F8FAFC;flex-shrink:0}
+.status-note{font-size:11px;color:#94A3B8;flex:1}
+.status-tag{
+  font-size:10px;font-weight:500;margin-left:auto;flex-shrink:0;
+  font-family:'JetBrains Mono',monospace;
+}
+
+/* API config notice */
+.api-notice{
+  background:#0A1628;border:1px solid #1E3A5F;
+  border-radius:6px;padding:10px 14px;margin-bottom:16px;
+  font-size:12px;color:#94A3B8;line-height:1.6
+}
+.api-notice strong{color:#F8FAFC}
+.api-config{
+  display:flex;gap:8px;margin-top:8px;align-items:center
+}
+.api-input{
+  flex:1;background:#0F2040;border:1px solid #1E3A5F;
+  border-radius:4px;color:#F8FAFC;padding:5px 8px;
+  font-size:12px;font-family:'JetBrains Mono',monospace;outline:none
+}
+.api-input:focus{border-color:#0EA5E9}
+.api-save-btn{
+  padding:5px 12px;border-radius:4px;border:none;
+  background:#0EA5E9;color:#fff;font-size:11px;
+  font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;
+  flex-shrink:0
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState, useRef, useEffect} = React;
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function confInfo(v) {
+  const pct = Math.round(v * 100);
+  if (v >= 0.7) return {cls:'badge-high', label:'Alta', pct};
+  if (v >= 0.4) return {cls:'badge-mid', label:'Média', pct};
+  return {cls:'badge-low', label:'Baixa', pct};
+}
+
+function Badge({value}) {
+  const {cls, label, pct} = confInfo(value);
+  return (
+    <span className={`badge ${cls}`}>
+      <span className="badge-dot"/>
+      {label} — {pct}%
+    </span>
+  );
+}
+
+// ─── API ─────────────────────────────────────────────────────────────────────
+async function callDiagnose(apiBase, payload) {
+  const res = await fetch(`${apiBase}/diagnose`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+// ─── Sidebar ─────────────────────────────────────────────────────────────────
+function Sidebar({view, setView, historyCount}) {
+  const items = [
+    {id:'diagnose', label:'Diagnóstico', icon:
+      <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+        <polygon points="7.5,1.5 13,5 13,11 7.5,14 2,11 2,5" stroke="currentColor" strokeWidth="1.2"/>
+        <circle cx="7.5" cy="7.5" r="2" stroke="currentColor" strokeWidth="1.2"/>
+      </svg>
+    },
+    {id:'history', label:'Histórico', badge: historyCount, icon:
+      <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+        <rect x="2" y="2" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="1.2"/>
+        <path d="M5 5h5M5 7.5h5M5 10h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+      </svg>
+    },
+    {id:'status', label:'Stack', icon:
+      <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+        <circle cx="7.5" cy="7.5" r="5.5" stroke="currentColor" strokeWidth="1.2"/>
+        <path d="M7.5 4v3.5l2 2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+      </svg>
+    },
+  ];
+  return (
+    <aside className="sidebar">
+      <div className="brand">
+        <div className="brand-icon">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <polygon points="7,1 13,4.5 13,10.5 7,14 1,10.5 1,4.5" stroke="white" strokeWidth="1.2" fill="none"/>
+            <circle cx="7" cy="7" r="2" fill="white"/>
+          </svg>
+        </div>
+        <div>
+          <div className="brand-name">Incident Copilot</div>
+          <div className="brand-sub">SAP Integration · AI</div>
+        </div>
+      </div>
+      <nav>
+        {items.map(it => (
+          <button key={it.id}
+            className={`nav-btn ${view===it.id?'active':''}`}
+            onClick={() => setView(it.id)}>
+            {it.icon}
+            {it.label}
+            {it.badge > 0 && <span className="nav-badge">{it.badge}</span>}
+          </button>
+        ))}
+      </nav>
+      <div className="model-info">
+        <div className="model-label">modelo ativo</div>
+        <div className="model-name">qwen3-coder-next</div>
+        <div className="model-meta">80B/3B · 262K ctx</div>
+      </div>
+    </aside>
+  );
+}
+
+// ─── DiagnoseView ─────────────────────────────────────────────────────────────
+function DiagnoseView({onResult, apiBase}) {
+  const [desc, setDesc] = useState('');
+  const [sys, setSys] = useState('');
+  const [ident, setIdent] = useState('');
+  const [logs, setLogs] = useState('');
+  const [payload, setPayload] = useState('');
+  const [showAdv, setShowAdv] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+  const [showReport, setShowReport] = useState(false);
+  const resultRef = useRef(null);
+
+  const systems = [
+    ['','Sem conector (texto livre)'],
+    ['odata','OData / SAP Gateway'],
+    ['rfc','RFC / SAP ABAP'],
+    ['servicenow','ServiceNow ITSM'],
+    ['salesforce','Salesforce CRM'],
+    ['workday','Workday HCM'],
+    ['ariba','SAP Ariba'],
+    ['cap','SAP CAP / BTP'],
+    ['apim','SAP API Management'],
+  ];
+
+  async function submit() {
+    if (!desc.trim()) {setError('Descreva o incidente para iniciar o diagnóstico.'); return;}
+    setError('');
+    setLoading(true);
+    setResult(null);
+    setShowReport(false);
+    try {
+      const body = {description: desc.trim()};
+      if (sys) body.interface_type = sys;
+      if (ident.trim()) body.identifier = ident.trim();
+      if (logs.trim()) body.logs = logs.trim();
+      if (payload.trim()) body.payload = payload.trim();
+      const res = await callDiagnose(apiBase, body);
+      setResult(res);
+      onResult({desc, sys, ident, result: res, ts: new Date()});
+      setTimeout(() => resultRef.current?.scrollIntoView({behavior:'smooth'}), 100);
+    } catch(e) {
+      setError(`Falha na comunicação com o servidor: ${e.message}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function fillDemo(id, s, d) {
+    setIdent(id); setSys(s); setDesc(d);
+    setResult(null); setError('');
+  }
+
+  return (
+    <div className="view">
+      <h1 className="page-title">Diagnóstico de incidente</h1>
+      <p className="page-sub">
+        Descreva o incidente em linguagem natural. O agente recupera o contexto via RAG,
+        analisa com LLM e retorna a causa raiz provável com próximos passos concretos.
+      </p>
+
+      <div className="form-card">
+        <div className="field-row">
+          <label className="field-label">Descrição do incidente *</label>
+          <textarea className="field-input" rows={4}
+            placeholder="Ex: IDoc travado com status 51 — material não encontrado no centro de produção. Tentativas de reprocessamento via BD87 falhando."
+            value={desc} onChange={e => setDesc(e.target.value)}/>
+        </div>
+        <div className="grid-2 field-row">
+          <div>
+            <label className="field-label">Sistema de origem</label>
+            <select className="field-input"
+              value={sys} onChange={e => setSys(e.target.value)}>
+              {systems.map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="field-label">Identificador do incidente</label>
+            <input className="field-input mono-input" type="text"
+              placeholder="INC0010001 · CPI-401-DEMO · RFC-IDOC-51"
+              value={ident} onChange={e => setIdent(e.target.value)}/>
+          </div>
+        </div>
+
+        <button className="advanced-toggle" onClick={() => setShowAdv(v => !v)}>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d={showAdv ? "M2 4l4 4 4-4" : "M4 2l4 4-4 4"} stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+          </svg>
+          {showAdv ? 'Ocultar campos avançados' : 'Campos avançados (logs, payload)'}
+        </button>
+
+        {showAdv && <>
+          <div className="field-row">
+            <label className="field-label">Logs do sistema (opcional)</label>
+            <textarea className="field-input mono-input" rows={4}
+              placeholder="Cole aqui os logs relevantes do iFlow, SM21, ST22, etc."
+              value={logs} onChange={e => setLogs(e.target.value)}/>
+          </div>
+          <div className="field-row">
+            <label className="field-label">Payload / mensagem de erro (opcional)</label>
+            <textarea className="field-input mono-input" rows={3}
+              placeholder="Payload XML, JSON de erro, mensagem de exceção ABAP, etc."
+              value={payload} onChange={e => setPayload(e.target.value)}/>
+          </div>
+        </>}
+
+        {error && <div className="form-error">{error}</div>}
+
+        <div className="btn-row">
+          <button className="submit-btn" onClick={submit} disabled={loading}>
+            {loading ? <>
+              <svg className="spinner" style={{width:14,height:14,animation:'spin .9s linear infinite',flexShrink:0}} viewBox="0 0 14 14" fill="none">
+                <circle cx="7" cy="7" r="5.5" stroke="rgba(255,255,255,.3)" strokeWidth="2"/>
+                <path d="M7 1.5a5.5 5.5 0 0 1 5.5 5.5" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+              Analisando…
+            </> : <>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <polygon points="7,1 13,4.5 13,10.5 7,14 1,10.5 1,4.5" stroke="white" strokeWidth="1.2" fill="none"/>
+                <circle cx="7" cy="7" r="2" fill="white"/>
+              </svg>
+              Iniciar diagnóstico
+            </>}
+          </button>
+        </div>
+      </div>
+
+      {loading && (
+        <div className="loading-card">
+          <div className="spinner" style={{width:40,height:40,borderRadius:'50%',border:'2px solid #1E3A5F',borderTopColor:'#0EA5E9',animation:'spin .9s linear infinite'}}/>
+          <div className="loading-title">Agente processando</div>
+          <div className="loading-sub">Conector → RAG híbrido → LLM → guardrails</div>
+        </div>
+      )}
+
+      {result && !loading && (
+        <div className="result-card" ref={resultRef}>
+          <div className="result-header">
+            <span className="result-header-title">Resultado do diagnóstico</span>
+            <Badge value={result.confidence}/>
+          </div>
+          <div className="result-body">
+            <div className="section-label">Causa raiz provável</div>
+            <p className="root-cause">{result.probable_root_cause}</p>
+
+            <div className="section-label">Próximos passos</div>
+            <ol className="steps-list">
+              {result.next_steps.map((s,i) => (
+                <li key={i} className="step-item">
+                  <span className="step-num">{i+1}</span>
+                  <span className="step-text">{s}</span>
+                </li>
+              ))}
+            </ol>
+
+            {result.matched_source && (
+              <div className="ref-doc" style={{marginBottom:16}}>
+                <span className="ref-label">Documento de referência</span>
+                <span className="ref-name">{result.matched_source}</span>
+              </div>
+            )}
+
+            {result.report_markdown && (
+              <div className="report-section">
+                <button className="report-toggle" onClick={() => setShowReport(v => !v)}>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <path d={showReport?"M2 4l4 4 4-4":"M4 2l4 4-4 4"} stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                  </svg>
+                  {showReport ? 'Ocultar relatório completo' : 'Ver relatório completo em Markdown'}
+                </button>
+                {showReport && (
+                  <div className="report-body"
+                    dangerouslySetInnerHTML={{__html: marked.parse(result.report_markdown)}}/>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="demo-ids">
+        <div className="demo-label">Identificadores de demonstração (requerem servidor ativo)</div>
+        <div className="demo-chips">
+          {[
+            ['CPI-401-DEMO','odata','iFlow retornando HTTP 401 ao autenticar via OAuth2 Client Credentials no SAP Integration Suite'],
+            ['RFC-IDOC-51-DEMO','rfc','IDoc ORDERS05 travado com status 51 — material 4711 não encontrado no centro 1000'],
+            ['RFC-CONN-REFUSED-DEMO','rfc','SM59 não conecta no sistema de destino PRD — connection refused na porta 3300'],
+          ].map(([id,s,d]) => (
+            <button key={id} className="demo-chip" onClick={() => fillDemo(id,s,d)}>{id}</button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── HistoryView ─────────────────────────────────────────────────────────────
+function HistoryView({history}) {
+  return (
+    <div className="view">
+      <h1 className="page-title">Histórico da sessão</h1>
+      <p className="page-sub" style={{marginBottom:20}}>Diagnósticos realizados nesta sessão.</p>
+      {!history.length ? (
+        <div className="history-empty">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+            <rect x="4" y="4" width="24" height="24" rx="4" stroke="currentColor" strokeWidth="1.5"/>
+            <path d="M10 11h12M10 16h12M10 21h7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+          <p style={{fontSize:13}}>Nenhum diagnóstico nesta sessão.</p>
+          <p style={{fontSize:12,marginTop:4}}>Os resultados aparecem aqui após o primeiro diagnóstico.</p>
+        </div>
+      ) : [...history].reverse().map((item, i) => {
+        const {cls} = confInfo(item.result.confidence);
+        return (
+          <div key={i} className="history-item">
+            <div className="history-row">
+              <p className="history-desc">{item.desc}</p>
+              <Badge value={item.result.confidence}/>
+            </div>
+            <div className="history-meta">
+              {item.sys && <span className="sys-tag">{item.sys}</span>}
+              {item.ident && <span className="hist-id">{item.ident}</span>}
+              <span className="hist-time">{item.ts.toLocaleTimeString('pt-BR')}</span>
+            </div>
+            <p className="history-cause">{item.result.probable_root_cause}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── StatusView ───────────────────────────────────────────────────────────────
+function StatusView() {
+  const connectors = [
+    {name:'ODataConnector',   status:'mock', note:'ODATA_SERVICE_URL não configurado'},
+    {name:'RFCConnector',     status:'ok',   note:'SDK 7.50 PL19 + pyrfc 3.3.1 · ABAP Trial A4H rel 754'},
+    {name:'ServiceNowConnector', status:'ok', note:'Validado — ServiceNow PDI real'},
+    {name:'SalesforceConnector', status:'ok', note:'Validado — Salesforce Developer Edition'},
+    {name:'WorkdayConnector', status:'mock', note:'Sem sandbox gratuito disponível'},
+    {name:'AribaConnector',   status:'mock', note:'Sandbox API Key — incompatível com OAuth2 CC'},
+    {name:'CAPConnector',     status:'ok',   note:'Validado — SAP BTP Trial (HANA Cloud + XSUAA)'},
+    {name:'APIManagementConnector', status:'warn', note:'Schema especulativo · não validado contra API real'},
+  ];
+  const infra = [
+    {name:'LLM Gateway',    value:'qwen3-coder-next:latest · 80B/3B ativo · 262K ctx', status:'ok'},
+    {name:'RAG (Qdrant)',   value:'dense + sparse BM25 · fusão RRF · score_threshold',  status:'ok'},
+    {name:'GraphRAG',       value:'Neo4j opt-in · desligado por padrão (GRAPH_RAG_ENABLED=false)', status:'mock'},
+    {name:'Observabilidade',value:'Langfuse · trace por execução',  status:'ok'},
+    {name:'A2A (Agent2Agent)', value:'JSON-RPC 2.0 · Agent Card · aguardando Joule GA Q4/2026', status:'warn'},
+  ];
+  const dotClass = s => s==='ok'?'status-dot-ok':s==='warn'?'status-dot-warn':'status-dot-mock';
+  const tagColor = s => s==='ok'?'#10B981':s==='warn'?'#F59E0B':'#475569';
+  const tagLabel = s => s==='ok'?'ok':s==='warn'?'especulativo':'mock';
+
+  return (
+    <div className="view">
+      <h1 className="page-title">Status da stack</h1>
+      <p className="page-sub">Estado atual dos conectores e serviços de infraestrutura.</p>
+
+      <div className="status-section">
+        <div className="status-section-label">Conectores (8)</div>
+        {connectors.map(c => (
+          <div key={c.name} className="status-row">
+            <span className={`status-dot ${dotClass(c.status)}`}/>
+            <span className="status-name" style={{width:210}}>{c.name}</span>
+            <span className="status-note">{c.note}</span>
+            <span className="status-tag" style={{color:tagColor(c.status)}}>{tagLabel(c.status)}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="status-section">
+        <div className="status-section-label">Infraestrutura</div>
+        {infra.map(s => (
+          <div key={s.name} className="status-row">
+            <span className={`status-dot ${dotClass(s.status)}`}/>
+            <span className="status-name" style={{width:150}}>{s.name}</span>
+            <span className="status-note" style={{fontFamily:"'JetBrains Mono',monospace",fontSize:10}}>{s.value}</span>
+            <span className="status-tag" style={{color:tagColor(s.status)}}>{tagLabel(s.status)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── App ──────────────────────────────────────────────────────────────────────
+function App() {
+  const [view, setView] = useState('diagnose');
+  const [history, setHistory] = useState([]);
+  const [apiBase, setApiBase] = useState(
+    window.location.origin === 'null' || window.location.origin === 'file://'
+      ? 'http://localhost:8000'
+      : window.location.origin
+  );
+  const [apiInput, setApiInput] = useState(apiBase);
+  const [apiSaved, setApiSaved] = useState(false);
+
+  function saveApi() {
+    setApiBase(apiInput.replace(/\/$/, ''));
+    setApiSaved(true);
+    setTimeout(() => setApiSaved(false), 2000);
+  }
+
+  return (
+    <div className="app">
+      <Sidebar view={view} setView={setView} historyCount={history.length}/>
+      <main className="main">
+        {(window.location.protocol === 'file:') && (
+          <div style={{padding:'16px 24px 0',maxWidth:720,margin:'0 auto'}}>
+            <div className="api-notice">
+              <strong>Modo standalone</strong> — arquivo aberto diretamente no browser.
+              Configure o endereço do servidor para conectar ao backend real.
+              <div className="api-config">
+                <input className="api-input" value={apiInput}
+                  onChange={e => setApiInput(e.target.value)}
+                  placeholder="http://localhost:8000"/>
+                <button className="api-save-btn" onClick={saveApi}>
+                  {apiSaved ? '✓ Salvo' : 'Salvar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {view === 'diagnose' && <DiagnoseView onResult={item => setHistory(h=>[...h,item])} apiBase={apiBase}/>}
+        {view === 'history' && <HistoryView history={history}/>}
+        {view === 'status' && <StatusView/>}
+      </main>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

@@ -3,6 +3,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from langfuse import get_client
 
 from app.a2a.agent_card import get_agent_card
@@ -23,6 +24,11 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+
+@app.get("/")
+def index():
+    return FileResponse("static/index.html")
 
 
 @app.get("/health")

@@ -5,6 +5,24 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 
 ---
 
+## [1.1.0] — 2026-09-15
+
+### Adicionado
+
+**Web search fallback (v1.1)**
+- Busca web via DuckDuckGo (`ddgs`) ativa automaticamente quando o melhor
+  resultado RAG tem score < 0.6 — RAG local continua sendo o caminho primário
+- Busca direcionada para SAP Community, GitHub SAP e SAP Help Portal
+  (`site:community.sap.com OR site:github.com/SAP OR site:help.sap.com`)
+- Retorna título, URL e resumo dos 5 melhores resultados, incorporados
+  ao contexto do prompt como fonte secundária
+- Privacidade: usa apenas a descrição textual do incidente, nunca dados
+  do conector (que podem conter informações sensíveis do cliente)
+- Novo node `web_search` no grafo LangGraph, entre `retrieve` e `diagnose`
+- Compatível com GraphRAG opt-in — entra no pipeline antes do `graph_enrich`
+
+---
+
 ## [1.0.0] — 2026-09-15
 
 Primeira versão estável. Pipeline completo de diagnóstico de incidentes de integração SAP e multi-vendor, com interface web, 8 conectores (4 validados contra sistema real), camada A2A, GraphRAG opt-in e documentação de produto completa.

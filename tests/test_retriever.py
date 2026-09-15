@@ -22,7 +22,7 @@ def test_retriever_finds_correct_document(query, expected_source, min_score):
     assert hits, f"Nenhum resultado para a query: {query}"
 
     top = hits[0]
-    assert (
-        top["source"] == expected_source
-    ), f"Esperado '{expected_source}' como top-1 para '{query}', veio '{top['source']}'"
+    assert top["source"] == expected_source, (
+        f"Esperado '{expected_source}' como top-1 para '{query}', veio '{top['source']}'"
+    )
     assert top["score"] >= min_score

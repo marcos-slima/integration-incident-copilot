@@ -61,6 +61,6 @@ def test_unknown_identifier_does_not_hallucinate_specific_diagnosis():
     )
     result = run_diagnosis(request)
 
-    assert (
-        result.confidence < 0.6
-    ), f"Identificador desconhecido nao deveria gerar alta confianca (veio {result.confidence})"
+    assert result.confidence < 0.6, (
+        f"Identificador desconhecido nao deveria gerar alta confianca (veio {result.confidence})"
+    )

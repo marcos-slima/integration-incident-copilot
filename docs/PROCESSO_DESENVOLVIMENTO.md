@@ -92,7 +92,7 @@ mais valiosa do processo.
 5. Regressão real pega pelo próprio `pytest` após uma mudança de
    prompt (whitespace) — confirmou o valor da suíte
 6. Comparação formal de modelo via `promptfoo` (pipeline real, não
-   LLM isolado) → decisão por `qwen2.5-coder:32b`, com dado
+   LLM isolado) → decisão por `qwen2.5-coder:32b` (depois substituído por `qwen3-coder-next:latest` na Fase 12), com dado
    observável (comportamento sob incerteza), não intuição
 
 **Artefatos:** `tests/`, `promptfooconfig.yaml`,
@@ -377,7 +377,7 @@ comprovada (Salesforce, ServiceNow, CAP, RFC).
    modelo MoE (80B total / 3B ativos por token, janela 262K tokens),
    avaliado formalmente via `promptfoo` com `concurrency: 1` (um modelo
    por vez — dois modelos simultâneos de 51GB + 20GB esgotam a RAM).
-   Resultado: 10/10 PASS, empate técnico com `qwen2.5-coder:32b`.
+   Resultado: 10/10 PASS, empate técnico com `qwen2.5-coder:32b` — confirmou paridade de qualidade antes da troca de modelo de produção para `qwen3-coder-next:latest` (Fase 12).
    Decisão de troca baseada no alinhamento com roadmap de agentes
    (long-horizon, tool use, A2A) — não em superioridade nos casos
    atuais.
@@ -410,3 +410,79 @@ comprovada (Salesforce, ServiceNow, CAP, RFC).
 `qwen3-coder-next` validado com 10/10 no promptfoo, USER_GUIDE e
 GETTING_STARTED commitados, documentação de produto alinhada com o
 estado real do projeto.
+
+## Fase 13 — SAP Integration Support Intelligence Platform (12 itens de qualidade)
+
+Evolução de demonstração de agentes/RAG para plataforma de suporte enterprise,
+endereçando todos os gaps identificados no double check P0/P1/P2/P3.
+
+1. **CI corrigido para master/main** — `.github/workflows/tests.yml`
+   atualizado para `branches: [master, main]`; ruff format e ruff check
+   estabilizados com `args: [--fix]` no pre-commit.
+
+2. **`reference_library` integrada ao diagnóstico** — `_retrieve_unified()`
+   em `app/rag/retriever.py` consulta `sap_incident_docs` + `sap_reference_library`
+   em paralelo; 2.000+ PDFs técnicos SAP participam do diagnóstico.
+
+3. **Score composto RRF** — score final = `alpha=0.7 × cosine + 0.3 × rrf_normalizado`;
+   elimina inconsistência semântica de descartar o BM25 após a fusão RRF.
+   `reference_library` usa dense-only até reindexação com schema híbrido.
+
+4. **Estado de ingestão path → hash** — chave `hash:filename` em
+   `app/rag/ingest.py`; detecta mudanças por conteúdo, não por path;
+   compatível com estado legado (conversão automática).
+
+5. **Delete-before-upsert eliminado** — IDs determinísticos
+   `md5(document_id::chunk_index)`; upsert idempotente sem janela de
+   indisponibilidade; função `deterministic_point_id()`.
+
+6. **PDF parsing + metadata rico** — `pymupdf4llm` substitui
+   `PyPDFLoader`; preserva estrutura Markdown (tabelas, headers, código);
+   schema: `source`, `text`, `filename`, `page_number`, `document_id`,
+   `chunk_index`, `file_hash`, `title`, `category`, `ingested_at`.
+
+7. **Candidate fusion + reranker semântico** —
+   `cross-encoder/ms-marco-MiniLM-L-6-v2` via `sentence-transformers`;
+   `rerank()` em `app/rag/retriever.py`; `rerank_score` substitui score
+   RRF na ordenação final.
+
+8. **Dataset de avaliação RAG** — `data/eval/rag_eval_dataset.json`
+   (15 casos, 3 dificuldades); baseline: Hit@1=92,3%, Hit@3=100%, MRR=0,949.
+
+9. **RAG tests como quality gate** — `tests/test_rag_quality.py`
+   marcado `@pytest.mark.integration`; thresholds: Hit@1≥85%, Hit@3≥92%,
+   MRR≥0,85; falha o CI se métricas regridem.
+
+10. **Auth/rate limiting** — `slowapi` 10/min por IP + `X-API-Key`
+    opcional via `API_KEY` no `.env`; `verify_api_key()` em `app/main.py`.
+
+11. **Refatorar graph.py** — 633 linhas divididas em 3 módulos:
+    `app/agent/state.py` (tipos: DiagnosisModel, CopilotState),
+    `app/agent/nodes.py` (todos os nodes + helpers), `app/agent/graph.py`
+    (orquestrador, ~136 linhas).
+
+12. **Métricas operacionais** — `_record_quality_metrics()` em
+    `app/agent/nodes.py`; `score_current_trace()` no Langfuse grava por
+    execução: `confidence`, `has_matched_source`, `rerank_top_score`,
+    `web_search_used`.
+
+**Critério de saída:** 12/12 itens implementados, CI verde, tag v2.0.0
+publicada; double check P0/P1/P2/P3 completamente endereçado.
+
+---
+
+## Fase 14 — Double check P1/P2 e v2.0.1
+
+Dois itens do double check não cobertos na Fase 13:
+
+1. **Sanitização de prompt injection (P1)** — `sanitize_untrusted_input()`
+   em `app/agent/nodes.py`; cobre `description`, `logs`, `payload` e
+   chunks do RAG; 15 padrões de injection conhecidos neutralizados antes
+   de entrar no prompt LLM; logging de tentativas detectadas.
+
+2. **Imagens Docker fixadas (P2)** — `ollama/ollama:0.34.1`,
+   `qdrant/qdrant:v1.19.0`, `neo4j:5.26.0-community`; todas as imagens
+   fixadas em versão exata para garantir reprodutibilidade.
+
+**Critério de saída:** CI verde, tag v2.0.1 publicada; todos os gaps
+do double check P0/P1/P2/P3 fechados.

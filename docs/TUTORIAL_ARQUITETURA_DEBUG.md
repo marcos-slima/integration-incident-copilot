@@ -62,7 +62,7 @@ SAPConnector      Qdrant (via          ChatOllama
 OData/RFC)        + embeddings              │
                   (nomic-embed-text          ▼
                   via Ollama)          Ollama runtime local
-                                       (qwen2.5-coder:32b)
+                                       (qwen3-coder-next:latest)
                        │                    │
                        └────────┬───────────┘
                                 ▼
@@ -104,9 +104,9 @@ Só o que o projeto **realmente usa** — não a API inteira de cada lib.
 | **LangGraph** | Orquestração de agentes como máquina de estados (grafo) | Modela o fluxo (`connector→retrieve→diagnose→report`) de forma explícita e visualizável, em vez de um script sequencial disfarçado de "agente" | `StateGraph`, `add_node`, `add_edge`, `set_entry_point`, `compile()`, `.invoke()` |
 | **langchain-ollama** | Integração LangChain ↔ Ollama | Dá interface padronizada (`ChatOllama`, `OllamaEmbeddings`) em vez de chamar a API REST do Ollama na mão | `ChatOllama(...).with_structured_output(DiagnosisModel, include_raw=True).invoke(prompt)`, `OllamaEmbeddings(model=...).embed_documents()/.embed_query()` |
 | **langchain-text-splitters** | Divisão de texto em chunks | `MarkdownTextSplitter` respeita a estrutura Markdown dos documentos de incidente ao invés de cortar no meio de uma frase | `MarkdownTextSplitter(chunk_size=..., chunk_overlap=...).split_text()` |
-| **langchain-community** (`PyPDFLoader`) | Extração de texto de PDF | Usado só na ingestão da biblioteca de referência (livros), não no fluxo de diagnóstico | `PyPDFLoader(path).load()` |
+| **pymupdf4llm** | Extração de PDF com preservação de estrutura Markdown | Substitui PyPDFLoader na ingestão — preserva tabelas, headers, blocos de código dos PDFs técnicos SAP | `pymupdf4llm.to_markdown(path, page_chunks=True)` |
 | **qdrant-client** | Cliente Python do Qdrant (vector DB) | Busca por similaridade vetorial — é o "motor de busca" do RAG | `QdrantClient(url=...)`, `.create_collection()`, `.upsert()`, `.query_points()` |
-| **Ollama** (runtime) | Servidor de inferência local de LLMs | Roda modelo local (`qwen2.5-coder:32b`) sem depender de API paga/nuvem — decisão alinhada ao seu hardware (APU com ROCm) | Não é chamado diretamente pelo código do Copilot — o `langchain-ollama` fala com ele via HTTP em `settings.ollama_host` |
+| **Ollama** (runtime) | Servidor de inferência local de LLMs | Roda modelo local (`qwen3-coder-next:latest`) sem depender de API paga/nuvem — decisão alinhada ao seu hardware (APU com ROCm) | Não é chamado diretamente pelo código do Copilot — o `langchain-ollama` fala com ele via HTTP em `settings.ollama_host` |
 | **LLM Gateway** (`app/llm/factory.py`) | Abstracao interna, nao uma lib externa | Permite trocar Ollama por OpenAI/Azure OpenAI via `Settings.llm_provider`, sem tocar no grafo | `get_chat_model()` retorna um `BaseChatModel` do LangChain, seja qual for o provedor escolhido |
 | **Langfuse** | Observabilidade de agentes/LLM | Visibilidade de tempo/tokens/payload de cada etapa, sem isso o sistema era uma caixa-preta | `@observe` (decorator), `CallbackHandler` (LangChain), `get_client().flush()` |
 | **pytest** | Framework de testes | Padrão de mercado Python; `conftest.py` implementa skip automático de testes de integração se a stack estiver fora do ar | `@pytest.mark.parametrize`, `@pytest.mark.integration`, fixtures |
@@ -237,7 +237,7 @@ Cada variável mapeia 1:1 pra um campo de `app/config.py::Settings`:
 
 | Variável no `.env` | Campo em `Settings` | O que muda no comportamento |
 |---|---|---|
-| (não setado, usa default) | `llm_model` | Qual modelo o `diagnose_node` chama — foi editando isso indiretamente (via `sed` no código, antes do `app/config.py` existir) que trocamos de `qwen3:30b-a3b` pra `qwen2.5-coder:32b` |
+| (não setado, usa default) | `llm_model` | Qual modelo o `diagnose_node` chama — foi editando isso indiretamente (via `sed` no código, antes do `app/config.py` existir) que trocamos de `qwen3:30b-a3b` pra `qwen3-coder-next:latest` |
 | `NEO4J_PASSWORD` | `neo4j_password` | Usado pelo GraphRAG (`app/rag/graph_store.py`) quando `GRAPH_RAG_ENABLED=true` — desligado por default, mas implementado e testado (nao mais so provisionado) |
 | `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_HOST` | `langfuse_*` | Sem essas três, o `CallbackHandler()` do Langfuse falha silenciosamente em autenticar — os traces simplesmente não aparecem em `localhost:3000` |
 
@@ -248,14 +248,14 @@ Cada variável mapeia 1:1 pra um campo de `app/config.py::Settings`:
 Duas collections, criadas dinamicamente por `app/rag/ingest.py::ensure_collection()`:
 
 - `sap_incident_docs` — a que o `diagnose_node` de fato consulta (via `retrieve_node`)
-- `sap_reference_library` — biblioteca de estudo pessoal, **nunca consultada pelo grafo**
+- `sap_reference_library` — PDFs técnicos SAP (2.000+ documentos), **consultada pelo grafo desde a v2.0** via retrieval unificado (`_retrieve_unified`) com reranker semântico
 
 O tamanho do vetor (`vector_size`) não é hardcoded — é lido do próprio embedding gerado (`len(vectors[0])`), então se você trocar `EMBEDDING_MODEL` no `.env`, a próxima ingestão cria a collection com a dimensão certa automaticamente (mas atenção: **misturar embeddings de dimensões diferentes na mesma collection quebra a busca** — trocar de modelo de embedding exige reindexar do zero).
 
 ### Ollama
 
 Dois modelos com papéis diferentes, nenhum overlap:
-- `qwen2.5-coder:32b` — geração de texto/JSON (`diagnose_node`)
+- `qwen3-coder-next:latest` — geração de texto/JSON (`diagnose_node`)
 - `nomic-embed-text` — embeddings (ingestão e consulta no RAG)
 
 ---

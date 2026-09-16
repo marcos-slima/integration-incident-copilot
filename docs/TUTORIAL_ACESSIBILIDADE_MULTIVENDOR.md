@@ -290,7 +290,7 @@ uv run python -m app.config
 
 # 4. Subir a stack completa self-contained e testar ponta a ponta
 docker compose up -d
-docker compose exec ollama ollama pull qwen2.5-coder:32b
+docker compose exec ollama ollama pull qwen3-coder-next:latest
 docker compose exec ollama ollama pull nomic-embed-text
 uv run python -m app.rag.ingest --target incidents   # indexa data/sample_docs/
 uv run pytest tests/ -v                               # agora os 14 de integracao tambem rodam

@@ -122,7 +122,7 @@ def get_chat_model(model_name: str | None = None) -> BaseChatModel:
 class Settings(BaseSettings):
     llm_provider: Literal["ollama", "openai", "azure_openai"] = "ollama"
     ollama_host: str = "http://127.0.0.1:11434"
-    llm_model: str = "qwen2.5-coder:32b"
+    llm_model: str = "qwen3-coder-next:latest"
     qdrant_url: str = "http://127.0.0.1:6333"
     graph_rag_enabled: bool = False
     model_config = SettingsConfigDict(env_file=".env")
@@ -156,7 +156,7 @@ Código completo e atualizado: repositório, pasta app/
 
 ```bash
 docker compose up -d
-docker compose exec ollama ollama pull qwen2.5-coder:32b
+docker compose exec ollama ollama pull qwen3-coder-next:latest
 docker compose exec ollama ollama pull nomic-embed-text
 
 cd ~/integration-incident-copilot
@@ -179,7 +179,7 @@ repetidos — sempre confirmar com uv run python --version.
 | Decisão | Por quê |
 |---|---|
 | LLM Gateway plugável | Viabilizar IA para quem não paga SAP AI Core exige rodar local ou sobre provedor do cliente, sem reescrever o grafo |
-| qwen2.5-coder:32b em produção | Comparação formal via promptfoo venceu duas rodadas contra concorrentes que falharam de forma reproduzível no caso crítico |
+| qwen3-coder-next:latest em produção | MoE 80B/3B ativo, 262K ctx — avaliado via promptfoo (10/10 PASS), adotado pelo alinhamento com roadmap de agentes (long-horizon, tool use) |
 | Contexto restrito ao top-1 | Top-3 causava mistura de causa raiz |
 | seed fixo | temperature=0 sozinho não garante determinismo |
 | Guardrails no código | LLM não é confiável para autoavaliar incerteza |

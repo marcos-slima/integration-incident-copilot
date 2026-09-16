@@ -16,6 +16,8 @@ Uso:
 import argparse
 import hashlib
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
@@ -43,6 +45,7 @@ EMBEDDING_MODEL = settings.embedding_model
 SPARSE_MODEL_NAME = "Qdrant/bm25"  # BM25 classico, sem rede neural - roda so em CPU, sem GPU
 QDRANT_URL = settings.qdrant_url
 EMBED_BATCH_SIZE = 16
+MAX_WORKERS = 4  # alinhado com OLLAMA_NUM_PARALLEL=4
 
 TARGETS = {
     "incidents": {
@@ -302,9 +305,13 @@ def run_ingest(target: str, limit: int | None, excludes: list[str], reset: bool)
     vector_size = probe_vector_size(embeddings)
     ensure_collection(client, cfg["collection"], vector_size, cfg["hybrid"])
 
-    for idx, path in enumerate(pending, start=1):
+    state_lock = threading.Lock()
+    progress_lock = threading.Lock()
+    done_count = 0
+
+    def process_one(path: Path) -> None:
+        nonlocal done_count
         rel = path.relative_to(source_dir)
-        print(f"[{target}] ({idx}/{len(pending)}) processando: {rel}")
         try:
             filename = path.name
             fhash = file_hash(path)
@@ -321,10 +328,15 @@ def run_ingest(target: str, limit: int | None, excludes: list[str], reset: bool)
             if path.suffix.lower() == ".pdf":
                 pages = extract_pages_with_metadata(path)
                 if not pages:
-                    print("    [aviso] nenhum texto extraido do PDF, pulando")
-                    processed[_state_key(path)] = str(path)
-                    save_state(cfg["state_file"], processed)
-                    continue
+                    with state_lock:
+                        processed[_state_key(path)] = str(path)
+                        save_state(cfg["state_file"], processed)
+                    with progress_lock:
+                        done_count += 1
+                        print(
+                            f"[{target}] ({done_count}/{len(pending)}) {rel} -- [aviso] sem texto no PDF, pulando"
+                        )
+                    return
                 chunks = []
                 for page in pages:
                     for chunk_text in splitter.split_text(page["text"]):
@@ -336,7 +348,11 @@ def run_ingest(target: str, limit: int | None, excludes: list[str], reset: bool)
                 ]
 
             if not chunks:
-                print("    [aviso] nenhum chunk gerado, pulando")
+                with progress_lock:
+                    done_count += 1
+                    print(
+                        f"[{target}] ({done_count}/{len(pending)}) {rel} -- [aviso] nenhum chunk gerado, pulando"
+                    )
             else:
                 embed_and_upsert(
                     client,
@@ -347,13 +363,27 @@ def run_ingest(target: str, limit: int | None, excludes: list[str], reset: bool)
                     cfg["hybrid"],
                     doc_meta,
                 )
-                print(f"    {len(chunks)} chunk(s) indexados (categoria: {category})")
+                with progress_lock:
+                    done_count += 1
+                    print(
+                        f"[{target}] ({done_count}/{len(pending)}) {rel} -- {len(chunks)} chunk(s) indexados (categoria: {category})"
+                    )
         except Exception as exc:  # noqa: BLE001
-            print(f"    [ERRO] falhou em {rel}: {exc} -- pulando este arquivo")
-            continue
+            with progress_lock:
+                done_count += 1
+                print(
+                    f"[{target}] ({done_count}/{len(pending)}) {rel} -- [ERRO] {exc} -- pulando este arquivo"
+                )
+            return
 
-        processed[_state_key(path)] = str(path)
-        save_state(cfg["state_file"], processed)
+        with state_lock:
+            processed[_state_key(path)] = str(path)
+            save_state(cfg["state_file"], processed)
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = [executor.submit(process_one, path) for path in pending]
+        for fut in as_completed(futures):
+            fut.result()  # relanca excecao inesperada (nao deveria ocorrer, ja tratada acima)
 
     print(f"[{target}] Concluido. Total processado ate agora: {len(processed)} arquivo(s).")
 

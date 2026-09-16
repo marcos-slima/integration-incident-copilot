@@ -297,6 +297,39 @@ textarea.field-input{resize:vertical;line-height:1.6}
   font-family:'JetBrains Mono',monospace;
 }
 
+/* Upload de arquivo */
+.upload-zone{
+  border:1.5px dashed #1E3A5F;border-radius:6px;
+  padding:14px 16px;cursor:pointer;transition:all .15s;
+  display:flex;align-items:center;gap:10px;
+  background:#0A1628;
+}
+.upload-zone:hover{border-color:#0EA5E9;background:#0EA5E908}
+.upload-zone input[type=file]{display:none}
+.upload-zone-label{font-size:12px;color:#94A3B8;cursor:pointer;flex:1}
+.upload-zone-label span{color:#0EA5E9}
+.upload-chip{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:3px 10px;border-radius:4px;
+  background:#0EA5E918;border:1px solid #0EA5E933;
+  font-size:11px;color:#0EA5E9;
+  font-family:'JetBrains Mono',monospace;
+  margin-top:6px;
+}
+.upload-chip-remove{
+  cursor:pointer;color:#94A3B8;font-size:14px;line-height:1;
+  background:none;border:none;padding:0;
+}
+.upload-chip-remove:hover{color:#EF4444}
+.upload-target-select{display:flex;gap:8px;margin-top:8px;}
+.upload-target-btn{
+  padding:3px 10px;border-radius:4px;border:1px solid #1E3A5F;
+  font-size:11px;cursor:pointer;background:transparent;
+  font-family:'Inter',sans-serif;transition:all .12s;
+}
+.upload-target-btn.active{background:#0EA5E922;border-color:#0EA5E9;color:#0EA5E9;}
+.upload-target-btn:not(.active){color:#94A3B8}
+
 /* API config notice */
 .api-notice{
   background:#0A1628;border:1px solid #1E3A5F;
@@ -422,6 +455,9 @@ function DiagnoseView({onResult, apiBase}) {
   const [logs, setLogs] = useState('');
   const [payload, setPayload] = useState('');
   const [showAdv, setShowAdv] = useState(false);
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadTarget, setUploadTarget] = useState('logs');
+  const fileInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
@@ -468,6 +504,36 @@ function DiagnoseView({onResult, apiBase}) {
     setResult(null); setError('');
   }
 
+  function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const allowed = ['.txt','.log','.xml','.json','.csv','.md'];
+    const ext = '.' + file.name.split('.').pop().toLowerCase();
+    if (!allowed.includes(ext)) {
+      setError('Tipo não suportado. Use: ' + allowed.join(', '));
+      return;
+    }
+    if (file.size > 500000) { setError('Arquivo muito grande. Limite: 500KB.'); return; }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = ev.target.result;
+      setUploadFile({name: file.name, content, target: uploadTarget});
+      if (uploadTarget === 'logs') setLogs(content);
+      else setPayload(content);
+      setShowAdv(true);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  }
+
+  function removeUpload() {
+    if (uploadFile) {
+      if (uploadFile.target === 'logs') setLogs('');
+      else setPayload('');
+    }
+    setUploadFile(null);
+  }
+
   return (
     <div className="view">
       <h1 className="page-title">Diagnóstico de incidente</h1>
@@ -496,6 +562,38 @@ function DiagnoseView({onResult, apiBase}) {
             <input className="field-input mono-input" type="text"
               placeholder="INC0010001 · CPI-401-DEMO · RFC-IDOC-51"
               value={ident} onChange={e => setIdent(e.target.value)}/>
+          </div>
+        </div>
+
+        {/* Upload de arquivo */}
+        <div className="field-row">
+          <label className="field-label">Anexar arquivo (opcional)</label>
+          <div className="upload-zone" onClick={() => fileInputRef.current?.click()}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M8 2v8M5 5l3-3 3 3" stroke="#0EA5E9" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M2 11v1a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-1" stroke="#94A3B8" strokeWidth="1.4" strokeLinecap="round"/>
+            </svg>
+            <label className="upload-zone-label">
+              <span>Clique para anexar</span> ou arraste um arquivo
+              <div style={{fontSize:10,color:'#475569',marginTop:2}}>.txt · .log · .xml · .json · .csv (máx. 500KB)</div>
+            </label>
+            <input ref={fileInputRef} type="file" accept=".txt,.log,.xml,.json,.csv,.md" onChange={handleFileSelect}/>
+          </div>
+          {uploadFile && (
+            <div style={{marginTop:6}}>
+              <span className="upload-chip">
+                📎 {uploadFile.name}
+                <span style={{fontSize:10,color:'#94A3B8',marginLeft:4}}>→ {uploadFile.target}</span>
+                <button className="upload-chip-remove" onClick={e => {e.stopPropagation(); removeUpload();}}>×</button>
+              </span>
+            </div>
+          )}
+          <div className="upload-target-select">
+            <span style={{fontSize:11,color:'#475569',alignSelf:'center'}}>Enviar como:</span>
+            <button className={'upload-target-btn' + (uploadTarget==='logs'?' active':'')}
+              onClick={e => {e.stopPropagation(); setUploadTarget('logs');}}>logs</button>
+            <button className={'upload-target-btn' + (uploadTarget==='payload'?' active':'')}
+              onClick={e => {e.stopPropagation(); setUploadTarget('payload');}}>payload</button>
           </div>
         </div>
 

@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, HTTPException, Request, Security, status
 from fastapi.responses import FileResponse
 from fastapi.security import APIKeyHeader
+from fastapi.staticfiles import StaticFiles
 from langfuse import get_client
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -55,9 +56,13 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
+# Serve assets do bundle Vite (JS, CSS, fontes)
+app.mount("/assets", StaticFiles(directory="static/dist/assets"), name="assets")
+
+
 @app.get("/")
 def index() -> FileResponse:
-    return FileResponse("static/index.html")
+    return FileResponse("static/dist/index.html")
 
 
 @app.get("/health")

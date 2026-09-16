@@ -10,7 +10,7 @@ foram resolvidos), ver a secao "Decisoes de Arquitetura" no
 ```mermaid
 flowchart TD
     A["IncidentRequest<br/>FastAPI POST /diagnose<br/>OU A2A message/send"] --> B["<b>connector</b><br/>SAP/nao-SAP (app/connectors/)<br/>mock ou real"]
-    B --> C["<b>retrieve</b><br/>Qdrant hibrido dense+sparse BM25<br/>fusao RRF, score_threshold"]
+    B --> C["<b>retrieve</b><br/>Qdrant hibrido dense+sparse BM25<br/>incidents + reference_library<br/>fusao RRF + reranker cross-encoder"]
     C --> D{"GraphRAG<br/>opt-in?"}
     D -->|"sim"| E["graph_enrich<br/>historico da interface no Neo4j"]
     D -->|"nao (default)"| F["<b>diagnose</b><br/>LLM Gateway (app/llm/factory.py)<br/>+ guardrails"]
@@ -33,7 +33,7 @@ quando `GRAPH_RAG_ENABLED=true` - com a flag desligada (default), o
 grafo compilado e identico ao anterior a esta fase, byte a byte na
 mesma sequencia de nodes. Ver secao GraphRAG abaixo.
 
-Cada etapa e um node do grafo (`app/agent/graph.py`), instrumentado com
+Cada etapa e um node do grafo (definidos em `app/agent/nodes.py`, orquestrados em `app/agent/graph.py`), instrumentado com
 `@observe` (Langfuse). O estado (`CopilotState`) flui entre nodes; o
 grafo e compilado uma vez (`get_graph()`, singleton em processo).
 
@@ -45,11 +45,11 @@ nenhuma logica duplicada entre eles: o endpoint REST `/diagnose`
 
 | Camada | Onde | Responsabilidade |
 |---|---|---|
-| API | `app/main.py` | FastAPI, `/health`, `/diagnose`, Agent Card A2A; sem logica de negocio |
+| API | `app/main.py` | FastAPI, `/health`, `/diagnose`, Agent Card A2A; rate limiting 10/min por IP (slowapi); API Key opcional via `X-API-Key` (API_KEY no .env) |
 | A2A | `app/a2a/` | Camada de interoperabilidade externa (Agent Card, task manager, JSON-RPC), chama a mesma orquestracao do `/diagnose` |
-| Orquestracao | `app/agent/graph.py` | Grafo LangGraph, prompt, guardrails |
+| Orquestracao | `app/agent/graph.py` · `app/agent/nodes.py` · `app/agent/state.py` | Grafo LangGraph (orquestrador ~136 linhas), nodes (connector/retrieve/web_search/diagnose/report), tipos (CopilotState, DiagnosisModel) |
 | LLM Gateway | `app/llm/factory.py` | Escolhe o `BaseChatModel` (Ollama/OpenAI/Azure OpenAI) a partir de `Settings` |
-| RAG | `app/rag/` | Ingestao (`ingest.py`), busca vetorial (`retriever.py`) via Qdrant, e GraphRAG opt-in (`graph_store.py`) via Neo4j |
+| RAG | `app/rag/` | Ingestao (`ingest.py`) com pymupdf4llm + schema rico; retrieval unificado (`retriever.py`) — hybrid search + reranker cross-encoder; GraphRAG opt-in (`graph_store.py`) via Neo4j |
 | Conectores | `app/connectors/` | Um por sistema externo (OData, RFC, ServiceNow, Salesforce, Workday, SAP Ariba, SAP CAP, SAP API Management); interface comum em `base.py` |
 | Config | `app/config.py` | Unica fonte de verdade (`.env` + defaults), nunca hardcoded espalhado |
 | Modelos | `app/models.py` | Contratos Pydantic da API (`IncidentRequest`/`DiagnosisResponse`) |
@@ -58,12 +58,12 @@ Esta nao e uma Clean Architecture "de livro" com pastas
 `domain/application/infrastructure` separadas - e uma separacao
 pragmatica por responsabilidade, que ja evita a mistura de
 preocupacoes que aquele padrao existe para prevenir (a logica de
-prompt/guardrail, por exemplo, sao funcoes puras em `graph.py`,
+prompt/guardrail, por exemplo, sao funcoes puras em `app/agent/nodes.py`,
 testaveis sem subir API nem grafo).
 
 **Nota honesta sobre `app/services/`:** a pasta existe (criada cedo,
 "para quando precisar") mas continua vazia - propositalmente. Hoje
-`run_diagnosis()` (em `graph.py`) ja cumpre o papel de "camada de
+`run_diagnosis()` (em `app/agent/graph.py`) ja cumpre o papel de "camada de
 servico": e a unica funcao que os dois consumidores existentes
 (`/diagnose` e `app/a2a/task_manager.py`) chamam, sem duplicar logica
 entre eles. Criar uma classe/modulo `IncidentDiagnosisService` que so
@@ -79,7 +79,7 @@ um dia houver mais de uma logica de orquestracao real para coordenar
 Ver `app/llm/factory.py` e a Decisao de Arquitetura #10 no README. Em
 uma frase: `Settings.llm_provider` decide entre Ollama (default,
 local-first, sem custo de API), OpenAI ou Azure OpenAI, sem o resto do
-codigo (`graph.py`, prompt, guardrails) precisar saber qual foi
+codigo (`app/agent/nodes.py`, prompt, guardrails) precisar saber qual foi
 escolhido - todos implementam a mesma interface `BaseChatModel` do
 LangChain.
 
@@ -135,11 +135,27 @@ nao consegue adotar SAP AI Core (que exige HANA Cloud). Ver
 
 ## RAG
 
-Duas collections Qdrant independentes (`app/rag/ingest.py`):
-`sap_incident_docs` (usada pelo fluxo de diagnostico) e
-`sap_reference_library` (livros/estudo pessoal, nao entra no
-diagnostico). Ingestao e idempotente (reprocessar um arquivo substitui
-os pontos antigos, nao duplica) e resumivel (estado salvo em disco).
+Duas collections Qdrant (`app/rag/ingest.py`) — ambas participam do
+fluxo de diagnostico a partir da v2.0:
+
+- `sap_incident_docs` — documentos de troubleshooting (`.md`), hybrid
+  search (dense + BM25 esparso, fusao RRF)
+- `sap_reference_library` — PDFs tecnicos SAP (guias, notas, livros),
+  busca densa; schema rico: `source`, `text`, `filename`, `page_number`,
+  `document_id`, `chunk_index`, `file_hash`, `title`, `category`,
+  `ingested_at` (parser: `pymupdf4llm`, preserva estrutura Markdown)
+
+**Retrieval unificado (`_retrieve_unified`):** consulta as duas
+collections em paralelo, funde os resultados por score composto
+(`alpha=0.7 × cosine + 0.3 × rrf_normalizado`) e passa os candidatos
+para o **reranker semantico** (`cross-encoder/ms-marco-MiniLM-L-6-v2`
+via `sentence-transformers`) que reordena por relevancia real ao par
+`(query, chunk)` — muito mais preciso que similaridade de cosseno pura.
+
+**Ingestao:** idempotente por IDs deterministicos
+(`md5(document_id::chunk_index)`) — sem delete-before-upsert. Estado
+salvo por hash de conteudo (`hash:filename`) em vez de path, detectando
+mudancas mesmo com renomeacao de arquivo.
 
 ## GraphRAG (Neo4j) - opt-in, nao no caminho default
 

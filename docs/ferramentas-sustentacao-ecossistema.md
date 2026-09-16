@@ -222,7 +222,7 @@ class Settings(BaseSettings):
     neo4j_password: str = ""
     langfuse_host: str = "http://127.0.0.1:3000"
     ollama_host: str = "http://127.0.0.1:11434"
-    llm_model: str = "qwen2.5-coder:32b"
+    llm_model: str = "qwen3-coder-next:latest"
     embedding_model: str = "nomic-embed-text"
 
     model_config = {"env_file": ".env"}
@@ -245,7 +245,7 @@ a investigação manual de hoje:
 1. `uv sync` — instala exatamente as mesmas versões travadas no
    `uv.lock` (**por isso o `uv.lock` deve ser versionado no git,
    nunca ignorado**)
-2. `ollama pull qwen2.5-coder:32b && ollama pull nomic-embed-text` —
+2. `ollama pull qwen3-coder-next:latest && ollama pull nomic-embed-text` —
    os modelos não vão junto com o `git clone`, precisam ser
    documentados como pré-requisito (candidato a entrar no `README`
    ou num script `bootstrap.sh`)

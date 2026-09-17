@@ -89,7 +89,11 @@ def resolve_source_dir(cfg: dict) -> Path:
 
 
 def find_files(source_dir: Path, excludes: list[str]) -> list[Path]:
-    files = list(source_dir.rglob("*.md")) + list(source_dir.rglob("*.pdf"))
+    files = (
+        list(source_dir.rglob("*.md"))
+        + list(source_dir.rglob("*.pdf"))
+        + list(source_dir.rglob("*.epub"))
+    )
     if excludes:
         files = [f for f in files if not any(ex.lower() in str(f).lower() for ex in excludes)]
     return sorted(files)
@@ -282,7 +286,7 @@ def run_ingest(target: str, limit: int | None, excludes: list[str], reset: bool)
     print(f"[{target}] Fonte: {source_dir}")
 
     all_files = find_files(source_dir, excludes)
-    print(f"[{target}] {len(all_files)} arquivo(s) encontrados (.md + .pdf, recursivo)")
+    print(f"[{target}] {len(all_files)} arquivo(s) encontrados (.md + .pdf + .epub, recursivo)")
 
     processed = {} if reset else load_state(cfg["state_file"])
     pending = [f for f in all_files if _state_key(f) not in processed]
@@ -325,7 +329,7 @@ def run_ingest(target: str, limit: int | None, excludes: list[str], reset: bool)
                 "title": path.stem,
             }
 
-            if path.suffix.lower() == ".pdf":
+            if path.suffix.lower() in (".pdf", ".epub"):
                 pages = extract_pages_with_metadata(path)
                 if not pages:
                     with state_lock:

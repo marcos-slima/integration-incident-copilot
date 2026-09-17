@@ -1,0 +1,24 @@
+The "global" statement
+**********************
+
+   global_stmt ::= "global" identifier ("," identifier)*
+
+The "global" statement causes the listed identifiers to be interpreted
+as globals. It would be impossible to assign to a global variable
+without "global", although free variables may refer to globals without
+being declared global.
+
+The "global" statement applies to the entire scope of a function or
+class body. A "SyntaxError" is raised if a variable is used or
+assigned to prior to its global declaration in the scope.
+
+**Programmer’s note:** "global" is a directive to the parser.  It
+applies only to code parsed at the same time as the "global"
+statement. In particular, a "global" statement contained in a string
+or code object supplied to the built-in "exec()" function does not
+affect the code block *containing* the function call, and code
+contained in such a string is unaffected by "global" statements in the
+code containing the function call.  The same applies to the "eval()"
+and "compile()" functions.
+
+Related help topics: nonlocal, NAMESPACES

@@ -4,15 +4,13 @@ separadas (incidents / reference).
 A collection 'incidents' agora indexa vetores DENSOS (embeddings
 semanticos, via Ollama) e ESPARSOS (BM25, via fastembed) lado a lado,
 na mesma collection, como campos nomeados - habilita hybrid search
-(A.py faz a fusao). A collection 'reference' continua so
+(retriever.py faz a fusao). A collection 'reference' continua so
 densa (nao participa do fluxo de diagnostico, nao precisa da mesma
 sofisticacao).
 
 Uso:
     uv run python -m app.rag.ingest --target incidents
     uv run python -m app.rag.ingest --target reference
-    uv run python -m app.rag.ingest --target incidents --reset-state
-    uv run python -m app.rag.ingest --target incidents --reset-collection
 """
 
 import argparse
@@ -22,7 +20,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import NAMESPACE_URL, uuid5
+from uuid import uuid4
 
 import pymupdf4llm
 from fastembed import SparseTextEmbedding
@@ -48,7 +46,6 @@ SPARSE_MODEL_NAME = "Qdrant/bm25"  # BM25 classico, sem rede neural - roda so em
 QDRANT_URL = settings.qdrant_url
 EMBED_BATCH_SIZE = 16
 MAX_WORKERS = 4  # alinhado com OLLAMA_NUM_PARALLEL=4
-SUPPORTED_SUFFIXES = {".md", ".pdf", ".epub"}
 
 TARGETS = {
     "incidents": {
@@ -72,24 +69,18 @@ TARGETS = {
 }
 
 _sparse_model: SparseTextEmbedding | None = None
-_sparse_model_lock = threading.Lock()
 
 
 def _get_sparse_model() -> SparseTextEmbedding:
     global _sparse_model
-    # A inicializacao pode disparar download/carregamento do modelo. Protege
-    # contra duas threads fazendo isso simultaneamente.
-    with _sparse_model_lock:
-        if _sparse_model is None:
-            _sparse_model = SparseTextEmbedding(model_name=SPARSE_MODEL_NAME)
+    if _sparse_model is None:
+        _sparse_model = SparseTextEmbedding(model_name=SPARSE_MODEL_NAME)
     return _sparse_model
 
 
 def resolve_source_dir(cfg: dict) -> Path:
     primary = cfg["primary_dir"]
-    if primary.exists() and any(
-        path.is_file() and path.suffix.lower() in SUPPORTED_SUFFIXES for path in primary.rglob("*")
-    ):
+    if primary.exists() and any(primary.rglob("*")):
         return primary
     if cfg["fallback_dir"] is not None:
         print(f"[aviso] {primary} vazia, usando fallback {cfg['fallback_dir']}")
@@ -98,13 +89,11 @@ def resolve_source_dir(cfg: dict) -> Path:
 
 
 def find_files(source_dir: Path, excludes: list[str]) -> list[Path]:
-    if not source_dir.exists():
-        return []
-    files = [
-        path
-        for path in source_dir.rglob("*")
-        if path.is_file() and path.suffix.lower() in SUPPORTED_SUFFIXES
-    ]
+    files = (
+        list(source_dir.rglob("*.md"))
+        + list(source_dir.rglob("*.pdf"))
+        + list(source_dir.rglob("*.epub"))
+    )
     if excludes:
         files = [f for f in files if not any(ex.lower() in str(f).lower() for ex in excludes)]
     return sorted(files)
@@ -154,12 +143,10 @@ def extract_pages_with_metadata(path: Path) -> list[dict]:
 
 
 def file_hash(path: Path) -> str:
-    """Retorna o SHA-256 de todo o arquivo sem carrega-lo integralmente em memoria."""
     h = hashlib.sha256()
     with open(path, "rb") as f:
-        for block in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(block)
-    return h.hexdigest()
+        h.update(f.read(65536))
+    return h.hexdigest()[:16]
 
 
 def infer_category(filename: str) -> str:
@@ -202,25 +189,14 @@ def ensure_collection(
     needs_recreate = False
     if collection_name in existing:
         info = client.get_collection(collection_name)
-        vectors = info.config.params.vectors
-        sparse_vectors = getattr(info.config.params, "sparse_vectors", None)
-        has_named_dense = isinstance(vectors, dict) and "dense" in vectors
-        has_named_sparse = isinstance(sparse_vectors, dict) and "sparse" in sparse_vectors
-        has_unnamed_dense = vectors is not None and not isinstance(vectors, dict)
-        dense_config = vectors.get("dense") if has_named_dense else vectors
-        has_expected_size = getattr(dense_config, "size", None) == vector_size
-
-        if (
-            hybrid
-            and not (has_named_dense and has_named_sparse and has_expected_size)
-            or not hybrid
-            and not (has_unnamed_dense and not sparse_vectors and has_expected_size)
-        ):
+        has_named_dense = bool(info.config.params.vectors) and "dense" in (
+            info.config.params.vectors or {}
+        )
+        if hybrid and not has_named_dense:
             needs_recreate = True
         if needs_recreate:
-            expected_schema = "hybrid (dense + sparse)" if hybrid else "dense-only"
             print(
-                f"Collection '{collection_name}' tem schema incompativel com {expected_schema} - recriando."
+                f"Collection '{collection_name}' tem schema antigo (incompativel com hybrid) - recriando."
             )
             client.delete_collection(collection_name)
             existing.remove(collection_name)
@@ -241,13 +217,13 @@ def ensure_collection(
 
 
 def deterministic_point_id(document_id: str, chunk_index: int) -> str:
-    """UUID estavel e aceito pelo Qdrant para um chunk do documento."""
-    return str(uuid5(NAMESPACE_URL, f"{document_id}::chunk::{chunk_index}"))
-
-
-def deterministic_document_id(source: str, content_hash: str) -> str:
-    """UUID estavel para a combinacao do caminho relativo e do conteudo do arquivo."""
-    return str(uuid5(NAMESPACE_URL, f"ingest-document::{source}::{content_hash}"))
+    """ID deterministico baseado em document_id + chunk_index.
+    Permite upsert idempotente sem delete-before-insert:
+    reindexar o mesmo documento sobrescreve os pontos existentes
+    em vez de criar duplicatas.
+    """
+    raw = f"{document_id}::{chunk_index}"
+    return str(hashlib.md5(raw.encode()).hexdigest())
 
 
 def delete_existing_points_for_source(client: QdrantClient, collection: str, source: str) -> None:
@@ -291,26 +267,20 @@ def embed_and_upsert(
                 "text": chunk_text,
                 "filename": doc_meta.get("filename", source),
                 "page_number": chunk_data.get("page_number"),
-                "document_id": doc_meta["document_id"],
+                "document_id": doc_meta.get("document_id", str(uuid4())),
                 "chunk_index": i + j,
                 "file_hash": doc_meta.get("file_hash", ""),
                 "title": doc_meta.get("title", Path(source).stem),
                 "category": doc_meta.get("category", "general"),
                 "ingested_at": ingested_at,
             }
-            point_id = deterministic_point_id(doc_meta["document_id"], i + j)
+            point_id = deterministic_point_id(doc_meta.get("document_id", source), i + j)
             points.append(PointStruct(id=point_id, vector=vector, payload=payload))
 
         client.upsert(collection_name=collection, points=points)
 
 
-def run_ingest(
-    target: str,
-    limit: int | None,
-    excludes: list[str],
-    reset_state: bool,
-    reset_collection: bool,
-) -> None:
+def run_ingest(target: str, limit: int | None, excludes: list[str], reset: bool) -> None:
     cfg = TARGETS[target]
     source_dir = resolve_source_dir(cfg)
     print(f"[{target}] Fonte: {source_dir}")
@@ -318,24 +288,13 @@ def run_ingest(
     all_files = find_files(source_dir, excludes)
     print(f"[{target}] {len(all_files)} arquivo(s) encontrados (.md + .pdf + .epub, recursivo)")
 
-    processed = {} if (reset_state or reset_collection) else load_state(cfg["state_file"])
-    if reset_state or reset_collection:
-        # Persiste imediatamente para que --reset-state tenha efeito mesmo
-        # quando nao ha arquivos elegiveis nesta execucao.
-        save_state(cfg["state_file"], processed)
+    processed = {} if reset else load_state(cfg["state_file"])
     pending = [f for f in all_files if _state_key(f) not in processed]
     print(f"[{target}] {len(processed)} ja processados anteriormente, {len(pending)} pendentes")
 
     if limit:
         pending = pending[:limit]
         print(f"[{target}] --limit aplicado: processando {len(pending)} arquivo(s) nesta execucao")
-
-    client = QdrantClient(url=QDRANT_URL)
-    if reset_collection:
-        existing = {collection.name for collection in client.get_collections().collections}
-        if cfg["collection"] in existing:
-            client.delete_collection(cfg["collection"])
-            print(f"Collection '{cfg['collection']}' removida por --reset-collection.")
 
     if not pending:
         print(f"[{target}] Nada a fazer.")
@@ -345,13 +304,10 @@ def run_ingest(
     splitter = MarkdownTextSplitter(
         chunk_size=cfg["chunk_size"], chunk_overlap=cfg["chunk_overlap"]
     )
+    client = QdrantClient(url=QDRANT_URL)
+
     vector_size = probe_vector_size(embeddings)
     ensure_collection(client, cfg["collection"], vector_size, cfg["hybrid"])
-
-    # Carrega o BM25 antes do paralelismo; o acesso posterior e somente para
-    # gerar vetores, nao para inicializar/downloadar o modelo em varias threads.
-    if cfg["hybrid"]:
-        _get_sparse_model()
 
     state_lock = threading.Lock()
     progress_lock = threading.Lock()
@@ -364,8 +320,7 @@ def run_ingest(
             filename = path.name
             fhash = file_hash(path)
             category = infer_category(filename)
-            source = str(rel)
-            document_id = deterministic_document_id(source, fhash)
+            document_id = str(uuid4())
             doc_meta = {
                 "filename": filename,
                 "file_hash": fhash,
@@ -377,7 +332,6 @@ def run_ingest(
             if path.suffix.lower() in (".pdf", ".epub"):
                 pages = extract_pages_with_metadata(path)
                 if not pages:
-                    delete_existing_points_for_source(client, cfg["collection"], source)
                     with state_lock:
                         processed[_state_key(path)] = str(path)
                         save_state(cfg["state_file"], processed)
@@ -398,22 +352,18 @@ def run_ingest(
                 ]
 
             if not chunks:
-                delete_existing_points_for_source(client, cfg["collection"], source)
                 with progress_lock:
                     done_count += 1
                     print(
                         f"[{target}] ({done_count}/{len(pending)}) {rel} -- [aviso] nenhum chunk gerado, pulando"
                     )
             else:
-                # Limpa tambem chunks que deixaram de existir (por exemplo,
-                # apos mudanca de conteudo ou do tamanho de chunk).
-                delete_existing_points_for_source(client, cfg["collection"], source)
                 embed_and_upsert(
                     client,
                     cfg["collection"],
                     embeddings,
                     chunks,
-                    source,
+                    str(rel),
                     cfg["hybrid"],
                     doc_meta,
                 )
@@ -447,23 +397,12 @@ def main() -> None:
     parser.add_argument("--target", choices=["incidents", "reference", "all"], default="incidents")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--exclude", action="append", default=[])
-    parser.add_argument(
-        "--reset",
-        "--reset-state",
-        dest="reset_state",
-        action="store_true",
-        help="limpa apenas o estado local e reindexa os arquivos; nao apaga a collection",
-    )
-    parser.add_argument(
-        "--reset-collection",
-        action="store_true",
-        help="apaga e recria a collection do target; tambem limpa o estado local",
-    )
+    parser.add_argument("--reset", action="store_true")
     args = parser.parse_args()
 
     targets = ["incidents", "reference"] if args.target == "all" else [args.target]
     for t in targets:
-        run_ingest(t, args.limit, args.exclude, args.reset_state, args.reset_collection)
+        run_ingest(t, args.limit, args.exclude, args.reset)
 
 
 if __name__ == "__main__":

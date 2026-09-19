@@ -46,7 +46,7 @@ def _get_qdrant_client() -> QdrantClient:
 
 @lru_cache(maxsize=1)
 def _get_embeddings() -> OllamaEmbeddings:
-    return OllamaEmbeddings(model=EMBEDDING_MODEL)
+    return OllamaEmbeddings(model=EMBEDDING_MODEL, base_url=settings.ollama_host)
 
 
 @lru_cache(maxsize=1)

@@ -42,6 +42,13 @@ from qdrant_client.models import (
 
 from app.config import settings
 
+# Desativa o motor de layout via ONNX (pymupdf.layout / BoxRFDGNN) - crasha
+# o processo (SIGSEGV, sem traceback Python) em determinados PDFs/EPUBs,
+# independente de threading (reproduzido isolado, single-thread, com
+# PYTHONFAULTHANDLER=1). Volta ao parser heuristico legado do pymupdf4llm
+# (sem ML), estavel para o volume e diversidade de arquivos deste projeto.
+pymupdf4llm.use_layout(False)
+
 BASE_DIR = Path(__file__).resolve().parents[2]
 EMBEDDING_MODEL = settings.embedding_model
 SPARSE_MODEL_NAME = "Qdrant/bm25"  # BM25 classico, sem rede neural - roda so em CPU, sem GPU
@@ -73,6 +80,14 @@ TARGETS = {
 
 _sparse_model: SparseTextEmbedding | None = None
 _sparse_model_lock = threading.Lock()
+
+# pymupdf4llm/PyMuPDF usa estado global nativo (MuPDF) para inferencia de
+# layout (modelo ONNX de deteccao de estrutura de pagina) - chamar
+# to_markdown() de threads diferentes ao mesmo tempo segfaulta o processo
+# (visto com PYTHONFAULTHANDLER=1: crash dentro de page.get_layout(), com
+# varias threads simultaneas na mesma pilha nativa). Serializa so a
+# extracao (CPU-bound, nativa); embedding/upsert (I/O) continuam paralelos.
+_pdf_extract_lock = threading.Lock()
 
 
 def _get_sparse_model() -> SparseTextEmbedding:
@@ -375,7 +390,8 @@ def run_ingest(
             }
 
             if path.suffix.lower() in (".pdf", ".epub"):
-                pages = extract_pages_with_metadata(path)
+                with _pdf_extract_lock:
+                    pages = extract_pages_with_metadata(path)
                 if not pages:
                     delete_existing_points_for_source(client, cfg["collection"], source)
                     with state_lock:

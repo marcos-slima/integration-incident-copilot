@@ -19,7 +19,7 @@
 
 ```bash
 git clone https://github.com/marcos-slima/sap-integration-copilot.git
-cd integration-incident-copilot
+cd sap-integration-copilot
 cp .env.example .env
 uv sync
 ```

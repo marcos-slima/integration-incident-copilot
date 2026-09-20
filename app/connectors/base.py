@@ -27,6 +27,9 @@ de cada um.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+from app.circuit_breaker import CircuitBreaker
+from app.config import settings
+
 
 @dataclass
 class ConnectorResult:
@@ -59,3 +62,58 @@ class SAPConnector(ABC):
 # da classe em si continua `SAPConnector` por compatibilidade com todo
 # o codigo/testes existentes - ver nota de modulo).
 ExternalSystemConnector = SAPConnector
+
+
+# Avaliacao externa (medio prazo, item 3): "Circuit breaker nos
+# conectores (ex.: tenacity + contador de falhas)". Antes desta
+# mudanca, so o AI Gateway (DA-26, app/llm/gateway.py) tinha circuit
+# breaker - uma falha de rede num conector HTTP (ex.: ServiceNow fora
+# do ar) significava esperar o timeout completo (settings.*_timeout,
+# quando existe) EM TODA chamada seguinte, mesmo sabendo que o sistema
+# acabou de falhar. Singleton em nivel de modulo, compartilhado por
+# TODOS os conectores (a chave e o source_system de cada um, ex.:
+# "ServiceNow", "Salesforce" - circuitos independentes por sistema,
+# mesma instancia de CircuitBreaker). Mesmo nao-objetivo do AI
+# Gateway: in-memory, por processo, nao compartilhado entre replicas.
+connector_circuit_breaker = CircuitBreaker()
+
+
+def circuit_breaker_guard(source_system: str) -> ConnectorResult | None:
+    """Chamado no INICIO de `_fetch_real(...)` de cada conector, antes
+    de abrir a conexao HTTP. Devolve um `ConnectorResult` de erro
+    imediato (sem tentar a rede) se o circuito daquele source_system
+    estiver aberto, ou `None` se a chamada pode prosseguir normalmente.
+
+    Uso tipico dentro de um conector:
+
+        def _fetch_real(self, identifier: str) -> ConnectorResult:
+            if (blocked := circuit_breaker_guard("ServiceNow")) is not None:
+                return blocked
+            try:
+                ...chamada HTTP real...
+            except httpx.RequestError as exc:
+                connector_circuit_breaker.record_failure(
+                    "ServiceNow", settings.connector_circuit_failure_threshold
+                )
+                ...ConnectorResult de erro, como ja acontecia antes...
+            else:
+                connector_circuit_breaker.record_success("ServiceNow")
+                ...
+    """
+    if connector_circuit_breaker.is_open(
+        source_system, settings.connector_circuit_cooldown_seconds
+    ):
+        return ConnectorResult(
+            source_system=source_system,
+            status="error",
+            error_code="CIRCUIT_OPEN",
+            message=(
+                f"Circuito aberto para {source_system}: muitas falhas de rede "
+                "consecutivas recentes - chamada pulada sem tentar a rede de "
+                "novo (aguardando o cooldown do circuit breaker)."
+            ),
+            raw="circuit breaker aberto (app/connectors/base.py::circuit_breaker_guard)",
+            is_mock=False,
+            is_fallback=True,
+        )
+    return None

@@ -40,7 +40,12 @@ Uso:
 import httpx
 
 from app.config import settings
-from app.connectors.base import ConnectorResult, ExternalSystemConnector
+from app.connectors.base import (
+    ConnectorResult,
+    ExternalSystemConnector,
+    circuit_breaker_guard,
+    connector_circuit_breaker,
+)
 
 _MOCK_SCENARIOS: dict[str, ConnectorResult] = {
     "APIM-RATE-LIMIT-DEMO": ConnectorResult(
@@ -103,6 +108,8 @@ class APIManagementConnector(ExternalSystemConnector):
         return response.json()["access_token"]
 
     def _fetch_real(self, identifier: str) -> ConnectorResult:
+        if (blocked := circuit_breaker_guard("SAP API Management")) is not None:
+            return blocked
         client = self._injected_client or httpx.Client(timeout=self.timeout)
         try:
             token = self._get_access_token(client)
@@ -114,6 +121,9 @@ class APIManagementConnector(ExternalSystemConnector):
                 headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
             )
         except httpx.HTTPStatusError as exc:
+            connector_circuit_breaker.record_failure(
+                "SAP API Management", settings.connector_circuit_failure_threshold
+            )
             return ConnectorResult(
                 source_system="SAP API Management",
                 status="error",
@@ -124,6 +134,9 @@ class APIManagementConnector(ExternalSystemConnector):
                 is_fallback=True,
             )
         except httpx.RequestError as exc:
+            connector_circuit_breaker.record_failure(
+                "SAP API Management", settings.connector_circuit_failure_threshold
+            )
             return ConnectorResult(
                 source_system="SAP API Management",
                 status="error",
@@ -136,6 +149,8 @@ class APIManagementConnector(ExternalSystemConnector):
         finally:
             if self._injected_client is None:
                 client.close()
+
+        connector_circuit_breaker.record_success("SAP API Management")
 
         if response.status_code != 200:
             return ConnectorResult(

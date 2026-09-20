@@ -640,10 +640,11 @@ citado pela propria revisao para quando o MCP ganhar tools de
 ESCRITA (prompt injection deixa de ser so um problema de qualidade de
 resposta e passa a ser um problema de autorizacao operacional).
 
-**Nao-objetivo desta fase:** a Evidence/Trust Layer ainda nao inclui o
-modelo `VERIFIED_AS` (verificacao humana/sistema separada da hipotese
-do LLM) proposto pela revisao para o GraphRAG - permanece na lista de
-itens P2 em aberto (ver `learnings.md`).
+**Nao-objetivo desta fase:** a Evidence/Trust Layer, sozinha, ainda
+nao incluia o modelo `VERIFIED_AS` (verificacao humana/sistema
+separada da hipotese do LLM) proposto pela revisao para o GraphRAG -
+implementado depois, como item proprio (ver secao "GraphRAG - modelo
+VERIFIED_AS (DA-28)" abaixo).
 
 Validado com `tests/test_evidence.py` (13 testes) - cada fonte
 isoladamente, a combinacao de todas, validacao do modelo `Evidence`
@@ -774,6 +775,102 @@ Validado com `tests/test_mcp_policy.py` (9 testes) - registro das duas
 tools atuais, fail-closed para tool nao registrada, enforcement de
 scope e de aprovacao (usando uma tool hipotetica de escrita registrada
 so dentro do teste, para nao afetar `CAPABILITY_REGISTRY` fora dele).
+
+## GraphRAG - modelo VERIFIED_AS (DA-28)
+
+Penultimo item do backlog da segunda revisao externa (P2). Motivo:
+`is_grounded` (DA-16, ver secao GraphRAG acima) e um proxy
+AUTOMATICO - `evidence_strength >= GROUNDED_EVIDENCE_THRESHOLD` no
+momento do diagnostico - ainda e a hipotese do LLM, so que com
+evidencia forte o suficiente pra nao ser descartada de cara. Sem uma
+distincao explicita entre "hipotese com boa evidencia" e "fato
+confirmado por alguem que investigou depois", o grafo corre o risco de
+virar um loop de retroalimentacao epistemico: a hipotese de hoje vira
+"historico" (fato) pro proximo diagnostico na mesma interface, sem
+nunca ter sido de fato confirmada - exatamente o risco que a revisao
+apontou como o mais serio do GraphRAG.
+
+**Escopo escolhido:** so o modelo `VERIFIED_AS` (verificacao pontual
+por incidente), nao o grafo de topologia completo
+(`System->API->iFlow->Event->Credential`) que a revisao tambem cita
+como evolucao possivel do schema. Motivo: este repositorio nao tem
+NENHUMA fonte de dados real para popular uma topologia (os 8-conectores
+mock nao expõem esse nivel de detalhe de infraestrutura) - inventar
+dados so pra ter um schema mais rico seria pior que nao ter a
+funcionalidade (mesmo principio de "nao simular alem do que da pra
+defender" usado em outras partes deste projeto).
+
+**Modelagem:**
+
+```
+(Incident)-[:VERIFIED_AS {verified_by, verified_at}]->(RootCause {text})
+```
+
+Um no `RootCause` separado (em vez de so propriedades planas no
+`Incident`) permite, no futuro, agregar quantos incidentes distintos
+compartilham a mesma causa raiz confirmada, sem reprocessar texto
+livre.
+
+- **`verify_incident(incident_id, verified_root_cause, verified_by,
+  session=None)`** (`app/rag/graph_store.py`) - o UNICO caminho que
+  marca `Incident.verified = true`. Chamada explicita apenas -
+  `verified` nunca e inferido por score/threshold, ao contrario de
+  `is_grounded`. `verified_root_cause` pode DIVERGIR de `root_cause` (a
+  hipotese original do LLM) - e justamente o caso mais importante de
+  capturar (o LLM errou, um humano corrigiu).
+- **`POST /incidents/{incident_id}/verify`** (`app/main.py`, novo
+  endpoint, mesma autenticacao `X-API-Key` de `/diagnose`) - superficie
+  HTTP para um operador (ou outro sistema, ex: ticket fechado com causa
+  raiz confirmada) registrar a verificacao. 404 explicito (nao
+  silencioso) se GraphRAG estiver desligado ou o `incident_id` nao
+  existir no grafo - ao contrario da maioria das funcoes deste modulo
+  (no-op silencioso por design quando GraphRAG esta desligado), este e
+  um endpoint chamado INTENCIONALMENTE esperando um efeito.
+- **Pre-requisito resolvido junto:** `DiagnosisResponse.incident_id`.
+  Antes desta mudanca, o id gravado no Neo4j era gerado DENTRO de
+  `graph_write_node` e descartado ali mesmo - nunca chegava ao caller
+  da API, entao nao havia como saber qual id referenciar em
+  `/incidents/{id}/verify`. Corrigido na origem: o id agora e gerado
+  uma unica vez em `graph.py::run_diagnosis()`, passado pelo
+  `CopilotState` (`incident_id`), usado por `graph_write_node` (em vez
+  de gerar um novo ali), e devolvido em `DiagnosisResponse.incident_id`
+  - `None` quando GraphRAG esta desligado OU o incidente nao tinha
+  `interface_type`/`identifier` suficientes pra ter sido gravado
+  (`upsert_incident_graph` e no-op nesse caso; devolver um id mesmo
+  assim seria enganoso).
+- **`graph_context()`**: o filtro de admissao (antes so `is_grounded`)
+  passa a ser `is_grounded OR verified` - uma verificacao humana/sistema
+  explicita e evidencia mais forte que o proxy automatico, entao nunca
+  deveria ficar de fora do contexto injetado no prompt so porque o
+  diagnostico ORIGINAL teve baixa confianca.
+- **`format_graph_context_for_prompt()`**: tres niveis de confianca no
+  texto injetado no prompt, do mais forte ao mais fraco - "causa raiz
+  VERIFICADA" (`verified=true`) > "causa raiz confirmada anteriormente"
+  (`is_grounded=true`, automatico) > "HIPOTESE NAO CONFIRMADA" (nenhum
+  dos dois). Quando verificado, a linha usa `verified_root_cause` (a
+  causa CONFIRMADA) em vez de `root_cause` (a hipotese original do LLM,
+  que pode ter sido corrigida) - o LLM nao deve ver as duas misturadas
+  sem saber qual e o fato.
+
+**Nao-objetivo explicito desta fase:** nenhum fluxo de UI/operador para
+CHAMAR `/incidents/{id}/verify` foi construido - o endpoint existe e e
+testado, mas hoje so pode ser chamado via API diretamente (curl,
+Postman, um sistema externo de tickets). Um painel/fluxo de verificacao
+humana fica como proximo passo natural, fora do escopo desta fase (que
+era resolver o RISCO ARQUITETURAL apontado pela revisao, nao construir
+UI).
+
+Validado com testes novos em `tests/test_graph_store.py`
+(`verify_incident` - desligado, incidente nao encontrado, escrita bem
+sucedida, `verified_by` default; filtro de `graph_context` incluindo
+verificado mesmo sem `is_grounded`; formatacao com o terceiro nivel de
+confianca, incluindo o caso de nao agrupar um incidente verificado com
+um nao-verificado que tenha a mesma causa raiz), `tests/test_api.py`
+(endpoint `/verify` - 404 desligado, 404 incidente inexistente, 200
+sucesso, autenticacao) e `tests/test_nodes_multiagent.py` +
+`tests/test_nodes_graph_degradation.py` (`incident_id` threading de
+`run_diagnosis()` ate `graph_write_node`) - 180 testes passando no
+total (`-m "not integration"`).
 
 ## Testes
 

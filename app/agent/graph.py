@@ -11,6 +11,7 @@ Ver docs/ARCHITECTURE.md para detalhamento por camada.
 """
 
 import os
+from uuid import uuid4
 
 from langfuse import get_client, observe
 
@@ -117,6 +118,11 @@ def run_diagnosis(
     promptfoo_provider.py para comparacao de modelos) - passado via
     parametro/state, nao mais via mutacao de global de modulo.
     """
+    # DA-28: id gerado aqui (nao mais dentro de graph_write_node) para
+    # poder ser devolvido em DiagnosisResponse.incident_id - sem isso,
+    # nao havia como referenciar um incidente especifico depois pra
+    # chamar verify_incident() (POST /incidents/{id}/verify).
+    incident_id = str(uuid4())
     initial_state: CopilotState = {
         "description": request.description,
         "logs": request.logs,
@@ -125,6 +131,7 @@ def run_diagnosis(
         "identifier": request.identifier,
         "llm_model": llm_model or settings.llm_model,
         "debug": debug,
+        "incident_id": incident_id,
     }
     final_state = get_graph().invoke(initial_state)
     diagnosis = final_state.get("diagnosis", {})
@@ -144,6 +151,15 @@ def run_diagnosis(
         # evita adicionar mais uma chave ao CopilotState so pra passar
         # o mesmo dado adiante.
         evidence=_assemble_evidence(final_state),
+        # DA-28: so tem sentido consultar/verificar depois se o
+        # GraphRAG estiver ligado E o incidente tiver sido de fato
+        # gravado (graph_write_node e no-op sem interface/identifier -
+        # ver upsert_incident_graph) - devolver o id de qualquer jeito
+        # seria enganoso (sugeriria que da pra verificar algo que nunca
+        # foi persistido).
+        incident_id=incident_id
+        if settings.graph_rag_enabled and request.interface_type and request.identifier
+        else None,
     )
 
 

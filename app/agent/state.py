@@ -67,6 +67,13 @@ class CopilotState(TypedDict, total=False):
     # diagnostico ("sap" | "saas" | "generic"), decidido pelo
     # supervisor_node ANTES do connector_node - ver app/agent/supervisor.py
     agent_domain: str
+    # DA-28: id estavel do incidente, gerado UMA vez em
+    # graph.py::run_diagnosis antes do grafo rodar (nao mais dentro de
+    # graph_write_node) - assim pode ser devolvido em
+    # DiagnosisResponse.incident_id e usado depois para chamar
+    # verify_incident() (POST /incidents/{id}/verify), ver
+    # app/rag/graph_store.py.
+    incident_id: str
     connector_data: ConnectorResult | None
     retrieved_context: list[dict]
     graph_history: list

@@ -101,7 +101,14 @@ def graph_write_node(state: CopilotState) -> CopilotState:
     data = state.get("connector_data")
     try:
         upsert_incident_graph(
-            incident_id=str(uuid4()),
+            # DA-28: usa o id gerado em graph.py::run_diagnosis (agora
+            # tambem devolvido em DiagnosisResponse.incident_id), em
+            # vez de gerar um novo aqui - sem isso o id gravado no
+            # Neo4j nunca chegava ao caller, e nao havia como chamar
+            # verify_incident() depois. Fallback pra uuid4() so por
+            # seguranca (chamada direta a graph_write_node sem passar
+            # por run_diagnosis, ex: um teste antigo).
+            incident_id=state.get("incident_id") or str(uuid4()),
             description=state["description"],
             interface_type=state.get("interface_type"),
             identifier=state.get("identifier"),

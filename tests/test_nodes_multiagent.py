@@ -115,3 +115,97 @@ def test_run_diagnosis_exposes_agent_domain_in_response(monkeypatch):
 
     assert result.agent_domain == "saas"
     assert result.probable_root_cause == "causa Y"
+
+
+class _StubGraphBare:
+    """Como _StubGraph, mas sem chaves extras - so o minimo que
+    run_diagnosis le do final_state."""
+
+    def invoke(self, initial_state):
+        return {"diagnosis": {}, "report_markdown": ""}
+
+
+def test_run_diagnosis_returns_incident_id_when_graph_rag_enabled_and_interface_known(
+    monkeypatch,
+):
+    """DA-28: incident_id so faz sentido devolver quando o incidente
+    de fato foi (ou sera) gravado no grafo - GraphRAG ligado E
+    interface_type/identifier presentes (mesma condicao de
+    upsert_incident_graph ser no-op ou nao)."""
+    from app.agent import graph as graph_module
+    from app.config import Settings
+    from app.models import IncidentRequest
+
+    monkeypatch.setattr(graph_module, "get_graph", lambda: _StubGraphBare())
+    monkeypatch.setattr(graph_module, "settings", Settings(graph_rag_enabled=True))
+
+    result = graph_module.run_diagnosis(
+        IncidentRequest(
+            description="IDoc travado", interface_type="rfc", identifier="RFC-IDOC-51-DEMO"
+        )
+    )
+
+    assert result.incident_id is not None
+    assert len(result.incident_id) > 0
+
+
+def test_run_diagnosis_returns_none_incident_id_when_graph_rag_disabled(monkeypatch):
+    from app.agent import graph as graph_module
+    from app.config import Settings
+    from app.models import IncidentRequest
+
+    monkeypatch.setattr(graph_module, "get_graph", lambda: _StubGraphBare())
+    monkeypatch.setattr(graph_module, "settings", Settings(graph_rag_enabled=False))
+
+    result = graph_module.run_diagnosis(
+        IncidentRequest(
+            description="IDoc travado", interface_type="rfc", identifier="RFC-IDOC-51-DEMO"
+        )
+    )
+
+    assert result.incident_id is None
+
+
+def test_run_diagnosis_returns_none_incident_id_when_interface_missing(monkeypatch):
+    """Mesmo com GraphRAG ligado, sem interface_type/identifier o
+    incidente nunca e gravado (upsert_incident_graph e no-op) -
+    devolver um id nesse caso enganaria o caller (sugeriria que ha algo
+    para verificar depois, quando nao ha)."""
+    from app.agent import graph as graph_module
+    from app.config import Settings
+    from app.models import IncidentRequest
+
+    monkeypatch.setattr(graph_module, "get_graph", lambda: _StubGraphBare())
+    monkeypatch.setattr(graph_module, "settings", Settings(graph_rag_enabled=True))
+
+    result = graph_module.run_diagnosis(IncidentRequest(description="algo estranho"))
+
+    assert result.incident_id is None
+
+
+def test_run_diagnosis_threads_incident_id_into_initial_state(monkeypatch):
+    """O id devolvido em DiagnosisResponse.incident_id tem que ser o
+    MESMO passado no initial_state (e, por consequencia, usado por
+    graph_write_node) - senao verify_incident() nunca acharia o
+    incidente gravado."""
+    from app.agent import graph as graph_module
+    from app.config import Settings
+    from app.models import IncidentRequest
+
+    captured = {}
+
+    class _CapturingGraph:
+        def invoke(self, initial_state):
+            captured.update(initial_state)
+            return {"diagnosis": {}, "report_markdown": ""}
+
+    monkeypatch.setattr(graph_module, "get_graph", lambda: _CapturingGraph())
+    monkeypatch.setattr(graph_module, "settings", Settings(graph_rag_enabled=True))
+
+    result = graph_module.run_diagnosis(
+        IncidentRequest(
+            description="IDoc travado", interface_type="rfc", identifier="RFC-IDOC-51-DEMO"
+        )
+    )
+
+    assert captured["incident_id"] == result.incident_id

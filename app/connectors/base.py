@@ -24,6 +24,7 @@ secao "Conectores - mock vs. real, hoje" para o estado de validacao
 de cada um.
 """
 
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -113,6 +114,49 @@ def circuit_breaker_guard(source_system: str) -> ConnectorResult | None:
                 "novo (aguardando o cooldown do circuit breaker)."
             ),
             raw="circuit breaker aberto (app/connectors/base.py::circuit_breaker_guard)",
+            is_mock=False,
+            is_fallback=True,
+        )
+    return None
+
+
+# Avaliacao externa (nova revisao, P1 - "Injection nos conectores
+# reais"): identifier (nome do iFlow, RFC destination, numero de
+# IDoc/incidente/PO - ver app/models.py::IncidentRequest.identifier)
+# vinha de entrada do usuario e era interpolado CRU em query strings
+# (OData $filter, SOQL WHERE, ServiceNow sysparm_query, CAP $filter)
+# e em segmentos de path de URL (Workday, Ariba) sem nenhum escape ou
+# validacao - um identifier como "x' or 1 eq 1" (OData/SOQL) ou
+# "../outro-recurso" (path) alterava a query/URL de verdade. Um
+# charset restrito (SAP/ITSM/CRM ja usam so alfanumerico + separadores
+# tipicos: numero de IDoc, RFC destination, CaseNumber, nome de iFlow)
+# elimina a classe inteira de injection sem exigir escape especifico
+# por protocolo - aspas, "/", "?", "#", espacos etc. nunca chegam a
+# fazer parte da query/URL, entao nao ha o que escapar depois.
+_IDENTIFIER_CHARSET_RE = re.compile(r"^[A-Za-z0-9._-]{1,200}$")
+
+
+def validate_identifier_charset(identifier: str, source_system: str) -> ConnectorResult | None:
+    """Chamado no INICIO de `_fetch_real(...)` de cada conector real
+    (depois do circuit_breaker_guard, antes de montar a query/URL com
+    o identifier). Devolve um `ConnectorResult` de erro imediato (sem
+    tentar a rede) se o identifier tiver qualquer caractere fora do
+    charset permitido, ou `None` se pode prosseguir normalmente. Os
+    identifiers de demo (ex.: "CPI-401-DEMO", "RFC-IDOC-51-DEMO") e
+    qualquer identifier SAP/ITSM/CRM real (numero de IDoc, RFC
+    destination, CaseNumber, nome de iFlow, numero de PO) ja respeitam
+    esse charset - nenhum uso legitimo e afetado."""
+    if not _IDENTIFIER_CHARSET_RE.match(identifier):
+        return ConnectorResult(
+            source_system=source_system,
+            status="error",
+            error_code="INVALID_IDENTIFIER",
+            message=(
+                f"Identificador invalido para {source_system}: aceita so letras, "
+                "numeros, '.', '_' e '-' (1 a 200 caracteres). Caracteres como "
+                "aspas, espacos, '/', '?' ou '#' nao sao permitidos."
+            ),
+            raw="",
             is_mock=False,
             is_fallback=True,
         )

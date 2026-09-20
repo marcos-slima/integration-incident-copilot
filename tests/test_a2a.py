@@ -208,3 +208,24 @@ def test_a2a_endpoint_rejects_wrong_api_key_when_configured(monkeypatch):
 
     response = client.post("/a2a", json=payload, headers={"X-A2A-Api-Key": "chave-errada"})
     assert response.status_code == 401
+
+
+def test_a2a_endpoint_is_rate_limited():
+    """Avaliacao externa (medio prazo, item 1): /a2a agora tem seu
+    proprio @limiter.limit("10/minute") (app/a2a/server.py) - antes
+    desta mudanca, o endpoint nao tinha NENHUM rate limit (o
+    "default_limits" do Limiter so valia para rotas com decorator
+    explicito, e SlowAPIMiddleware nunca era registrado)."""
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tasks/get",
+        "params": {"id": "inexistente"},
+    }
+
+    for _ in range(10):
+        response = client.post("/a2a", json=payload)
+        assert response.status_code == 200
+
+    limited = client.post("/a2a", json=payload)
+    assert limited.status_code == 429

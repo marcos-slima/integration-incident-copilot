@@ -11,6 +11,7 @@ import socket
 
 import pytest
 
+from app.connectors.base import connector_circuit_breaker
 from app.rate_limit import limiter
 
 
@@ -40,6 +41,19 @@ def _reset_rate_limiter():
     "aleatorio" dependendo da ordem em que os testes rodam. Reseta
     antes de cada teste para isolar a cota entre eles."""
     limiter.reset()
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _reset_connector_circuit_breaker():
+    """Avaliacao externa (medio prazo, item 3): mesmo motivo do reset
+    do rate limiter acima - connector_circuit_breaker
+    (app/connectors/base.py) e um singleton por processo, compartilhado
+    por todos os testes da sessao do pytest. Um teste que simula N
+    falhas consecutivas de rede pra um source_system (ex.: "abre o
+    circuito apos N falhas") deixaria esse circuito aberto para
+    qualquer teste seguinte do MESMO conector, se nao for resetado."""
+    connector_circuit_breaker.reset()
     yield
 
 

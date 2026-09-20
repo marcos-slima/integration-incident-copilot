@@ -78,6 +78,17 @@ class Settings(BaseSettings):
     llm_gateway_circuit_failure_threshold: int = 3
     llm_gateway_circuit_cooldown_seconds: float = 30.0
 
+    # Avaliacao externa (medio prazo, item 3): mesmo mecanismo do
+    # circuit breaker do AI Gateway acima (app/circuit_breaker.py),
+    # agora tambem para os conectores HTTP reais (SAP OData/CAP/API
+    # Management, ServiceNow, Salesforce, Workday, Ariba - ver
+    # app/connectors/base.py::circuit_breaker_guard). Falha consecutiva
+    # aqui = erro de REDE (timeout, conexao recusada), nao um 404/400
+    # de negocio (identificador nao encontrado nao significa que o
+    # sistema esta fora do ar).
+    connector_circuit_failure_threshold: int = 5
+    connector_circuit_cooldown_seconds: float = 30.0
+
     # Ollama (default local-first)
     ollama_host: str = "http://127.0.0.1:11434"
     llm_model: str = "qwen3-coder-next:latest"

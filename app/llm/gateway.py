@@ -52,9 +52,9 @@ do projeto):
 
 import logging
 import time
-from dataclasses import dataclass
 from typing import Literal
 
+from app.circuit_breaker import CircuitBreaker
 from app.config import Settings, settings
 from app.exceptions import ConfigurationError
 from app.llm.factory import TRANSPORT_FAILURE_EXCEPTIONS, get_chat_model
@@ -89,54 +89,13 @@ class PolicyViolationError(ConfigurationError):
     na policy; custo estimado acima do teto configurado."""
 
 
-@dataclass
-class _CircuitBreakerState:
-    consecutive_failures: int = 0
-    opened_at: float | None = None
-
-
-class CircuitBreaker:
-    """Circuit breaker in-memory, por provider, por processo (ver
-    nao-objetivo no docstring do modulo).
-
-    closed -> (N falhas consecutivas) -> open -> (cooldown expira) ->
-    deixa a proxima tentativa passar (half-open implicito) -> sucesso
-    reseta pra closed, falha reabre.
-
-    threshold/cooldown sao passados em cada chamada (nao fixados no
-    construtor) para respeitar overrides de config por chamada/teste,
-    igual ao resto do Gateway (config: Settings | None).
-    """
-
-    def __init__(self) -> None:
-        self._states: dict[str, _CircuitBreakerState] = {}
-
-    def _state(self, provider: str) -> _CircuitBreakerState:
-        return self._states.setdefault(provider, _CircuitBreakerState())
-
-    def is_open(self, provider: str, cooldown_seconds: float) -> bool:
-        state = self._state(provider)
-        if state.opened_at is None:
-            return False
-        return time.monotonic() - state.opened_at < cooldown_seconds
-
-    def record_success(self, provider: str) -> None:
-        self._states[provider] = _CircuitBreakerState()
-
-    def record_failure(self, provider: str, failure_threshold: int) -> None:
-        state = self._state(provider)
-        state.consecutive_failures += 1
-        if state.consecutive_failures >= failure_threshold:
-            state.opened_at = time.monotonic()
-
-    def reset(self) -> None:
-        """So para testes - limpa todo o estado do circuito."""
-        self._states.clear()
-
-
 # Singleton em nivel de modulo - circuito compartilhado por todas as
 # chamadas deste processo (ver nao-objetivo: nao compartilhado entre
-# replicas/processos).
+# replicas/processos). CircuitBreaker (classe) e _CircuitBreakerState
+# foram extraidos para app/circuit_breaker.py (avaliacao externa,
+# medio prazo item 3) - reexportado por "from ... import CircuitBreaker"
+# acima para nao quebrar "from app.llm.gateway import CircuitBreaker"
+# em tests/test_llm_gateway.py.
 circuit_breaker = CircuitBreaker()
 
 

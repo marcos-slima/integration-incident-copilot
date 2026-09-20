@@ -24,7 +24,12 @@ Uso:
 import httpx
 
 from app.config import settings
-from app.connectors.base import ConnectorResult, ExternalSystemConnector
+from app.connectors.base import (
+    ConnectorResult,
+    ExternalSystemConnector,
+    circuit_breaker_guard,
+    connector_circuit_breaker,
+)
 
 _MOCK_SCENARIOS: dict[str, ConnectorResult] = {
     "INC0010001": ConnectorResult(
@@ -74,6 +79,8 @@ class ServiceNowConnector(ExternalSystemConnector):
         return self._fetch_real(identifier)
 
     def _fetch_real(self, identifier: str) -> ConnectorResult:
+        if (blocked := circuit_breaker_guard("ServiceNow")) is not None:
+            return blocked
         client = self._injected_client or httpx.Client(timeout=self.timeout)
         try:
             response = client.get(
@@ -87,6 +94,9 @@ class ServiceNowConnector(ExternalSystemConnector):
                 headers={"Accept": "application/json"},
             )
         except httpx.RequestError as exc:
+            connector_circuit_breaker.record_failure(
+                "ServiceNow", settings.connector_circuit_failure_threshold
+            )
             return ConnectorResult(
                 source_system="ServiceNow",
                 status="error",
@@ -99,6 +109,8 @@ class ServiceNowConnector(ExternalSystemConnector):
         finally:
             if self._injected_client is None:
                 client.close()
+
+        connector_circuit_breaker.record_success("ServiceNow")
 
         if response.status_code != 200:
             return ConnectorResult(

@@ -22,7 +22,12 @@ ressalva que se aplica a `RFCConnector._fetch_real`.
 import httpx
 
 from app.config import settings
-from app.connectors.base import ConnectorResult, SAPConnector
+from app.connectors.base import (
+    ConnectorResult,
+    SAPConnector,
+    circuit_breaker_guard,
+    connector_circuit_breaker,
+)
 from app.exceptions import ConfigurationError
 
 _MOCK_SCENARIOS: dict[str, ConnectorResult] = {
@@ -91,6 +96,8 @@ class ODataConnector(SAPConnector):
         return response.json()["access_token"]
 
     def _fetch_real(self, identifier: str) -> ConnectorResult:
+        if (blocked := circuit_breaker_guard("OData")) is not None:
+            return blocked
         client = self._injected_client or httpx.Client(timeout=10.0)
         try:
             token = self._get_access_token(client)
@@ -100,6 +107,9 @@ class ODataConnector(SAPConnector):
                 headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
             )
         except httpx.HTTPStatusError as exc:
+            connector_circuit_breaker.record_failure(
+                "OData", settings.connector_circuit_failure_threshold
+            )
             return ConnectorResult(
                 source_system="OData",
                 status="error",
@@ -110,6 +120,9 @@ class ODataConnector(SAPConnector):
                 is_fallback=True,
             )
         except httpx.RequestError as exc:
+            connector_circuit_breaker.record_failure(
+                "OData", settings.connector_circuit_failure_threshold
+            )
             return ConnectorResult(
                 source_system="OData",
                 status="error",
@@ -122,6 +135,8 @@ class ODataConnector(SAPConnector):
         finally:
             if self._injected_client is None:
                 client.close()
+
+        connector_circuit_breaker.record_success("OData")
 
         if response.status_code != 200:
             return ConnectorResult(

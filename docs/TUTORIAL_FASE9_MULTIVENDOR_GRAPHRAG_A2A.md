@@ -137,9 +137,12 @@ o task manager chama a mesma orquestração completa. Os testes
 automatizados (`uv run pytest tests/test_a2a.py -v`) não exigem isso —
 usam um `diagnosis_fn` stub injetado no `TaskManager`.
 
-Para ativar autenticação por chave: `A2A_API_KEY=algum-valor` no
-`.env`, e enviar o header `X-A2A-Api-Key: algum-valor` em toda
-chamada a `/a2a` (sem o header ou com valor errado: HTTP 401).
+Autenticação por chave (`X-A2A-Api-Key`) é sempre exigida a partir da
+DA-18: configure `A2A_API_KEY=algum-valor` no `.env` para uma chave
+estável, ou deixe em branco e leia o log de startup — uma chave
+aleatória é gerada automaticamente a cada execução. Envie o header
+`X-A2A-Api-Key: <chave>` em toda chamada a `/a2a` (sem o header ou com
+valor errado: HTTP 401).
 
 ## 6. O que NÃO foi feito nesta fase (gap honesto)
 

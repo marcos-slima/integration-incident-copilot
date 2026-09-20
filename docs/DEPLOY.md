@@ -125,13 +125,26 @@ Sem `--reset`, o ingest processa só documentos ainda não indexados (idempotent
 
 ## 7. Teste end-to-end
 
+Desde a DA-18, `/diagnose` sempre exige o header `X-API-Key`. Se você
+não configurou `API_KEY` no `.env`, uma chave aleatória é gerada a
+cada `docker compose up`/restart e avisada em nível `WARNING` no log
+de startup:
+
+```bash
+docker logs integration-incident-copilot-api-1 2>&1 | grep "API_KEY"
+```
+
+Use essa chave (ou a que você configurou em `API_KEY=` no `.env`, se
+preferir uma chave estável entre restarts):
+
 ```bash
 curl -s -X POST http://127.0.0.1:8000/diagnose \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: <chave-do-log-ou-do-.env>" \
   -d '{"description":"IDoc travado com status 51, erro de mapeamento de material"}'
 ```
 
-Deve retornar um JSON com `probable_root_cause`, `confidence`, `next_steps` e `report_markdown`.
+Deve retornar um JSON com `probable_root_cause`, `confidence`, `next_steps` e `report_markdown`. Sem o header (ou com valor errado): `401 Unauthorized`.
 
 ---
 
@@ -143,6 +156,7 @@ Deve retornar um JSON com `probable_root_cause`, `confidence`, `next_steps` e `r
 | `address already in use` (11434) | Ollama nativo já rodando | Ver seção 3-B |
 | `ConnectionError: Failed to connect to Ollama` dentro do container | `OLLAMA_HOST` errado, ou Ollama nativo só em `127.0.0.1` | Ver seção 3-B, passos 2 e 3 |
 | Container `api` reinicia sozinho com erro de DNS/`python-discovery` | `uv run` tentando sync sem rede | Ver seção 4 |
+| `401 Unauthorized` em `/diagnose` ou `/a2a` | Header `X-API-Key`/`X-A2A-Api-Key` ausente ou errado (DA-18: chave sempre exigida, gerada automaticamente se não configurada) | Ver a chave gerada no log de startup (`docker logs ... \| grep API_KEY`), ou configure `API_KEY`/`A2A_API_KEY` no `.env` |
 | `RuntimeError: Directory 'static/dist/assets' does not exist` | Frontend não buildado / não copiado para a imagem | Ver seção 2 |
 | `Collection 'sap_incident_docs' doesn't exist` | Qdrant do compose está vazio (esperado em ambiente novo) | Ver seção 6 |
 | Variável de `.env` com `$` interpretada como interpolação do Compose (warning `variable is not set`) | `$` literal em segredo (ex: `CAP_CLIENT_SECRET`) | Escapar como `$$` no `.env` |

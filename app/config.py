@@ -146,9 +146,10 @@ class Settings(BaseSettings):
 
     # A2A (Agent2Agent) - camada de interoperabilidade externa,
     # ver app/a2a/ e docs/proposals/a2a-interoperability-layer.md.
-    # a2a_api_key vazio (default) = autenticacao desabilitada no
-    # endpoint /a2a - aceitavel para portfolio/demo local, documentado
-    # como gap de producao (ver proposta original).
+    # a2a_api_key vazio aqui (default) NAO significa autenticacao
+    # desabilitada (DA-18): app.main._ensure_api_keys_configured gera
+    # uma chave aleatoria no startup se esta continuar vazia. Vazio so
+    # significa "sem chave fixa configurada pelo operador".
     a2a_api_key: str = ""
 
     model_config = SettingsConfigDict(

@@ -14,11 +14,14 @@ streaming/push notifications que este agente sincrono nao precisa):
                   sincrona aqui)
 
 Autenticacao: header `X-A2A-Api-Key` comparado a `settings.a2a_api_key`
-quando esta configurado (vazio = autenticacao desabilitada, aceitavel
-para portfolio/demo local - ver Agent Card / proposta original para o
-gap de producao documentado: producao exigiria OAuth2/JWT entre
-agentes, nao uma chave estatica).
+via secrets.compare_digest. Se A2A_API_KEY nao foi configurada no
+.env, app.main._ensure_api_keys_configured gera uma chave aleatoria no
+startup e avisa no log (DA-18) - o endpoint nunca fica sem NENHUMA
+chave. Gap de producao que permanece, documentado: uma chave estatica
+compartilhada nao substitui OAuth2/JWT por-agente entre pares reais.
 """
+
+import secrets
 
 from fastapi import APIRouter, Header, Request
 from fastapi.responses import JSONResponse
@@ -38,9 +41,12 @@ def _jsonrpc_result(request_id, result: dict) -> dict:
 
 
 def _check_auth(x_a2a_api_key: str | None) -> bool:
-    if not settings.a2a_api_key:
-        return True
-    return x_a2a_api_key == settings.a2a_api_key
+    """DA-18: settings.a2a_api_key nunca fica vazio apos o startup
+    (ver app.main._ensure_api_keys_configured) - o "if not
+    settings.a2a_api_key: return True" (auth desabilitada) foi
+    removido de proposito, nao e mais um caminho alcancavel em
+    execucao normal. secrets.compare_digest evita timing attack."""
+    return secrets.compare_digest(x_a2a_api_key or "", settings.a2a_api_key)
 
 
 async def handle_jsonrpc(

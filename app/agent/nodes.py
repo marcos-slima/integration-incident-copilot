@@ -374,8 +374,7 @@ def _apply_confidence_guardrails(diagnosis: dict, state: CopilotState) -> dict:
     diagnosis["evidence_strength"] = round(evidence_strength, 3)
 
     evidence_ceiling = min(1.0, evidence_strength + EVIDENCE_CONFIDENCE_MARGIN)
-    if diagnosis["confidence"] > evidence_ceiling:
-        diagnosis["confidence"] = evidence_ceiling
+    diagnosis["confidence"] = min(diagnosis["confidence"], evidence_ceiling)
 
     data = state.get("connector_data")
     if data and data.is_fallback:

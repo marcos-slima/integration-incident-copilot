@@ -1,5 +1,7 @@
 """SAP Integration Copilot - entrypoint FastAPI."""
 
+import logging
+import secrets
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Security, status
@@ -17,6 +19,8 @@ from app.agent.graph import run_diagnosis
 from app.config import settings
 from app.models import DiagnosisResponse, IncidentRequest
 
+logger = logging.getLogger(__name__)
+
 # ─── Rate limiting ─────────────────────────────────────────────────────────
 # Limite por IP: 10 diagnosticos por minuto (configuravel via RATE_LIMIT no .env)
 limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
@@ -28,19 +32,48 @@ api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
 def verify_api_key(api_key: str | None = Security(api_key_header)) -> None:
-    """Valida API Key se configurada. Se nao configurada, permite tudo."""
-    configured_key = getattr(settings, "api_key", None)
-    if not configured_key:
-        return  # API Key nao configurada — modo aberto
-    if api_key != configured_key:
+    """Valida API Key. DA-18: apos _ensure_api_keys_configured() rodar
+    no startup, settings.api_key NUNCA fica vazio - nao ha mais "modo
+    aberto" silencioso. Comparacao com secrets.compare_digest (nao
+    "==") para nao vazar o tamanho/prefixo da chave via timing attack."""
+    configured_key = settings.api_key
+    if not secrets.compare_digest(api_key or "", configured_key):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="X-API-Key invalida ou ausente",
         )
 
 
+def _ensure_api_keys_configured() -> None:
+    """DA-18: nenhum endpoint protegido (/diagnose via API_KEY, /a2a
+    via A2A_API_KEY) deve ficar sem NENHUMA chave em memoria. Antes,
+    A2A_API_KEY/API_KEY vazios no .env significavam autenticacao
+    completamente desabilitada (qualquer chamador passava) - um gap
+    silencioso, so visivel lendo o codigo-fonte. Se o operador nao
+    configurou uma chave, geramos uma aleatoria por processo aqui e
+    avisamos ALTO no log de startup - preserva o "clone e rode" (zero
+    config obrigatoria pra rodar local) sem deixar os endpoints
+    abertos por padrao. A chave gerada muda a cada restart; para uma
+    chave estavel, configure API_KEY/A2A_API_KEY no .env."""
+    if not settings.api_key:
+        settings.api_key = secrets.token_urlsafe(32)
+        logger.warning(
+            "API_KEY nao configurada no .env - chave gerada automaticamente "
+            "para esta execucao (header X-API-Key): %s",
+            settings.api_key,
+        )
+    if not settings.a2a_api_key:
+        settings.a2a_api_key = secrets.token_urlsafe(32)
+        logger.warning(
+            "A2A_API_KEY nao configurada no .env - chave gerada automaticamente "
+            "para esta execucao (header X-A2A-Api-Key): %s",
+            settings.a2a_api_key,
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _ensure_api_keys_configured()
     yield
     get_client().flush()
 

@@ -22,6 +22,47 @@ class IncidentRequest(BaseModel):
     identifier: str | None = None  # ex: nome do iFlow, RFC destination, numero de IDoc/incidente
 
 
+# DA-23 (Event Mesh): formato CloudEvents, o mesmo usado pelo SAP
+# Event Mesh em modo REST/Webhook push subscription (alem de AMQP) -
+# nao e um formato inventado por este projeto, e o envelope real que
+# um assinante de webhook do Event Mesh recebe (type/source/id/time/
+# data). Hoje so um `type` e reconhecido - qualquer outro e rejeitado
+# com 422 automaticamente pelo Literal abaixo, em vez de tentar
+# interpretar um payload de formato desconhecido silenciosamente.
+INCIDENT_DETECTED_EVENT_TYPE = "com.sap.integration.incident.detected.v1"
+
+
+class IncidentEventData(BaseModel):
+    """Corpo (`data`) do evento - mesmos campos de IncidentRequest,
+    pois o evento representa a MESMA informacao que um humano digitaria
+    em /diagnose, so que originada automaticamente por um sistema de
+    monitoracao (ex: CPI, Solution Manager, um listener de IDoc)."""
+
+    description: str = Field(max_length=MAX_DESCRIPTION_LENGTH)
+    logs: str | None = Field(default=None, max_length=MAX_LOGS_LENGTH)
+    payload: str | None = Field(default=None, max_length=MAX_PAYLOAD_LENGTH)
+    interface_type: (
+        Literal["odata", "rfc", "servicenow", "salesforce", "workday", "ariba", "cap", "apim"]
+        | None
+    ) = None
+    identifier: str | None = None
+
+
+class IncidentEventEnvelope(BaseModel):
+    """Envelope CloudEvents recebido em `POST /events/incident` - ver
+    app/events/consumer.py para a conversao para IncidentRequest e o
+    disparo automatico do diagnostico."""
+
+    type: Literal["com.sap.integration.incident.detected.v1"]
+    source: str | None = Field(
+        default=None,
+        description="Sistema de origem do evento (ex: 'cpi-monitor', 'solman'). Informativo.",
+    )
+    id: str | None = None
+    time: str | None = None
+    data: IncidentEventData
+
+
 class DiagnosisResponse(BaseModel):
     probable_root_cause: str
     confidence: float = Field(ge=0.0, le=1.0)

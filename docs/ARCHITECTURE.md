@@ -421,6 +421,62 @@ NAO propaga eventos de lifespan para sub-apps automaticamente), e por
 isso os testes em `tests/test_mcp.py` usam um UNICO
 `with TestClient(app) as ...` para toda a suite daquele arquivo.
 
+## Event Mesh - ingestao orientada a evento (DA-23)
+
+Ate esta fase, o Copilot so reagia a chamadas EXPLICITAS: `POST
+/diagnose` humano, mensagem A2A, ou tool call MCP. Fechando o sexto
+item do roadmap arquitetural, `POST /events/incident`
+(`app/main.py` + `app/events/`) permite que um sistema de monitoracao
+externo (CPI, Solution Manager, um listener de fila/IDoc) dispare o
+diagnostico automaticamente, publicando um evento em vez de esperar
+alguem chamar a API.
+
+**Formato do evento:** [CloudEvents](https://cloudevents.io/) -
+`type`/`source`/`id`/`time`/`data` - o mesmo formato que o SAP Event
+Mesh usa em modo **REST/Webhook push subscription** (alem do AMQP 1.0
+nativo). `data` carrega exatamente os mesmos campos de
+`IncidentRequest` (a informacao e a MESMA que um humano digitaria em
+`/diagnose`, so que originada automaticamente). Hoje so um `type` e
+reconhecido - `com.sap.integration.incident.detected.v1` - modelado
+como `Literal` em `IncidentEventEnvelope` (`app/models.py`): qualquer
+outro valor e rejeitado com `422` automaticamente pelo Pydantic, em
+vez de tentar interpretar silenciosamente um payload de formato
+desconhecido.
+
+**Por que webhook e nao um consumidor AMQP:** nao e um atalho para
+evitar montar um broker real - webhook e um modo de entrega de
+PRIMEIRA CLASSE do proprio SAP Event Mesh, documentado ao lado do
+AMQP, e e o unico que da para exercitar de ponta a ponta com testes
+reais (TestClient HTTP) sem depender de infraestrutura externa - mesma
+logica pragmatica ja aplicada ao GraphRAG (DA-21) e ao MCP (DA-19).
+
+**Decisao de auth:** `X-Event-Mesh-Api-Key` e uma chave DEDICADA,
+separada de `X-API-Key` (`/diagnose`) e `X-A2A-Api-Key` (`/a2a`) -
+mesmo padrao de geracao automatica no startup se nao configurada
+(DA-18). Isolamento deliberado: o webhook secret normalmente fica
+configurado num sistema de monitoracao externo (fora do controle
+direto deste projeto), entao um vazamento ali nao deve comprometer os
+outros dois canais de acesso.
+
+`app/events/consumer.py::handle_incident_event()` converte o evento em
+`IncidentRequest` e chama a MESMA `run_diagnosis()` usada por
+`/diagnose` e pela camada A2A - nenhuma logica de diagnostico
+duplicada, so mais um ponto de entrada.
+
+**Nao-objetivo explicito desta fase:** processamento assincrono/fila
+real (hoje e sincrono - o webhook so retorna quando o diagnostico
+termina, sujeito ao mesmo rate limit de 10/min de `/diagnose`) e
+consumo AMQP direto do SAP Event Mesh - se o volume de eventos ou a
+necessidade de backpressure justificar, isso e evolucao natural futura,
+nao um gap escondido.
+
+**Validacao:** `tests/test_events.py` cobre o mapeamento evento ->
+IncidentRequest, a chamada a `run_diagnosis()`, autenticacao (401 sem
+chave/chave errada), rejeicao de `type` desconhecido (422), limite de
+tamanho da descricao (422, mesma regra de `/diagnose`) e geracao
+automatica da chave no startup - tudo com `run_diagnosis` mockado, sem
+depender de Ollama/Qdrant reais.
+
 ## Testes
 
 Testes unitarios (`tests/test_connectors.py`, `test_llm_factory.py`,

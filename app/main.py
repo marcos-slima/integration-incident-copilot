@@ -292,39 +292,79 @@ def incident_event_webhook(request: Request, envelope: IncidentEventEnvelope) ->
 @limiter.limit("10/minute")
 def verify_incident_endpoint(
     request: Request, incident_id: str, body: VerifyIncidentRequest
-) -> dict[str, str]:
-    """DA-28 (VERIFIED_AS): registra a confirmacao EXPLICITA (humana ou
-    de outro sistema) da causa raiz de um incidente ja diagnosticado e
-    gravado no grafo (GraphRAG). Ver app.rag.graph_store.verify_incident
-    para a justificativa completa da distincao entre isto e o
-    `is_grounded` automatico (DA-16).
+) -> dict[str, str | bool]:
+    """DA-28 (VERIFIED_AS) + avaliacao externa (medio prazo, item 5 -
+    "Metricas e feedback"): registra a confirmacao EXPLICITA (humana ou
+    de outro sistema) da causa raiz de um incidente ja diagnosticado, e
+    opcionalmente um veredito de correto/incorreto (`body.correct`)
+    como score no trace Langfuse original (`body.trace_id`).
 
-    404 se GraphRAG estiver desligado ou o `incident_id` nao existir no
-    grafo - nao ha nada silencioso aqui, ao contrario da maioria das
-    funcoes deste modulo (que sao no-op por design quando desligadas),
-    porque este e um endpoint que o operador chama INTENCIONALMENTE
-    esperando um efeito: se o efeito nao aconteceu, ele precisa saber.
+    Dois efeitos INDEPENDENTES (ver docstring de VerifyIncidentRequest):
+    grafo (Neo4j, exige GraphRAG ligado + incident_id valido) e score
+    Langfuse (exige trace_id). Nenhum bloqueia o outro - um cliente que
+    so tem trace_id (GraphRAG desligado) ainda registra feedback no
+    Langfuse; um cliente que so tem incident_id ainda grava no grafo,
+    exatamente como antes desta mudanca (DA-28).
+
+    400 se nenhum dos dois puder acontecer - GraphRAG desligado (ou
+    sem tentativa de grafo porque nao houve incident_id gravavel) E
+    trace_id ausente, ou seja, a chamada nao tem NENHUMA pre-condicao
+    atendida para fazer alguma coisa.
+    404 se GraphRAG estiver ligado mas o `incident_id` nao existir no
+    grafo - mesmo comportamento estrito de antes (nao silencioso, o
+    operador chamou isto esperando um efeito real).
 
     Rate limit: 10 requisicoes por minuto por IP (mesma politica dos
     demais endpoints mutantes).
     Autenticacao: X-API-Key header (mesma dependency de /diagnose).
     """
-    if not settings.graph_rag_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="GraphRAG esta desligado (GRAPH_RAG_ENABLED=false) - nada para verificar.",
+    graph_updated = False
+    if settings.graph_rag_enabled:
+        graph_updated = verify_incident(
+            incident_id=incident_id,
+            verified_root_cause=body.root_cause,
+            verified_by=body.verified_by,
         )
-    verified = verify_incident(
-        incident_id=incident_id,
-        verified_root_cause=body.root_cause,
-        verified_by=body.verified_by,
-    )
-    if not verified:
+        if not graph_updated:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Incidente '{incident_id}' nao encontrado no grafo.",
+            )
+
+    langfuse_scored = False
+    if body.trace_id and body.correct is not None:
+        try:
+            get_client().create_score(
+                trace_id=body.trace_id,
+                name="diagnosis_correct",
+                value=body.correct,
+                data_type="BOOLEAN",
+                comment=body.root_cause,
+            )
+            langfuse_scored = True
+        except Exception:
+            logger.warning(
+                "Falha ao gravar score de feedback no Langfuse (trace_id=%s)",
+                body.trace_id,
+                exc_info=True,
+            )
+
+    if not settings.graph_rag_enabled and not langfuse_scored:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Incidente '{incident_id}' nao encontrado no grafo.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Nada para registrar: GraphRAG esta desligado "
+                "(GRAPH_RAG_ENABLED=false) e nenhum trace_id/correct valido "
+                "foi informado para gravar feedback no Langfuse."
+            ),
         )
-    return {"incident_id": incident_id, "status": "verified"}
+
+    return {
+        "incident_id": incident_id,
+        "status": "verified",
+        "graph_updated": graph_updated,
+        "langfuse_scored": langfuse_scored,
+    }
 
 
 @app.get("/.well-known/agent-card.json")

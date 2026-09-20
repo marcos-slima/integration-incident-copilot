@@ -207,14 +207,99 @@ def test_ensure_graph_rag_password_configured_ignored_when_graph_rag_disabled(mo
     main_module._ensure_graph_rag_password_configured()  # nao deve levantar
 
 
-def test_verify_incident_returns_404_when_graph_rag_disabled(monkeypatch):
+def test_verify_incident_returns_400_when_nothing_to_record(monkeypatch):
+    """Avaliacao externa (medio prazo, item 5): sem GraphRAG ligado E
+    sem trace_id/correct informados, a chamada nao tem NENHUMA
+    pre-condicao atendida - nada seria gravado em lugar nenhum, entao
+    400 (erro do cliente), nao um 200 silencioso nem um 404 generico."""
     monkeypatch.setattr(main_module, "settings", Settings(graph_rag_enabled=False))
     response = client.post(
         "/incidents/i1/verify",
         json={"root_cause": "causa confirmada", "verified_by": "human"},
     )
-    assert response.status_code == 404
-    assert "desligado" in response.json()["detail"]
+    assert response.status_code == 400
+    assert "GraphRAG" in response.json()["detail"]
+
+
+def test_verify_incident_scores_langfuse_even_with_graph_rag_disabled(monkeypatch):
+    """O segundo efeito (score no Langfuse) e independente do primeiro
+    (grafo) - um cliente que so tem trace_id (GraphRAG desligado) ainda
+    consegue registrar feedback."""
+    monkeypatch.setattr(main_module, "settings", Settings(graph_rag_enabled=False))
+    captured = {}
+
+    class _FakeLangfuseClient:
+        def create_score(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(main_module, "get_client", lambda: _FakeLangfuseClient())
+
+    response = client.post(
+        "/incidents/i1/verify",
+        json={
+            "root_cause": "causa confirmada",
+            "correct": False,
+            "trace_id": "trace-abc123",
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["graph_updated"] is False
+    assert body["langfuse_scored"] is True
+    assert captured["trace_id"] == "trace-abc123"
+    assert captured["value"] is False
+    assert captured["name"] == "diagnosis_correct"
+    assert captured["data_type"] == "BOOLEAN"
+
+
+def test_verify_incident_langfuse_failure_does_not_break_endpoint(monkeypatch):
+    """Feedback no Langfuse e best-effort - uma falha ao gravar o score
+    (Langfuse fora do ar, por exemplo) nao pode derrubar o endpoint
+    inteiro quando o grafo (se aplicavel) ja foi atualizado com sucesso."""
+    monkeypatch.setattr(main_module, "settings", Settings(graph_rag_enabled=True))
+    monkeypatch.setattr(main_module, "verify_incident", lambda **kwargs: True)
+
+    class _BrokenLangfuseClient:
+        def create_score(self, **kwargs):
+            raise RuntimeError("Langfuse indisponivel")
+
+    monkeypatch.setattr(main_module, "get_client", lambda: _BrokenLangfuseClient())
+
+    response = client.post(
+        "/incidents/i1/verify",
+        json={
+            "root_cause": "causa confirmada",
+            "correct": True,
+            "trace_id": "trace-abc123",
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["graph_updated"] is True
+    assert body["langfuse_scored"] is False
+
+
+def test_verify_incident_without_correct_does_not_score_langfuse(monkeypatch):
+    """trace_id sozinho, sem `correct`, nao gera score - mantem o
+    comportamento de antes desta mudanca para quem so manda root_cause
+    (so grafo, sem feedback de correto/incorreto)."""
+    monkeypatch.setattr(main_module, "settings", Settings(graph_rag_enabled=True))
+    monkeypatch.setattr(main_module, "verify_incident", lambda **kwargs: True)
+    scored = {"called": False}
+
+    class _FakeLangfuseClient:
+        def create_score(self, **kwargs):
+            scored["called"] = True
+
+    monkeypatch.setattr(main_module, "get_client", lambda: _FakeLangfuseClient())
+
+    response = client.post(
+        "/incidents/i1/verify",
+        json={"root_cause": "causa confirmada", "trace_id": "trace-abc123"},
+    )
+    assert response.status_code == 200
+    assert response.json()["langfuse_scored"] is False
+    assert scored["called"] is False
 
 
 def test_verify_incident_returns_404_when_incident_not_found(monkeypatch):
@@ -242,7 +327,12 @@ def test_verify_incident_returns_200_on_success(monkeypatch):
         json={"root_cause": "causa confirmada por Basis", "verified_by": "human"},
     )
     assert response.status_code == 200
-    assert response.json() == {"incident_id": "i1", "status": "verified"}
+    assert response.json() == {
+        "incident_id": "i1",
+        "status": "verified",
+        "graph_updated": True,
+        "langfuse_scored": False,
+    }
     assert captured["incident_id"] == "i1"
     assert captured["verified_root_cause"] == "causa confirmada por Basis"
     assert captured["verified_by"] == "human"

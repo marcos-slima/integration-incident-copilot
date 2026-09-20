@@ -924,6 +924,19 @@ funcionalidade.
   verificado, usa `verified_root_cause` (a causa confirmada, que pode
   divergir da hipótese original do LLM) em vez de `root_cause`.
 
+
+**Atualização (avaliação externa, médio prazo item 5 — "Métricas e
+feedback"):** `POST /incidents/{id}/verify` deixou de exigir GraphRAG
+ligado. Agora tem dois efeitos independentes — gravar `VERIFIED_AS` no
+grafo (comportamento original acima, inalterado quando GraphRAG está
+ligado) e registrar um score booleano `diagnosis_correct` no trace
+Langfuse original, via um novo campo `DiagnosisResponse.trace_id`
+(capturado em `run_diagnosis()`, independente de GraphRAG) e um novo
+campo `trace_id`/`correct` no corpo de `VerifyIncidentRequest`. Sem
+GraphRAG ligado e sem `trace_id`, o endpoint agora devolve 400 (nada
+para registrar), não mais 404 — 404 continua reservado para "GraphRAG
+ligado mas o incidente não existe no grafo".
+
 **Validação:** novos testes em `tests/test_graph_store.py`
 (`verify_incident`, filtro de `graph_context`, formatação por nível de
 confiança), `tests/test_api.py` (endpoint `/verify`, 404 quando

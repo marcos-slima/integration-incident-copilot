@@ -209,3 +209,43 @@ def test_run_diagnosis_threads_incident_id_into_initial_state(monkeypatch):
     )
 
     assert captured["incident_id"] == result.incident_id
+
+
+class _FakeLangfuseClient:
+    def __init__(self, trace_id):
+        self._trace_id = trace_id
+
+    def get_current_trace_id(self):
+        return self._trace_id
+
+
+def test_run_diagnosis_populates_trace_id_from_langfuse_current_trace(monkeypatch):
+    """Avaliacao externa (medio prazo, item 5): DiagnosisResponse.trace_id
+    e capturado via get_client().get_current_trace_id() ENQUANTO ainda
+    dentro do span "sap_copilot_diagnosis" (run_diagnosis e @observe) -
+    independente de GraphRAG, diferente de incident_id."""
+    from app.agent import graph as graph_module
+    from app.config import Settings
+    from app.models import IncidentRequest
+
+    monkeypatch.setattr(graph_module, "get_graph", lambda: _StubGraphBare())
+    monkeypatch.setattr(graph_module, "settings", Settings(graph_rag_enabled=False))
+    monkeypatch.setattr(graph_module, "get_client", lambda: _FakeLangfuseClient("trace-xyz"))
+
+    result = graph_module.run_diagnosis(IncidentRequest(description="IDoc travado"))
+
+    assert result.trace_id == "trace-xyz"
+
+
+def test_run_diagnosis_trace_id_is_none_when_langfuse_has_no_active_trace(monkeypatch):
+    from app.agent import graph as graph_module
+    from app.config import Settings
+    from app.models import IncidentRequest
+
+    monkeypatch.setattr(graph_module, "get_graph", lambda: _StubGraphBare())
+    monkeypatch.setattr(graph_module, "settings", Settings(graph_rag_enabled=False))
+    monkeypatch.setattr(graph_module, "get_client", lambda: _FakeLangfuseClient(None))
+
+    result = graph_module.run_diagnosis(IncidentRequest(description="IDoc travado"))
+
+    assert result.trace_id is None

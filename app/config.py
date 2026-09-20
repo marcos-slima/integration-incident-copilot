@@ -41,6 +41,23 @@ class Settings(BaseSettings):
     # normalmente (OPENAI_API_KEY ou AZURE_OPENAI_*, conforme o caso).
     llm_fallback_provider: Literal["openai", "azure_openai", ""] = ""
 
+    # AI Gateway v1 (DA-26): teto de custo estimado (USD) por chamada
+    # LLM, verificado ANTES da chamada (heuristica de tokens x tabela
+    # de preco aproximada, nao cobranca real) - ver app/llm/gateway.py.
+    # 0.50 e deliberadamente permissivo (nao quebra uso normal); existe
+    # para pegar um caso patologico (prompt gigantesco por engano),
+    # nao para orcamento fino de producao.
+    llm_gateway_max_cost_usd: float = 0.50
+
+    # AI Gateway v1 (DA-26): circuit breaker por provider - depois de
+    # N falhas de transporte CONSECUTIVAS, o provider fica "aberto" por
+    # um cooldown (chamadas seguintes pulam direto pro proximo provider
+    # permitido, sem esperar timeout de novo). In-memory, por processo
+    # - ver nao-objetivo em app/llm/gateway.py (nao compartilhado entre
+    # replicas Kyma).
+    llm_gateway_circuit_failure_threshold: int = 3
+    llm_gateway_circuit_cooldown_seconds: float = 30.0
+
     # Ollama (default local-first)
     ollama_host: str = "http://127.0.0.1:11434"
     llm_model: str = "qwen3-coder-next:latest"

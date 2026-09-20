@@ -2,9 +2,10 @@
 verifica que cada sub-agente usa a persona correta e que o roteamento
 condicional do grafo (app/agent/graph.py::_route_to_specialist) manda
 o incidente para o node certo, sem depender de LLM real (mesmo padrao
-de tests/test_llm_factory.py: mocka `invoke_with_hybrid_fallback`
-diretamente, entao o closure `_build_and_invoke` nunca roda de verdade
-- nao precisa de Ollama nem de create_react_agent)."""
+de tests/test_llm_factory.py: mocka `invoke_via_gateway` (DA-26 - AI
+Gateway, antes `invoke_with_hybrid_fallback`) diretamente, entao o
+closure `_build_and_invoke` nunca roda de verdade - nao precisa de
+Ollama nem de create_react_agent)."""
 
 from app.agent.graph import _route_to_specialist
 from app.agent.nodes import (
@@ -26,8 +27,8 @@ _VALID_DIAGNOSIS_JSON = (
 )
 
 
-def _fake_hybrid_fallback_factory(provider="ollama"):
-    def _fake(build_and_invoke, model_name=None, config=None):
+def _fake_gateway_factory(provider="ollama"):
+    def _fake(build_and_invoke, state=None, prompt_text="", model_name=None, config=None):
         return {"messages": [_FakeMessage(_VALID_DIAGNOSIS_JSON)]}, provider
 
     return _fake
@@ -41,9 +42,7 @@ def test_sap_diagnosis_node_uses_sap_persona(monkeypatch):
         return "prompt qualquer"
 
     monkeypatch.setattr("app.agent.nodes._build_diagnosis_prompt", fake_prompt)
-    monkeypatch.setattr(
-        "app.agent.nodes.invoke_with_hybrid_fallback", _fake_hybrid_fallback_factory()
-    )
+    monkeypatch.setattr("app.agent.nodes.invoke_via_gateway", _fake_gateway_factory())
 
     result = sap_diagnosis_node({"description": "IDoc travado", "retrieved_context": []})
 
@@ -60,9 +59,7 @@ def test_saas_diagnosis_node_uses_enterprise_persona(monkeypatch):
         return "prompt qualquer"
 
     monkeypatch.setattr("app.agent.nodes._build_diagnosis_prompt", fake_prompt)
-    monkeypatch.setattr(
-        "app.agent.nodes.invoke_with_hybrid_fallback", _fake_hybrid_fallback_factory()
-    )
+    monkeypatch.setattr("app.agent.nodes.invoke_via_gateway", _fake_gateway_factory())
 
     result = saas_diagnosis_node(
         {"description": "webhook falhando no Salesforce", "retrieved_context": []}

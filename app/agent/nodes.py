@@ -25,7 +25,7 @@ from langgraph.prebuilt import create_react_agent
 
 from app.agent.state import CopilotState, DiagnosisModel
 from app.connectors import get_connector
-from app.llm.factory import invoke_with_hybrid_fallback
+from app.llm.gateway import invoke_via_gateway
 from app.rag.graph_store import (
     GRAPH_UNAVAILABLE_EXCEPTIONS,
     format_graph_context_for_prompt,
@@ -613,12 +613,12 @@ um JSON valido com exatamente esta estrutura (sem texto adicional antes ou depoi
             config={"callbacks": [_langfuse_handler]},
         )
 
-    # Hybrid Inference (DA-20): se `settings.llm_fallback_provider`
-    # estiver configurado e o provider primario (Ollama, tipicamente)
-    # estiver fora do ar, tenta automaticamente com o provider de
-    # fallback antes de desistir - ver app/llm/factory.py.
-    react_result, llm_provider_used = invoke_with_hybrid_fallback(
-        _build_and_invoke, model_name=model_name
+    # AI Gateway v1 (DA-26): centraliza Hybrid Inference (DA-20) +
+    # policy de roteamento por sensibilidade de dado + circuit breaker
+    # + budget - ver app/llm/gateway.py. prompt_text so alimenta a
+    # estimativa de custo, nao afeta a chamada em si.
+    react_result, llm_provider_used = invoke_via_gateway(
+        _build_and_invoke, state=state, prompt_text=prompt, model_name=model_name
     )
 
     last_msg = react_result["messages"][-1]

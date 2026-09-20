@@ -823,3 +823,30 @@ isolation), Tool/Agent Execution Policy, Capability Registry, evolução
 do schema do GraphRAG (`VERIFIED_AS` — verificação humana separada de
 hipótese do LLM), benchmark científico de rerankers para o domínio
 SAP/PT-BR/EN técnico.
+
+### 25. AI Gateway v1 - policy de roteamento, circuit breaker e budget (DA-26)
+
+O "LLM Gateway" existente (`app/llm/factory.py`) era, na prática, um
+LLM Provider Factory — a revisão externa apontou corretamente a
+diferença. `app/llm/gateway.py` (novo) centraliza toda chamada LLM
+(`_run_diagnosis_agent` não chama mais `invoke_with_hybrid_fallback`
+diretamente) e adiciona:
+
+- **Policy de roteamento por sensibilidade**: incidente com dado real
+  de conector (não mock/fallback) é `confidential` e nunca pode ser
+  roteado a um provider cloud — nem como fallback. Fecha um gap real:
+  o setup default (local primário + cloud como fallback) faria um
+  Ollama fora do ar vazar dado real de produção SAP para fora.
+- **Circuit breaker** de verdade por provider (closed/open, cooldown
+  configurável), substituindo o try/except simples da DA-20.
+- **Budget**: estimativa de custo por chamada, rejeitada antes de
+  invocar o provider se ultrapassar um teto configurável.
+- **Audit log** estruturado por tentativa.
+
+Auth permanece na borda HTTP (API key, DA-18/23) — não duplicada
+aqui. Ficam de fora desta v1 (backlog em aberto): PII/DLP de verdade,
+tenant isolation, e circuit breaker compartilhado entre réplicas
+(é in-memory por processo).
+
+**Validação:** `tests/test_llm_gateway.py` (20 testes) — 152 testes
+passando no total (`-m "not integration"`).

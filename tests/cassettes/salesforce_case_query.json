@@ -1,0 +1,13 @@
+{
+  "_source": "Salesforce REST API - SOQL Query (GET /services/data/vXX.X/query?q=...), formato documentado em https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_query.htm - envelope 'records[]' e os campos CaseNumber/Priority/Subject/Status sao os nomes reais do objeto standard Case.",
+  "response": {
+    "records": [
+      {
+        "CaseNumber": "00847",
+        "Priority": "High",
+        "Subject": "Pedido criado no Salesforce nao aparece no SAP SD",
+        "Status": "Working"
+      }
+    ]
+  }
+}

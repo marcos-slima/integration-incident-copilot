@@ -1005,3 +1005,36 @@ ele, jobs enfileirados ficam presos em `"queued"` indefinidamente.
 testada com fakes, sem Redis/RQ reais) e `tests/test_api.py`
 (endpoints `/diagnose/async`, incluindo 503 sem `REDIS_URL` e 404 para
 job inexistente).
+
+**Atualização (avaliação externa, médio prazo item 7 — "Testes de
+contrato dos conectores + Neo4j no CI"):** duas mudanças
+independentes fecham este item, o último dos sete do médio prazo:
+
+1. **Cassettes de conectores** (`tests/cassettes/`): os testes
+   `*_real_mode_success` de `tests/test_connectors.py` e
+   `tests/test_cap_connector.py` (ServiceNow, SAP CPI/OData,
+   Salesforce, Workday, Ariba, CAP) agora carregam o corpo da resposta
+   HTTP simulada de um arquivo `.json` documentado (via
+   `tests/cassette_loader.py::load_cassette()`), em vez de um dict
+   inventado inline no teste — cada cassette tem um campo `_source`
+   apontando para a documentação pública da API real correspondente.
+   **Deliberadamente fora de escopo:** o conector de API Management
+   (schema já autodocumentado como especulativo — corrigi-lo é o item
+   de longo prazo "Validação real do API Management connector") e o
+   RFC (depende do SDK proprietário `pyrfc`, não instalado no CI).
+2. **Smoke test do GraphRAG contra Neo4j real** — novo job
+   `neo4j-smoke` no CI (`.github/workflows/tests.yml`), que sobe um
+   Neo4j real como *service container* e roda
+   `tests/test_graph_store_neo4j_smoke.py` (marker `neo4j_smoke`,
+   `pyproject.toml`). Os testes existentes de `app/rag/graph_store.py`
+   usavam só um `FakeSession` em memória — nunca tinham sido
+   executados contra um Neo4j de verdade, risco apontado
+   explicitamente pela revisão ("schema/constraints em runtime").
+   Localmente (ou no job padrão "test", sem Neo4j disponível), esses
+   testes são pulados (`pytest.skip`) via a própria fixture, não pelo
+   marker `integration` — ver docstring do arquivo para o porquê.
+
+Com isso, **todos os 7 itens do médio prazo da segunda revisão
+arquitetural externa estão fechados** (rate limit global, persistência
+A2A, circuit breaker, redaction de PII, métricas/feedback, fila
+assíncrona e este). Resta só o longo prazo, ainda não autorizado.

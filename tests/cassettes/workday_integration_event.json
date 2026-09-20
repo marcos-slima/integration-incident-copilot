@@ -1,0 +1,7 @@
+{
+  "_source": "Workday REST API - Integration Events resource (GET /ccx/api/v1/{tenant}/integrationEvents/{id}), formato documentado em https://community.workday.com/sites/default/files/file-hosting/restapi/ - campos status/errorMessage sao os nomes reais devolvidos para um evento de integracao com falha.",
+  "response": {
+    "status": "Error",
+    "errorMessage": "Worker_ID nao encontrado"
+  }
+}

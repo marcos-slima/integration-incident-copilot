@@ -967,3 +967,30 @@ job no processo do worker.
 com fakes, sem Redis/RQ reais) e `tests/test_api.py` (endpoints
 `/diagnose/async`, incluindo 503 sem `REDIS_URL` e 404 para job
 inexistente).
+
+**Atualizacao (avaliacao externa, medio prazo item 7 - "Testes de
+contrato dos conectores + Neo4j no CI"):** ultimo item do medio prazo,
+duas mudancas independentes:
+
+1. Cassettes de conectores (tests/cassettes/, tests/cassette_loader.py)
+   - os testes "*_real_mode_success" de tests/test_connectors.py e
+   tests/test_cap_connector.py passam a carregar o corpo da resposta
+   HTTP simulada de arquivos .json documentados (formato real da API,
+   com um campo "_source" apontando a documentacao publica), em vez de
+   dicts inline inventados no teste. APIManagementConnector (schema
+   ja autodocumentado como especulativo) e RFCConnector (depende do
+   SDK proprietario pyrfc) ficam deliberadamente de fora - ver
+   tests/cassettes/README.md.
+2. Novo job "neo4j-smoke" no CI (.github/workflows/tests.yml) - sobe
+   um Neo4j real como service container e roda
+   tests/test_graph_store_neo4j_smoke.py (marker "neo4j_smoke"). Os
+   testes existentes de app/rag/graph_store.py usam um FakeSession em
+   memoria; este smoke test exercita ensure_constraints/
+   upsert_incident_graph/graph_context/verify_incident contra Cypher
+   de verdade pela primeira vez. Marcado so com "neo4j_smoke" (nao
+   "integration") de proposito - ver docstring do arquivo - e pulado
+   via fixture (nao via o hook de skip de integration) quando
+   NEO4J_URI/NEO4J_PASSWORD nao estao configuradas.
+
+Com isso, os 7 itens do medio prazo da segunda revisao arquitetural
+externa estao todos fechados.

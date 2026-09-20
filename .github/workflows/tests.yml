@@ -45,3 +45,75 @@ jobs:
         # Exclui testes marcados como integration: eles exigem Qdrant e Ollama,
         # que não existem no runner do GitHub
         run: uv run pytest -m "not integration" -v --tb=short
+
+  neo4j-smoke:
+    name: smoke test GraphRAG (Neo4j real)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Avaliacao externa (medio prazo, item 7): "smoke test com Neo4j
+    # no CI (service container)". Job separado do "lint + tests"
+    # acima (que roda com "-m 'not integration'", sem nenhuma
+    # infraestrutura externa) - os testes existentes de
+    # app/rag/graph_store.py usam um FakeSession em memoria, nunca
+    # validados contra um Neo4j de verdade (schema/constraints em
+    # runtime, apontado como risco pela revisao). Este job sobe um
+    # Neo4j real como "service container" do GitHub Actions e roda
+    # so tests/test_graph_store_neo4j_smoke.py (marker "neo4j_smoke",
+    # ver pyproject.toml).
+    services:
+      neo4j:
+        image: neo4j:5.26.0-community
+        env:
+          NEO4J_AUTH: neo4j/smoke-test-password
+        ports:
+          - 7687:7687
+        options: >-
+          --health-cmd "wget -qO- http://localhost:7474 || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 20s
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Instalar Python
+        run: uv python install
+
+      - name: Sincronizar dependências
+        run: uv sync --dev
+
+      - name: Aguardar Neo4j aceitar conexoes Bolt
+        # O healthcheck HTTP acima (porta 7474) so garante que o
+        # processo subiu - a porta Bolt (7687, usada pelo driver
+        # app/rag/graph_store.py) pode demorar mais alguns segundos.
+        run: |
+          for i in $(seq 1 30); do
+            if uv run python -c "
+          from neo4j import GraphDatabase
+          driver = GraphDatabase.driver('bolt://127.0.0.1:7687', auth=('neo4j', 'smoke-test-password'))
+          driver.verify_connectivity()
+          driver.close()
+          "; then
+              echo "Neo4j pronto."
+              exit 0
+            fi
+            echo "Aguardando Neo4j (tentativa $i/30)..."
+            sleep 2
+          done
+          echo "Neo4j nao respondeu a tempo." >&2
+          exit 1
+
+      - name: Pytest — smoke test GraphRAG
+        env:
+          NEO4J_URI: bolt://127.0.0.1:7687
+          NEO4J_USER: neo4j
+          NEO4J_PASSWORD: smoke-test-password
+        run: uv run pytest -m neo4j_smoke -v --tb=short

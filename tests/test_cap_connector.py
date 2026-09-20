@@ -4,6 +4,7 @@
 import httpx
 
 from app.connectors.cap_connector import CAPConnector
+from tests.cassette_loader import load_cassette
 
 
 def test_cap_connector_mock_scenario_when_not_configured(monkeypatch):
@@ -39,18 +40,7 @@ def test_cap_connector_real_path_success(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/oauth/token":
             return httpx.Response(200, json={"access_token": "fake-token", "expires_in": 3600})
-        return httpx.Response(
-            200,
-            json={
-                "value": [
-                    {
-                        "ID": "PO-APPROVAL-00042",
-                        "status": "rejected",
-                        "message": "campo obrigatorio ausente",
-                    }
-                ]
-            },
-        )
+        return httpx.Response(200, json=load_cassette("cap_odata_v4_query"))
 
     mock_client = httpx.Client(transport=httpx.MockTransport(handler))
     connector = CAPConnector(client=mock_client)

@@ -1,0 +1,14 @@
+{
+  "_source": "SAP Integration Suite / Cloud Integration - Message Processing Log OData v2 API (MessageStatus), formato documentado em https://help.sap.com/docs/cloud-integration/sap-cloud-integration/message-processing-log-api - envelope 'd.results[]' e o padrao OData v2 do SAP Gateway, campos MessageId/Status/StatusText correspondem as colunas reais do MPL.",
+  "response": {
+    "d": {
+      "results": [
+        {
+          "MessageId": "MSG-001-DEMO",
+          "Status": "FAILED",
+          "StatusText": "Timeout no adapter HTTP de destino"
+        }
+      ]
+    }
+  }
+}

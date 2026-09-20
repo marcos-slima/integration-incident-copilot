@@ -1,7 +1,14 @@
-"""Testes unitarios dos conectores - SAP (mock) e ServiceNow (mock +
-HTTP real via MockTransport) - sem dependencias externas, rodam em
-qualquer maquina, sem precisar de nenhuma stack no ar.
-"""
+"""Testes unitarios dos conectores - SAP (mock) e HTTP real (mock +
+httpx.MockTransport) - sem dependencias externas, rodam em qualquer
+maquina, sem precisar de nenhuma stack no ar.
+
+Avaliacao externa (medio prazo, item 7 - "Testes de contrato dos
+conectores... contra respostas reais documentadas"): os testes
+"*_real_mode_success" abaixo usam corpos de resposta carregados de
+tests/cassettes/ (via tests/cassette_loader.py::load_cassette), no
+formato documentado publicamente pela API real de cada sistema - nao
+mais dicts inventados inline no teste. Ver tests/cassettes/README.md
+para o que esta (e o que deliberadamente NAO esta) coberto."""
 
 import httpx
 import pytest
@@ -15,6 +22,7 @@ from app.connectors.salesforce_connector import SalesforceConnector
 from app.connectors.servicenow_connector import ServiceNowConnector
 from app.connectors.workday_connector import WorkdayConnector
 from app.exceptions import ConfigurationError
+from tests.cassette_loader import load_cassette
 
 
 def test_odata_connector_known_scenario(monkeypatch):
@@ -107,20 +115,7 @@ def test_servicenow_connector_real_mode_success(monkeypatch):
 
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.params["sysparm_query"] == "number=INC0099999"
-        return httpx.Response(
-            200,
-            json={
-                "result": [
-                    {
-                        "number": "INC0099999",
-                        "priority": "2 - High",
-                        "short_description": "SAP OData endpoint timing out",
-                        "category": "Integration",
-                        "cmdb_ci": "SAP S/4HANA PRD",
-                    }
-                ]
-            },
-        )
+        return httpx.Response(200, json=load_cassette("servicenow_incident"))
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
     result = ServiceNowConnector(client=client).fetch("INC0099999")
@@ -138,7 +133,7 @@ def test_servicenow_connector_real_mode_not_found(monkeypatch):
     )
 
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"result": []})
+        return httpx.Response(200, json=load_cassette("servicenow_incident_not_found"))
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
     result = ServiceNowConnector(client=client).fetch("INC-INEXISTENTE")
@@ -186,20 +181,7 @@ def test_odata_connector_real_mode_success(monkeypatch):
             return httpx.Response(200, json={"access_token": "fake-token"})
         assert request.headers["Authorization"] == "Bearer fake-token"
         assert "MSG-001-DEMO" in request.url.params["$filter"]
-        return httpx.Response(
-            200,
-            json={
-                "d": {
-                    "results": [
-                        {
-                            "MessageId": "MSG-001-DEMO",
-                            "Status": "FAILED",
-                            "StatusText": "Timeout no adapter HTTP de destino",
-                        }
-                    ]
-                }
-            },
-        )
+        return httpx.Response(200, json=load_cassette("cpi_message_status"))
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
     result = ODataConnector(client=client).fetch("MSG-001-DEMO")
@@ -243,19 +225,7 @@ def test_salesforce_connector_real_mode_success(monkeypatch):
         if "oauth2/token" in str(request.url):
             return httpx.Response(200, json={"access_token": "fake-token"})
         assert "00847" in request.url.params["q"]
-        return httpx.Response(
-            200,
-            json={
-                "records": [
-                    {
-                        "CaseNumber": "00847",
-                        "Priority": "High",
-                        "Subject": "Pedido criado no Salesforce nao aparece no SAP SD",
-                        "Status": "Working",
-                    }
-                ]
-            },
-        )
+        return httpx.Response(200, json=load_cassette("salesforce_case_query"))
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
     result = SalesforceConnector(client=client).fetch("00847")
@@ -309,10 +279,7 @@ def test_workday_connector_real_mode_success(monkeypatch):
         if "oauth2" in str(request.url):
             return httpx.Response(200, json={"access_token": "fake-token"})
         assert request.url.path.endswith("/integrationEvents/EVT-123")
-        return httpx.Response(
-            200,
-            json={"status": "Error", "errorMessage": "Worker_ID nao encontrado"},
-        )
+        return httpx.Response(200, json=load_cassette("workday_integration_event"))
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
     result = WorkdayConnector(client=client).fetch("EVT-123")
@@ -369,14 +336,7 @@ def test_ariba_connector_real_mode_success(monkeypatch):
         if "oauth" in str(request.url):
             return httpx.Response(200, json={"access_token": "fake-token"})
         assert request.url.path.endswith("/purchase-orders/PO-42")
-        return httpx.Response(
-            200,
-            json={
-                "networkStatus": "Failed",
-                "errorCode": "SUPPLIER_MISMATCH",
-                "detail": "ANID divergente do cadastro em S/4HANA",
-            },
-        )
+        return httpx.Response(200, json=load_cassette("ariba_purchase_order"))
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
     result = AribaConnector(client=client).fetch("PO-42")

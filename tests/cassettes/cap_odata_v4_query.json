@@ -1,0 +1,12 @@
+{
+  "_source": "SAP Cloud Application Programming Model (CAP) - servico OData v4 gerado automaticamente pelo CDS, formato documentado em https://cap.cloud.sap/docs/advanced/odata - envelope 'value[]' e o padrao OData v4 (JSON) usado por qualquer servico CAP, incluindo os gerados pelo proprio bookshop/sample oficial do CAP.",
+  "response": {
+    "value": [
+      {
+        "ID": "PO-APPROVAL-00042",
+        "status": "rejected",
+        "message": "campo obrigatorio ausente"
+      }
+    ]
+  }
+}

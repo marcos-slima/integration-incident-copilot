@@ -276,7 +276,7 @@ existia para o resto do projeto.
 
 ```bash
 # 1. Clonar e instalar
-git clone https://github.com/marcos-slima/integration-incident-copilot.git
+git clone https://github.com/marcos-slima/sap-integration-copilot.git
 cd integration-incident-copilot
 uv sync --extra dev            # so o caminho local-first
 uv sync --extra dev --extra openai   # se tambem quiser testar o provider OpenAI

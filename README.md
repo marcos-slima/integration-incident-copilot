@@ -936,3 +936,40 @@ Fecha os itens P2 do backlog priorizado pela revisão externa. O único
 item restante do backlog completo é o benchmark científico de
 rerankers (P2 também, mas tratado à parte por ser um artefato de
 avaliação, não uma mudança de arquitetura).
+
+### 28. Benchmark científico de rerankers (DA-29)
+
+Último item do backlog da segunda revisão arquitetural externa. O
+reranker de produção (`cross-encoder/ms-marco-MiniLM-L-6-v2`) nunca
+tinha sido comparado formalmente contra alternativas — inclusive
+alternativas **multilíngues**, relevante porque as queries reais são
+majoritariamente em português, enquanto o baseline foi treinado só em
+inglês (MS MARCO).
+
+`scripts/benchmark_rerankers.py` reranqueia o corpus inteiro de
+`data/sample_docs/` (chunked com os mesmos parâmetros de produção)
+contra os 13 casos *in-scope* de `data/eval/rag_eval_dataset.json`,
+para 4 modelos candidatos, medindo Hit@1/Recall@5/MRR@5/nDCG@5
+(lógica pura em `app/rag/eval_metrics.py`, testada sem depender de
+nenhum modelo carregado) + latência + RAM + contagem de parâmetros.
+
+**Resultado:** o candidato multilíngue leve
+(`cross-encoder/mmarco-mMiniLMv2-L12-H384-v1`) supera o baseline em
+toda métrica de qualidade (Hit@1 0.85→0.92, MRR@5 0.92→0.96, nDCG@5
+0.94→0.97) e empata em qualidade com um candidato multilíngue maior
+(`BAAI/bge-reranker-base`) sendo 3.5x mais rápido. Metodologia
+completa, resultados detalhados por query e a recomendação (não
+aplicada nesta fase — troca de uma linha, documentada, pendente de
+decisão do operador) em `docs/RERANKER_BENCHMARK.md`.
+
+**Validação:** `tests/test_eval_metrics.py` (15 testes, lógica pura de
+ranking) — 195 testes passando no total (`-m "not integration"`). O
+benchmark em si (`scripts/benchmark_rerankers.py`) não roda no CI/
+suíte de testes — baixa 4 modelos reais do Hugging Face Hub e mede
+latência real, mesmo tratamento dado a `scripts/eval_rag.py` (scripts
+de avaliação ficam fora de `-m "not integration"`, que cobre só a
+suíte de testes automatizada).
+
+Com isso, **todos os itens do backlog da segunda revisão arquitetural
+externa estão fechados** (P0/P1/P2 — ver `learnings.md` do projeto
+para o histórico completo item a item).

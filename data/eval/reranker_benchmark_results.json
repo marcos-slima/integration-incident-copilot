@@ -1,0 +1,1058 @@
+[
+  {
+    "key": "ms-marco-L6",
+    "hf_id": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+    "notes": "Baseline atual de producao (app/rag/retriever.py::RERANKER_MODEL). Ingles apenas (MS MARCO).",
+    "ok": true,
+    "error": null,
+    "hit_at_1": 0.8461538461538461,
+    "recall_at_5": 1.0,
+    "mrr_at_5": 0.9230769230769231,
+    "ndcg_at_5": 0.9432199620879166,
+    "avg_latency_ms": 786.5344500769424,
+    "p95_latency_ms": 812.8690339999594,
+    "rss_delta_mb": 45.03515625,
+    "param_count": 22713601,
+    "per_query": [
+      {
+        "query": "IDoc travado com status 51",
+        "difficulty": "easy",
+        "expected_sources": [
+          "idoc_status_51.md"
+        ],
+        "top5": [
+          "idoc_status_51.md",
+          "servicenow_itsm_alert.md",
+          "ariba_po_supplier_mismatch.md",
+          "odata_timeout_cpi.md",
+          "rfc_gateway_pool_timeout.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 758.0
+      },
+      {
+        "query": "iFlow retornando HTTP 401 ao autenticar via OAuth2",
+        "difficulty": "easy",
+        "expected_sources": [
+          "cpi_http_401.md"
+        ],
+        "top5": [
+          "cpi_http_401.md",
+          "odata_timeout_cpi.md",
+          "servicenow_itsm_alert.md",
+          "cap_custom_purchase_approval_failure.md",
+          "idoc_status_51.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 799.0
+      },
+      {
+        "query": "RFC connection refused na porta 3300",
+        "difficulty": "easy",
+        "expected_sources": [
+          "rfc_connection_refused.md"
+        ],
+        "top5": [
+          "rfc_connection_refused.md",
+          "rfc_gateway_pool_timeout.md",
+          "salesforce_case_sap_sync_failure.md",
+          "servicenow_itsm_alert.md",
+          "cpi_http_401.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 741.3
+      },
+      {
+        "query": "timeout ao consumir servico OData sem filtro retornando muitos registros",
+        "difficulty": "easy",
+        "expected_sources": [
+          "odata_timeout_cpi.md"
+        ],
+        "top5": [
+          "odata_timeout_cpi.md",
+          "cap_custom_purchase_approval_failure.md",
+          "rfc_gateway_pool_timeout.md",
+          "ariba_po_supplier_mismatch.md",
+          "workday_successfactors_sync_error.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 847.5
+      },
+      {
+        "query": "SAP Gateway pool de conexoes RFC esgotado",
+        "difficulty": "medium",
+        "expected_sources": [
+          "rfc_gateway_pool_timeout.md"
+        ],
+        "top5": [
+          "rfc_gateway_pool_timeout.md",
+          "odata_timeout_cpi.md",
+          "rfc_connection_refused.md",
+          "salesforce_case_sap_sync_failure.md",
+          "servicenow_itsm_alert.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 765.9
+      },
+      {
+        "query": "pedido de compra Ariba fornecedor diferente do SAP",
+        "difficulty": "medium",
+        "expected_sources": [
+          "ariba_po_supplier_mismatch.md"
+        ],
+        "top5": [
+          "ariba_po_supplier_mismatch.md",
+          "salesforce_case_sap_sync_failure.md",
+          "cap_custom_purchase_approval_failure.md",
+          "servicenow_itsm_alert.md",
+          "odata_timeout_cpi.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 798.3
+      },
+      {
+        "query": "caso ServiceNow nao sincroniza com SAP",
+        "difficulty": "medium",
+        "expected_sources": [
+          "servicenow_itsm_alert.md"
+        ],
+        "top5": [
+          "salesforce_case_sap_sync_failure.md",
+          "servicenow_itsm_alert.md",
+          "ariba_po_supplier_mismatch.md",
+          "odata_timeout_cpi.md",
+          "cpi_http_401.md"
+        ],
+        "hit_at_1": 0,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 0.5,
+        "ndcg_at_5": 0.6309297535714575,
+        "latency_ms": 766.1
+      },
+      {
+        "query": "Salesforce case nao atualiza no SAP",
+        "difficulty": "medium",
+        "expected_sources": [
+          "salesforce_case_sap_sync_failure.md"
+        ],
+        "top5": [
+          "salesforce_case_sap_sync_failure.md",
+          "servicenow_itsm_alert.md",
+          "cpi_http_401.md",
+          "ariba_po_supplier_mismatch.md",
+          "workday_successfactors_sync_error.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 758.2
+      },
+      {
+        "query": "campo obrigatorio faltando no servico CAP BTP retorna 422",
+        "difficulty": "hard",
+        "expected_sources": [
+          "cap_custom_purchase_approval_failure.md"
+        ],
+        "top5": [
+          "cap_custom_purchase_approval_failure.md",
+          "salesforce_case_sap_sync_failure.md",
+          "workday_successfactors_sync_error.md",
+          "odata_timeout_cpi.md",
+          "servicenow_itsm_alert.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 808.9
+      },
+      {
+        "query": "erro de sincronizacao Workday SuccessFactors",
+        "difficulty": "hard",
+        "expected_sources": [
+          "workday_successfactors_sync_error.md"
+        ],
+        "top5": [
+          "workday_successfactors_sync_error.md",
+          "ariba_po_supplier_mismatch.md",
+          "salesforce_case_sap_sync_failure.md",
+          "rfc_gateway_pool_timeout.md",
+          "idoc_status_51.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 780.3
+      },
+      {
+        "query": "IDoc ORDERS com status 51 material nao cadastrado na planta",
+        "difficulty": "easy",
+        "expected_sources": [
+          "idoc_status_51.md"
+        ],
+        "top5": [
+          "idoc_status_51.md",
+          "ariba_po_supplier_mismatch.md",
+          "cpi_http_401.md",
+          "servicenow_itsm_alert.md",
+          "workday_successfactors_sync_error.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 795.3
+      },
+      {
+        "query": "SM59 nao consegue conectar no sistema destino",
+        "difficulty": "easy",
+        "expected_sources": [
+          "rfc_connection_refused.md"
+        ],
+        "top5": [
+          "rfc_connection_refused.md",
+          "rfc_gateway_pool_timeout.md",
+          "idoc_status_51.md",
+          "cpi_http_401.md",
+          "servicenow_itsm_alert.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 793.4
+      },
+      {
+        "query": "autenticacao falhou no adapter HTTP do iFlow Integration Suite",
+        "difficulty": "medium",
+        "expected_sources": [
+          "cpi_http_401.md"
+        ],
+        "top5": [
+          "odata_timeout_cpi.md",
+          "cpi_http_401.md",
+          "servicenow_itsm_alert.md",
+          "salesforce_case_sap_sync_failure.md",
+          "cap_custom_purchase_approval_failure.md"
+        ],
+        "hit_at_1": 0,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 0.5,
+        "ndcg_at_5": 0.6309297535714575,
+        "latency_ms": 812.9
+      }
+    ]
+  },
+  {
+    "key": "ms-marco-L12",
+    "hf_id": "cross-encoder/ms-marco-MiniLM-L-12-v2",
+    "notes": "Mesma familia do baseline, mais profundo (12 camadas vs 6). Ingles apenas.",
+    "ok": true,
+    "error": null,
+    "hit_at_1": 0.8461538461538461,
+    "recall_at_5": 1.0,
+    "mrr_at_5": 0.9230769230769231,
+    "ndcg_at_5": 0.9432199620879166,
+    "avg_latency_ms": 1551.7443640765823,
+    "p95_latency_ms": 1593.0632269992202,
+    "rss_delta_mb": 48.79296875,
+    "param_count": 33360385,
+    "per_query": [
+      {
+        "query": "IDoc travado com status 51",
+        "difficulty": "easy",
+        "expected_sources": [
+          "idoc_status_51.md"
+        ],
+        "top5": [
+          "idoc_status_51.md",
+          "servicenow_itsm_alert.md",
+          "ariba_po_supplier_mismatch.md",
+          "workday_successfactors_sync_error.md",
+          "rfc_gateway_pool_timeout.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 1579.1
+      },
+      {
+        "query": "iFlow retornando HTTP 401 ao autenticar via OAuth2",
+        "difficulty": "easy",
+        "expected_sources": [
+          "cpi_http_401.md"
+        ],
+        "top5": [
+          "cpi_http_401.md",
+          "odata_timeout_cpi.md",
+          "servicenow_itsm_alert.md",
+          "salesforce_case_sap_sync_failure.md",
+          "cap_custom_purchase_approval_failure.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 1589.4
+      },
+      {
+        "query": "RFC connection refused na porta 3300",
+        "difficulty": "easy",
+        "expected_sources": [
+          "rfc_connection_refused.md"
+        ],
+        "top5": [
+          "rfc_connection_refused.md",
+          "rfc_gateway_pool_timeout.md",
+          "salesforce_case_sap_sync_failure.md",
+          "servicenow_itsm_alert.md",
+          "cap_custom_purchase_approval_failure.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 1437.2
+      },
+      {
+        "query": "timeout ao consumir servico OData sem filtro retornando muitos registros",
+        "difficulty": "easy",
+        "expected_sources": [
+          "odata_timeout_cpi.md"
+        ],
+        "top5": [
+          "odata_timeout_cpi.md",
+          "cap_custom_purchase_approval_failure.md",
+          "rfc_gateway_pool_timeout.md",
+          "ariba_po_supplier_mismatch.md",
+          "salesforce_case_sap_sync_failure.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 1656.4
+      },
+      {
+        "query": "SAP Gateway pool de conexoes RFC esgotado",
+        "difficulty": "medium",
+        "expected_sources": [
+          "rfc_gateway_pool_timeout.md"
+        ],
+        "top5": [
+          "rfc_gateway_pool_timeout.md",
+          "odata_timeout_cpi.md",
+          "rfc_connection_refused.md",
+          "salesforce_case_sap_sync_failure.md",
+          "servicenow_itsm_alert.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 1503.7
+      },
+      {
+        "query": "pedido de compra Ariba fornecedor diferente do SAP",
+        "difficulty": "medium",
+        "expected_sources": [
+          "ariba_po_supplier_mismatch.md"
+        ],
+        "top5": [
+          "ariba_po_supplier_mismatch.md",
+          "salesforce_case_sap_sync_failure.md",
+          "cap_custom_purchase_approval_failure.md",
+          "idoc_status_51.md",
+          "servicenow_itsm_alert.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 1579.4
+      },
+      {
+        "query": "caso ServiceNow nao sincroniza com SAP",
+        "difficulty": "medium",
+        "expected_sources": [
+          "servicenow_itsm_alert.md"
+        ],
+        "top5": [
+          "salesforce_case_sap_sync_failure.md",
+          "servicenow_itsm_alert.md",
+          "cpi_http_401.md",
+          "odata_timeout_cpi.md",
+          "ariba_po_supplier_mismatch.md"
+        ],
+        "hit_at_1": 0,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 0.5,
+        "ndcg_at_5": 0.6309297535714575,
+        "latency_ms": 1508.7
+      },
+      {
+        "query": "Salesforce case nao atualiza no SAP",
+        "difficulty": "medium",
+        "expected_sources": [
+          "salesforce_case_sap_sync_failure.md"
+        ],
+        "top5": [
+          "salesforce_case_sap_sync_failure.md",
+          "servicenow_itsm_alert.md",
+          "cpi_http_401.md",
+          "cap_custom_purchase_approval_failure.md",
+          "workday_successfactors_sync_error.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 1496.8
+      },
+      {
+        "query": "campo obrigatorio faltando no servico CAP BTP retorna 422",
+        "difficulty": "hard",
+        "expected_sources": [
+          "cap_custom_purchase_approval_failure.md"
+        ],
+        "top5": [
+          "cap_custom_purchase_approval_failure.md",
+          "salesforce_case_sap_sync_failure.md",
+          "workday_successfactors_sync_error.md",
+          "rfc_connection_refused.md",
+          "servicenow_itsm_alert.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 1593.1
+      },
+      {
+        "query": "erro de sincronizacao Workday SuccessFactors",
+        "difficulty": "hard",
+        "expected_sources": [
+          "workday_successfactors_sync_error.md"
+        ],
+        "top5": [
+          "workday_successfactors_sync_error.md",
+          "ariba_po_supplier_mismatch.md",
+          "salesforce_case_sap_sync_failure.md",
+          "rfc_gateway_pool_timeout.md",
+          "idoc_status_51.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 1561.0
+      },
+      {
+        "query": "IDoc ORDERS com status 51 material nao cadastrado na planta",
+        "difficulty": "easy",
+        "expected_sources": [
+          "idoc_status_51.md"
+        ],
+        "top5": [
+          "idoc_status_51.md",
+          "ariba_po_supplier_mismatch.md",
+          "servicenow_itsm_alert.md",
+          "cpi_http_401.md",
+          "workday_successfactors_sync_error.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 1551.0
+      },
+      {
+        "query": "SM59 nao consegue conectar no sistema destino",
+        "difficulty": "easy",
+        "expected_sources": [
+          "rfc_connection_refused.md"
+        ],
+        "top5": [
+          "rfc_connection_refused.md",
+          "rfc_gateway_pool_timeout.md",
+          "idoc_status_51.md",
+          "cpi_http_401.md",
+          "servicenow_itsm_alert.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 1574.1
+      },
+      {
+        "query": "autenticacao falhou no adapter HTTP do iFlow Integration Suite",
+        "difficulty": "medium",
+        "expected_sources": [
+          "cpi_http_401.md"
+        ],
+        "top5": [
+          "odata_timeout_cpi.md",
+          "cpi_http_401.md",
+          "servicenow_itsm_alert.md",
+          "salesforce_case_sap_sync_failure.md",
+          "cap_custom_purchase_approval_failure.md"
+        ],
+        "hit_at_1": 0,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 0.5,
+        "ndcg_at_5": 0.6309297535714575,
+        "latency_ms": 1542.9
+      }
+    ]
+  },
+  {
+    "key": "mmarco-mMiniLMv2",
+    "hf_id": "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
+    "notes": "Treinado no mMARCO (MS MARCO traduzido, incluindo portugues) - candidato multilingue leve.",
+    "ok": true,
+    "error": null,
+    "hit_at_1": 0.9230769230769231,
+    "recall_at_5": 1.0,
+    "mrr_at_5": 0.9615384615384616,
+    "ndcg_at_5": 0.9716099810439582,
+    "avg_latency_ms": 1194.5336053845144,
+    "p95_latency_ms": 1254.9113920003947,
+    "rss_delta_mb": 430.35546875,
+    "param_count": 117641089,
+    "per_query": [
+      {
+        "query": "IDoc travado com status 51",
+        "difficulty": "easy",
+        "expected_sources": [
+          "idoc_status_51.md"
+        ],
+        "top5": [
+          "idoc_status_51.md",
+          "servicenow_itsm_alert.md",
+          "ariba_po_supplier_mismatch.md",
+          "workday_successfactors_sync_error.md",
+          "rfc_gateway_pool_timeout.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 1150.6
+      },
+      {
+        "query": "iFlow retornando HTTP 401 ao autenticar via OAuth2",
+        "difficulty": "easy",
+        "expected_sources": [
+          "cpi_http_401.md"
+        ],
+        "top5": [
+          "cpi_http_401.md",
+          "odata_timeout_cpi.md",
+          "servicenow_itsm_alert.md",
+          "ariba_po_supplier_mismatch.md",
+          "rfc_gateway_pool_timeout.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 1203.6
+      },
+      {
+        "query": "RFC connection refused na porta 3300",
+        "difficulty": "easy",
+        "expected_sources": [
+          "rfc_connection_refused.md"
+        ],
+        "top5": [
+          "rfc_connection_refused.md",
+          "rfc_gateway_pool_timeout.md",
+          "servicenow_itsm_alert.md",
+          "ariba_po_supplier_mismatch.md",
+          "salesforce_case_sap_sync_failure.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 1161.3
+      },
+      {
+        "query": "timeout ao consumir servico OData sem filtro retornando muitos registros",
+        "difficulty": "easy",
+        "expected_sources": [
+          "odata_timeout_cpi.md"
+        ],
+        "top5": [
+          "odata_timeout_cpi.md",
+          "cap_custom_purchase_approval_failure.md",
+          "servicenow_itsm_alert.md",
+          "idoc_status_51.md",
+          "rfc_gateway_pool_timeout.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 1210.7
+      },
+      {
+        "query": "SAP Gateway pool de conexoes RFC esgotado",
+        "difficulty": "medium",
+        "expected_sources": [
+          "rfc_gateway_pool_timeout.md"
+        ],
+        "top5": [
+          "rfc_gateway_pool_timeout.md",
+          "odata_timeout_cpi.md",
+          "rfc_connection_refused.md",
+          "servicenow_itsm_alert.md",
+          "salesforce_case_sap_sync_failure.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 1188.7
+      },
+      {
+        "query": "pedido de compra Ariba fornecedor diferente do SAP",
+        "difficulty": "medium",
+        "expected_sources": [
+          "ariba_po_supplier_mismatch.md"
+        ],
+        "top5": [
+          "ariba_po_supplier_mismatch.md",
+          "salesforce_case_sap_sync_failure.md",
+          "servicenow_itsm_alert.md",
+          "rfc_gateway_pool_timeout.md",
+          "cpi_http_401.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 1150.0
+      },
+      {
+        "query": "caso ServiceNow nao sincroniza com SAP",
+        "difficulty": "medium",
+        "expected_sources": [
+          "servicenow_itsm_alert.md"
+        ],
+        "top5": [
+          "servicenow_itsm_alert.md",
+          "salesforce_case_sap_sync_failure.md",
+          "rfc_connection_refused.md",
+          "ariba_po_supplier_mismatch.md",
+          "workday_successfactors_sync_error.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 1160.1
+      },
+      {
+        "query": "Salesforce case nao atualiza no SAP",
+        "difficulty": "medium",
+        "expected_sources": [
+          "salesforce_case_sap_sync_failure.md"
+        ],
+        "top5": [
+          "salesforce_case_sap_sync_failure.md",
+          "servicenow_itsm_alert.md",
+          "cpi_http_401.md",
+          "cap_custom_purchase_approval_failure.md",
+          "rfc_connection_refused.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 1190.6
+      },
+      {
+        "query": "campo obrigatorio faltando no servico CAP BTP retorna 422",
+        "difficulty": "hard",
+        "expected_sources": [
+          "cap_custom_purchase_approval_failure.md"
+        ],
+        "top5": [
+          "cap_custom_purchase_approval_failure.md",
+          "servicenow_itsm_alert.md",
+          "ariba_po_supplier_mismatch.md",
+          "salesforce_case_sap_sync_failure.md",
+          "workday_successfactors_sync_error.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 1236.7
+      },
+      {
+        "query": "erro de sincronizacao Workday SuccessFactors",
+        "difficulty": "hard",
+        "expected_sources": [
+          "workday_successfactors_sync_error.md"
+        ],
+        "top5": [
+          "workday_successfactors_sync_error.md",
+          "ariba_po_supplier_mismatch.md",
+          "salesforce_case_sap_sync_failure.md",
+          "rfc_gateway_pool_timeout.md",
+          "servicenow_itsm_alert.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 1254.9
+      },
+      {
+        "query": "IDoc ORDERS com status 51 material nao cadastrado na planta",
+        "difficulty": "easy",
+        "expected_sources": [
+          "idoc_status_51.md"
+        ],
+        "top5": [
+          "idoc_status_51.md",
+          "servicenow_itsm_alert.md",
+          "workday_successfactors_sync_error.md",
+          "rfc_gateway_pool_timeout.md",
+          "cpi_http_401.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 1269.9
+      },
+      {
+        "query": "SM59 nao consegue conectar no sistema destino",
+        "difficulty": "easy",
+        "expected_sources": [
+          "rfc_connection_refused.md"
+        ],
+        "top5": [
+          "rfc_connection_refused.md",
+          "rfc_gateway_pool_timeout.md",
+          "servicenow_itsm_alert.md",
+          "cpi_http_401.md",
+          "ariba_po_supplier_mismatch.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 1161.8
+      },
+      {
+        "query": "autenticacao falhou no adapter HTTP do iFlow Integration Suite",
+        "difficulty": "medium",
+        "expected_sources": [
+          "cpi_http_401.md"
+        ],
+        "top5": [
+          "odata_timeout_cpi.md",
+          "cpi_http_401.md",
+          "salesforce_case_sap_sync_failure.md",
+          "workday_successfactors_sync_error.md",
+          "servicenow_itsm_alert.md"
+        ],
+        "hit_at_1": 0,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 0.5,
+        "ndcg_at_5": 0.6309297535714575,
+        "latency_ms": 1190.1
+      }
+    ]
+  },
+  {
+    "key": "bge-reranker-base",
+    "hf_id": "BAAI/bge-reranker-base",
+    "notes": "Multilingue (100+ idiomas, incluindo PT), maior que os demais candidatos (~1.1GB).",
+    "ok": true,
+    "error": null,
+    "hit_at_1": 0.9230769230769231,
+    "recall_at_5": 1.0,
+    "mrr_at_5": 0.9615384615384616,
+    "ndcg_at_5": 0.9716099810439582,
+    "avg_latency_ms": 4171.4454707693785,
+    "p95_latency_ms": 4281.022401999508,
+    "rss_delta_mb": 379.09375,
+    "param_count": 278044417,
+    "per_query": [
+      {
+        "query": "IDoc travado com status 51",
+        "difficulty": "easy",
+        "expected_sources": [
+          "idoc_status_51.md"
+        ],
+        "top5": [
+          "idoc_status_51.md",
+          "servicenow_itsm_alert.md",
+          "workday_successfactors_sync_error.md",
+          "rfc_gateway_pool_timeout.md",
+          "ariba_po_supplier_mismatch.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 4065.9
+      },
+      {
+        "query": "iFlow retornando HTTP 401 ao autenticar via OAuth2",
+        "difficulty": "easy",
+        "expected_sources": [
+          "cpi_http_401.md"
+        ],
+        "top5": [
+          "cpi_http_401.md",
+          "rfc_gateway_pool_timeout.md",
+          "odata_timeout_cpi.md",
+          "salesforce_case_sap_sync_failure.md",
+          "cap_custom_purchase_approval_failure.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 4401.2
+      },
+      {
+        "query": "RFC connection refused na porta 3300",
+        "difficulty": "easy",
+        "expected_sources": [
+          "rfc_connection_refused.md"
+        ],
+        "top5": [
+          "rfc_connection_refused.md",
+          "ariba_po_supplier_mismatch.md",
+          "rfc_gateway_pool_timeout.md",
+          "workday_successfactors_sync_error.md",
+          "cap_custom_purchase_approval_failure.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 4067.9
+      },
+      {
+        "query": "timeout ao consumir servico OData sem filtro retornando muitos registros",
+        "difficulty": "easy",
+        "expected_sources": [
+          "odata_timeout_cpi.md"
+        ],
+        "top5": [
+          "odata_timeout_cpi.md",
+          "rfc_gateway_pool_timeout.md",
+          "cap_custom_purchase_approval_failure.md",
+          "ariba_po_supplier_mismatch.md",
+          "rfc_connection_refused.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 4249.0
+      },
+      {
+        "query": "SAP Gateway pool de conexoes RFC esgotado",
+        "difficulty": "medium",
+        "expected_sources": [
+          "rfc_gateway_pool_timeout.md"
+        ],
+        "top5": [
+          "odata_timeout_cpi.md",
+          "rfc_gateway_pool_timeout.md",
+          "rfc_connection_refused.md",
+          "idoc_status_51.md",
+          "workday_successfactors_sync_error.md"
+        ],
+        "hit_at_1": 0,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 0.5,
+        "ndcg_at_5": 0.6309297535714575,
+        "latency_ms": 4140.5
+      },
+      {
+        "query": "pedido de compra Ariba fornecedor diferente do SAP",
+        "difficulty": "medium",
+        "expected_sources": [
+          "ariba_po_supplier_mismatch.md"
+        ],
+        "top5": [
+          "ariba_po_supplier_mismatch.md",
+          "salesforce_case_sap_sync_failure.md",
+          "cap_custom_purchase_approval_failure.md",
+          "servicenow_itsm_alert.md",
+          "rfc_gateway_pool_timeout.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 4066.5
+      },
+      {
+        "query": "caso ServiceNow nao sincroniza com SAP",
+        "difficulty": "medium",
+        "expected_sources": [
+          "servicenow_itsm_alert.md"
+        ],
+        "top5": [
+          "servicenow_itsm_alert.md",
+          "salesforce_case_sap_sync_failure.md",
+          "ariba_po_supplier_mismatch.md",
+          "workday_successfactors_sync_error.md",
+          "rfc_gateway_pool_timeout.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 4123.5
+      },
+      {
+        "query": "Salesforce case nao atualiza no SAP",
+        "difficulty": "medium",
+        "expected_sources": [
+          "salesforce_case_sap_sync_failure.md"
+        ],
+        "top5": [
+          "salesforce_case_sap_sync_failure.md",
+          "ariba_po_supplier_mismatch.md",
+          "servicenow_itsm_alert.md",
+          "cap_custom_purchase_approval_failure.md",
+          "workday_successfactors_sync_error.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 4074.1
+      },
+      {
+        "query": "campo obrigatorio faltando no servico CAP BTP retorna 422",
+        "difficulty": "hard",
+        "expected_sources": [
+          "cap_custom_purchase_approval_failure.md"
+        ],
+        "top5": [
+          "cap_custom_purchase_approval_failure.md",
+          "rfc_gateway_pool_timeout.md",
+          "ariba_po_supplier_mismatch.md",
+          "workday_successfactors_sync_error.md",
+          "salesforce_case_sap_sync_failure.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 4253.5
+      },
+      {
+        "query": "erro de sincronizacao Workday SuccessFactors",
+        "difficulty": "hard",
+        "expected_sources": [
+          "workday_successfactors_sync_error.md"
+        ],
+        "top5": [
+          "workday_successfactors_sync_error.md",
+          "ariba_po_supplier_mismatch.md",
+          "servicenow_itsm_alert.md",
+          "cap_custom_purchase_approval_failure.md",
+          "rfc_gateway_pool_timeout.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 4165.2
+      },
+      {
+        "query": "IDoc ORDERS com status 51 material nao cadastrado na planta",
+        "difficulty": "easy",
+        "expected_sources": [
+          "idoc_status_51.md"
+        ],
+        "top5": [
+          "idoc_status_51.md",
+          "servicenow_itsm_alert.md",
+          "ariba_po_supplier_mismatch.md",
+          "cap_custom_purchase_approval_failure.md",
+          "workday_successfactors_sync_error.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 4281.0
+      },
+      {
+        "query": "SM59 nao consegue conectar no sistema destino",
+        "difficulty": "easy",
+        "expected_sources": [
+          "rfc_connection_refused.md"
+        ],
+        "top5": [
+          "rfc_connection_refused.md",
+          "rfc_gateway_pool_timeout.md",
+          "cap_custom_purchase_approval_failure.md",
+          "servicenow_itsm_alert.md",
+          "ariba_po_supplier_mismatch.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 4108.9
+      },
+      {
+        "query": "autenticacao falhou no adapter HTTP do iFlow Integration Suite",
+        "difficulty": "medium",
+        "expected_sources": [
+          "cpi_http_401.md"
+        ],
+        "top5": [
+          "cpi_http_401.md",
+          "odata_timeout_cpi.md",
+          "workday_successfactors_sync_error.md",
+          "ariba_po_supplier_mismatch.md",
+          "servicenow_itsm_alert.md"
+        ],
+        "hit_at_1": 1,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "latency_ms": 4231.7
+      }
+    ]
+  }
+]

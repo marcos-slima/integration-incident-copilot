@@ -93,4 +93,14 @@ dev = [
 testpaths = ["tests"]
 markers = [
     "integration: requer stack local viva (Qdrant/Ollama); pulado automaticamente se indisponivel",
+    # Avaliacao externa (medio prazo, item 7): smoke test do GraphRAG
+    # contra um Neo4j REAL (nao o FakeSession de tests/test_graph_store.py).
+    # Selecionado explicitamente pelo job dedicado "neo4j-smoke" do CI
+    # (.github/workflows/tests.yml, "pytest -m neo4j_smoke"). Nao leva
+    # o marker "integration" acima de proposito (ver docstring de
+    # tests/test_graph_store_neo4j_smoke.py) - a propria fixture do
+    # teste pula (pytest.skip) quando NEO4J_URI/NEO4J_PASSWORD nao
+    # estao configuradas, o que ja cobre "sem Neo4j disponivel" tanto
+    # localmente quanto no job padrao "test" ('-m "not integration"').
+    "neo4j_smoke: requer um Neo4j real vivo (GRAPH_RAG_ENABLED + credenciais); ver job 'neo4j-smoke' do CI",
 ]

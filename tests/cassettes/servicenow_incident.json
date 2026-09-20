@@ -1,0 +1,14 @@
+{
+  "_source": "ServiceNow Table API (GET /api/now/table/incident?sysparm_query=...) - formato documentado em https://docs.servicenow.com/bundle/latest-release-notes/page/integrate/inbound-rest/concept/c_TableAPI.html - campos number/priority/short_description/category/cmdb_ci sao os nomes reais de coluna da tabela [incident].",
+  "response": {
+    "result": [
+      {
+        "number": "INC0099999",
+        "priority": "2 - High",
+        "short_description": "SAP OData endpoint timing out",
+        "category": "Integration",
+        "cmdb_ci": "SAP S/4HANA PRD"
+      }
+    ]
+  }
+}

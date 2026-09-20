@@ -1,0 +1,6 @@
+{
+  "_source": "ServiceNow Table API - lista vazia e a resposta real quando sysparm_query nao casa nenhum registro (200 OK, nao 404 - a Table API so devolve 404 para um sys_id invalido no path, nao para uma query sem match).",
+  "response": {
+    "result": []
+  }
+}

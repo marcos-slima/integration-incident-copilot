@@ -1,0 +1,8 @@
+{
+  "_source": "SAP Ariba Network Purchase Order Integration API (GET /api/purchase-orders/v1/...), formato documentado em https://developer.ariba.com/api/ - campos networkStatus/errorCode/detail refletem o formato real de status de transmissao de PO da Ariba Network.",
+  "response": {
+    "networkStatus": "Failed",
+    "errorCode": "SUPPLIER_MISMATCH",
+    "detail": "ANID divergente do cadastro em S/4HANA"
+  }
+}

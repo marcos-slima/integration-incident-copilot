@@ -251,7 +251,14 @@ def sanitize_untrusted_input(text: str | None, field_name: str = "input") -> str
     Remove ou neutraliza padroes de prompt injection conhecidos.
     Nao e uma protecao completa — defense in depth, nao silver bullet.
     Campos sanitizados: description, logs, payload, connector_data,
-    chunks do RAG (que podem vir de PDFs externos).
+    chunks do RAG (que podem vir de PDFs externos) e resultados de
+    busca web (paginas de terceiros, mesmo grau de confianca que um
+    PDF externo). Avaliacao externa (nova revisao, P1): antes desta
+    correcao, a docstring ja afirmava isso, mas description e o
+    resultado de busca web eram interpolados CRUS em
+    _build_diagnosis_prompt() - o unico campo de fato nao confiavel
+    (digitado livremente pelo usuario) que chegava ao LLM sem passar
+    por aqui era justamente o mais obvio.
 
     Args:
         text: Texto a sanitizar
@@ -352,16 +359,19 @@ Dados coletados diretamente do sistema SAP (via conector {data.source_system}{" 
     web_results = state.get("web_search_results", [])
     web_block = ""
     if web_results and web_results[0].get("source") == "web_search":
+        safe_web_text = sanitize_untrusted_input(web_results[0]["text"][:2000], "web_search_result")
         web_block = f"""
 Resultado de busca web (SAP Community / GitHub SAP) como contexto adicional:
-{web_results[0]["text"][:2000]}
+{safe_web_text}
 [Fonte: busca web - use como referencia secundaria, prefira o documento RAG acima se disponivel]
 """
+
+    safe_description = sanitize_untrusted_input(state["description"], "description")
 
     return f"""{persona}
 
 Incidente reportado:
-{state["description"]}
+{safe_description}
 {extras}{connector_block}
 Contexto recuperado da base de conhecimento de incidentes:
 {context_block}

@@ -25,6 +25,7 @@ from langgraph.prebuilt import create_react_agent
 
 from app.agent.state import CopilotState, DiagnosisModel
 from app.connectors import get_connector
+from app.llm.factory import TRANSPORT_FAILURE_EXCEPTIONS
 from app.llm.gateway import invoke_via_gateway
 from app.rag.graph_store import (
     GRAPH_UNAVAILABLE_EXCEPTIONS,
@@ -614,11 +615,45 @@ um JSON valido com exatamente esta estrutura (sem texto adicional antes ou depoi
 }"""
 
     def _build_and_invoke(llm):
-        react_agent = create_react_agent(llm, tools=[web_tool])
-        return react_agent.invoke(
-            {"messages": [{"role": "user", "content": prompt + json_instruction}]},
-            config={"callbacks": [_langfuse_handler]},
-        )
+        # Avaliacao externa (curto prazo, item 5): "structured output de
+        # verdade" - response_format=DiagnosisModel faz o
+        # create_react_agent (langgraph>=1.x) rodar uma chamada ADICIONAL
+        # ao LLM apos o loop ReAct terminar, usando with_structured_output
+        # de verdade (tool-calling nativo do provider), e devolve o
+        # resultado ja validado em react_result["structured_response"] -
+        # nao mais so um texto que a gente torce pra estar em JSON. O
+        # parsing por regex abaixo (_extract_diagnosis_from_raw_message)
+        # deixa de ser o caminho principal e vira o ULTIMO fallback, so
+        # usado quando structured_response nao vem preenchido.
+        react_agent = create_react_agent(llm, tools=[web_tool], response_format=DiagnosisModel)
+        messages = {"messages": [{"role": "user", "content": prompt + json_instruction}]}
+        config = {"callbacks": [_langfuse_handler]}
+        try:
+            return react_agent.invoke(messages, config=config)
+        except TRANSPORT_FAILURE_EXCEPTIONS:
+            # Nao e um problema do structured output - e o provider
+            # inalcancavel. Deixa subir sem tratamento especial, para o
+            # AI Gateway (invoke_via_gateway, DA-26) decidir circuit
+            # breaker/fallback normalmente, exatamente como antes desta
+            # mudanca.
+            raise
+        except Exception as exc:  # noqa: BLE001
+            # A chamada ADICIONAL de structured output falhou por algum
+            # motivo especifico de aplicacao (ex: o modelo nao suporta
+            # tool-calling bem o suficiente para with_structured_output,
+            # ou devolveu algo que nao bate com o schema). Refaz o MESMO
+            # ReAct sem response_format - volta pro comportamento de
+            # antes desta mudanca (texto + parsing por regex abaixo),
+            # em vez de deixar a requisicao inteira quebrar por causa de
+            # uma camada que deveria so melhorar a qualidade, nao ser um
+            # ponto novo de falha.
+            logging.getLogger(__name__).warning(
+                "structured output (response_format=DiagnosisModel) falhou, "
+                "refazendo sem ele - caindo no parsing por regex: %s",
+                exc,
+            )
+            react_agent_plain = create_react_agent(llm, tools=[web_tool])
+            return react_agent_plain.invoke(messages, config=config)
 
     # AI Gateway v1 (DA-26): centraliza Hybrid Inference (DA-20) +
     # policy de roteamento por sensibilidade de dado + circuit breaker
@@ -640,22 +675,39 @@ um JSON valido com exatamente esta estrutura (sem texto adicional antes ou depoi
                 print(f"  [{role}] {content[:200]}")
         print("=" * 60)
 
-    # Extrai JSON estruturado da resposta final do agente
-    json_match = re_module.search(r'\{[^{}]*"probable_root_cause"[^{}]*\}', raw, re_module.DOTALL)
-    if json_match:
-        try:
-            diagnosis = DiagnosisModel(**json.loads(json_match.group(0))).model_dump()
-        except (json.JSONDecodeError, ValueError, KeyError):
-            diagnosis = _fallback_diagnosis(raw)
+    # Avaliacao externa (curto prazo, item 5): structured_response e
+    # populado por create_react_agent quando response_format=DiagnosisModel
+    # (ver _build_and_invoke acima) teve sucesso - ja e uma instancia
+    # validada de DiagnosisModel, nao um texto pra adivinhar. So cai no
+    # parsing por regex (o comportamento INTEIRO de antes desta mudanca,
+    # preservado abaixo sem alteracao) quando structured_response nao
+    # veio - response_format ausente/falhou, ou (chamada direta a este
+    # node em algum teste) um resultado que nao passou por
+    # create_react_agent com response_format.
+    structured = react_result.get("structured_response")
+    if structured is not None:
+        diagnosis = (
+            structured.model_dump() if hasattr(structured, "model_dump") else dict(structured)
+        )
     else:
-        code_match = re_module.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re_module.DOTALL)
-        if code_match:
+        # Extrai JSON estruturado da resposta final do agente
+        json_match = re_module.search(
+            r'\{[^{}]*"probable_root_cause"[^{}]*\}', raw, re_module.DOTALL
+        )
+        if json_match:
             try:
-                diagnosis = json.loads(code_match.group(1))
-            except json.JSONDecodeError:
+                diagnosis = DiagnosisModel(**json.loads(json_match.group(0))).model_dump()
+            except (json.JSONDecodeError, ValueError, KeyError):
                 diagnosis = _fallback_diagnosis(raw)
         else:
-            diagnosis = _fallback_diagnosis(raw)
+            code_match = re_module.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re_module.DOTALL)
+            if code_match:
+                try:
+                    diagnosis = json.loads(code_match.group(1))
+                except json.JSONDecodeError:
+                    diagnosis = _fallback_diagnosis(raw)
+            else:
+                diagnosis = _fallback_diagnosis(raw)
 
     diagnosis = _apply_confidence_guardrails(diagnosis, state)
     diagnosis["llm_provider_used"] = llm_provider_used

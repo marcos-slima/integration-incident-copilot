@@ -28,6 +28,7 @@ from fastapi.responses import JSONResponse
 
 from app.a2a.task_manager import TaskManager, get_default_task_manager
 from app.config import settings
+from app.rate_limit import limiter
 
 router = APIRouter()
 
@@ -92,6 +93,11 @@ async def handle_jsonrpc(
 
 
 @router.post("/a2a")
+# Avaliacao externa (medio prazo, item 1): decorator explicito, alem do
+# default_limits global do SlowAPIMiddleware (app/main.py) - mesmo
+# tratamento que /diagnose ja recebia, agora tambem no endpoint A2A
+# (agente-para-agente), que antes ficava sem NENHUM rate limit.
+@limiter.limit("10/minute")
 async def a2a_endpoint(
     request: Request,
     x_a2a_api_key: str | None = Header(default=None),

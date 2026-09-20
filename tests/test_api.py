@@ -27,6 +27,19 @@ def test_health_endpoint():
     assert response.json() == {"status": "ok"}
 
 
+def test_health_endpoint_is_rate_limited_by_global_default():
+    """Avaliacao externa (medio prazo, item 1): /health nunca teve seu
+    proprio @limiter.limit(...) (nem precisa) - antes de
+    SlowAPIMiddleware ser registrado (app/main.py), isso significava
+    NENHUM rate limit, apesar do Limiter ter default_limits=["10/minute"].
+    Este teste prova que o default global agora vale mesmo para rotas
+    sem decorator proprio."""
+    for _ in range(10):
+        assert client.get("/health").status_code == 200
+
+    assert client.get("/health").status_code == 429
+
+
 @pytest.mark.integration
 def test_diagnose_endpoint_known_case():
     response = client.post("/diagnose", json={"description": "iFlow falhando com erro 401"})

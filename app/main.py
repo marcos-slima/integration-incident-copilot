@@ -9,9 +9,9 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from langfuse import get_client
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
+from slowapi.middleware import SlowAPIMiddleware
 
 from app.a2a.agent_card import get_agent_card
 from app.a2a.server import router as a2a_router
@@ -28,12 +28,9 @@ from app.models import (
     VerifyIncidentRequest,
 )
 from app.rag.graph_store import GRAPH_UNAVAILABLE_EXCEPTIONS, ensure_constraints, verify_incident
+from app.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
-
-# ─── Rate limiting ─────────────────────────────────────────────────────────
-# Limite por IP: 10 diagnosticos por minuto (configuravel via RATE_LIMIT no .env)
-limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
 
 # ─── API Key (opcional) ────────────────────────────────────────────────────
 # Se API_KEY nao estiver configurado no .env, autenticacao e desabilitada.
@@ -210,6 +207,14 @@ app = FastAPI(
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# Avaliacao externa (medio prazo, item 1): sem este middleware,
+# "default_limits" do Limiter (app/rate_limit.py) so valia para rotas
+# com "@limiter.limit(...)" explicito - /a2a, /mcp e /health ficavam
+# sem NENHUM rate limit. Com o middleware, o default passa a valer
+# tambem para essas rotas (/a2a ainda ganha seu proprio decorator
+# explicito, ver app/a2a/server.py, pelo mesmo motivo de /diagnose ja
+# ter um).
+app.add_middleware(SlowAPIMiddleware)
 
 
 @app.exception_handler(DiagnosisTimeoutError)

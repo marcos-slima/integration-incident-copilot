@@ -38,6 +38,13 @@ dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "ruff>=0.7",
+    # DA-29: usados so por scripts/benchmark_rerankers.py (RSS do
+    # processo + limpeza do cache local do HF Hub entre modelos) - ja
+    # vinham transitivamente via sentence-transformers/transformers,
+    # mas declarados aqui explicitamente porque o script depende deles
+    # diretamente (import direto), nao so de forma incidental.
+    "psutil>=7.2",
+    "huggingface-hub>=0.30",
 ]
 # Opcional: so necessario se LLM_PROVIDER=openai ou azure_openai no
 # .env (default e "ollama", que nao precisa disso). Mantido fora das

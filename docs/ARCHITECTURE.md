@@ -872,6 +872,50 @@ sucesso, autenticacao) e `tests/test_nodes_multiagent.py` +
 `run_diagnosis()` ate `graph_write_node`) - 180 testes passando no
 total (`-m "not integration"`).
 
+## Benchmark cientifico de rerankers (DA-29)
+
+Ultimo item do backlog da segunda revisao arquitetural externa. O
+reranker de producao (`cross-encoder/ms-marco-MiniLM-L-6-v2`, ver
+secao RAG acima) nunca tinha sido comparado formalmente contra
+alternativas - inclusive multilingues, relevante porque as queries
+reais sao majoritariamente em portugues e o baseline foi treinado so
+em ingles (MS MARCO).
+
+`scripts/benchmark_rerankers.py` reranqueia o corpus inteiro de
+`data/sample_docs/` (chunked com os MESMOS parametros de producao -
+`MarkdownTextSplitter`, `chunk_size=500`, `chunk_overlap=50`) contra
+os 13 casos in-scope de `data/eval/rag_eval_dataset.json`, para 4
+modelos candidatos - `ms-marco-L6` (baseline), `ms-marco-L12` (mesma
+familia, mais profundo), `mmarco-mMiniLMv2` (multilingue, treinado no
+mMARCO) e `bge-reranker-base` (multilingue, maior). Metricas puras
+(Hit@1, Recall@5, MRR@5, nDCG@5 com relevancia binaria) isoladas em
+`app/rag/eval_metrics.py` - testadas sem depender de nenhum modelo
+carregado (`tests/test_eval_metrics.py`, 15 testes) - mais latencia
+media/p95, delta de RSS do processo (proxy de RAM via `psutil`) e
+contagem de parametros (proxy de custo computacional).
+
+**Resultado**: `mmarco-mMiniLMv2` supera o baseline em toda metrica de
+qualidade (Hit@1 0.85->0.92, MRR@5 0.92->0.96, nDCG@5 0.94->0.97) e
+empata em qualidade com `bge-reranker-base` (mesmos 4 numeros) sendo
+3.5x mais rapido (1195ms vs. 4171ms) com menos da metade dos
+parametros. Metodologia completa, resultados por query, nota de
+recursos do ambiente onde rodou (2 vCPUs/~3.8GB RAM/~3.7GB disco, sem
+GPU) e a recomendacao (NAO aplicada nesta fase - troca de uma linha em
+`RERANKER_MODEL`, documentada e pendente de decisao do operador) em
+`docs/RERANKER_BENCHMARK.md`. Dados brutos por query em
+`data/eval/reranker_benchmark_results.json`.
+
+**Nao-objetivo explicito**: `BAAI/bge-reranker-v2-m3` (multilingue mais
+forte, ~2.2GB) nao foi testado por risco de OOM/disco cheio na maquina
+especifica onde isso rodou - candidato natural pra uma rodada futura
+com mais recursos. O script em si (baixa modelos reais do HF Hub, mede
+latencia real) nao roda no CI/suite de testes - so a logica pura de
+metricas e testada automaticamente, mesmo tratamento dado a
+`scripts/eval_rag.py`.
+
+Com isso, TODOS os itens do backlog priorizado pela segunda revisao
+arquitetural externa (P0/P1/P2) estao fechados.
+
 ## Testes
 
 Testes unitarios (`tests/test_connectors.py`, `test_llm_factory.py`,

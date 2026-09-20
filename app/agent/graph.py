@@ -11,6 +11,8 @@ Ver docs/ARCHITECTURE.md para detalhamento por camada.
 """
 
 import os
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from uuid import uuid4
 
 from langfuse import get_client, observe
@@ -29,6 +31,7 @@ from app.agent.nodes import (
 from app.agent.state import CopilotState
 from app.agent.supervisor import supervisor_node
 from app.config import settings
+from app.exceptions import DiagnosisTimeoutError
 from app.models import DiagnosisResponse, IncidentRequest
 
 os.environ.setdefault("LANGFUSE_PUBLIC_KEY", settings.langfuse_public_key)
@@ -106,6 +109,42 @@ def get_graph():
     return _compiled_graph
 
 
+# Avaliacao externa (curto prazo, item 4): pool dedicado e pequeno (nao
+# o threadpool default do FastAPI/Starlette, que ja roda o endpoint
+# /diagnose sincrono em si) - so serve pra rodar get_graph().invoke()
+# COM um watchdog (.result(timeout=...)) por cima, ja que o codigo
+# sincrono do LangGraph nao tem nenhum ponto de cancelamento cooperativo
+# (nao e async/await) para usar asyncio.wait_for diretamente. Criado uma
+# vez, reaproveitado entre chamadas - abrir uma thread nova por request
+# seria desperdicio.
+_graph_invoke_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="diagnosis-invoke")
+
+
+def _invoke_graph_with_timeout(initial_state: CopilotState) -> CopilotState:
+    """Roda get_graph().invoke(initial_state) com um teto de tempo
+    (settings.diagnosis_timeout_seconds) para o pipeline INTEIRO -
+    retrieval + GraphRAG + 1-2 chamadas LLM do ReAct + relatorio.
+
+    IMPORTANTE: isso e um watchdog, nao um cancelamento real - ao
+    estourar o timeout, a thread que roda o grafo CONTINUA executando
+    em segundo plano (o LangGraph/LangChain nao expoe um ponto de
+    cancelamento cooperativo no meio de uma chamada LLM sincrona); o
+    que este timeout garante e que o CALLER (a requisicao HTTP) nunca
+    fica esperando mais que o teto configurado, mesmo que a etapa
+    interna trave. Mesma limitacao pratica que qualquer watchdog sobre
+    codigo sincrono sem pontos de cancelamento - documentada aqui em
+    vez de fingida como cancelamento de verdade."""
+    future = _graph_invoke_pool.submit(get_graph().invoke, initial_state)
+    try:
+        return future.result(timeout=settings.diagnosis_timeout_seconds)
+    except FutureTimeoutError as exc:
+        raise DiagnosisTimeoutError(
+            f"Diagnostico excedeu o timeout de {settings.diagnosis_timeout_seconds}s "
+            "(settings.diagnosis_timeout_seconds) - o pipeline de retrieval/GraphRAG/LLM "
+            "nao terminou a tempo."
+        ) from exc
+
+
 @observe(name="sap_copilot_diagnosis")
 def run_diagnosis(
     request: IncidentRequest,
@@ -133,7 +172,7 @@ def run_diagnosis(
         "debug": debug,
         "incident_id": incident_id,
     }
-    final_state = get_graph().invoke(initial_state)
+    final_state = _invoke_graph_with_timeout(initial_state)
     diagnosis = final_state.get("diagnosis", {})
 
     return DiagnosisResponse(

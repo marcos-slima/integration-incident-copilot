@@ -17,6 +17,8 @@ from app.a2a.agent_card import get_agent_card
 from app.a2a.server import router as a2a_router
 from app.agent.graph import run_diagnosis
 from app.config import settings
+from app.mcp.server import build_mcp_asgi_app
+from app.mcp.server import mcp as mcp_server
 from app.models import DiagnosisResponse, IncidentRequest
 
 logger = logging.getLogger(__name__)
@@ -74,7 +76,18 @@ def _ensure_api_keys_configured() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _ensure_api_keys_configured()
-    yield
+    # DA-19: o app ASGI do servidor MCP (app/mcp/server.py) gerencia
+    # sessoes via StreamableHTTPSessionManager, que precisa do seu
+    # proprio lifespan rodando - `app.mount()` NAO propaga eventos de
+    # lifespan para sub-apps automaticamente (limitacao do Starlette),
+    # entao entramos nesse contexto aqui, no lifespan do app raiz.
+    # ATENCAO (testes): `session_manager.run()` so pode ser chamado UMA
+    # vez por instancia de processo - o SDK MCP levanta RuntimeError na
+    # segunda tentativa. Como `app` e um singleto global, so pode haver
+    # UM `with TestClient(app) as ...` (que dispara o lifespan) em toda
+    # a suite de testes - ver tests/test_mcp.py.
+    async with mcp_server.session_manager.run():
+        yield
     get_client().flush()
 
 
@@ -124,3 +137,8 @@ def agent_card() -> dict:
 
 
 app.include_router(a2a_router)
+
+# DA-19: servidor MCP montado em /mcp - ver app/mcp/server.py para o
+# contrato de ferramentas (diagnose_incident, list_connectors) e a
+# justificativa arquitetural completa.
+app.mount("/mcp", build_mcp_asgi_app())

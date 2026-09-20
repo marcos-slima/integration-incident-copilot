@@ -458,3 +458,103 @@ habilitaria o Joule a chamar este Copilot como par (inbound) está
 pré-GA, previsto para Q4/2026. Este endpoint é compatível com o
 protocolo aberto A2A (padrão vendor-neutral, Linux Foundation), não uma
 integração já consumível pelo Joule.
+
+### 15. Evidence/Trust Layer entre RAG/conectores e o LLM (DA-15/16/17)
+
+**Contexto:** uma revisão arquitetural externa apontou três riscos
+concretos, não hipotéticos, num agente que já correlaciona dado de
+conector + RAG + web search antes de chamar o LLM: (1) dado não
+sanitizado de conector/RAG chegando cru no prompt (superfície de
+prompt injection); (2) `confidence` sendo só auto-relato do LLM, sem
+nenhum piso objetivo; (3) GraphRAG podia gravar uma hipótese do LLM no
+grafo e, num incidente futuro, ela voltar ao prompt como se fosse fato
+histórico confirmado — um loop de retroalimentação epistêmica.
+
+**Decisão:** refatoração controlada, preservando 100% do stack
+existente (LangGraph + Qdrant + Ollama + Langfuse + conectores + A2A) —
+não um rewrite. `sanitize_untrusted_input` (já existente) passou a
+envolver TODO dado de conector/RAG antes de entrar no prompt, não só
+parte dele. `evidence_strength` — sinal objetivo (dado real de conector
+OU score de retrieval do documento top-1, nunca auto-relato do LLM) —
+vira um TETO duro sobre `confidence` (`min(confidence, evidence_strength
++ 0.25)`), exposto na API (`DiagnosisResponse.evidence_strength`). No
+Neo4j, todo incidente grava seu `evidence_strength`/`is_grounded`, e
+`graph_context()` só traz para o prompt incidentes históricos
+`is_grounded=true` por padrão — uma hipótese fraca vira `"HIPOTESE NAO
+CONFIRMADA (baixa evidencia - nao trate como fato)"` em vez de
+silenciosamente virar "causa raiz confirmada anteriormente".
+
+**Bugs reais encontrados no caminho (não deixados como débito):** um
+regex de detecção de prompt injection quebrado (`re.error: global flags
+not at the start of the expression` — flags inline `(?i)` por padrão,
+inválido quando concatenados via `"|".join()`) e dois bugs de
+ranking em `app/rag/retriever.py` (score composto RRF+cosine vazando
+para o campo que devia ser cosine puro; fallback para a biblioteca de
+referência sendo aplicado sempre, não só na ausência de match) que
+inflavam a confiança de diagnósticos com pouca ou nenhuma evidência
+real — corrigidos de raiz, não contornados.
+
+**Validação:** suíte completa (71 testes) verde, incluindo dois testes
+novos que provam que uma hipótese não fundamentada é filtrada por
+padrão do contexto de grafo e rotulada como tal quando explicitamente
+incluída.
+
+### 16. Autenticação de `/diagnose` e `/a2a` sempre exigida, com geração automática de chave (DA-18)
+
+**Contexto:** `API_KEY`/`A2A_API_KEY` vazios no `.env` significavam
+autenticação completamente desabilitada — um gap silencioso, só visível
+lendo o código-fonte, não um comportamento documentado como tal.
+
+**Decisão:** `app/main.py::_ensure_api_keys_configured()` roda no
+`lifespan` do FastAPI e garante que nenhuma das duas chaves fica vazia
+em memória — se o operador não configurou uma no `.env`, uma é gerada
+(`secrets.token_urlsafe(32)`) e avisada em `WARNING` no log de startup.
+Preserva "clone e rode" (zero config obrigatória) sem deixar os
+endpoints abertos por padrão. Comparação de chave via
+`secrets.compare_digest` (não `==`), para não vazar tamanho/prefixo por
+timing attack.
+
+**Validação:** `tests/test_api.py`/`tests/test_a2a.py` cobrem chave
+correta/incorreta/ausente em ambos endpoints, geração automática quando
+ausente, preservação quando já configurada, e o Agent Card refletindo o
+`securityScheme` quando `A2A_API_KEY` está setada.
+
+### 17. Servidor MCP (Model Context Protocol) - capability catalog read-first (DA-19)
+
+**Contexto:** terceiro item do roadmap arquitetural planejado (depois
+do Evidence Layer e do fechamento de autenticação do A2A) — MCP como
+CONTRATO DE CAPABILITIES para agentes externos, não mais um protocolo
+isolado de "conectar um LLM a uma ferramenta". A especificação MCP de
+2026 caminha explicitamente para stateless scaling, cache de capability
+catalog e autorização empresarial, o que aproxima MCP de infraestrutura
+de produção.
+
+**Decisão:** expor o Copilot como SERVIDOR MCP (não cliente — a leitura
+alternativa, migrar os conectores para consumir MCP externo, fica para
+uma fase seguinte e deliberadamente fora deste escopo) em `POST /mcp/`,
+via `app/mcp/server.py` (SDK oficial `mcp`, classe `MCPServer`). Duas
+ferramentas, ambas READ-ONLY por design ("leitura primeiro" no
+roadmap): `diagnose_incident` (chama a MESMA `run_diagnosis()` de
+`/diagnose`/`/a2a` — zero lógica duplicada pela terceira vez) e
+`list_connectors` (inspeciona `settings` sem nenhuma chamada de rede,
+informa mock vs. real por `interface_type`). Autenticação reusa o MESMO
+`X-API-Key` de `/diagnose` (DA-18) via um middleware ASGI simples, em
+vez do `AuthSettings`/`TokenVerifier` OAuth2 do SDK — manter um único
+mecanismo de autenticação em toda a superfície HTTP (REST + A2A + MCP),
+não três.
+
+**Detalhe de implementação que valeu registrar:**
+`StreamableHTTPSessionManager.run()` só pode rodar uma vez por
+instância de processo, e `app.mount()` não propaga eventos de lifespan
+para sub-apps automaticamente — seu ciclo de vida entra explicitamente
+no `lifespan` do app FastAPI raiz. E `POST /mcp` sem barra final sofre
+`307 Temporary Redirect` do Starlette antes mesmo de chegar na checagem
+de autenticação (comportamento padrão de `app.mount()`, não específico
+do MCP) — documentado em `docs/DEPLOY.md`, não deixado como surpresa.
+
+**Validação:** `tests/test_mcp.py` cobre as duas tools como funções
+Python diretas (o decorator `@mcp.tool()` não envolve a função
+original) e a fronteira de autenticação via `TestClient` real no app
+montado — incluindo um teste de round-trip completo do handshake
+`initialize` do protocolo MCP contra um servidor `uvicorn` real rodando
+de verdade nesta sessão (não só mockado).

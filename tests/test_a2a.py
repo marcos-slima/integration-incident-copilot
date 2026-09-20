@@ -43,8 +43,25 @@ def test_agent_card_is_published_at_well_known_path():
     card = response.json()
     assert card["name"] == "SAP Integration Copilot"
     assert card["skills"][0]["id"] == "diagnose-integration-incident"
-    # sem A2A_API_KEY configurado (default de teste) - sem securitySchemes
+    # sem A2A_API_KEY configurado (default de teste, TestClient nao roda o
+    # lifespan que aciona _ensure_api_keys_configured - DA-18) - sem
+    # securitySchemes. Ver test_agent_card_reflects_configured_a2a_api_key
+    # para o card com uma chave configurada.
     assert card["security"] == []
+
+
+def test_agent_card_reflects_configured_a2a_api_key(monkeypatch):
+    """DA-18: quando A2A_API_KEY esta configurada (seja via .env, seja
+    porque _ensure_api_keys_configured gerou uma no startup real), o
+    Agent Card deve anunciar o securityScheme - agentes que consomem o
+    card programaticamente dependem disso pra saber que devem enviar
+    o header X-A2A-Api-Key."""
+    monkeypatch.setattr("app.a2a.agent_card.settings", Settings(a2a_api_key="secret-card"))
+    from app.a2a.agent_card import get_agent_card
+
+    card = get_agent_card()
+    assert card["security"] == [{"apiKeyAuth": []}]
+    assert card["securitySchemes"]["apiKeyAuth"]["name"] == "X-A2A-Api-Key"
 
 
 def test_message_send_runs_diagnosis_and_returns_completed_task():
@@ -175,3 +192,19 @@ def test_a2a_endpoint_requires_api_key_when_configured(monkeypatch):
     authorized = client.post("/a2a", json=payload, headers={"X-A2A-Api-Key": "secret-123"})
     assert authorized.status_code == 200
     assert authorized.json()["result"]["status"]["state"] == "completed"
+
+
+def test_a2a_endpoint_rejects_wrong_api_key_when_configured(monkeypatch):
+    """DA-18: uma chave incorreta deve ser rejeitada com o mesmo 401 -
+    nao basta so testar "sem header"; um caller que manda uma chave
+    errada (typo, chave revogada) tem que cair no mesmo caminho de erro."""
+    monkeypatch.setattr("app.a2a.server.settings", Settings(a2a_api_key="secret-123"))
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 10,
+        "method": "message/send",
+        "params": {"message": {"role": "user", "parts": [{"kind": "text", "text": "x"}]}},
+    }
+
+    response = client.post("/a2a", json=payload, headers={"X-A2A-Api-Key": "chave-errada"})
+    assert response.status_code == 401

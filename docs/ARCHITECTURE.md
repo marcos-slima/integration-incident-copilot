@@ -45,7 +45,7 @@ nenhuma logica duplicada entre eles: o endpoint REST `/diagnose`
 
 | Camada | Onde | Responsabilidade |
 |---|---|---|
-| API | `app/main.py` | FastAPI, `/health`, `/diagnose`, Agent Card A2A; rate limiting 10/min por IP (slowapi); API Key opcional via `X-API-Key` (API_KEY no .env) |
+| API | `app/main.py` | FastAPI, `/health`, `/diagnose`, Agent Card A2A; rate limiting 10/min por IP (slowapi); API Key via `X-API-Key` (API_KEY no .env, ou gerada automaticamente no startup se ausente - DA-18) |
 | A2A | `app/a2a/` | Camada de interoperabilidade externa (Agent Card, task manager, JSON-RPC), chama a mesma orquestracao do `/diagnose` |
 | Orquestracao | `app/agent/graph.py` · `app/agent/nodes.py` · `app/agent/state.py` | Grafo LangGraph (orquestrador ~136 linhas), nodes (connector/retrieve/web_search/diagnose/report), tipos (CopilotState, DiagnosisModel) |
 | LLM Gateway | `app/llm/factory.py` | Escolhe o `BaseChatModel` (Ollama/OpenAI/Azure OpenAI) a partir de `Settings` |
@@ -223,8 +223,13 @@ alcanca sao implementados (`submitted -> working -> completed|failed`)
 - `input_required`/`auth_required`/`canceled`/`rejected` nao se aplicam
 a um agente que nao pede dado adicional a meio do processo nem tem
 fluxo de autorizacao interativo. Autenticacao e uma chave estatica via
-header (`A2A_API_KEY`, opcional) - documentado como gap de producao
-real (exigiria OAuth2/JWT entre agentes), nao uma limitacao escondida.
+header (`A2A_API_KEY`). Desde a DA-18, essa chave NUNCA fica vazia em
+memoria: se nao vier do `.env`, `app/main.py::_ensure_api_keys_configured`
+gera uma aleatoria no startup e avisa no log - o endpoint nunca fica
+silenciosamente aberto. Uma chave de OAuth2/JWT entre agentes continua
+sendo o gap de producao real (exigiria um fluxo de autorizacao
+interoperavel entre agentes de fornecedores diferentes), nao uma
+limitacao escondida.
 
 Testado com FastAPI `TestClient` + um `diagnosis_fn` stub injetado no
 `TaskManager` (mesmo padrao de injecao de dependencia dos conectores

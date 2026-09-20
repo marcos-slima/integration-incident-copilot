@@ -454,7 +454,8 @@ endereçando todos os gaps identificados no double check P0/P1/P2/P3.
    MRR≥0,85; falha o CI se métricas regridem.
 
 10. **Auth/rate limiting** — `slowapi` 10/min por IP + `X-API-Key`
-    opcional via `API_KEY` no `.env`; `verify_api_key()` em `app/main.py`.
+    (via `API_KEY` no `.env`, ou gerada automaticamente no startup se
+    ausente — DA-18); `verify_api_key()` em `app/main.py`.
 
 11. **Refatorar graph.py** — 633 linhas divididas em 3 módulos:
     `app/agent/state.py` (tipos: DiagnosisModel, CopilotState),
@@ -530,7 +531,8 @@ endereçando todos os gaps identificados no double check P0/P1/P2/P3.
    MRR≥0,85; falha o CI se métricas regridem.
 
 10. **Auth/rate limiting** — `slowapi` 10/min por IP + `X-API-Key`
-    opcional via `API_KEY` no `.env`; `verify_api_key()` em `app/main.py`.
+    (via `API_KEY` no `.env`, ou gerada automaticamente no startup se
+    ausente — DA-18); `verify_api_key()` em `app/main.py`.
 
 11. **Refatorar graph.py** — 633 linhas divididas em 3 módulos:
     `app/agent/state.py` (tipos: DiagnosisModel, CopilotState),

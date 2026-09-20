@@ -38,3 +38,13 @@ class DiagnosisResponse(BaseModel):
             "score de retrieval do documento mais relevante. Ver DA-15."
         ),
     )
+    llm_provider_used: str | None = Field(
+        default=None,
+        description=(
+            "Provider LLM que efetivamente respondeu a este diagnostico "
+            "('ollama', 'openai' ou 'azure_openai') - normalmente igual a "
+            "settings.llm_provider, mas pode ser o provider de fallback "
+            "(settings.llm_fallback_provider) se o primario estava "
+            "indisponivel. Ver DA-20 (Hybrid Inference)."
+        ),
+    )

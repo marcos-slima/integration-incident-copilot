@@ -27,10 +27,34 @@ Uso:
     from app.llm.factory import get_chat_model
     llm = get_chat_model()                       # usa settings.llm_provider
     llm = get_chat_model(model_name="qwen3:30b")  # override so do nome do modelo
+
+Hybrid Inference (DA-20): quando `settings.llm_fallback_provider` esta
+configurado, `invoke_with_hybrid_fallback()` (abaixo) roda uma chamada
+com o provider primario e, SO em caso de falha de transporte (Ollama
+fora do ar, timeout - nao erro de aplicacao), refaz a MESMA chamada com
+o provider de fallback antes de desistir. Ver app/agent/nodes.py
+(diagnose_node) para o uso real.
 """
+
+import logging
+
+import httpx
 
 from app.config import Settings, settings
 from app.exceptions import ConfigurationError
+
+logger = logging.getLogger(__name__)
+
+# Excecoes que sinalizam "o provider esta inalcancavel agora" (rede,
+# timeout) - NAO erros de aplicacao (prompt invalido, resposta
+# malformada, credencial errada) que devem continuar subindo
+# normalmente em vez de mascarados por uma tentativa de fallback.
+# `ConnectionError` (builtin) e o que o pacote `ollama` levanta ao
+# nao conseguir conectar (ver ollama._client._request_raw, que
+# converte `httpx.ConnectError` nisso); providers OpenAI-compativeis
+# (langchain-openai, sobre httpx) levantam `httpx.ConnectError`/
+# `httpx.TimeoutException` diretamente.
+TRANSPORT_FAILURE_EXCEPTIONS = (ConnectionError, httpx.ConnectError, httpx.TimeoutException)
 
 
 def get_chat_model(model_name: str | None = None, config: Settings | None = None):
@@ -112,3 +136,51 @@ def get_chat_model(model_name: str | None = None, config: Settings | None = None
         )
 
     raise ConfigurationError(f"llm_provider desconhecido: {provider!r}")
+
+
+def invoke_with_hybrid_fallback(build_and_invoke, model_name=None, config=None):
+    """Roda `build_and_invoke(llm)` com o provider primario
+    (`config.llm_provider`, default `settings`); se falhar por
+    indisponibilidade de transporte (ver `TRANSPORT_FAILURE_EXCEPTIONS`)
+    e `config.llm_fallback_provider` estiver configurado, tenta
+    novamente com o provider de fallback antes de desistir.
+
+    `build_and_invoke` recebe o `BaseChatModel` ja construido e decide o
+    que fazer com ele (criar um agente ReAct, chamar `.invoke()`
+    diretamente, etc.) - este wrapper nao assume nada sobre a forma da
+    chamada, so sobre COMO reagir a uma falha de transporte.
+
+    Retorna `(resultado, provider_usado)`, onde `provider_usado` e o
+    nome do provider que efetivamente respondeu (`"ollama"`, `"openai"`
+    ou `"azure_openai"`) - util para expor no diagnostico (transparencia
+    de qual provider serviu aquela chamada, ver DA-20/DiagnosisResponse).
+
+    Levanta `ConfigurationError` se AMBOS os providers falharem (ou se
+    so o primario estiver configurado e falhar).
+    """
+    cfg = config or settings
+
+    primary_llm = get_chat_model(model_name=model_name, config=cfg)
+    try:
+        return build_and_invoke(primary_llm), cfg.llm_provider
+    except TRANSPORT_FAILURE_EXCEPTIONS as primary_error:
+        if not cfg.llm_fallback_provider:
+            raise
+
+        logger.warning(
+            "Provider primario '%s' indisponivel (%s: %s) - tentando fallback '%s'",
+            cfg.llm_provider,
+            type(primary_error).__name__,
+            primary_error,
+            cfg.llm_fallback_provider,
+        )
+        fallback_cfg = cfg.model_copy(update={"llm_provider": cfg.llm_fallback_provider})
+        fallback_llm = get_chat_model(model_name=model_name, config=fallback_cfg)
+        try:
+            return build_and_invoke(fallback_llm), fallback_cfg.llm_provider
+        except TRANSPORT_FAILURE_EXCEPTIONS as fallback_error:
+            raise ConfigurationError(
+                f"Provider primario ('{cfg.llm_provider}') E fallback "
+                f"('{cfg.llm_fallback_provider}') indisponiveis. Primario: "
+                f"{primary_error}. Fallback: {fallback_error}"
+            ) from fallback_error

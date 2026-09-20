@@ -25,7 +25,7 @@ from langgraph.prebuilt import create_react_agent
 
 from app.agent.state import CopilotState, DiagnosisModel
 from app.connectors import get_connector
-from app.llm.factory import get_chat_model
+from app.llm.factory import invoke_with_hybrid_fallback
 from app.rag.graph_store import (
     format_graph_context_for_prompt,
     graph_context,
@@ -441,7 +441,6 @@ def _make_web_search_tool(state):
 @observe(name="diagnose")
 def diagnose_node(state: CopilotState) -> CopilotState:
     model_name = state.get("llm_model") or settings.llm_model
-    llm = get_chat_model(model_name)
     prompt = _build_diagnosis_prompt(state)
 
     if state.get("debug"):
@@ -454,7 +453,6 @@ def diagnose_node(state: CopilotState) -> CopilotState:
     # v1.3 - agente ReAct: o modelo decide autonomamente quando e
     # quantas vezes buscar na web antes de retornar o diagnostico.
     web_tool = _make_web_search_tool(state)
-    react_agent = create_react_agent(llm, tools=[web_tool])
     # Instrucao adicional para forcar JSON na resposta final do agente ReAct
     json_instruction = """
 
@@ -467,9 +465,19 @@ um JSON valido com exatamente esta estrutura (sem texto adicional antes ou depoi
   "next_steps": ["passo 1", "passo 2"]
 }"""
 
-    react_result = react_agent.invoke(
-        {"messages": [{"role": "user", "content": prompt + json_instruction}]},
-        config={"callbacks": [_langfuse_handler]},
+    def _build_and_invoke(llm):
+        react_agent = create_react_agent(llm, tools=[web_tool])
+        return react_agent.invoke(
+            {"messages": [{"role": "user", "content": prompt + json_instruction}]},
+            config={"callbacks": [_langfuse_handler]},
+        )
+
+    # Hybrid Inference (DA-20): se `settings.llm_fallback_provider`
+    # estiver configurado e o provider primario (Ollama, tipicamente)
+    # estiver fora do ar, tenta automaticamente com o provider de
+    # fallback antes de desistir - ver app/llm/factory.py.
+    react_result, llm_provider_used = invoke_with_hybrid_fallback(
+        _build_and_invoke, model_name=model_name
     )
 
     last_msg = react_result["messages"][-1]
@@ -502,6 +510,7 @@ um JSON valido com exatamente esta estrutura (sem texto adicional antes ou depoi
             diagnosis = _fallback_diagnosis(raw)
 
     diagnosis = _apply_confidence_guardrails(diagnosis, state)
+    diagnosis["llm_provider_used"] = llm_provider_used
     return {"diagnosis": diagnosis}
 
 
@@ -573,7 +582,7 @@ def report_node(state: CopilotState) -> CopilotState:
 {connector_line}
 **Causa raiz provavel:** {diagnosis.get("probable_root_cause", "N/A")}
 
-**Confianca:** {diagnosis.get("confidence", 0.0):.0%} (evidence_strength: {diagnosis.get("evidence_strength", 0.0):.0%})
+**Confianca:** {diagnosis.get("confidence", 0.0):.0%} (evidence_strength: {diagnosis.get("evidence_strength", 0.0):.0%}, LLM: {diagnosis.get("llm_provider_used", "N/A")})
 
 **Documento usado como base:** {matched}
 

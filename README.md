@@ -783,3 +783,43 @@ Validado rodando `npm ci && npm run build` isoladamente (gera o
 `dist/` esperado) — build de imagem Docker completo não testado
 (Docker indisponível neste ambiente, mesma limitação já registrada na
 DA-24).
+
+### 24. Evidence/Trust Layer + correção do threshold do RAG antes do reranker (DA-25)
+
+Uma segunda revisão arquitetural externa apontou dois itens P0
+restantes (os outros dois do backlog, Docker multi-stage e `uv.lock`,
+já tinham sido corrigidos no item anterior).
+
+**RAG:** o `score_threshold` (cosseno denso) era aplicado *antes* do
+reranker (cross-encoder) — um documento com BM25/RRF excelente mas
+cosseno moderado (ex: 0.47) era descartado sem o reranker nunca ter a
+chance de avaliar o par query+chunk de verdade. Invertido: o pool de
+candidatos da fusão RRF cresceu (antes o próprio Qdrant já truncava
+para `top_k` antes de qualquer filtragem), todos os candidatos são
+reranqueados, e só depois um hit é admitido se o cosseno *ou* o
+`rerank_score` (clampado 0-1) atingir o threshold — o reranker ganhou
+um caminho próprio para "salvar" um documento que o cosseno sozinho
+descartaria.
+
+**Evidence/Trust Layer:** `DiagnosisResponse` ganhou `evidence:
+list[Evidence]` — uma entrada por fonte real consultada (conector,
+RAG, GraphRAG, busca web, descrição do usuário), com `trust_level`
+decidido pelo TIPO da fonte (`system_observed` > `retrieved_document`
+> `web_untrusted` > `user_reported`), montada 100% deterministicamente
+em `_assemble_evidence()` — o LLM nunca cita suas próprias fontes,
+mesmo princípio já usado em `evidence_strength` (DA-15). Muda a
+resposta de "o LLM deu uma resposta" para "o LLM produziu uma hipótese
+sustentada por evidências rastreáveis" — pré-requisito que a própria
+revisão apontou como necessário antes de qualquer evolução do MCP para
+tools de escrita.
+
+**Validação:** `tests/test_retriever_evidence_threshold.py` (8 testes,
+infraestrutura mockada) + `tests/test_evidence.py` (13 testes) — 132
+testes passando no total (`-m "not integration"`).
+
+**Itens do backlog da revisão que seguem em aberto** (sem ação
+agendada): AI Gateway real (auth/policy/routing/budget/PII-DLP/tenant
+isolation), Tool/Agent Execution Policy, Capability Registry, evolução
+do schema do GraphRAG (`VERIFIED_AS` — verificação humana separada de
+hipótese do LLM), benchmark científico de rerankers para o domínio
+SAP/PT-BR/EN técnico.

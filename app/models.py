@@ -63,6 +63,47 @@ class IncidentEventEnvelope(BaseModel):
     data: IncidentEventData
 
 
+# DA-25 (Evidence/Trust Layer): cada Evidence aponta para uma fonte
+# REAL que o pipeline de fato consultou (conector, RAG, GraphRAG, busca
+# web ou a propria descricao do usuario) - a lista e montada de forma
+# inteiramente deterministica em app/agent/nodes.py::_assemble_evidence,
+# nunca a partir de autoavaliacao/citacao do LLM (mesmo principio ja
+# usado em evidence_strength, DA-15). trust_level distingue "fato
+# observado pelo sistema" de "hipotese/inferencia nao verificada" -
+# sem isso, o consumidor da API nao tem como saber se uma causa raiz
+# se apoia num dado real do conector ou so num resultado de busca web
+# nao curado.
+class Evidence(BaseModel):
+    source_id: str = Field(
+        description="Identificador legivel da fonte (ex: 'rag:cpi_http_401.md', 'connector:OData')."
+    )
+    source_type: Literal["connector", "rag", "graph", "web", "user"]
+    locator: str | None = Field(
+        default=None,
+        description="Nome do documento/sistema referenciado, quando aplicavel (ex: nome do arquivo RAG).",
+    )
+    excerpt: str = Field(description="Trecho literal da fonte usado como evidencia (truncado).")
+    retrieval_score: float | None = Field(
+        default=None,
+        description="Score de retrieval (cosseno denso) do RAG/GraphRAG, quando aplicavel.",
+    )
+    rerank_score: float | None = Field(
+        default=None, description="Score do cross-encoder de reranking, quando aplicavel."
+    )
+    trust_level: Literal[
+        "system_observed", "retrieved_document", "web_untrusted", "user_reported", "simulated"
+    ] = Field(
+        description=(
+            "Nivel de confianca da fonte, decidido pelo TIPO da fonte "
+            "(nunca por afirmacao do LLM): system_observed (dado real "
+            "de conector) > retrieved_document (RAG/GraphRAG) > "
+            "web_untrusted (busca web nao curada) > user_reported "
+            "(descricao textual do usuario, nunca verificada) - "
+            "'simulated' quando o conector retornou dado mock/fallback."
+        )
+    )
+
+
 class DiagnosisResponse(BaseModel):
     probable_root_cause: str
     confidence: float = Field(ge=0.0, le=1.0)
@@ -96,5 +137,15 @@ class DiagnosisResponse(BaseModel):
             "('sap', 'saas' ou 'generic'), decidido deterministicamente "
             "pelo supervisor a partir de interface_type/descricao - nunca "
             "por autoavaliacao do LLM. Ver DA-22 (Multi-agent)."
+        ),
+    )
+    evidence: list[Evidence] = Field(
+        default_factory=list,
+        description=(
+            "Lista de evidencias que sustentam o diagnostico, uma por "
+            "fonte real consultada (conector, RAG, GraphRAG, busca web, "
+            "descricao do usuario) - montada deterministicamente pelo "
+            "pipeline, nunca citada pelo LLM. Ver DA-25 (Evidence/Trust "
+            "Layer)."
         ),
     )

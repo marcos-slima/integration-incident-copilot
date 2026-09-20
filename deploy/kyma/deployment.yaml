@@ -1,0 +1,80 @@
+# DA-24: Deployment da API. A imagem usa o Dockerfile deste repositorio
+# (corrigido nesta mesma fase: uv.lock + --frozen para build
+# reproduzivel, usuario nao-root, CMD chamando .venv/bin/uvicorn direto
+# - ver Dockerfile e docs/DEPLOY.md secao 4).
+#
+# <REGISTRY>/sap-integration-copilot:<tag> e um placeholder - troque
+# pelo registry real (ex: o Docker registry gerenciado pela conta BTP,
+# ou qualquer registry que o cluster Kyma consiga puxar).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sap-integration-copilot
+  namespace: sap-integration-copilot
+  labels:
+    app.kubernetes.io/name: sap-integration-copilot
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sap-integration-copilot
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sap-integration-copilot
+    spec:
+      # DA-24: mesmo UID nao-root criado no Dockerfile (appuser, uid
+      # 1000) - reforcado aqui a nivel de Pod, nao so de imagem, para
+      # que um PodSecurityStandard "restricted" do cluster nao rejeite
+      # o Pod mesmo se alguem trocar a imagem sem perceber essa
+      # exigencia.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: "<REGISTRY>/sap-integration-copilot:<TAG>"
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: sap-integration-copilot-config
+            - secretRef:
+                name: sap-integration-copilot-secrets
+          # DA-24: probes usam GET /health - endpoint sem autenticacao
+          # e sem dependencia de Qdrant/LLM (so retorna {"status":"ok"}
+          # se o processo FastAPI esta de pe), entao nao gera falso
+          # negativo de readiness so porque o Qdrant externo esta lento.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+          # DA-24: requests/limits conservadores para um workload de IO
+          # (chamadas HTTP a LLM/Qdrant, pouco uso de CPU local) - ajuste
+          # conforme o volume real observado (ver HPA em hpa.yaml para
+          # escalar horizontalmente em vez de so aumentar limits).
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]

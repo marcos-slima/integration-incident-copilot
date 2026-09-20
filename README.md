@@ -715,3 +715,47 @@ um gap escondido.
 `IncidentRequest`, chamada a `run_diagnosis()`, autenticação (401),
 rejeição de `type` desconhecido (422), limite de tamanho (422) e
 geração automática da chave — tudo mockado, sem Ollama/Qdrant reais.
+
+### 22. Deploy em produção - SAP BTP Kyma Runtime (DA-24)
+
+**Contexto:** último item do roadmap arquitetural planejado. Até esta
+fase o projeto só rodava via `docker-compose.yml` (dev/demo local) -
+faltava o empacotamento real para um ambiente de produção SAP,
+completando a jornada "protótipo de portfólio → produto demonstrável".
+
+**Decisão (escopo escolhido: "manifests reais de deploy no Kyma", não
+integração mais profunda com serviços BTP como XSUAA/Destination):**
+`deploy/kyma/` traz Deployment (2 réplicas, probes em `/health`,
+usuário não-root), Service, HorizontalPodAutoscaler (2-6 réplicas por
+CPU - resposta direta a uma limitação já identificada na revisão do
+DA-23: picos de eventos aumentam chamadas simultâneas ao LLM Gateway),
+ConfigMap e um `secret.example.yaml` — template com todo valor
+prefixado `CHANGE-ME`, nunca aplicado direto. O `APIRule` (módulo API
+Gateway do Kyma) usa `accessStrategy: noop`, já que o Copilot tem sua
+própria autenticação por API key em cada endpoint (DA-18/DA-23) — não
+duplica autenticação na camada de rede.
+
+Ao revisar o empacotamento, três problemas reais no `Dockerfile` foram
+corrigidos na origem (não contornados só nos manifests): build não
+reprodutível (`uv sync` sem lockfile no build), container rodando como
+root, e o bug já documentado de `uv run` ressincronizando dependências
+de dev a cada start (agora `CMD` chama `.venv/bin/uvicorn` direto) —
+`docker-compose.yml` não precisa mais do `command:` override que
+contornava esse último problema.
+
+**Não-objetivos explícitos:** nenhum manifest foi validado contra um
+cluster Kyma real, nem imagem Docker construída de fato (sem cluster
+ou Docker acessível neste ambiente de desenvolvimento — mesma honestidade
+já aplicada ao Neo4j/DA-21 e ao MCP/DA-19); o schema do CRD `APIRule`
+deve ser conferido contra o cluster alvo antes de aplicar; Qdrant e
+Neo4j continuam pré-requisitos externos, não implantados por este bundle.
+
+**Validação:** `tests/test_kyma_manifests.py` (11 testes) — todo YAML
+sintaticamente válido, namespace consistente entre recursos, probes
+em `/health` (nunca endpoint autenticado), Pod não-root, HPA/APIRule
+apontando para os recursos certos, `kustomization.yaml` referenciando
+só arquivos existentes.
+
+Isso fecha o roadmap arquitetural consolidado deste projeto (AI Gateway
+→ A2A/API auth → MCP → Hybrid Inference → GraphRAG → Multi-agent →
+Event Mesh → BTP/Kyma), todo executado nesta mesma sessão de trabalho.

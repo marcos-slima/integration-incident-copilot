@@ -1,0 +1,9 @@
+# DA-24: namespace dedicado - isola o Copilot de outros workloads no
+# mesmo cluster Kyma (recomendado pela propria SAP para cargas de
+# aplicacao, em vez de usar o namespace "default").
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sap-integration-copilot
+  labels:
+    app.kubernetes.io/name: sap-integration-copilot

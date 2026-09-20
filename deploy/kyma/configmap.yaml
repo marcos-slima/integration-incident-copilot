@@ -1,0 +1,35 @@
+# DA-24: variaveis NAO sensiveis - tudo que e segredo (API keys,
+# senhas, client secrets) vive em secret.example.yaml, nunca aqui.
+#
+# LLM_PROVIDER=openai por default aqui (nao "ollama", o default do
+# app/config.py) porque Ollama local nao roda de forma pratica dentro
+# de um Pod Kyma (imagem de varios GB, precisa de GPU/CPU dedicada
+# para latencia aceitavel) - um cluster Kyma real tipicamente aponta
+# para OpenAI/Azure OpenAI (LLM_FALLBACK_PROVIDER da DA-20 cobre o
+# cenario de resiliencia entre os dois). Ajuste para "ollama" se voce
+# estiver rodando um Ollama proprio acessivel de dentro do cluster.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sap-integration-copilot-config
+  namespace: sap-integration-copilot
+data:
+  LLM_PROVIDER: "openai"
+  LLM_FALLBACK_PROVIDER: "azure_openai"
+  LLM_MODEL: "gpt-4o-mini"
+  EMBEDDING_MODEL: "nomic-embed-text"
+  # Qdrant precisa ser implantado separadamente no cluster (Helm chart
+  # oficial da Qdrant, ou um servico gerenciado) - este ConfigMap so
+  # assume que ele e alcancavel neste DNS interno do namespace.
+  QDRANT_URL: "http://qdrant:6333"
+  # GraphRAG (DA-21) continua opt-in por decisao de arquitetura (#9) -
+  # ligar aqui exige TAMBEM implantar um Neo4j no cluster, fora do
+  # escopo deste bundle de manifests.
+  GRAPH_RAG_ENABLED: "false"
+  WEB_SEARCH_ENABLED: "true"
+  WEB_SEARCH_THRESHOLD: "0.6"
+  # Langfuse (observabilidade) e opcional - vazio aqui, sem tracing.
+  # Aponte para um Langfuse self-hosted ou cloud via Secret se quiser
+  # observabilidade em produção (nao precisa ser ConfigMap, mas as
+  # chaves publicas/privadas do Langfuse ficam melhor no Secret).
+  LANGFUSE_HOST: ""

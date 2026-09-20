@@ -84,11 +84,11 @@ sudo systemctl restart ollama
 
 ---
 
-## 4. Bug conhecido: `uv run` no `CMD` tenta ressincronizar no startup
+## 4. Bug conhecido (corrigido no Dockerfile desde DA-24): `uv run` no `CMD` tentava ressincronizar no startup
 
-O `CMD` do `Dockerfile` roda `uv run uvicorn ...`, e `uv run` por padrão tenta ressincronizar o ambiente a cada start — incluindo dependências de dev (`pre-commit` → `virtualenv` → `python-discovery`). Em um container sem saída de rede (ou rede restrita), isso derruba o container com erro de DNS/timeout.
+Historicamente o `CMD` do `Dockerfile` rodava `uv run uvicorn ...`, e `uv run` por padrão tenta ressincronizar o ambiente a cada start — incluindo dependências de dev (`pre-commit` → `virtualenv` → `python-discovery`). Em um container sem saída de rede (ou rede restrita, como um cluster Kyma com Network Policies), isso derrubava o container com erro de DNS/timeout.
 
-**Fix**: sobrescrever o `command:` do serviço `api` no `docker-compose.yml` para chamar o `uvicorn` direto do venv já instalado no build, sem passar por `uv run`:
+**Corrigido na origem (DA-24)**: o `Dockerfile` agora chama `.venv/bin/uvicorn` diretamente no `CMD`, sem passar por `uv run` - `docker-compose.yml` e os manifests Kyma (`deploy/kyma/`) não precisam mais de nenhum override de `command:` para contornar isso. Se você estiver usando uma imagem construída antes desta fase, seu próprio `command:` override (o de baixo) continua funcionando como workaround:
 ```yaml
   api:
     command: [".venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -215,7 +215,8 @@ def graph_context(
     confirmadas do LLM, nao fatos observados, e ficam de fora do
     contexto injetado no prompt de novos diagnosticos para nao virarem
     "verdade historica" por repeticao. Passar True so em ferramentas de
-    auditoria/analise, nunca no caminho de producao do diagnose_node."""
+    auditoria/analise, nunca no caminho de producao dos sub-agentes de
+    diagnostico (sap_diagnosis_node/saas_diagnosis_node, DA-22)."""
     if not is_enabled() or not interface_type or not identifier:
         return []
 

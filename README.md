@@ -578,8 +578,9 @@ desta fase) **e** a falha for de transporte (`ConnectionError`/
 timeout de rede), refaz a MESMA chamada com o provider de fallback
 antes de desistir. Erro de aplicação (JSON malformado, prompt inválido)
 nunca aciona o fallback — mascarar um bug real atrás de uma segunda
-chamada de LLM seria pior do que deixá-lo estourar. `diagnose_node` é o
-único consumidor hoje; qual provider respondeu de fato fica exposto em
+chamada de LLM seria pior do que deixá-lo estourar. Os sub-agentes de diagnóstico
+(`sap_diagnosis_node`/`saas_diagnosis_node`, ver DA-22) são os consumidores
+hoje; qual provider respondeu de fato fica exposto em
 `DiagnosisResponse.llm_provider_used` — transparência, não um fallback
 silencioso.
 
@@ -641,3 +642,42 @@ com driver Neo4j fake (`FakeSession`), mesmo padrão de
 explícito:** validação contra um Neo4j real continua pendente, por
 limitação deste ambiente (sem Docker) — decisão aceita explicitamente
 ao escopar esta fase.
+
+### 20. Multi-agent - supervisor + especialistas por domínio (DA-22)
+
+**Contexto:** sexto item do roadmap arquitetural planejado. O único
+node de diagnóstico existente (`diagnose_node`) usava uma persona fixa
+de "especialista em integração SAP" para QUALQUER conector — incidente
+de webhook do Salesforce recebia a mesma expertise "OData/IDoc/RFC/CPI"
+de um incidente de RFC. Isso contradizia o princípio de design já
+registrado neste log (#8/#13): SAP é um conector entre iguais, não o
+eixo arquitetural do produto.
+
+**Decisão:** um `supervisor_node` (`app/agent/supervisor.py`) roda
+PRIMEIRO no grafo — antes até do `connector` — e classifica
+deterministicamente (sem LLM) o domínio do incidente a partir de
+`interface_type` (ou, na ausência dele, palavras-chave SAP na
+descrição). O grafo (`app/agent/graph.py::_route_to_specialist`, via
+`add_conditional_edges`) direciona para UM dos dois sub-agentes
+especialistas — nunca os dois no mesmo incidente:
+
+- `sap_diagnosis_node` — persona SAP (OData, IDoc, RFC, CPI/Integration
+  Suite, BTP)
+- `saas_diagnosis_node` — persona multi-fornecedor (ServiceNow,
+  Salesforce, Workday, Ariba, APIs REST/OAuth2), também cobrindo o
+  caso "domínio não identificado" com raciocínio generalista
+
+Os dois compartilham o mesmo núcleo (`_run_diagnosis_agent`) — agente
+ReAct, Hybrid Inference (DA-20), parsing de JSON e guardrails de
+confiança (DA-15) continuam idênticos; só a persona/expertise do
+prompt muda. `DiagnosisResponse.agent_domain` expõe qual domínio foi
+usado — mesma filosofia de transparência de `llm_provider_used`
+(DA-20), nunca um roteamento silencioso.
+
+**Validação:** `tests/test_supervisor.py` (classificação determinística
+pura) e `tests/test_nodes_multiagent.py` (persona correta por
+sub-agente, roteamento condicional, salvaguarda contra `agent_domain`
+ausente, propagação até `DiagnosisResponse`) — mockando
+`invoke_with_hybrid_fallback` diretamente, sem depender de LLM real.
+`build_graph()` verificado compilando com sucesso nos dois modos de
+GraphRAG (ligado/desligado), confirmando os nodes esperados.

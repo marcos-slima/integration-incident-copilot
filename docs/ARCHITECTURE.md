@@ -9,13 +9,18 @@ foram resolvidos), ver a secao "Decisoes de Arquitetura" no
 
 ```mermaid
 flowchart TD
-    A["IncidentRequest<br/>FastAPI POST /diagnose<br/>OU A2A message/send"] --> B["<b>connector</b><br/>SAP/nao-SAP (app/connectors/)<br/>mock ou real"]
+    A["IncidentRequest<br/>FastAPI POST /diagnose<br/>OU A2A message/send"] --> S["<b>supervisor</b><br/>classifica o dominio (DA-22)<br/>deterministico, sem LLM"]
+    S --> B["<b>connector</b><br/>SAP/nao-SAP (app/connectors/)<br/>mock ou real"]
     B --> C["<b>retrieve</b><br/>Qdrant hibrido dense+sparse BM25<br/>incidents + reference_library<br/>fusao RRF + reranker cross-encoder"]
-    C --> D{"GraphRAG<br/>opt-in?"}
+    C --> W["web_search<br/>SAP Community/GitHub (fallback)"]
+    W --> D{"GraphRAG<br/>opt-in?"}
     D -->|"sim"| E["graph_enrich<br/>historico da interface no Neo4j"]
-    D -->|"nao (default)"| F["<b>diagnose</b><br/>LLM Gateway (app/llm/factory.py)<br/>+ guardrails"]
-    E --> F
-    F --> G{"GraphRAG<br/>opt-in?"}
+    D -->|"nao (default)"| R{"agent_domain?<br/>(DA-22)"}
+    E --> R
+    R -->|"sap"| F1["<b>sap_diagnose</b><br/>especialista SAP<br/>LLM Gateway + guardrails"]
+    R -->|"saas / generic"| F2["<b>saas_diagnose</b><br/>especialista multi-fornecedor<br/>LLM Gateway + guardrails"]
+    F1 --> G{"GraphRAG<br/>opt-in?"}
+    F2 --> G
     G -->|"sim"| H["graph_write<br/>grava no Neo4j"]
     G -->|"nao (default)"| I["<b>report</b><br/>monta o Markdown final"]
     H --> I
@@ -23,15 +28,21 @@ flowchart TD
 
     style D fill:#f5f5f5,stroke:#999
     style G fill:#f5f5f5,stroke:#999
+    style R fill:#f5f5f5,stroke:#999
+    style S fill:#fff3cd,stroke:#e0a800
     style B fill:#e8f0fe,stroke:#4285f4
     style C fill:#e8f0fe,stroke:#4285f4
-    style F fill:#e8f0fe,stroke:#4285f4
+    style F1 fill:#e8f0fe,stroke:#4285f4
+    style F2 fill:#e8f0fe,stroke:#4285f4
 ```
 
 Os nodes `graph_enrich`/`graph_write` (GraphRAG) so entram no grafo
 quando `GRAPH_RAG_ENABLED=true` - com a flag desligada (default), o
-grafo compilado e identico ao anterior a esta fase, byte a byte na
-mesma sequencia de nodes. Ver secao GraphRAG abaixo.
+grafo compilado tem a mesma sequencia de nodes de antes da fase
+GraphRAG, byte a byte (ver secao GraphRAG abaixo). O `supervisor` e o
+roteamento condicional para `sap_diagnose`/`saas_diagnose` (DA-22,
+secao Multi-agent abaixo) rodam SEMPRE, com ou sem GraphRAG - e a unica
+mudanca estrutural que se aplica nos dois modos do grafo.
 
 Cada etapa e um node do grafo (definidos em `app/agent/nodes.py`, orquestrados em `app/agent/graph.py`), instrumentado com
 `@observe` (Langfuse). O estado (`CopilotState`) flui entre nodes; o
@@ -103,10 +114,12 @@ TRANSPORTE (`ConnectionError`/`httpx.ConnectError`/
 MESMA chamada com o provider de fallback antes de desistir. Erro de
 APLICACAO (JSON malformado, prompt invalido) NUNCA aciona o fallback -
 subir normalmente evita mascarar um bug real atras de uma segunda
-chamada de LLM (custo/latencia desnecessarios). `diagnose_node` (unico
-consumidor hoje) usa isso para a chamada ao agente ReAct; qual provider
-respondeu de fato fica exposto em `DiagnosisResponse.llm_provider_used`
-- transparencia, nao so um fallback silencioso.
+chamada de LLM (custo/latencia desnecessarios). Os sub-agentes de
+diagnostico (`sap_diagnosis_node`/`saas_diagnosis_node`, ver DA-22
+logo abaixo) usam isso, via `_run_diagnosis_agent()`, para a chamada
+ao agente ReAct; qual provider respondeu de fato fica exposto em
+`DiagnosisResponse.llm_provider_used` - transparencia, nao so um
+fallback silencioso.
 
 ## Conectores - mock vs. real, hoje
 
@@ -266,6 +279,60 @@ isso foi construido). A cobertura de teste e com driver fake
 (`FakeSession`, mesmo padrao usado nos conectores HTTP com
 `httpx.MockTransport`); validar contra um Neo4j real fica como proximo
 passo do lado do operador/autor, fora deste ambiente de desenvolvimento.
+
+## Multi-agent - supervisor + especialistas por dominio (DA-22)
+
+Antes desta fase, um unico node (`diagnose_node`) tratava QUALQUER
+incidente com uma persona fixa de "especialista em integracao SAP" -
+incoerente com o principio de design deste projeto de que SAP e um
+conector entre iguais, nao o eixo arquitetural (ver Decisao de
+Arquitetura #8/#13 no README). Um incidente de webhook do Salesforce
+recebia a mesma expertise "OData/IDoc/RFC/CPI" que um incidente de RFC.
+
+**Decisao:** um `supervisor_node` (`app/agent/supervisor.py`) roda
+PRIMEIRO no grafo (antes ate do `connector`) e classifica
+deterministicamente o dominio do incidente:
+
+- `interface_type` em `{odata, rfc, cap}` -> `"sap"`
+- `interface_type` em `{servicenow, salesforce, workday, ariba}` ->
+  `"saas"`
+- sem `interface_type` (fluxo por descricao livre): palavra-chave SAP
+  na descricao (`idoc`, `iflow`, `cpi`, `rfc`, `bapi`, `abap`, `btp`,
+  etc.) -> `"sap"`; senao -> `"generic"`
+
+A classificacao e CODIGO, nao uma chamada de LLM - mesmo principio ja
+aplicado aos guardrails de confianca (DA-15): decisao estrutural
+barata, deterministica e 100% testavel sem depender de infraestrutura
+de IA. `app/agent/graph.py::_route_to_specialist` le `agent_domain` do
+estado e direciona o grafo (via `add_conditional_edges`) para UM dos
+dois sub-agentes especialistas - nunca os dois no mesmo incidente, sem
+duplicar custo de chamada de LLM:
+
+- `sap_diagnosis_node` - persona SAP (OData, IDoc, RFC, CPI/Integration
+  Suite, BTP)
+- `saas_diagnosis_node` - persona multi-fornecedor (ServiceNow,
+  Salesforce, Workday, Ariba, APIs REST/OAuth2 em geral); tambem cobre
+  `"generic"` (nenhum dominio identificado), aplicando o mesmo
+  raciocinio generalista de troubleshooting de integracao
+
+Os dois sub-agentes compartilham o mesmo nucleo (`_run_diagnosis_agent`
+em `app/agent/nodes.py`) - agente ReAct, Hybrid Inference (DA-20),
+parsing de JSON e guardrails de confianca (DA-15) permanecem
+IDENTICOS; a unica diferenca entre eles e a persona/expertise injetada
+no prompt. Qual dominio foi usado fica exposto em
+`DiagnosisResponse.agent_domain` (mesma filosofia de transparencia do
+`llm_provider_used`, DA-20) e aparece no relatorio Markdown final.
+
+**Validacao:** `tests/test_supervisor.py` (classificacao pura, sem
+LLM) e `tests/test_nodes_multiagent.py` (cada sub-agente recebe a
+persona certa, o roteamento condicional manda para o node certo -
+incluindo o caso de seguranca `agent_domain` ausente cair no
+especialista generalista em vez de quebrar - e `agent_domain` chega
+ate `DiagnosisResponse`), todos mockando `invoke_with_hybrid_fallback`
+diretamente (sem Ollama real, mesmo padrao de `test_llm_factory.py`).
+`build_graph()` foi verificado manualmente compilando com sucesso nos
+dois modos (GraphRAG ligado/desligado), confirmando os nodes esperados
+no grafo resultante.
 
 ## Rodando sem depender do `~/ai-stack` pessoal
 

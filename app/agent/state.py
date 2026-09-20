@@ -63,6 +63,10 @@ class CopilotState(TypedDict, total=False):
     interface_type: str | None
     identifier: str | None
     llm_model: str
+    # DA-22: dominio do sub-agente especialista que vai tratar o
+    # diagnostico ("sap" | "saas" | "generic"), decidido pelo
+    # supervisor_node ANTES do connector_node - ver app/agent/supervisor.py
+    agent_domain: str
     connector_data: ConnectorResult | None
     retrieved_context: list[dict]
     graph_history: list

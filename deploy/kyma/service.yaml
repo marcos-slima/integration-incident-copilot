@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: sap-integration-copilot
+  namespace: sap-integration-copilot
+  labels:
+    app.kubernetes.io/name: sap-integration-copilot
+spec:
+  selector:
+    app.kubernetes.io/name: sap-integration-copilot
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  type: ClusterIP

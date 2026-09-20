@@ -477,6 +477,62 @@ tamanho da descricao (422, mesma regra de `/diagnose`) e geracao
 automatica da chave no startup - tudo com `run_diagnosis` mockado, sem
 depender de Ollama/Qdrant reais.
 
+## Deploy em produção - SAP BTP Kyma Runtime (DA-24)
+
+Fecha o último item do roadmap arquitetural consolidado deste projeto.
+`deploy/kyma/` (manifests + `README.md` próprio com o passo a passo)
+contém um Deployment (2 réplicas, probes em `/health`, usuário
+não-root), Service, HorizontalPodAutoscaler (2-6 réplicas por CPU),
+ConfigMap (config não sensível) e um `secret.example.yaml` - TEMPLATE,
+nunca aplicado direto, com todo valor prefixado `CHANGE-ME` (testado em
+`tests/test_kyma_manifests.py::test_secret_example_has_no_real_looking_values`).
+
+**APIRule** (módulo API Gateway do Kyma) expõe o Service pelo Istio
+Gateway gerenciado, com `accessStrategy: noop` - o Copilot já tem sua
+própria autenticação por API key em cada endpoint (DA-18/DA-23), então
+não duplica autenticação na camada de rede. Evoluir para `jwt`
+(validando tokens XSUAA do BTP) seria a evolução natural de uma
+integração mais profunda com serviços BTP (Destination service,
+XSUAA) - escopo explicitamente descartado nesta fase em favor de só
+empacotar o deploy (ver decisão de escopo no README, ### 22).
+
+**Correções feitas no `Dockerfile` nesta mesma fase** (descobertas ao
+revisar o empacotamento para produção, corrigidas na origem em vez de
+contornadas só nos manifests - mesmo princípio de "sem débito técnico"
+aplicado o resto da sessão):
+
+- `COPY pyproject.toml uv.lock` + `uv sync --frozen` - build
+  reproduzível (antes, `uv sync` sem lockfile no build resolvia contra
+  as versões mais recentes compatíveis com `pyproject.toml`, não contra
+  as travadas no lockfile commitado)
+- usuário não-root (`appuser`, uid 1000) - boa prática de segurança
+  para clusters com PodSecurityStandards restritivos
+- `CMD` chama `.venv/bin/uvicorn` diretamente - corrige na origem o bug
+  documentado em `docs/DEPLOY.md` (`uv run` ressincronizando dependências
+  de dev a cada start, derrubando o container em rede restrita);
+  `docker-compose.yml` não precisa mais do `command:` override que
+  contornava isso
+
+**Não-objetivos explícitos desta fase** (mesma honestidade já aplicada
+ao GraphRAG/DA-21 e ao MCP/DA-19): nenhum manifest foi validado contra
+um cluster Kyma real (nenhum cluster acessível neste ambiente de
+desenvolvimento) - o schema do CRD `APIRule` já mudou de versão mais de
+uma vez na história do Kyma, então o `apiVersion` usado deve ser
+conferido contra o cluster alvo antes de aplicar de verdade; nenhum
+build/push de imagem Docker foi testado (Docker não disponível neste
+ambiente); Qdrant e Neo4j (GraphRAG, que continua opt-in) não são
+implantados por este bundle - são pré-requisitos externos, documentados
+em `deploy/kyma/README.md`.
+
+**Validação:** `tests/test_kyma_manifests.py` (11 testes) garante que
+todo YAML do bundle é sintaticamente válido e internamente consistente
+- mesmo namespace em todos os recursos namespaced, probes de saúde em
+`/health` (nunca um endpoint autenticado, para não travar o rollout em
+`CrashLoopBackOff` por falta de Secret), Pod rodando não-root, HPA/APIRule
+apontando para o Deployment/Service certos, e o `kustomization.yaml`
+referenciando só arquivos que existem (excluindo deliberadamente o
+template de Secret).
+
 ## Testes
 
 Testes unitarios (`tests/test_connectors.py`, `test_llm_factory.py`,

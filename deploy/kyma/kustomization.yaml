@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: sap-integration-copilot
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+  - hpa.yaml
+  - apirule.yaml
+# secret.example.yaml e DELIBERADAMENTE excluido daqui - e um template,
+# nao um recurso para aplicar direto (ver README.md deste diretorio e
+# o comentario dentro do proprio arquivo).

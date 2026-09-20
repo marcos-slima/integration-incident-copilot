@@ -1,0 +1,26 @@
+# DA-24: escala horizontal por CPU - resposta direta a uma limitacao ja
+# registrada na revisao do DA-23 (Event Mesh): um pico de eventos
+# (varios incidentes publicados de uma vez por um sistema de
+# monitoracao externo) aumenta o numero de chamadas simultaneas ao LLM
+# Gateway, que e I/O-bound mas ainda consome CPU/memoria por worker
+# uvicorn. Escalar replicas e mais barato e mais alinhado ao workload
+# do que so aumentar limits de um Pod so.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: sap-integration-copilot
+  namespace: sap-integration-copilot
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: sap-integration-copilot
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

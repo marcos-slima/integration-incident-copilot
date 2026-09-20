@@ -1,0 +1,40 @@
+# DA-24: APIRule (modulo API Gateway do Kyma) - expoe o Service via o
+# Istio Gateway gerenciado pelo Kyma, sem precisar configurar Istio
+# VirtualService/Gateway manualmente.
+#
+# ATENCAO - risco de desatualizacao explicito: o schema do CRD APIRule
+# ja mudou de versao mais de uma vez na historia do Kyma (v1alpha1 ->
+# v1beta1, e o proprio v1beta1 teve campos renomeados entre releases
+# do modulo API Gateway). O que esta abaixo e o schema v1beta1 correto
+# ate o conhecimento deste projeto - NAO foi validado contra um cluster
+# Kyma real (nenhum cluster acessivel neste ambiente de
+# desenvolvimento, mesma limitacao ja registrada para Neo4j/Docker nas
+# fases DA-21/DA-19). Antes de aplicar de verdade, rode
+# `kubectl explain apirule.spec` (ou `kubectl api-resources | grep -i
+# apirule` para confirmar o apiVersion instalado) no cluster alvo e
+# ajuste este arquivo se o schema tiver mudado.
+#
+# accessStrategy "noop" = sem autenticacao adicional do Istio/Kyma -
+# correto aqui porque o Copilot JA tem sua propria autenticacao por
+# API key em cada endpoint (X-API-Key, X-A2A-Api-Key,
+# X-Event-Mesh-Api-Key - DA-18/DA-23). Evoluir para "jwt" (validando
+# tokens XSUAA emitidos pelo BTP) seria a opcao natural se este projeto
+# avancar para o escopo "integracao com servicos BTP" descartado nesta
+# fase (ver conversa de escopo do DA-24) - troca a autenticacao por
+# token/roles do BTP em vez das API keys customizadas atuais.
+apiVersion: gateway.kyma-project.io/v1beta1
+kind: APIRule
+metadata:
+  name: sap-integration-copilot
+  namespace: sap-integration-copilot
+spec:
+  host: sap-integration-copilot.<CLUSTER_DOMAIN>
+  service:
+    name: sap-integration-copilot
+    port: 80
+  gateway: kyma-system/kyma-gateway
+  rules:
+    - path: /*
+      methods: ["GET", "POST"]
+      accessStrategies:
+        - handler: noop

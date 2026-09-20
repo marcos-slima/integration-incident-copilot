@@ -650,6 +650,75 @@ isoladamente, a combinacao de todas, validacao do modelo `Evidence`
 contra os dicts montados por `_assemble_evidence`, e a secao nova do
 `report_markdown`.
 
+## AI Gateway v1 - policy, circuit breaker e budget (DA-26)
+
+Terceiro item da segunda revisao arquitetural externa (P1): o "LLM
+Gateway" existente (`app/llm/factory.py`) era, tecnicamente, so um LLM
+Provider Factory / Abstraction Layer - decidia QUAL `BaseChatModel`
+instanciar, mas nao tinha, de forma centralizada, policy, budget nem
+circuit breaker de verdade. `app/llm/gateway.py` (novo) adiciona essas
+tres coisas SOBRE a Hybrid Inference ja existente (DA-20) - auth
+continua na borda HTTP (X-API-Key por endpoint, DA-18/DA-23), nao
+duplicada aqui.
+
+`app/agent/nodes.py::_run_diagnosis_agent` (usado pelos dois
+sub-agentes especialistas, DA-22) agora chama
+`gateway.invoke_via_gateway()` em vez de
+`factory.invoke_with_hybrid_fallback()` diretamente - e o UNICO ponto
+de entrada de chamada LLM no grafo.
+
+**1. Data Classification + Policy Routing.** Todo incidente e
+classificado deterministicamente (`classify_sensitivity`, mesmo sinal
+ja usado em `evidence_strength`/DA-15 e no Evidence/Trust Layer/DA-25:
+dado real de conector, nao mock/fallback) como `confidential` ou
+`public`. Dado `confidential` NUNCA pode ser roteado para um provider
+cloud (`openai`/`azure_openai`) - nem como fallback. Isso fecha um gap
+real: o setup default de Hybrid Inference e primario=`ollama` (local)
++ fallback=`openai`/`azure` (cloud) - sem esta policy, um Ollama fora
+do ar faria um incidente com dado real de producao SAP vazar para um
+provider externo. Se a policy nao deixa nenhum provider candidato (ex:
+`llm_provider="openai"` sem fallback local configurado, e o incidente
+e confidencial), a chamada falha explicitamente com
+`PolicyViolationError` - nunca silenciosamente tenta cloud mesmo
+assim.
+
+**2. Circuit Breaker.** `CircuitBreaker` (in-memory, por provider, por
+processo) substitui o try/except direto da DA-20: depois de
+`settings.llm_gateway_circuit_failure_threshold` (default 3) falhas de
+transporte CONSECUTIVAS, o provider fica "aberto" por
+`settings.llm_gateway_circuit_cooldown_seconds` (default 30s) -
+chamadas seguintes pulam esse provider sem tentar, em vez de esperar o
+mesmo timeout de rede de novo contra algo que ja sabemos que esta
+fora. Reseta para fechado no primeiro sucesso.
+
+**3. Budget.** `_estimate_cost_usd` estima o custo (heuristica de
+~4 caracteres/token x tabela de preco aproximada por provider -
+`ollama` sempre `0.0`) ANTES de cada chamada; se ultrapassar
+`settings.llm_gateway_max_cost_usd` (default 0.50, deliberadamente
+permissivo - existe pra pegar um caso patologico, nao pra orcamento
+fino de producao), a chamada e rejeitada com `PolicyViolationError`
+sem nunca invocar o provider.
+
+**4. Audit log.** Uma linha de log estruturado por tentativa
+(`logger.info`/`warning`, nunca `print`) com provider, sensibilidade,
+decisao (`status=success|failure|circuit_open|budget_rejected`),
+latencia e custo estimado.
+
+**Nao-objetivos explicitos desta v1** (backlog em aberto, ver
+`learnings.md` do projeto): IAM/auth (ja resolvido na borda HTTP, nao
+duplicado aqui); PII/DLP de verdade (um scanner de dados sensiveis no
+CONTEUDO do prompt - `sanitize_untrusted_input` protege contra prompt
+injection, nao e a mesma coisa que um scanner de PII); tenant
+isolation (projeto ainda single-tenant); circuit breaker compartilhado
+entre replicas (e in-memory por processo - os 2+ pods do deploy Kyma,
+DA-24, nao compartilham esse estado entre si; precisaria de um backend
+tipo Redis para isso em producao multi-instancia).
+
+Validado com `tests/test_llm_gateway.py` (20 testes) - policy de
+roteamento, circuit breaker (abre/fecha/expira cooldown, isolado por
+provider) e budget, sem depender de nenhum provider real (mesmo padrao
+ja usado em `test_llm_factory.py` para `invoke_with_hybrid_fallback`).
+
 ## Testes
 
 Testes unitarios (`tests/test_connectors.py`, `test_llm_factory.py`,

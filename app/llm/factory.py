@@ -1,4 +1,15 @@
-"""Factory de chat model - o "LLM Gateway" do Copilot.
+"""Factory de chat model - camada de ABSTRACAO de provider (LangChain
+BaseChatModel), usada pelo AI Gateway (app/llm/gateway.py, DA-26).
+
+Ate a DA-26, este modulo era chamado de "LLM Gateway" no comentario
+abaixo - uma revisao arquitetural externa apontou corretamente que
+isso era, tecnicamente, um LLM Provider Factory / Abstraction Layer,
+nao um Gateway de verdade (sem policy, budget, circuit breaker
+centralizado). O nome do modulo nao mudou (factory.py continua
+descrevendo bem o que ele faz: decide QUAL BaseChatModel instanciar),
+mas quem QUER um AI Gateway de verdade deve chamar
+app.llm.gateway.invoke_via_gateway(), nao invoke_with_hybrid_fallback()
+diretamente - ver app/agent/nodes.py::_run_diagnosis_agent.
 
 Por que isso existe (contexto de negocio, nao so tecnico):
 

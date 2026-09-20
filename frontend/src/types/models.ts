@@ -35,3 +35,23 @@ export interface HistoryItem {
   result: DiagnosisResponse;
   ts: Date;
 }
+
+// Espelho de GET /health (app/main.py::health / app.connectors.connector_status)
+export type ConnectorHealthStatus = 'real' | 'mock' | 'misconfigured';
+
+export interface ConnectorHealth {
+  status: ConnectorHealthStatus;
+  note: string;
+}
+
+export interface HealthResponse {
+  status: string;
+  connectors: Record<InterfaceType, ConnectorHealth>;
+  infra: {
+    llm_provider: string;
+    graph_rag_enabled: boolean;
+    langfuse_enabled: boolean;
+    async_queue_enabled: boolean;
+    auth_required: boolean;
+  };
+}

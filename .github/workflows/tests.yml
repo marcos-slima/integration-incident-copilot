@@ -117,3 +117,56 @@ jobs:
           NEO4J_USER: neo4j
           NEO4J_PASSWORD: smoke-test-password
         run: uv run pytest -m neo4j_smoke -v --tb=short
+
+  frontend:
+    name: frontend — typecheck + lint + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Avaliacao externa (nova revisao, P0/item 25): CI nunca
+    # typechecava/lintava/buildava o frontend (React/Vite) - o job
+    # "test" acima roda so pytest/ruff (Python). Este job novo cobre
+    # exatamente o que "npm run build" faz (tsc -b + vite build,
+    # ver frontend/package.json) e "npm run lint" (oxlint), pegando
+    # erros de tipo/lint do frontend no CI pela primeira vez.
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Instalar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Lint (oxlint)
+        run: npm run lint
+
+      - name: Typecheck + build (tsc -b && vite build)
+        run: npm run build
+
+  docker-build:
+    name: valida build da imagem Docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Avaliacao externa (nova revisao, P0/item 1 e item 25): o
+    # Dockerfile multi-stage (que builda o frontend com
+    # "npm run build" e copia static/dist/ para a imagem final) nunca
+    # tinha sido exercitado pelo CI - só localmente, manual. Sem isso,
+    # uma regressão no Dockerfile (ex: path errado no COPY
+    # --from=frontend-build) só apareceria num "docker compose up" de
+    # alguém, não no CI. Não faz push da imagem (sem registry
+    # configurado nesta fase) - só prova que "docker build ." termina
+    # com sucesso.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: docker build
+        run: docker build -t integration-incident-copilot:ci .

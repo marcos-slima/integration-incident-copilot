@@ -1,0 +1,14 @@
+# DA-24-fix: evita mandar node_modules/venv/git etc. pro contexto de
+# build do Docker agora que o Dockerfile builda o frontend a partir
+# do codigo-fonte (multi-stage) - sem isso, "docker build" copiava e
+# hasheava node_modules/ inteiro (varios MB, irrelevante pro cache).
+.git/
+.venv/
+frontend/node_modules/
+frontend/dist/
+static/dist/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.env

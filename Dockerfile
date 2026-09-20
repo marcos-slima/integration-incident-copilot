@@ -1,3 +1,20 @@
+FROM node:22-slim AS frontend-build
+
+WORKDIR /frontend
+
+# DA-24-fix: build do frontend a partir do codigo-fonte dentro do
+# Dockerfile (multi-stage) - antes disso, static/dist/ precisava ser
+# gerado manualmente (npm run build + cp) antes de "docker build",
+# passo documentado (e autodenunciado como pendente) em
+# docs/DEPLOY.md secao 2. Um "git clone" limpo seguido de
+# "docker build" falhava ou gerava imagem sem frontend, pois
+# static/dist/ esta no .gitignore.
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+COPY frontend/ ./
+RUN npm run build
+
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -15,7 +32,10 @@ COPY app/ app/
 
 COPY data/sample_docs/ data/sample_docs/
 
+# DA-24-fix: copia o frontend buildado no estagio anterior em vez de
+# exigir que static/dist/ ja exista no contexto de build.
 COPY static/ static/
+COPY --from=frontend-build /frontend/dist static/dist
 
 # DA-24: usuario nao-root - boa pratica de seguranca para rodar em
 # Kubernetes/Kyma (PodSecurityStandards de varios clusters bloqueiam

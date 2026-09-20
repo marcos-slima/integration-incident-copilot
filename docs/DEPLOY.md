@@ -29,14 +29,9 @@ cp .env.example .env
 
 ## 2. Build do frontend
 
-O `Dockerfile` empacota os assets estáticos do frontend (React), mas não builda a partir do código-fonte — o build precisa existir antes de `docker compose build`:
+O `Dockerfile` builda o frontend (React/Vite) a partir do código-fonte em um estágio próprio (`frontend-build`, base `node:22-slim`) e copia o resultado (`frontend/dist`) para `static/dist` no estágio final da imagem. Não há passo manual: `docker compose build` (ou `docker build .`) já builda o frontend sozinho.
 
-```bash
-cd frontend && npm install && npm run build && cd ..
-mkdir -p static && cp -r frontend/dist static/dist
-```
-
-> Melhoria pendente: mover isso para um multi-stage build no `Dockerfile`, eliminando o passo manual.
+Se quiser rodar o frontend fora do Docker (dev local com hot-reload), use `cd frontend && npm install && npm run dev`.
 
 ---
 

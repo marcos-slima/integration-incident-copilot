@@ -578,9 +578,22 @@ def _make_web_search_tool(state):
         Args:
             query: Termos tecnicos de busca (ex: 'BAPI_MATERIAL_SAVEDATA authorization error')
         """
+        # Avaliacao externa (nova revisao, P1 - "Agente ReAct pode
+        # vazar dados na web"): diferente do web_search_node (que so
+        # usa a descricao do incidente), este tool e chamado pelo
+        # proprio LLM, que MONTA a query livremente - a instrucao
+        # acima ("nunca dados sensiveis") e so uma instrucao de prompt,
+        # nao um enforcement de codigo, e o LLM tem acesso no contexto
+        # a dados de conector/logs/payload que podem conter e-mail,
+        # CPF ou numero de IDoc (exemplo citado explicitamente pela
+        # revisao). redact_pii_text (a MESMA funcao usada por
+        # sanitize_untrusted_input para o que ENTRA no prompt) roda
+        # aqui tambem para o que SAI para a rede - defesa em
+        # profundidade, nao depende so do LLM obedecer a instrucao.
+        safe_query = redact_pii_text(query)
         try:
             with DDGS() as ddgs:
-                hits = list(ddgs.text(f"{query} {site_filter}", max_results=5))
+                hits = list(ddgs.text(f"{safe_query} {site_filter}", max_results=5))
             return "\n\n".join(
                 f"Titulo: {h.get('title', '')}\nURL: {h.get('href', '')}\nResumo: {h.get('body', '')}"
                 for h in hits
@@ -653,7 +666,10 @@ um JSON valido com exatamente esta estrutura (sem texto adicional antes ou depoi
         # usado quando structured_response nao vem preenchido.
         react_agent = create_react_agent(llm, tools=[web_tool], response_format=DiagnosisModel)
         messages = {"messages": [{"role": "user", "content": prompt + json_instruction}]}
-        config = {"callbacks": [_langfuse_handler]}
+        config = {
+            "callbacks": [_langfuse_handler],
+            "recursion_limit": settings.react_agent_recursion_limit,
+        }
         try:
             return react_agent.invoke(messages, config=config)
         except TRANSPORT_FAILURE_EXCEPTIONS:

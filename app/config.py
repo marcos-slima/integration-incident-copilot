@@ -166,6 +166,16 @@ class Settings(BaseSettings):
     web_search_enabled: bool = True
     web_search_threshold: float = 0.6
 
+    # Avaliacao externa (nova revisao, P1 - "Agente ReAct pode vazar
+    # dados na web"): create_react_agent (app/agent/nodes.py) nunca
+    # tinha um recursion_limit explicito - o default do LangGraph e
+    # 25 "super-steps" (cada rodada agente->tool->agente conta varios),
+    # caro/lento sem necessidade real para um agente com um unico tool
+    # (busca web). 8 permite ~3-4 rodadas de busca antes de forcar o
+    # agente a concluir, sem abrir espaco pra loop indefinido custando
+    # tempo/dinheiro de LLM.
+    react_agent_recursion_limit: int = 8
+
     # Auth (opcional por padrao - se vazio, uma chave aleatoria por
     # processo e gerada no startup, ver _ensure_api_keys_configured em
     # app/main.py; para exigir chave EXPLICITA e travar o startup caso

@@ -560,6 +560,96 @@ corrigido: o modelo LLM default estava inconsistente entre
 `.env.example`/`docker-compose.yml` (ambos `qwen2.5-coder:32b`) - os
 dois arquivos alinhados ao valor canônico do `config.py`.
 
+## Evidence/Trust Layer + correcao do threshold do RAG (DA-25)
+
+Uma segunda revisao arquitetural externa, feita apos o roadmap
+consolidado (AI Gateway → A2A → MCP → Hybrid Inference → GraphRAG →
+Multi-agent → Event Mesh → BTP/Kyma), apontou um backlog priorizado
+(P0-P3). Esta fase ataca os dois itens P0 restantes (os outros dois,
+Docker multi-stage e `uv.lock`, ja estavam corrigidos - ver secao
+"Follow-up pos-roadmap" acima).
+
+**1. Threshold do RAG aplicado cedo demais (antes do reranker).**
+`app/rag/retriever.py::_retrieve_hybrid` descartava candidatos com
+cosseno denso abaixo de `score_threshold` (0.5) ANTES do cross-encoder
+(reranker) ter qualquer chance de avaliar a relevancia semantica de
+verdade - um documento com BM25/RRF excelente (match de termo exato,
+ex: "IDoc status 51") mas cosseno moderado (ex: 0.47) era descartado
+sem nunca chegar ao reranker. Corrigido invertendo a ordem:
+
+```
+dense + sparse -> RRF -> candidate pool -> cross encoder -> evidence threshold -> top K
+```
+
+- `_retrieve_hybrid` agora so descarta ruido semantico extremo
+  (`MIN_CANDIDATE_FLOOR = 0.05`), nao mais o threshold real de
+  confianca; o pool de candidatos da fusao RRF tambem cresceu
+  (`fusion_limit = max(top_k * 5, HYBRID_PREFETCH_LIMIT)` em vez de
+  `limit=top_k`), porque antes o proprio Qdrant ja truncava a fusao
+  para so `top_k` resultados antes de qualquer filtragem - o reranker
+  nunca via mais candidatos do que o resultado final ja teria mesmo
+  assim.
+- `_retrieve_unified` agora reranqueia TODO o pool de candidatos
+  (inclusive quando ha so 1, caso central do bug relatado) e so DEPOIS
+  aplica a decisao de confianca, via `_evidence_admission_score()`: um
+  hit e admitido se o cosseno OU o `rerank_score` (clampado para
+  [0, 1], mesma convencao ja usada em `_compute_evidence_strength`)
+  atingir `score_threshold` - o reranker ganhou um caminho proprio
+  para "salvar" um documento que o cosseno sozinho descartaria.
+- O gatilho do fallback para `reference_library` (DA-17) continua
+  olhando para o melhor cosseno de `incidents_hits` antes do rerank -
+  nao mudou de criterio, so passou a conviver com candidatos fracos
+  que antes eram descartados cedo demais e agora entram no pool do
+  reranker.
+- Validado com `tests/test_retriever_evidence_threshold.py` (8 testes,
+  mockando os limites de infraestrutura - Qdrant/reranker - sem
+  depender de infra real): cobre o caso central (cosseno fraco +
+  rerank forte -> admitido), o caso de controle (ambos fracos ->
+  rejeitado) e os dois ramos do fallback de `reference_library`.
+
+**2. Evidence/Trust Layer.** A resposta do diagnostico (`DiagnosisResponse`)
+ganhou um campo `evidence: list[Evidence]` (`app/models.py`) - uma
+entrada por fonte REAL consultada nesta execucao (conector, RAG,
+GraphRAG, busca web, descricao do usuario), cada uma com um
+`trust_level` decidido pelo TIPO da fonte:
+
+```
+system_observed (conector real)
+  > retrieved_document (RAG/GraphRAG)
+  > web_untrusted (busca web, nao curada)
+  > user_reported (descricao do usuario, nunca verificada)
+```
+
+(`simulated` substitui `system_observed` quando o conector retornou
+dado mock/fallback.) A lista e montada de forma inteiramente
+DETERMINISTICA em `app/agent/nodes.py::_assemble_evidence(state)` - o
+LLM nunca declara/cita suas proprias fontes, mesmo principio ja usado
+em `evidence_strength` (DA-15) e nos demais guardrails deste projeto
+("guardrails em codigo, nao em prompt"; ver `learnings.md` do projeto).
+`_assemble_evidence` e chamada tanto em `report_node` (para a nova
+secao "Evidencias" do `report_markdown`) quanto em
+`graph.py::run_diagnosis` (para popular `DiagnosisResponse.evidence`)
+- funcao pura e barata, entao chamada duas vezes em vez de adicionar
+mais uma chave ao `CopilotState` so pra passar o mesmo dado adiante.
+
+Isso resolve diretamente o ponto mais forte da revisao externa: antes,
+a resposta era "o LLM deu uma resposta"; agora e "o LLM produziu uma
+hipotese sustentada por evidencias rastreaveis", cada uma com uma
+fonte e um nivel de confianca explicitos - pre-requisito arquitetural
+citado pela propria revisao para quando o MCP ganhar tools de
+ESCRITA (prompt injection deixa de ser so um problema de qualidade de
+resposta e passa a ser um problema de autorizacao operacional).
+
+**Nao-objetivo desta fase:** a Evidence/Trust Layer ainda nao inclui o
+modelo `VERIFIED_AS` (verificacao humana/sistema separada da hipotese
+do LLM) proposto pela revisao para o GraphRAG - permanece na lista de
+itens P2 em aberto (ver `learnings.md`).
+
+Validado com `tests/test_evidence.py` (13 testes) - cada fonte
+isoladamente, a combinacao de todas, validacao do modelo `Evidence`
+contra os dicts montados por `_assemble_evidence`, e a secao nova do
+`report_markdown`.
+
 ## Testes
 
 Testes unitarios (`tests/test_connectors.py`, `test_llm_factory.py`,

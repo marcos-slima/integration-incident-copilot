@@ -32,6 +32,17 @@ HYBRID_PREFETCH_LIMIT = 20  # candidatos por perna (dense/sparse) antes da fusao
 RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 RERANKER_TOP_K = 3  # quantos candidatos retornar apos o reranking
 
+# DA-25: piso baixo aplicado ANTES do reranker - so descarta ruido
+# semantico extremo (candidato sem nenhuma relacao com a query), nunca
+# a decisao real de confianca. Antes, DEFAULT_SCORE_THRESHOLD (0.5) era
+# aplicado aqui e descartava candidatos com BM25/RRF forte mas cosseno
+# denso moderado (ex: 0.47) ANTES do cross-encoder ter qualquer chance
+# de avaliar a relevancia semantica de verdade - um documento poderia
+# ter o termo exato certo (ex: "IDoc status 51") e ainda assim nunca
+# chegar ao reranker. Ver _evidence_admission_score() para onde a
+# decisao de confianca de verdade agora acontece (pos-reranking).
+MIN_CANDIDATE_FLOOR = 0.05
+
 COLLECTIONS = {
     "incidents": "sap_incident_docs",
     "reference": "sap_reference_library",
@@ -67,12 +78,18 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
     return float(np.dot(a_arr, b_arr) / denom)
 
 
-def _retrieve_hybrid(
-    query: str, collection_name: str, top_k: int, score_threshold: float
-) -> list[dict]:
+def _retrieve_hybrid(query: str, collection_name: str, top_k: int) -> list[dict]:
     client = _get_qdrant_client()
     dense_query = _get_embeddings().embed_query(query)
     sparse_query = _sparse_query_vector(query)
+
+    # DA-25: pool de candidatos da fusao RRF maior que top_k - antes,
+    # limit=top_k aqui truncava a fusao para so 3 candidatos ANTES de
+    # qualquer filtragem/reranking, entao o reranker nunca via mais
+    # candidatos do que o resultado final ja ia ter mesmo assim. Um
+    # pool maior deixa o cross-encoder (mais preciso) realmente
+    # escolher entre mais opcoes.
+    fusion_limit = max(top_k * 5, HYBRID_PREFETCH_LIMIT)
 
     fused = client.query_points(
         collection_name=collection_name,
@@ -81,7 +98,7 @@ def _retrieve_hybrid(
             Prefetch(query=sparse_query, using="sparse", limit=HYBRID_PREFETCH_LIMIT),
         ],
         query=FusionQuery(fusion=Fusion.RRF),
-        limit=top_k,
+        limit=fusion_limit,
         with_vectors=["dense"],
     ).points
 
@@ -105,9 +122,11 @@ def _retrieve_hybrid(
 
         composite_score = ALPHA * cosine_score + (1 - ALPHA) * rrf_normalized
 
-        # Threshold aplicado sobre o cosseno denso (preserva calibracao
-        # dos guardrails existentes — todos calibrados para escala cosseno)
-        if cosine_score < score_threshold:
+        # DA-25: so descarta ruido extremo aqui (MIN_CANDIDATE_FLOOR) -
+        # a decisao real de confianca (score_threshold) acontece DEPOIS
+        # do reranker, em _evidence_admission_score(). Ver comentario em
+        # MIN_CANDIDATE_FLOOR acima.
+        if cosine_score < MIN_CANDIDATE_FLOOR:
             continue
 
         results.append(
@@ -192,6 +211,31 @@ def rerank(query: str, hits: list[dict], top_k: int = RERANKER_TOP_K) -> list[di
     return reranked[:top_k]
 
 
+def _evidence_admission_score(hit: dict) -> float:
+    """DA-25: decide se um candidato reranqueado tem evidencia forte o
+    suficiente para ser admitido na resposta final. Usa o MAIOR entre o
+    cosseno denso (match semantico direto, escala em que
+    score_threshold ja e calibrado) e o rerank_score do cross-encoder
+    normalizado/clampado para [0, 1] (mesma convencao ja usada em
+    _compute_evidence_strength, app/agent/nodes.py) - um documento pode
+    provar relevancia por QUALQUER UM dos dois caminhos, nao so pelo
+    cosseno.
+
+    Corrige o caso relatado na revisao externa: um documento com BM25
+    excelente (match de termo exato, ex: "IDoc status 51") mas cosseno
+    denso moderado (ex: 0.47) era descartado por score_threshold=0.5
+    ANTES do reranker (mais preciso, avalia o par query+chunk de
+    verdade) ter qualquer chance de opinar. Agora, se o reranker
+    considerar o par fortemente relevante, o documento e admitido
+    mesmo com cosseno abaixo do threshold.
+    """
+    rerank_score = hit.get("rerank_score")
+    scores = [hit["score"]]
+    if rerank_score is not None:
+        scores.append(max(0.0, min(1.0, rerank_score)))
+    return max(scores)
+
+
 def _retrieve_unified(
     query: str,
     top_k: int,
@@ -228,10 +272,20 @@ def _retrieve_unified(
     # match forte o suficiente para ser confiavel como fallback.
     REFERENCE_FALLBACK_THRESHOLD = 0.85
 
-    incidents_hits = _retrieve_hybrid(query, COLLECTIONS["incidents"], top_k, score_threshold)
+    incidents_hits = _retrieve_hybrid(query, COLLECTIONS["incidents"], top_k)
     all_hits: list[dict] = list(incidents_hits)
 
-    if not incidents_hits:
+    # DA-25: incidents_hits ja nao vem pre-filtrado por score_threshold
+    # (so pelo MIN_CANDIDATE_FLOOR de ruido extremo) - o gatilho do
+    # fallback para reference_library continua olhando para o MELHOR
+    # candidato de incidents por cosseno (mesmo criterio de antes),
+    # so que agora incidents_hits pode conter candidatos fracos que
+    # antes eram descartados cedo demais; eles ainda entram no pool
+    # do reranker abaixo, so nao contam como "match forte" para decidir
+    # se consulta reference_library tambem.
+    incidents_has_strong_match = any(h["score"] >= score_threshold for h in incidents_hits)
+
+    if not incidents_has_strong_match:
         client = _get_qdrant_client()
         try:
             ref_info = client.get_collection("sap_reference_library")
@@ -256,14 +310,20 @@ def _retrieve_unified(
             seen[key] = hit
 
     results = sorted(seen.values(), key=lambda r: r["score"], reverse=True)
-    candidates = results[: top_k * 3]  # passa mais candidatos pro reranker
+    candidates = results[: top_k * 5]  # passa mais candidatos pro reranker
 
-    if len(candidates) > 1:
-        candidates = rerank(query, candidates, top_k=top_k)
-    else:
-        candidates = candidates[:top_k]
+    # DA-25: reranqueia TODOS os candidatos do pool (nao so os top_k),
+    # mesmo quando ha apenas 1 - um unico candidato com cosseno fraco
+    # e exatamente o caso que esta correcao existe para salvar (BM25
+    # forte, cosseno moderado); pular o reranker so por ter 1 candidato
+    # o deixaria sem chance de ser resgatado pelo cross-encoder. O
+    # corte final agora acontece DEPOIS do reranker opinar
+    # (_evidence_admission_score), nao antes. rerank() ja ordena por
+    # rerank_score internamente.
+    candidates = rerank(query, candidates, top_k=len(candidates))
 
-    return candidates
+    admitted = [c for c in candidates if _evidence_admission_score(c) >= score_threshold]
+    return admitted[:top_k]
 
 
 def retrieve(

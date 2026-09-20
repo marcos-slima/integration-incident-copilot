@@ -391,6 +391,99 @@ def _compute_evidence_strength(state: CopilotState) -> float:
     return max(0.0, min(1.0, strength))
 
 
+def _assemble_evidence(state: CopilotState) -> list[dict]:
+    """DA-25 (Evidence/Trust Layer): monta a lista de evidencias que
+    sustentam o diagnostico de forma inteiramente DETERMINISTICA -
+    nunca a partir de autoavaliacao/citacao do LLM (mesmo principio ja
+    usado em _compute_evidence_strength/DA-15: guardrails em codigo,
+    nao em prompt - a autoavaliacao do LLM nao e uma metrica confiavel,
+    e o mesmo vale para "quais fontes o LLM diz ter usado"). Cada item
+    aponta para uma fonte REAL que o pipeline de fato consultou nesta
+    execucao, com trust_level decidido pelo TIPO da fonte:
+
+    - system_observed: dado real de conector (nao mock, nao fallback)
+    - simulated: dado de conector mock/fallback (nao um sistema real)
+    - retrieved_document: chunk RAG (Qdrant, ja passado pelo reranker)
+      ou historico do GraphRAG
+    - web_untrusted: resultado de busca web (DuckDuckGo), nao curado
+    - user_reported: a propria descricao textual do incidente - nunca
+      verificada de forma independente, e o sinal mais fraco de todos.
+    """
+    evidence: list[dict] = []
+
+    data = state.get("connector_data")
+    if data is not None:
+        evidence.append(
+            {
+                "source_id": f"connector:{data.source_system}",
+                "source_type": "connector",
+                "locator": data.source_system,
+                "excerpt": _truncate(data.message or "", 500),
+                "retrieval_score": None,
+                "rerank_score": None,
+                "trust_level": "simulated"
+                if (data.is_mock or data.is_fallback)
+                else "system_observed",
+            }
+        )
+
+    for hit in state.get("retrieved_context") or []:
+        evidence.append(
+            {
+                "source_id": f"rag:{hit.get('source')}",
+                "source_type": "rag",
+                "locator": hit.get("source"),
+                "excerpt": _truncate(hit.get("text") or "", 500),
+                "retrieval_score": hit.get("score"),
+                "rerank_score": hit.get("rerank_score"),
+                "trust_level": "retrieved_document",
+            }
+        )
+
+    for related in state.get("graph_history") or []:
+        evidence.append(
+            {
+                "source_id": f"graph:{related.source_system}:{related.matched_document or 'sem-documento'}",
+                "source_type": "graph",
+                "locator": related.matched_document,
+                "excerpt": _truncate(related.root_cause or "", 500),
+                "retrieval_score": related.evidence_strength,
+                "rerank_score": None,
+                "trust_level": "retrieved_document",
+            }
+        )
+
+    web_results = state.get("web_search_results") or []
+    if web_results and web_results[0].get("source") == "web_search":
+        evidence.append(
+            {
+                "source_id": "web:duckduckgo",
+                "source_type": "web",
+                "locator": None,
+                "excerpt": _truncate(web_results[0].get("text") or "", 500),
+                "retrieval_score": None,
+                "rerank_score": None,
+                "trust_level": "web_untrusted",
+            }
+        )
+
+    description = state.get("description")
+    if description:
+        evidence.append(
+            {
+                "source_id": "user:description",
+                "source_type": "user",
+                "locator": None,
+                "excerpt": _truncate(description, 500),
+                "retrieval_score": None,
+                "rerank_score": None,
+                "trust_level": "user_reported",
+            }
+        )
+
+    return evidence
+
+
 def _apply_confidence_guardrails(diagnosis: dict, state: CopilotState) -> dict:
     """Guardrails deterministicos - nao confia so na autoavaliacao do
     LLM nem so na validacao de schema."""
@@ -639,6 +732,19 @@ def report_node(state: CopilotState) -> CopilotState:
             f"status={data.status}, codigo={data.error_code}\n"
         )
 
+    # DA-25: evidencias montadas deterministicamente (nunca citadas
+    # pelo LLM) - ver _assemble_evidence().
+    def _evidence_line(item: dict) -> str:
+        locator_suffix = f" ({item['locator']})" if item.get("locator") else ""
+        return f"- [{item['trust_level']}] {item['source_type']}{locator_suffix}"
+
+    evidence_items = _assemble_evidence(state)
+    evidence_md = (
+        "\n".join(_evidence_line(item) for item in evidence_items)
+        if evidence_items
+        else "- (nenhuma evidencia disponivel)"
+    )
+
     report = f"""## Diagnostico do Incidente
 
 **Descricao reportada:** {state["description"]}
@@ -653,5 +759,8 @@ def report_node(state: CopilotState) -> CopilotState:
 {next_steps_md if next_steps_md else "- (nenhum passo sugerido)"}
 
 **Fontes recuperadas (candidatas):** {sources}
+
+**Evidencias (DA-25 - trust_level por tipo de fonte, nao autoavaliado pelo LLM):**
+{evidence_md}
 """
     return {"report_markdown": report}

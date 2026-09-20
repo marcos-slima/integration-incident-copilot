@@ -15,6 +15,7 @@ import os
 from langfuse import get_client, observe
 
 from app.agent.nodes import (
+    _assemble_evidence,
     connector_node,
     graph_enrich_node,
     graph_write_node,
@@ -137,6 +138,12 @@ def run_diagnosis(
         evidence_strength=diagnosis.get("evidence_strength"),
         llm_provider_used=diagnosis.get("llm_provider_used"),
         agent_domain=final_state.get("agent_domain"),
+        # DA-25: mesma montagem deterministica usada no report_markdown
+        # (ver report_node) - chamada de novo aqui sobre final_state
+        # (nao guardada no state) porque e uma funcao pura e barata, e
+        # evita adicionar mais uma chave ao CopilotState so pra passar
+        # o mesmo dado adiante.
+        evidence=_assemble_evidence(final_state),
     )
 
 

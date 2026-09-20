@@ -850,3 +850,29 @@ tenant isolation, e circuit breaker compartilhado entre réplicas
 
 **Validação:** `tests/test_llm_gateway.py` (20 testes) — 152 testes
 passando no total (`-m "not integration"`).
+
+### 26. Capability Registry + Agent Execution Policy (DA-27)
+
+Último item P1 da revisão externa. O servidor MCP (DA-19) só tinha
+autenticação de transporte (X-API-Key compartilhada) — sem
+diferenciação de risco por tool. `app/mcp/policy.py` (novo) cria um
+`CAPABILITY_REGISTRY` (uma entrada `ToolPolicy` por tool — risco,
+destrutividade, scopes exigidos, se precisa de aprovação, sensibilidade
+do dado) e `enforce()`, **fail-closed**: uma tool sem entrada no
+registry é negada por padrão. `diagnose_incident` e `list_connectors`
+agora chamam `enforce()` antes de executar.
+
+Como as duas tools atuais são 100% read-only, o comportamento
+observável não muda — o valor é preparar o terreno: qualquer tool
+futura de **escrita** (ex: reiniciar um iFlow) precisa
+obrigatoriamente de uma entrada no registry antes de ser exposta, ou
+é negada em runtime. Resolve o ponto mais forte da revisão: com
+tools de escrita, prompt injection deixa de ser "diagnóstico errado"
+e vira um problema de autorização operacional.
+
+**Validação:** `tests/test_mcp_policy.py` (9 testes) — 161 testes
+passando no total (`-m "not integration"`).
+
+Fecha os itens P0/P1 do backlog priorizado pela revisão externa. Os
+itens P2 restantes (evolução do schema do GraphRAG com `VERIFIED_AS`,
+benchmark científico de rerankers) seguem sem ação agendada.

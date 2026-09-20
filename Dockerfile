@@ -47,6 +47,17 @@ USER appuser
 
 EXPOSE 8000
 
+# Avaliacao externa (curto prazo, item 6): HEALTHCHECK explicito -
+# sem ele, orquestradores (docker compose, Kyma/Kubernetes via a
+# probe equivalente) so sabem que o CONTAINER esta rodando, nao que
+# a API dentro dele esta respondendo (um processo travado apos o
+# startup, ex. deadlock ou LLM gateway preso, continuaria "up"
+# indefinidamente sem isso). Usa urllib da stdlib em vez de curl/wget
+# porque a imagem base python:3.12-slim nao inclui nenhum dos dois
+# (evita adicionar uma dependencia de SO so para o healthcheck).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)" || exit 1
+
 # DA-24: chama o uvicorn direto do venv (nao "uv run uvicorn ...") -
 # uv run tenta ressincronizar o ambiente a cada start (incluindo
 # dependencias de dev como pre-commit/virtualenv), o que derruba o

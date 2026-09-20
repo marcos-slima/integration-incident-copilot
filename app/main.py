@@ -137,9 +137,38 @@ def _ensure_api_keys_configured() -> None:
         )
 
 
+class MissingGraphRagCredentialsError(RuntimeError):
+    """Levantada no startup quando GRAPH_RAG_ENABLED=true mas
+    NEO4J_PASSWORD nao foi configurada - impede o lifespan de
+    completar, mesmo principio de "falhar alto e cedo" de
+    MissingRequiredAuthError acima.
+
+    Avaliacao externa (curto prazo, item 6): o Neo4j do
+    docker-compose.yml (perfil "graphrag") exige NEO4J_PASSWORD
+    explicitamente (sem fallback fraco "changeme123" - ver
+    docker-compose.yml). Sem esta checagem, um NEO4J_PASSWORD vazio
+    aqui do lado do app faria o driver tentar autenticar com senha
+    vazia contra QUALQUER Neo4j configurado em NEO4J_URI - inclusive
+    um Neo4j de terceiros fora deste docker-compose.yml, onde nao ha
+    garantia nenhuma de que senha vazia falhe alto (alguns setups
+    self-managed permitem auth desabilitada). Melhor recusar subir
+    aqui do que depender do Neo4j do outro lado rejeitar a conexao."""
+
+
+def _ensure_graph_rag_password_configured() -> None:
+    if settings.graph_rag_enabled and not settings.neo4j_password:
+        raise MissingGraphRagCredentialsError(
+            "GRAPH_RAG_ENABLED=true, mas NEO4J_PASSWORD nao esta configurada "
+            "no .env. Configure-a explicitamente (o Neo4j do docker-compose.yml, "
+            'perfil "graphrag", tambem exige NEO4J_PASSWORD, sem default fraco) '
+            "ou desligue GRAPH_RAG_ENABLED."
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _ensure_api_keys_configured()
+    _ensure_graph_rag_password_configured()
     # DA-21: garante os constraints/indices do Neo4j no startup quando
     # GraphRAG esta habilitado, eliminando o passo manual
     # `python -m app.rag.graph_store --init`. Envolvido em try/except

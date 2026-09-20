@@ -16,6 +16,14 @@ Isso e exatamente o escopo que a proposta original (ver
 docs/proposals/a2a-interoperability-layer.md) definiu como criterio de
 aceite - implementar os estados que o protocolo suporta mas que este
 agente nunca vai de fato atingir seria "preciosismo" sem valor real.
+
+Avaliacao externa (medio prazo, item 2): as tasks eram guardadas num
+dict em memoria (`self._tasks`), perdido a cada restart do processo -
+"persistencia de tasks A2A" era so uma frase no README, nao codigo. A
+partir desta mudanca, o armazenamento fica atras de `TaskStore`
+(app/a2a/task_store.py), com Redis opcional (REDIS_URL) e o mesmo dict
+em memoria como fallback default - nada muda no comportamento default
+("clone e rode" sem infra obrigatoria).
 """
 
 from __future__ import annotations
@@ -24,6 +32,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from uuid import uuid4
 
+from app.a2a.task_store import TaskStore, get_default_task_store
 from app.agent.graph import run_diagnosis
 from app.models import DiagnosisResponse, IncidentRequest
 
@@ -97,23 +106,29 @@ class TaskManager:
     LLM real no ar - mesmo padrao de injecao de dependencia usado nos
     conectores HTTP (`client: httpx.Client | None`)."""
 
-    def __init__(self, diagnosis_fn: Callable[[IncidentRequest], DiagnosisResponse] | None = None):
+    def __init__(
+        self,
+        diagnosis_fn: Callable[[IncidentRequest], DiagnosisResponse] | None = None,
+        task_store: TaskStore | None = None,
+    ):
         self._diagnosis_fn = diagnosis_fn or run_diagnosis
-        self._tasks: dict[str, A2ATask] = {}
+        self._store = task_store if task_store is not None else get_default_task_store()
 
     def handle_message(self, message: dict) -> A2ATask:
         task = A2ATask(id=str(uuid4()))
-        self._tasks[task.id] = task
+        self._store.set(task)
 
         try:
             request = _extract_incident_request(message)
         except Exception as exc:  # noqa: BLE001 - erro de validacao vira task failed, nao 500
             task.state = "failed"
             task.error = f"Mensagem invalida: {exc}"
+            self._store.set(task)
             return task
 
         task.state = "working"
         task.input_description = request.description
+        self._store.set(task)
         try:
             task.result = self._diagnosis_fn(request)
             task.state = "completed"
@@ -121,10 +136,11 @@ class TaskManager:
             task.state = "failed"
             task.error = str(exc)
 
+        self._store.set(task)
         return task
 
     def get_task(self, task_id: str) -> A2ATask | None:
-        return self._tasks.get(task_id)
+        return self._store.get(task_id)
 
 
 _default_manager = TaskManager()

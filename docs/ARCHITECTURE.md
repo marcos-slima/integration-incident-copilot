@@ -45,7 +45,7 @@ nenhuma logica duplicada entre eles: o endpoint REST `/diagnose`
 
 | Camada | Onde | Responsabilidade |
 |---|---|---|
-| API | `app/main.py` | FastAPI, `/health`, `/diagnose`, Agent Card A2A; rate limiting 10/min por IP (slowapi); API Key via `X-API-Key` (API_KEY no .env, ou gerada automaticamente no startup se ausente - DA-18) |
+| API | `app/main.py` | FastAPI, `/health`, `/diagnose`, Agent Card A2A, servidor MCP (`/mcp`); rate limiting 10/min por IP (slowapi); API Key via `X-API-Key` (API_KEY no .env, ou gerada automaticamente no startup se ausente - DA-18) |
 | A2A | `app/a2a/` | Camada de interoperabilidade externa (Agent Card, task manager, JSON-RPC), chama a mesma orquestracao do `/diagnose` |
 | Orquestracao | `app/agent/graph.py` · `app/agent/nodes.py` · `app/agent/state.py` | Grafo LangGraph (orquestrador ~136 linhas), nodes (connector/retrieve/web_search/diagnose/report), tipos (CopilotState, DiagnosisModel) |
 | LLM Gateway | `app/llm/factory.py` | Escolhe o `BaseChatModel` (Ollama/OpenAI/Azure OpenAI) a partir de `Settings` |
@@ -237,6 +237,44 @@ HTTP) - inclui um teste que prova que uma falha na orquestracao vira
 task com `status.state == "failed"`, nao um erro HTTP 500, que e o
 comportamento correto de um agente A2A (erro de negocio, nao de
 transporte).
+
+## MCP (Model Context Protocol) - capability catalog, nao so "conectar um LLM a uma ferramenta"
+
+`app/mcp/server.py` expoe o Copilot como SERVIDOR MCP (nao cliente -
+decisao explicita, ver docstring do modulo para a leitura alternativa
+descartada), montado em `POST /mcp/` (com barra final - `app.mount()`
+redireciona 307 a partir de `/mcp` sem barra, comportamento padrao do
+Starlette, nao especifico do MCP). Terceiro item do roadmap "Projeto
+evolucao planejada", depois de AI Gateway minimo/Evidence Layer (DA-15/
+16/17) e do fechamento de autenticacao do A2A (DA-18) - a especificacao
+MCP de 2026 caminha para stateless scaling, cache de capability catalog
+e autorizacao empresarial, o que aproxima MCP de infraestrutura de
+producao em vez de um protocolo isolado.
+
+Duas ferramentas, ambas READ-ONLY ("leitura primeiro" - o roadmap e
+explicito sobre isso):
+
+- `diagnose_incident` - chama a MESMA `run_diagnosis()` usada por
+  `/diagnose` e `/a2a`; nao ha logica de diagnostico duplicada pela
+  terceira vez.
+- `list_connectors` - inspeciona `settings` (sem nenhuma chamada de
+  rede) e informa, por `interface_type`, se o conector esta configurado
+  para dados reais ou opera em modo demo/mock.
+
+Autenticacao: reusa `settings.api_key` (o MESMO X-API-Key de
+`/diagnose`, DA-18) via `RequireApiKeyMiddleware`, um middleware ASGI
+simples - o SDK MCP oferece `AuthSettings`/`TokenVerifier` (OAuth2)
+para autorizacao enterprise real, mas isso seria sobre-engenharia
+tendo REST e A2A ja usando API Key estatica; manter um unico mecanismo
+de autenticacao em toda a superficie HTTP em vez de dois.
+
+Detalhe de implementacao que vale registrar (pegou um teste real nesta
+fase): `StreamableHTTPSessionManager.run()` - que gerencia as sessoes
+MCP - so pode ser chamado UMA vez por instancia de processo; por isso
+seu ciclo de vida entra no `lifespan` do app FastAPI raiz (`app.mount()`
+NAO propaga eventos de lifespan para sub-apps automaticamente), e por
+isso os testes em `tests/test_mcp.py` usam um UNICO
+`with TestClient(app) as ...` para toda a suite daquele arquivo.
 
 ## Testes
 

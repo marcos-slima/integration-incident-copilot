@@ -146,6 +146,20 @@ curl -s -X POST http://127.0.0.1:8000/diagnose \
 
 Deve retornar um JSON com `probable_root_cause`, `confidence`, `next_steps` e `report_markdown`. Sem o header (ou com valor errado): `401 Unauthorized`.
 
+O mesmo diagnóstico também está disponível via **MCP** (DA-19) em
+`POST /mcp/` (com barra final - sem ela, `307 Temporary Redirect`),
+reusando o mesmo `X-API-Key`:
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "X-API-Key: <chave-do-log-ou-do-.env>" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"cliente-teste","version":"1.0"}}}'
+```
+
+Deve retornar um evento `message` com `serverInfo.name == "sap-integration-copilot"` e as ferramentas `diagnose_incident`/`list_connectors` disponíveis.
+
 ---
 
 ## Resolução de problemas
@@ -157,6 +171,7 @@ Deve retornar um JSON com `probable_root_cause`, `confidence`, `next_steps` e `r
 | `ConnectionError: Failed to connect to Ollama` dentro do container | `OLLAMA_HOST` errado, ou Ollama nativo só em `127.0.0.1` | Ver seção 3-B, passos 2 e 3 |
 | Container `api` reinicia sozinho com erro de DNS/`python-discovery` | `uv run` tentando sync sem rede | Ver seção 4 |
 | `401 Unauthorized` em `/diagnose` ou `/a2a` | Header `X-API-Key`/`X-A2A-Api-Key` ausente ou errado (DA-18: chave sempre exigida, gerada automaticamente se não configurada) | Ver a chave gerada no log de startup (`docker logs ... \| grep API_KEY`), ou configure `API_KEY`/`A2A_API_KEY` no `.env` |
+| `307 Temporary Redirect` em `POST /mcp` | Faltou a barra final - `app.mount()` do Starlette redireciona `/mcp` → `/mcp/` antes de checar autenticação (comportamento padrão, não é bug do MCP) | Chame `/mcp/` (com barra final) diretamente, ou configure o cliente MCP para seguir redirects |
 | `RuntimeError: Directory 'static/dist/assets' does not exist` | Frontend não buildado / não copiado para a imagem | Ver seção 2 |
 | `Collection 'sap_incident_docs' doesn't exist` | Qdrant do compose está vazio (esperado em ambiente novo) | Ver seção 6 |
 | Variável de `.env` com `$` interpretada como interpolação do Compose (warning `variable is not set`) | `$` literal em segredo (ex: `CAP_CLIENT_SECRET`) | Escapar como `$$` no `.env` |

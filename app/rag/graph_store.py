@@ -55,12 +55,23 @@ class _Neo4jSession(Protocol):
     def run(self, query: str, **parameters: Any) -> Any: ...
 
 
+# Abaixo do qual um incidente gravado no grafo e tratado como hipotese
+# fraca (nao confirmada) em consultas futuras - mesmo limiar conceitual
+# do EVIDENCE_CONFIDENCE_MARGIN em app/agent/nodes.py, aplicado aqui do
+# lado da leitura: sem isso, uma causa raiz de baixa confianca gravada
+# hoje volta como "historico" (fato) para o proximo incidente na mesma
+# interface - o LLM nao tem como saber que era so uma hipotese (DA-16).
+GROUNDED_EVIDENCE_THRESHOLD = 0.5
+
+
 @dataclass
 class RelatedIncident:
     interface_identifier: str
     source_system: str
     root_cause: str
     matched_document: str | None
+    evidence_strength: float = 0.0
+    is_grounded: bool = False
 
 
 def is_enabled() -> bool:
@@ -104,7 +115,8 @@ def ensure_constraints(session: _Neo4jSession | None = None) -> None:
 _UPSERT_QUERY = """
 MERGE (i:Incident {id: $incident_id})
   SET i.description = $description, i.root_cause = $root_cause,
-      i.confidence = $confidence, i.created_at = datetime()
+      i.confidence = $confidence, i.evidence_strength = $evidence_strength,
+      i.is_grounded = $is_grounded, i.created_at = datetime()
 MERGE (f:Interface {type: $interface_type, identifier: $identifier})
 MERGE (i)-[:AFFECTS]->(f)
 MERGE (s:System {name: $source_system})
@@ -126,11 +138,20 @@ def upsert_incident_graph(
     root_cause: str,
     confidence: float,
     matched_document: str | None,
+    evidence_strength: float = 0.0,
     session: _Neo4jSession | None = None,
 ) -> None:
     """Grava um diagnostico concluido no grafo. No-op silencioso se
     nao houver interface/identificador (incidente so-texto, sem
-    conector) - nao ha o que relacionar nesse caso."""
+    conector) - nao ha o que relacionar nesse caso.
+
+    evidence_strength (DA-16): sinal objetivo (nao a confidence
+    auto-relatada pelo LLM) de quao fundamentado era o diagnostico no
+    momento em que foi gravado - ver
+    app.agent.nodes._compute_evidence_strength. Persistido junto com o
+    incidente para que consultas futuras (graph_context) possam
+    distinguir "fato observado" de "hipotese nao confirmada" em vez de
+    tratar toda gravacao anterior como historico validado."""
     if not interface_type or not identifier:
         return
     sess = _get_session(session)
@@ -144,6 +165,8 @@ def upsert_incident_graph(
         root_cause=root_cause,
         confidence=confidence,
         matched_document=matched_document,
+        evidence_strength=evidence_strength,
+        is_grounded=evidence_strength >= GROUNDED_EVIDENCE_THRESHOLD,
     )
 
 
@@ -151,7 +174,9 @@ _RELATED_QUERY = """
 MATCH (f:Interface {type: $interface_type, identifier: $identifier})<-[:AFFECTS]-(i:Incident)
 OPTIONAL MATCH (i)-[:HAS_ROOT_CAUSE_IN]->(d:Document)
 OPTIONAL MATCH (f)-[:RUNS_ON]->(s:System)
-RETURN i.root_cause AS root_cause, s.name AS source_system, d.source AS matched_document
+RETURN i.root_cause AS root_cause, s.name AS source_system, d.source AS matched_document,
+       coalesce(i.evidence_strength, 0.0) AS evidence_strength,
+       coalesce(i.is_grounded, false) AS is_grounded
 ORDER BY i.created_at DESC
 LIMIT $limit
 """
@@ -161,12 +186,21 @@ def graph_context(
     interface_type: str | None,
     identifier: str | None,
     limit: int = 5,
+    include_ungrounded: bool = False,
     session: _Neo4jSession | None = None,
 ) -> list[RelatedIncident]:
     """Retorna incidentes anteriores conhecidos na mesma interface,
     mais recentes primeiro. Lista vazia se GraphRAG estiver desligado,
     sem historico, ou sem interface/identificador informado - sempre
-    seguro de chamar incondicionalmente do grafo LangGraph."""
+    seguro de chamar incondicionalmente do grafo LangGraph.
+
+    include_ungrounded (DA-16): por padrao False - incidentes gravados
+    com evidence_strength abaixo de GROUNDED_EVIDENCE_THRESHOLD (ou sem
+    o campo, gravados antes desta mudanca) sao hipoteses nao
+    confirmadas do LLM, nao fatos observados, e ficam de fora do
+    contexto injetado no prompt de novos diagnosticos para nao virarem
+    "verdade historica" por repeticao. Passar True so em ferramentas de
+    auditoria/analise, nunca no caminho de producao do diagnose_node."""
     if not is_enabled() or not interface_type or not identifier:
         return []
 
@@ -174,15 +208,20 @@ def graph_context(
     result = sess.run(
         _RELATED_QUERY, interface_type=interface_type, identifier=identifier, limit=limit
     )
-    return [
+    related = [
         RelatedIncident(
             interface_identifier=identifier,
             source_system=record["source_system"] or interface_type,
             root_cause=record["root_cause"] or "",
             matched_document=record["matched_document"],
+            evidence_strength=float(record["evidence_strength"]),
+            is_grounded=bool(record["is_grounded"]),
         )
         for record in result
     ]
+    if include_ungrounded:
+        return related
+    return [r for r in related if r.is_grounded]
 
 
 def format_graph_context_for_prompt(related: list[RelatedIncident]) -> str:
@@ -192,7 +231,8 @@ def format_graph_context_for_prompt(related: list[RelatedIncident]) -> str:
     if not related:
         return ""
     lines = [
-        f"- causa raiz anterior: {r.root_cause} (documento: {r.matched_document or 'N/A'})"
+        f"- {'causa raiz confirmada anteriormente' if r.is_grounded else 'HIPOTESE NAO CONFIRMADA de diagnostico anterior (baixa evidencia - nao trate como fato)'}"
+        f": {r.root_cause} (documento: {r.matched_document or 'N/A'})"
         for r in related
     ]
     return (

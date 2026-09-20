@@ -89,6 +89,7 @@ def graph_write_node(state: CopilotState) -> CopilotState:
         root_cause=diagnosis.get("probable_root_cause", ""),
         confidence=float(diagnosis.get("confidence", 0.0)),
         matched_document=diagnosis.get("matched_source"),
+        evidence_strength=float(diagnosis.get("evidence_strength", 0.0)),
     )
     return {}
 
@@ -161,25 +162,31 @@ def web_search_node(state: CopilotState) -> CopilotState:
 
 
 # Padroes de prompt injection mais comuns em contexto SAP/LLM
+# Sem "(?i)" por padrao: a partir do Python 3.11, uma flag inline só é
+# valida no INICIO da expressao inteira - repeti-la em cada padrao
+# individual (como estava antes) quebra o re.compile("|".join(...))
+# com "global flags not at the start of the expression" assim que mais
+# de um padrao com (?i) e unido. Case-insensitive agora e aplicado uma
+# unica vez via re.IGNORECASE no re.compile (ver _get_injection_re).
 _INJECTION_PATTERNS = [
     # Instrucoes diretas ao modelo
-    r"(?i)ignore\s+(all\s+)?(previous|prior|above)\s+instructions?",
-    r"(?i)disregard\s+(all\s+)?(previous|prior|above)\s+instructions?",
-    r"(?i)forget\s+(all\s+)?(previous|prior|above)\s+instructions?",
-    r"(?i)you\s+are\s+now\s+a",
-    r"(?i)act\s+as\s+(a\s+)?(?:different|new|another)",
-    r"(?i)new\s+instructions?:",
-    r"(?i)system\s*:\s*you",
-    r"(?i)\[system\]",
-    r"(?i)\<\s*system\s*\>",
+    r"ignore\s+(all\s+)?(previous|prior|above)\s+instructions?",
+    r"disregard\s+(all\s+)?(previous|prior|above)\s+instructions?",
+    r"forget\s+(all\s+)?(previous|prior|above)\s+instructions?",
+    r"you\s+are\s+now\s+a",
+    r"act\s+as\s+(a\s+)?(?:different|new|another)",
+    r"new\s+instructions?:",
+    r"system\s*:\s*you",
+    r"\[system\]",
+    r"\<\s*system\s*\>",
     # Exfiltracao de dados
-    r"(?i)print\s+(all\s+)?(your\s+)?(system\s+)?prompt",
-    r"(?i)reveal\s+(your\s+)?(system\s+)?prompt",
-    r"(?i)show\s+(me\s+)?(your\s+)?(instructions?|prompt|context)",
+    r"print\s+(all\s+)?(your\s+)?(system\s+)?prompt",
+    r"reveal\s+(your\s+)?(system\s+)?prompt",
+    r"show\s+(me\s+)?(your\s+)?(instructions?|prompt|context)",
     # Jailbreak comum
-    r"(?i)DAN\s+mode",
-    r"(?i)developer\s+mode",
-    r"(?i)jailbreak",
+    r"DAN\s+mode",
+    r"developer\s+mode",
+    r"jailbreak",
 ]
 
 _INJECTION_RE = None
@@ -190,7 +197,7 @@ def _get_injection_re():
     if _INJECTION_RE is None:
         import re
 
-        _INJECTION_RE = re.compile("|".join(_INJECTION_PATTERNS))
+        _INJECTION_RE = re.compile("|".join(_INJECTION_PATTERNS), re.IGNORECASE)
     return _INJECTION_RE
 
 
@@ -241,9 +248,10 @@ def _build_diagnosis_prompt(state: CopilotState) -> str:
     other_sources = [h["source"] for h in hits[1:]]
 
     if top_hit:
+        safe_chunk_text = sanitize_untrusted_input(top_hit["text"], "rag_chunk")
         context_block = (
             f"--- Documento mais relevante (fonte={top_hit['source']}, "
-            f"score={top_hit['score']:.3f}) ---\n{top_hit['text']}"
+            f"score={top_hit['score']:.3f}) ---\n{safe_chunk_text}"
         )
     else:
         context_block = "(nenhum contexto relevante encontrado)"
@@ -268,12 +276,17 @@ def _build_diagnosis_prompt(state: CopilotState) -> str:
             if data.is_fallback
             else ""
         )
+        safe_error_code = sanitize_untrusted_input(
+            str(data.error_code) if data.error_code else "", "connector_error_code"
+        )
+        safe_message = sanitize_untrusted_input(data.message, "connector_message")
+        safe_raw = sanitize_untrusted_input(str(data.raw) if data.raw else "", "connector_raw")
         connector_block = f"""
 Dados coletados diretamente do sistema SAP (via conector {data.source_system}{" - SIMULADO/MOCK" if data.is_mock else ""}):
   status: {data.status}
-  codigo de erro: {data.error_code}
-  mensagem: {data.message}
-  detalhe bruto: {data.raw}{fallback_warning}
+  codigo de erro: {safe_error_code}
+  mensagem: {safe_message}
+  detalhe bruto: {safe_raw}{fallback_warning}
 """
 
     graph_block = format_graph_context_for_prompt(state.get("graph_history", []))
@@ -322,10 +335,47 @@ do conector confirmando o diagnostico, a confidence pode ser mais alta
 (o dado do sistema e mais confiavel que so a descricao textual)."""
 
 
+# Margem de tolerancia entre confidence auto-relatada pelo LLM e a
+# evidence_strength calculada a partir do retrieval/conector reais.
+# DA-15: sem isso, o modelo pode "soar confiante" (0.8, 0.9) mesmo
+# quando o retrieval sustenta pouco (score baixo) - a autoavaliacao do
+# LLM nao e uma metrica de evidencia, e o teto anterior (0.4/0.3 fixos,
+# so em 2 cenarios binarios) nao cobria o espectro continuo de scores.
+EVIDENCE_CONFIDENCE_MARGIN = 0.25
+
+
+def _compute_evidence_strength(state: CopilotState) -> float:
+    """Evidence_strength: sinal objetivo (nao auto-relatado pelo LLM) de
+    quao bem fundamentado esta o contexto disponivel para o diagnostico.
+
+    Fontes, em ordem de forca:
+    - Dado real de conector (nao mock, nao fallback) e o sinal mais forte
+      -> piso de 0.75, pois vem diretamente do sistema, nao de inferencia.
+    - Score de retrieval (rerank_score se disponivel, senao score bruto
+      do hybrid RAG) do documento mais relevante.
+    - Nenhum contexto (sem RAG, sem conector real) -> 0.0.
+    """
+    data = state.get("connector_data")
+    hits = state.get("retrieved_context") or []
+    top_hit = hits[0] if hits else {}
+    rag_score = float(top_hit.get("rerank_score", top_hit.get("score", 0.0))) if top_hit else 0.0
+
+    connector_is_real_evidence = bool(data) and not data.is_mock and not data.is_fallback
+    strength = max(rag_score, 0.75) if connector_is_real_evidence else rag_score
+    return max(0.0, min(1.0, strength))
+
+
 def _apply_confidence_guardrails(diagnosis: dict, state: CopilotState) -> dict:
     """Guardrails deterministicos - nao confia so na autoavaliacao do
     LLM nem so na validacao de schema."""
     diagnosis["confidence"] = max(0.0, min(1.0, float(diagnosis.get("confidence", 0.0))))
+
+    evidence_strength = _compute_evidence_strength(state)
+    diagnosis["evidence_strength"] = round(evidence_strength, 3)
+
+    evidence_ceiling = min(1.0, evidence_strength + EVIDENCE_CONFIDENCE_MARGIN)
+    if diagnosis["confidence"] > evidence_ceiling:
+        diagnosis["confidence"] = evidence_ceiling
 
     data = state.get("connector_data")
     if data and data.is_fallback:
@@ -524,7 +574,7 @@ def report_node(state: CopilotState) -> CopilotState:
 {connector_line}
 **Causa raiz provavel:** {diagnosis.get("probable_root_cause", "N/A")}
 
-**Confianca:** {diagnosis.get("confidence", 0.0):.0%}
+**Confianca:** {diagnosis.get("confidence", 0.0):.0%} (evidence_strength: {diagnosis.get("evidence_strength", 0.0):.0%})
 
 **Documento usado como base:** {matched}
 

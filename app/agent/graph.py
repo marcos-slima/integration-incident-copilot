@@ -106,6 +106,7 @@ def run_diagnosis(
         next_steps=diagnosis.get("next_steps", []),
         report_markdown=final_state.get("report_markdown", ""),
         matched_source=diagnosis.get("matched_source"),
+        evidence_strength=diagnosis.get("evidence_strength"),
     )
 
 

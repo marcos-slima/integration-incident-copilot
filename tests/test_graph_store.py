@@ -102,6 +102,8 @@ def test_graph_context_maps_records_when_enabled(monkeypatch):
                 "root_cause": "Pool de processos de dialogo esgotado",
                 "source_system": "RFC",
                 "matched_document": "rfc_gateway_pool_timeout.md",
+                "evidence_strength": 0.8,
+                "is_grounded": True,
             }
         ]
     )
@@ -111,6 +113,41 @@ def test_graph_context_maps_records_when_enabled(monkeypatch):
     assert result[0].root_cause == "Pool de processos de dialogo esgotado"
     assert result[0].source_system == "RFC"
     assert result[0].matched_document == "rfc_gateway_pool_timeout.md"
+    assert result[0].evidence_strength == 0.8
+    assert result[0].is_grounded is True
+
+
+def test_graph_context_filters_out_ungrounded_hypotheses_by_default(monkeypatch):
+    """DA-16: um diagnostico anterior gravado com baixa evidencia nao
+    deve voltar como 'historico' para alimentar o proximo prompt - so
+    incidentes com is_grounded=True aparecem por padrao."""
+    monkeypatch.setattr("app.rag.graph_store.settings", Settings(graph_rag_enabled=True))
+    session = FakeSession(
+        records=[
+            {
+                "root_cause": "hipotese fraca, nao confirmada",
+                "source_system": "RFC",
+                "matched_document": None,
+                "evidence_strength": 0.2,
+                "is_grounded": False,
+            },
+            {
+                "root_cause": "causa confirmada",
+                "source_system": "RFC",
+                "matched_document": "doc.md",
+                "evidence_strength": 0.9,
+                "is_grounded": True,
+            },
+        ]
+    )
+    result = graph_context("rfc", "RFC-GWY-POOL-TIMEOUT-DEMO", session=session)
+    assert len(result) == 1
+    assert result[0].root_cause == "causa confirmada"
+
+    result_all = graph_context(
+        "rfc", "RFC-GWY-POOL-TIMEOUT-DEMO", include_ungrounded=True, session=session
+    )
+    assert len(result_all) == 2
 
 
 def test_format_graph_context_for_prompt_empty():
@@ -120,7 +157,15 @@ def test_format_graph_context_for_prompt_empty():
 def test_format_graph_context_for_prompt_with_history(monkeypatch):
     monkeypatch.setattr("app.rag.graph_store.settings", Settings(graph_rag_enabled=True))
     session = FakeSession(
-        records=[{"root_cause": "causa X", "source_system": "RFC", "matched_document": "doc.md"}]
+        records=[
+            {
+                "root_cause": "causa X",
+                "source_system": "RFC",
+                "matched_document": "doc.md",
+                "evidence_strength": 0.9,
+                "is_grounded": True,
+            }
+        ]
     )
     related = graph_context("rfc", "ID-1", session=session)
     text = format_graph_context_for_prompt(related)
@@ -128,3 +173,18 @@ def test_format_graph_context_for_prompt_with_history(monkeypatch):
     assert "1 incidente" in text
     assert "causa X" in text
     assert "doc.md" in text
+    assert "confirmada" in text
+
+
+def test_format_graph_context_for_prompt_labels_ungrounded_hypothesis():
+    related = graph_context.__globals__["RelatedIncident"](
+        interface_identifier="ID-1",
+        source_system="RFC",
+        root_cause="hipotese fraca",
+        matched_document=None,
+        evidence_strength=0.1,
+        is_grounded=False,
+    )
+    text = format_graph_context_for_prompt([related])
+    assert "NAO CONFIRMADA" in text
+    assert "nao trate como fato" in text.lower()

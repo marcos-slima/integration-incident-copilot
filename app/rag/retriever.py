@@ -114,12 +114,23 @@ def _retrieve_hybrid(
             {
                 "source": hit.payload.get("source"),
                 "text": hit.payload.get("text"),
-                "score": composite_score,
+                # "score" = cosseno puro, nao o composto - contrato
+                # documentado no topo do modulo (guardrails, thresholds
+                # e oos_rejection do eval sao calibrados para cosseno;
+                # devolver o composto aqui inflava OOS queries genericas
+                # com o bonus fixo de RRF do rank 0, mesmo sem match real).
+                "score": cosine_score,
                 "cosine_score": cosine_score,
+                "composite_score": composite_score,
                 "rrf_rank": rank,
+                "collection": collection_name,
             }
         )
-    results.sort(key=lambda r: r["score"], reverse=True)
+    # Ordena por composite_score (aproveita o sinal do BM25/RRF para
+    # priorizar match de termo exato), mas o "score" reportado
+    # continua sendo cosseno puro - so a ORDEM de candidatos usa RRF,
+    # nao a confianca comunicada para o resto do pipeline.
+    results.sort(key=lambda r: r["composite_score"], reverse=True)
     return results
 
 
@@ -141,6 +152,7 @@ def _retrieve_dense_only(
             "score": hit.score,
             "cosine_score": hit.score,
             "rrf_rank": None,
+            "collection": collection_name,
         }
         for hit in results
     ]
@@ -185,36 +197,53 @@ def _retrieve_unified(
     top_k: int,
     score_threshold: float,
 ) -> list[dict]:
-    """Consulta incidents + reference_library em paralelo e funde via RRF.
-
-    A reference_library (PDFs tecnicos SAP) enriquece o contexto quando
-    os documentos de troubleshooting nao cobrem o incidente com precisao
-    suficiente. O score retornado e sempre cosseno denso (mesma escala
-    dos guardrails existentes).
+    """Busca em incidents (hybrid dense+BM25); so consulta a
+    reference_library como fallback quando incidents nao cobre a query
+    (ver DA-17 abaixo) - nunca em paralelo/concorrendo de igual pra
+    igual. O score retornado e sempre cosseno denso (mesma escala dos
+    guardrails existentes).
     """
 
-    collections = [COLLECTIONS["incidents"]]
+    # DA-17: reference_library so participa como FALLBACK, quando
+    # incidents nao cobre a query - nunca como competidor de igual pra
+    # igual. O docstring desta funcao ja prometia isso ("enriquece
+    # quando os documentos de troubleshooting nao cobrem o incidente
+    # com precisao suficiente"), mas o codigo original ignorava essa
+    # regra e fundia as duas colecoes por score bruto sempre - um
+    # manual generico (ex: Manual_Basis_SAP_R3.pdf, denso em texto
+    # tecnico correlato) podia vencer um documento de incidente feito
+    # sob medida so por ter mais massa textual similar em busca densa
+    # pura. Uma penalidade multiplicativa (tentativa anterior) reduzia
+    # o problema mas nao o eliminava, porque o reranker cross-encoder
+    # reavalia o texto e pode preferir o manual de qualquer forma. A
+    # regra objetiva e mais forte: so consulta reference_library quando
+    # incidents NAO retornou nada acima do score_threshold.
+    # A reference_library nao e curada por incidente (766k+ chunks de
+    # manuais tecnicos genericos) - qualquer query relacionada a SAP
+    # tende a achar ALGO semanticamente proximo nela, mesmo quando o
+    # incidente reportado nao tem relacao real com nenhum documento
+    # conhecido (caso out-of-scope). Por isso o fallback exige um
+    # score bem mais alto que o usado em incidents (documentos feitos
+    # sob medida): 0.85 filtra "vagamente parecido" e so deixa passar
+    # match forte o suficiente para ser confiavel como fallback.
+    REFERENCE_FALLBACK_THRESHOLD = 0.85
 
-    # Inclui reference_library se existir e tiver chunks
-    client = _get_qdrant_client()
-    try:
-        ref_info = client.get_collection("sap_reference_library")
-        if ref_info.points_count > 0:
-            collections.append("sap_reference_library")
-    except (ValueError, RuntimeError):
-        pass
+    incidents_hits = _retrieve_hybrid(query, COLLECTIONS["incidents"], top_k, score_threshold)
+    all_hits: list[dict] = list(incidents_hits)
 
-    # Busca em paralelo em todas as colecoes
-    # incidents: hybrid (dense+sparse BM25) — vetores nomeados
-    # reference_library: dense puro — vetores anonimos (schema antigo)
-    all_hits: list[dict] = []
-    for collection in collections:
+    if not incidents_hits:
+        client = _get_qdrant_client()
         try:
-            if collection == COLLECTIONS["incidents"]:
-                hits = _retrieve_hybrid(query, collection, top_k, score_threshold)
-            else:
-                hits = _retrieve_dense_only(query, collection, top_k, score_threshold)
-            all_hits.extend(hits)
+            ref_info = client.get_collection("sap_reference_library")
+            if ref_info.points_count > 0:
+                all_hits.extend(
+                    _retrieve_dense_only(
+                        query,
+                        "sap_reference_library",
+                        top_k,
+                        REFERENCE_FALLBACK_THRESHOLD,
+                    )
+                )
         except (ValueError, RuntimeError):
             pass
 

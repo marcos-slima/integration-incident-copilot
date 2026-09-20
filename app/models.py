@@ -28,3 +28,13 @@ class DiagnosisResponse(BaseModel):
     next_steps: list[str]
     report_markdown: str
     matched_source: str | None = None
+    evidence_strength: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Sinal objetivo (nao auto-relatado pelo LLM) de quao "
+            "fundamentado esta o diagnostico: dado real de conector ou "
+            "score de retrieval do documento mais relevante. Ver DA-15."
+        ),
+    )

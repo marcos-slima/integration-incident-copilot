@@ -20,6 +20,7 @@ from app.config import settings
 from app.mcp.server import build_mcp_asgi_app
 from app.mcp.server import mcp as mcp_server
 from app.models import DiagnosisResponse, IncidentRequest
+from app.rag.graph_store import GRAPH_UNAVAILABLE_EXCEPTIONS, ensure_constraints
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,23 @@ def _ensure_api_keys_configured() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _ensure_api_keys_configured()
+    # DA-21: garante os constraints/indices do Neo4j no startup quando
+    # GraphRAG esta habilitado, eliminando o passo manual
+    # `python -m app.rag.graph_store --init`. Envolvido em try/except
+    # porque um Neo4j temporariamente fora do ar NAO pode impedir a API
+    # de subir - graph_enrich_node/graph_write_node ja degradam
+    # graciosamente (ver DA-21 em app/agent/nodes.py) quando o grafo
+    # esta indisponivel, entao o startup segue a mesma filosofia.
+    if settings.graph_rag_enabled:
+        try:
+            ensure_constraints()
+        except GRAPH_UNAVAILABLE_EXCEPTIONS as exc:
+            logger.warning(
+                "Neo4j indisponivel no startup - constraints/indices do "
+                "GraphRAG nao foram verificados agora (tentaremos de novo "
+                "de forma implicita nas proximas escritas/leituras): %s",
+                exc,
+            )
     # DA-19: o app ASGI do servidor MCP (app/mcp/server.py) gerencia
     # sessoes via StreamableHTTPSessionManager, que precisa do seu
     # proprio lifespan rodando - `app.mount()` NAO propaga eventos de

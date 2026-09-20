@@ -205,7 +205,12 @@ fase e que agora **existe codigo real, testado (com driver fake, ver
 1. `docker compose --profile graphrag up -d neo4j` (nao sobe com
    `docker compose up` default - profile dedicado, ver `docker-compose.yml`)
 2. `GRAPH_RAG_ENABLED=true` no `.env`
-3. `uv run python -m app.rag.graph_store --init` (cria as constraints)
+
+Nao ha um passo 3 manual: desde a Decisao de Arquitetura #19 (DA-21),
+`ensure_constraints()` roda sozinho no `lifespan` do FastAPI quando a
+flag esta ligada (ver `app/main.py`) - o antigo
+`uv run python -m app.rag.graph_store --init` continua disponivel para
+uso manual/explicito, mas deixou de ser obrigatorio.
 
 Nao ha nada para descomentar no Python - so essa flag + a infra de fato
 existir. Com a flag desligada, `build_graph()` monta exatamente a mesma
@@ -213,6 +218,54 @@ sequencia de nodes de antes desta fase (ver `app/agent/graph.py`),
 custo zero. **Nao testado contra um Neo4j real** (sem Docker daemon
 disponivel no ambiente onde isso foi construido) - mesma ressalva
 honesta do `RFCConnector._fetch_real`.
+
+### Hardening operacional (DA-21): degradacao graciosa, dedup e limpeza
+
+Ligar GraphRAG significa que o Neo4j passa a estar no caminho critico
+de CADA diagnostico (`graph_enrich_node` antes, `graph_write_node`
+depois - ver `app/agent/graph.py`). Sem cuidado, uma instabilidade
+pontual do Neo4j (restart, rede, pool esgotado) derrubaria o
+diagnostico inteiro por causa de uma camada que deveria ser so um
+enriquecimento, nao uma dependencia rigida. Tres reforcos, todos
+cobertos por teste com driver fake (`tests/test_graph_store.py`,
+`tests/test_nodes_graph_degradation.py`):
+
+- **Degradacao graciosa por tipo de excecao** - `GRAPH_UNAVAILABLE_EXCEPTIONS`
+  (`neo4j.exceptions.DriverError` + `TransientError`) delimita exatamente
+  o que conta como "infra indisponivel agora, siga sem grafo": conexao
+  recusada, timeout, servidor em restart. `graph_enrich_node` cai para
+  "sem historico" (`graph_history: []`) e `graph_write_node` pula a
+  escrita, ambos logando um `warning` - o diagnostico principal (RAG +
+  LLM) segue intacto. Deliberadamente NAO inclui `Neo4jError` em geral:
+  um `ConstraintError`/`CypherSyntaxError` sinaliza um bug NOSSO
+  (Cypher ou schema errado), nao indisponibilidade de infra, e continua
+  propagando normalmente - mesmo principio que separa falha de
+  transporte de erro de aplicacao no Hybrid Inference (DA-20).
+- **Formatacao com deduplicacao por recorrencia** -
+  `format_graph_context_for_prompt()` agrupa ocorrencias CONSECUTIVAS
+  da mesma causa raiz numa unica linha com contador ("ja ocorreu 3x"),
+  em vez de repetir a mesma linha e desperdicar orcamento de prompt numa
+  interface "flapping" (falhando repetidamente pela mesma causa).
+  Agrupamento e so entre vizinhos - a lista ja vem mais-recente-primeiro,
+  e uma causa diferente intercalada quebra o agrupamento, para nao
+  esconder que algo diferente aconteceu no meio.
+- **Utilitario manual de limpeza** - `prune_ungrounded_hypotheses()`
+  (CLI: `--prune-ungrounded --older-than-days N`, default 90) remove
+  hipoteses NAO confirmadas (`is_grounded=false`) antigas, que so
+  acumulam ruido no grafo sem nunca terem sido corroboradas. Incidentes
+  com causa raiz confirmada (`is_grounded=true`) nunca sao tocados, sob
+  nenhuma idade. E manutencao explicita do operador - nunca chamada
+  automaticamente por nenhum node ou pelo `lifespan`, mesmo principio de
+  "nada e deletado sem o operador pedir" usado em outras partes deste
+  projeto.
+
+**Nao-objetivo explicito desta fase**: nenhuma das tres mudancas acima
+foi validada contra um Neo4j real (mesma limitacao de ambiente das
+demais integracoes reais deste projeto - sem Docker disponivel onde
+isso foi construido). A cobertura de teste e com driver fake
+(`FakeSession`, mesmo padrao usado nos conectores HTTP com
+`httpx.MockTransport`); validar contra um Neo4j real fica como proximo
+passo do lado do operador/autor, fora deste ambiente de desenvolvimento.
 
 ## Rodando sem depender do `~/ai-stack` pessoal
 

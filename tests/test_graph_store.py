@@ -11,6 +11,7 @@ from app.rag.graph_store import (
     format_graph_context_for_prompt,
     graph_context,
     is_enabled,
+    prune_ungrounded_hypotheses,
     upsert_incident_graph,
 )
 
@@ -188,3 +189,93 @@ def test_format_graph_context_for_prompt_labels_ungrounded_hypothesis():
     text = format_graph_context_for_prompt([related])
     assert "NAO CONFIRMADA" in text
     assert "nao trate como fato" in text.lower()
+
+
+def test_format_graph_context_for_prompt_groups_consecutive_repeats():
+    """DA-21: mesma causa raiz repetida em incidentes CONSECUTIVOS vira
+    uma linha com contador de ocorrencias, em vez de N linhas identicas."""
+    RelatedIncident = graph_context.__globals__["RelatedIncident"]
+    related = [
+        RelatedIncident(
+            interface_identifier="ID-1",
+            source_system="RFC",
+            root_cause="Pool de processos de dialogo esgotado",
+            matched_document="doc.md",
+            evidence_strength=0.9,
+            is_grounded=True,
+        ),
+        RelatedIncident(
+            interface_identifier="ID-1",
+            source_system="RFC",
+            root_cause="Pool de processos de dialogo esgotado",
+            matched_document="doc.md",
+            evidence_strength=0.9,
+            is_grounded=True,
+        ),
+        RelatedIncident(
+            interface_identifier="ID-1",
+            source_system="RFC",
+            root_cause="Pool de processos de dialogo esgotado",
+            matched_document="doc.md",
+            evidence_strength=0.9,
+            is_grounded=True,
+        ),
+    ]
+    text = format_graph_context_for_prompt(related)
+    assert text.count("Pool de processos de dialogo esgotado") == 1
+    assert "(ja ocorreu 3x)" in text
+    assert "3 incidente(s)" in text
+
+
+def test_format_graph_context_for_prompt_does_not_group_non_consecutive_repeats():
+    """DA-21: agrupamento e so entre VIZINHOS - se outra causa aparece no
+    meio, as duas ocorrencias da causa original nao devem ser somadas
+    numa unica linha (perderia o sinal de que outra coisa aconteceu)."""
+    RelatedIncident = graph_context.__globals__["RelatedIncident"]
+    causa_a = RelatedIncident(
+        interface_identifier="ID-1",
+        source_system="RFC",
+        root_cause="causa A",
+        matched_document="a.md",
+        evidence_strength=0.9,
+        is_grounded=True,
+    )
+    causa_b = RelatedIncident(
+        interface_identifier="ID-1",
+        source_system="RFC",
+        root_cause="causa B",
+        matched_document="b.md",
+        evidence_strength=0.9,
+        is_grounded=True,
+    )
+    related = [causa_a, causa_b, causa_a]
+    text = format_graph_context_for_prompt(related)
+    assert "(ja ocorreu 2x)" not in text
+    assert text.count("causa A") == 2
+    assert text.count("causa B") == 1
+
+
+def test_prune_ungrounded_hypotheses_returns_deleted_count():
+    session = FakeSession(records=[{"deleted_count": 4}])
+    deleted = prune_ungrounded_hypotheses(older_than_days=30, session=session)
+    assert deleted == 4
+    assert len(session.calls) == 1
+    query, params = session.calls[0]
+    assert "is_grounded" in query
+    assert "DETACH DELETE" in query
+    assert params["older_than_days"] == 30
+
+
+def test_prune_ungrounded_hypotheses_never_targets_grounded_incidents():
+    """A query em si (nao so o teste) e quem garante isso: verificamos
+    que a clausula WHERE filtra por is_grounded=false, para que um
+    incidente confirmado nunca entre no escopo do DETACH DELETE."""
+    session = FakeSession(records=[])
+    prune_ungrounded_hypotheses(session=session)
+    query, _ = session.calls[0]
+    assert "is_grounded, false) = false" in query
+
+
+def test_prune_ungrounded_hypotheses_returns_zero_when_no_records():
+    session = FakeSession(records=[])
+    assert prune_ungrounded_hypotheses(session=session) == 0

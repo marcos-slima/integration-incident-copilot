@@ -43,7 +43,22 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Protocol
 
+from neo4j.exceptions import DriverError, TransientError
+
 from app.config import settings
+
+# DA-21: excecoes que sinalizam "Neo4j inalcancavel agora" (conexao
+# recusada, pool esgotado, servidor temporariamente indisponivel) -
+# `DriverError` cobre falhas do LADO DO CLIENTE (nunca chegou a
+# conversar com o servidor) e `TransientError` cobre respostas do
+# servidor que dizem "tente de novo depois" (ex: `DatabaseUnavailable`
+# durante um restart). Deliberadamente NAO inclui `Neo4jError` em
+# geral: um `ConstraintError`/`CypherSyntaxError` significa que a
+# query ou o schema estao errados - um bug nosso, nao indisponibilidade
+# de infra - e deve continuar subindo normalmente, mesmo principio que
+# separa falha de transporte de erro de aplicacao no Hybrid Inference
+# (DA-20, app/llm/factory.py).
+GRAPH_UNAVAILABLE_EXCEPTIONS = (DriverError, TransientError)
 
 
 class _Neo4jSession(Protocol):
@@ -227,18 +242,78 @@ def graph_context(
 def format_graph_context_for_prompt(related: list[RelatedIncident]) -> str:
     """Formata o historico relacional como bloco de texto pronto para
     entrar no prompt de diagnostico - separado da consulta em si para
-    poder ser testado sem depender de nenhum driver."""
+    poder ser testado sem depender de nenhum driver.
+
+    DA-21: agrupa ocorrencias CONSECUTIVAS da mesma causa raiz (mesmo
+    root_cause + matched_document + is_grounded) em uma linha com
+    contador ("ja ocorreu 3x") em vez de repetir a mesma linha - uma
+    interface "flapping" (falhando repetidamente pela mesma causa)
+    esgotava o orcamento de contexto do prompt com linhas identicas em
+    vez de sinalizar recorrencia, que e justamente o dado mais util
+    que uma camada de conhecimento OPERACIONAL deveria destacar.
+    Agrupamento e so entre vizinhos (a lista ja vem mais-recente-
+    primeiro) - nao junta ocorrencias intercaladas com causas
+    diferentes, para nao esconder que outra coisa aconteceu no meio."""
     if not related:
         return ""
-    lines = [
-        f"- {'causa raiz confirmada anteriormente' if r.is_grounded else 'HIPOTESE NAO CONFIRMADA de diagnostico anterior (baixa evidencia - nao trate como fato)'}"
-        f": {r.root_cause} (documento: {r.matched_document or 'N/A'})"
-        for r in related
-    ]
+
+    grouped: list[tuple[RelatedIncident, int]] = []
+    for r in related:
+        if grouped:
+            prev, count = grouped[-1]
+            if (
+                prev.root_cause == r.root_cause
+                and prev.matched_document == r.matched_document
+                and prev.is_grounded == r.is_grounded
+            ):
+                grouped[-1] = (prev, count + 1)
+                continue
+        grouped.append((r, 1))
+
+    lines = []
+    for r, count in grouped:
+        label = (
+            "causa raiz confirmada anteriormente"
+            if r.is_grounded
+            else "HIPOTESE NAO CONFIRMADA de diagnostico anterior (baixa evidencia - nao trate como fato)"
+        )
+        occurrence = f" (ja ocorreu {count}x)" if count > 1 else ""
+        lines.append(
+            f"- {label}{occurrence}: {r.root_cause} (documento: {r.matched_document or 'N/A'})"
+        )
+
     return (
         f"\nHistorico conhecido desta interface ({len(related)} incidente(s) anterior(es), "
         f"mais recente primeiro):\n" + "\n".join(lines) + "\n"
     )
+
+
+_PRUNE_UNGROUNDED_QUERY = """
+MATCH (i:Incident)
+WHERE coalesce(i.is_grounded, false) = false
+  AND i.created_at < datetime() - duration({days: $older_than_days})
+DETACH DELETE i
+RETURN count(i) AS deleted_count
+"""
+
+
+def prune_ungrounded_hypotheses(
+    older_than_days: int = 90, session: _Neo4jSession | None = None
+) -> int:
+    """Remove hipoteses NAO confirmadas (`is_grounded=false`) gravadas
+    ha mais de `older_than_days` dias - manutencao MANUAL, nunca
+    automatica (nao e chamada de nenhum node do grafo nem do
+    lifespan). Incidentes `is_grounded=true` (causa raiz confirmada)
+    NUNCA sao tocados por esta funcao, sob nenhuma idade - so a
+    hipotese fraca que nunca foi corroborada e que so ocupa espaco e
+    pode confundir uma leitura manual do grafo. Mesmo principio de
+    "nunca deletar sem o operador pedir explicitamente" usado em outras
+    partes deste projeto, aplicado aqui no nivel de dado do grafo em
+    vez de arquivo. Retorna quantos incidentes foram removidos."""
+    sess = _get_session(session)
+    result = sess.run(_PRUNE_UNGROUNDED_QUERY, older_than_days=older_than_days)
+    record = next(iter(result), None)
+    return int(record["deleted_count"]) if record else 0
 
 
 if __name__ == "__main__":
@@ -247,6 +322,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Utilitarios de manutencao do GraphRAG (Neo4j)")
     parser.add_argument(
         "--init", action="store_true", help="Cria as constraints/indices necessarias"
+    )
+    parser.add_argument(
+        "--prune-ungrounded",
+        action="store_true",
+        help=(
+            "Remove hipoteses NAO confirmadas (is_grounded=false) gravadas ha mais de "
+            "--older-than-days dias. Incidentes confirmados nunca sao afetados."
+        ),
+    )
+    parser.add_argument(
+        "--older-than-days",
+        type=int,
+        default=90,
+        help="Usado com --prune-ungrounded (default: 90 dias)",
     )
     args = parser.parse_args()
 
@@ -258,5 +347,12 @@ if __name__ == "__main__":
     elif args.init:
         ensure_constraints()
         print("Constraints/indices do GraphRAG criados/confirmados no Neo4j.")
+    elif args.prune_ungrounded:
+        deleted = prune_ungrounded_hypotheses(older_than_days=args.older_than_days)
+        print(
+            f"{deleted} hipotese(s) nao confirmada(s) com mais de "
+            f"{args.older_than_days} dia(s) removida(s). Incidentes confirmados "
+            "nao foram afetados."
+        )
     else:
         parser.print_help()

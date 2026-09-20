@@ -31,9 +31,6 @@ from langchain_text_splitters import MarkdownTextSplitter
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
-    FieldCondition,
-    Filter,
-    MatchValue,
     PointStruct,
     SparseVector,
     SparseVectorParams,
@@ -256,20 +253,33 @@ def ensure_collection(
 
 
 def deterministic_point_id(document_id: str, chunk_index: int) -> str:
-    """UUID estavel e aceito pelo Qdrant para um chunk do documento."""
+    """UUID estavel e aceito pelo Qdrant para um chunk do documento -
+    ver docstring de `deterministic_document_id` para por que isso
+    basta para upsert idempotente sem delete previo."""
     return str(uuid5(NAMESPACE_URL, f"{document_id}::chunk::{chunk_index}"))
 
 
-def deterministic_document_id(source: str, content_hash: str) -> str:
-    """UUID estavel para a combinacao do caminho relativo e do conteudo do arquivo."""
-    return str(uuid5(NAMESPACE_URL, f"ingest-document::{source}::{content_hash}"))
+def deterministic_document_id(source: str) -> str:
+    """UUID estavel para o caminho relativo do arquivo (`source`) -
+    DELIBERADAMENTE nao depende do conteudo/hash do arquivo, ao
+    contrario de uma versao anterior. Isso e o que torna o upsert
+    idempotente sem delete-before-upsert (ver docs/ARCHITECTURE.md,
+    secao "Ingestao"): reprocessar o MESMO arquivo (path) sempre gera
+    os mesmos `document_id`/point ids por indice de chunk, entao um
+    `client.upsert()` novo sobrescreve os chunks existentes no lugar -
+    sem janela de indisponibilidade (delete + upsert deixaria a
+    collection momentaneamente sem esses pontos) e sem duplicar dados
+    quando so o CONTEUDO do arquivo muda (mesmo indice de chunk == mesmo
+    point id == overwrite, nao um ponto novo orfao).
 
-
-def delete_existing_points_for_source(client: QdrantClient, collection: str, source: str) -> None:
-    client.delete(
-        collection_name=collection,
-        points_selector=Filter(must=[FieldCondition(key="source", match=MatchValue(value=source))]),
-    )
+    Trade-off aceito: se um arquivo encolhe (produz MENOS chunks que a
+    versao anterior), os indices de chunk que deixaram de existir nao
+    sao removidos automaticamente (nao ha "delete dos que sobraram"
+    sem reintroduzir a janela de indisponibilidade que este esquema
+    evita). Para uma limpeza completa apos edicoes que reduzem
+    bastante o numero de chunks de varios arquivos, use
+    `--reset-collection` (reindexa tudo do zero)."""
+    return str(uuid5(NAMESPACE_URL, f"ingest-document::{source}"))
 
 
 def _sparse_vector_for(text: str) -> SparseVector:
@@ -380,7 +390,7 @@ def run_ingest(
             fhash = file_hash(path)
             category = infer_category(filename)
             source = str(rel)
-            document_id = deterministic_document_id(source, fhash)
+            document_id = deterministic_document_id(source)
             doc_meta = {
                 "filename": filename,
                 "file_hash": fhash,
@@ -393,7 +403,6 @@ def run_ingest(
                 with _pdf_extract_lock:
                     pages = extract_pages_with_metadata(path)
                 if not pages:
-                    delete_existing_points_for_source(client, cfg["collection"], source)
                     with state_lock:
                         processed[_state_key(path)] = str(path)
                         save_state(cfg["state_file"], processed)
@@ -414,16 +423,15 @@ def run_ingest(
                 ]
 
             if not chunks:
-                delete_existing_points_for_source(client, cfg["collection"], source)
                 with progress_lock:
                     done_count += 1
                     print(
                         f"[{target}] ({done_count}/{len(pending)}) {rel} -- [aviso] nenhum chunk gerado, pulando"
                     )
             else:
-                # Limpa tambem chunks que deixaram de existir (por exemplo,
-                # apos mudanca de conteudo ou do tamanho de chunk).
-                delete_existing_points_for_source(client, cfg["collection"], source)
+                # Sem delete previo - deterministic_document_id(source) faz o
+                # upsert sobrescrever os pontos existentes no lugar (ver
+                # docstring de deterministic_document_id).
                 embed_and_upsert(
                     client,
                     cfg["collection"],

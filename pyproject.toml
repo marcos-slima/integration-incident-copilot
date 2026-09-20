@@ -2,6 +2,7 @@
 name = "integration-incident-copilot"
 version = "0.1.0"
 description = "Assistente de IA para diagnóstico de incidentes de integração SAP (RAG + agentes + conectores SAP)"
+license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",

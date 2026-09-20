@@ -21,6 +21,30 @@ def _stub_diagnosis(request):
     )
 
 
+def test_index_returns_404_json_when_frontend_not_built(monkeypatch, tmp_path):
+    """Avaliacao externa (nova revisao, P0): GET / nao pode mais
+    quebrar com FileNotFoundError quando o bundle do frontend
+    (static/dist/) nao foi buildado - deve devolver 404 com uma
+    mensagem acionavel."""
+    monkeypatch.setattr(main_module, "_STATIC_DIST_INDEX", tmp_path / "nao-existe.html")
+
+    response = client.get("/")
+
+    assert response.status_code == 404
+    assert "frontend" in response.json()["detail"].lower()
+
+
+def test_index_serves_built_frontend_when_present(monkeypatch, tmp_path):
+    fake_index = tmp_path / "index.html"
+    fake_index.write_text("<html><body>ok</body></html>")
+    monkeypatch.setattr(main_module, "_STATIC_DIST_INDEX", fake_index)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "ok" in response.text
+
+
 def test_health_endpoint():
     response = client.get("/health")
     assert response.status_code == 200

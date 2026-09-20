@@ -3,6 +3,7 @@
 import logging
 import secrets
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Security, status
 from fastapi.responses import FileResponse, JSONResponse
@@ -231,13 +232,48 @@ def _diagnosis_timeout_handler(request: Request, exc: DiagnosisTimeoutError):
     return JSONResponse(status_code=status.HTTP_504_GATEWAY_TIMEOUT, content={"detail": str(exc)})
 
 
-# Serve assets do bundle Vite (JS, CSS, fontes)
-app.mount("/assets", StaticFiles(directory="static/dist/assets"), name="assets")
+# Avaliacao externa (nova revisao, P0 - "CI e a API nao sobem sem o
+# bundle Vite"): static/dist/ e gerado por "npm run build" (nao
+# versionado no git - .gitignore:5 tem uma regra generica "dist/" que
+# tambem pega static/dist/, alem de dist/ do Python) e so existe de
+# verdade depois desse build (local, no Dockerfile multi-stage, ou
+# agora tambem no CI - ver .github/workflows/tests.yml). Antes desta
+# mudanca, o mount abaixo rodava incondicionalmente NA IMPORTACAO do
+# modulo - "import app.main" (o que TODO teste de tests/test_api.py,
+# tests/test_a2a.py etc faz, via "from app.main import app") explodia
+# com RuntimeError em qualquer checkout sem o bundle ja buildado a
+# mao, inclusive potencialmente no CI. Agora o mount so acontece se o
+# diretorio existir - clonar o repo e rodar so a API/os testes
+# (cenario "so backend", sem Node/npm instalado) continua funcionando;
+# "/" devolve 404 com uma mensagem clara em vez de FileNotFoundError
+# se ninguem buildou o frontend ainda.
+_STATIC_DIST_ASSETS_DIR = Path("static/dist/assets")
+_STATIC_DIST_INDEX = Path("static/dist/index.html")
+
+if _STATIC_DIST_ASSETS_DIR.is_dir():
+    app.mount("/assets", StaticFiles(directory=str(_STATIC_DIST_ASSETS_DIR)), name="assets")
+else:
+    logger.warning(
+        "static/dist/assets nao encontrado - bundle do frontend (frontend/) nao foi "
+        "buildado ('npm ci && npm run build' em frontend/, ou 'docker compose build'). "
+        "A API sobe normalmente, mas GET / devolvera 404 ate o bundle existir."
+    )
 
 
-@app.get("/")
-def index() -> FileResponse:
-    return FileResponse("static/dist/index.html")
+@app.get("/", response_model=None)
+def index() -> FileResponse | JSONResponse:
+    if not _STATIC_DIST_INDEX.is_file():
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "detail": (
+                    "Frontend nao buildado (static/dist/index.html ausente). Rode "
+                    "'npm ci && npm run build' em frontend/, ou use a imagem Docker "
+                    "(que builda o frontend automaticamente)."
+                )
+            },
+        )
+    return FileResponse(str(_STATIC_DIST_INDEX))
 
 
 @app.get("/health")

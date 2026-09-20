@@ -12,7 +12,7 @@ services:
     environment:
       LLM_PROVIDER: ollama
       OLLAMA_HOST: http://host.docker.internal:11434
-      LLM_MODEL: ${LLM_MODEL:-qwen2.5-coder:32b}
+      LLM_MODEL: ${LLM_MODEL:-qwen3-coder-next:latest}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
       QDRANT_URL: http://qdrant:6333
       # Langfuse e opcional - sem chaves, o app roda normal, so sem

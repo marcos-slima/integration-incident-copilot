@@ -533,6 +533,33 @@ apontando para o Deployment/Service certos, e o `kustomization.yaml`
 referenciando só arquivos que existem (excluindo deliberadamente o
 template de Secret).
 
+**Follow-up pós-DA-24 - multi-stage build do frontend no `Dockerfile`:**
+a DA-24 tocou o `Dockerfile` duas vezes (reprodutibilidade e usuário
+não-root) mas deixou passar um débito já autodenunciado em
+`docs/DEPLOY.md` ("Melhoria pendente: mover isso para um multi-stage
+build no Dockerfile"): a imagem copiava `static/` pronto (`COPY static/
+static/`), mas `static/dist/` (o build do frontend React/Vite) está no
+`.gitignore` e só existia se alguém rodasse manualmente `npm run build`
++ `cp` antes de `docker build` - um `git clone` limpo seguido de
+`docker build -t ... .` (exatamente o passo 1 do `deploy/kyma/README.md`)
+falhava ou gerava uma imagem sem frontend. Corrigido com um segundo
+estágio (`node:22-slim AS frontend-build`) que roda `npm ci && npm run
+build` a partir do código-fonte em `frontend/`, e o estágio final copia
+`frontend/dist` para `static/dist` via `COPY --from=frontend-build`.
+`docs/DEPLOY.md` seção 2 atualizada para refletir que não há mais passo
+manual; `.dockerignore` adicionado (não existia) para não mandar
+`frontend/node_modules/`, `.venv/` e `.git/` para o contexto de build.
+Validado rodando `npm ci && npm run build` isoladamente (produz o
+`dist/` esperado: `assets/`, `favicon.svg`, `icons.svg`, `index.html`) -
+o build de imagem completo em si não foi testado (Docker não disponível
+neste ambiente, mesma limitação já registrada acima).
+
+Junto com esse fix, um segundo problema encontrado na mesma revisão foi
+corrigido: o modelo LLM default estava inconsistente entre
+`app/config.py` (`qwen3-coder-next:latest`, fonte canônica) e
+`.env.example`/`docker-compose.yml` (ambos `qwen2.5-coder:32b`) - os
+dois arquivos alinhados ao valor canônico do `config.py`.
+
 ## Testes
 
 Testes unitarios (`tests/test_connectors.py`, `test_llm_factory.py`,

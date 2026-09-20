@@ -759,3 +759,27 @@ só arquivos existentes.
 Isso fecha o roadmap arquitetural consolidado deste projeto (AI Gateway
 → A2A/API auth → MCP → Hybrid Inference → GraphRAG → Multi-agent →
 Event Mesh → BTP/Kyma), todo executado nesta mesma sessão de trabalho.
+
+### 23. Follow-up pós-roadmap — multi-stage build do frontend + alinhamento de modelo default
+
+Uma revisão arquitetural externa apontou dois problemas reais que
+sobreviveram à DA-24: (1) o `Dockerfile` não buildava o frontend
+(React/Vite) a partir do código-fonte — esperava um `static/dist/` já
+pronto, que está no `.gitignore` e não existe num clone limpo,
+quebrando exatamente o fluxo de build descrito no
+`deploy/kyma/README.md` (isso já estava autodenunciado como pendência
+em `docs/DEPLOY.md`, mas não foi corrigido durante a DA-24); (2) o
+modelo LLM default divergia entre `app/config.py`
+(`qwen3-coder-next:latest`, fonte canônica) e `.env.example`/
+`docker-compose.yml` (ambos `qwen2.5-coder:32b`).
+
+Corrigido com um segundo estágio no `Dockerfile`
+(`node:22-slim AS frontend-build`, `npm ci && npm run build`) cujo
+resultado é copiado para `static/dist` no estágio final via
+`COPY --from=frontend-build`; `.dockerignore` adicionado (não
+existia); `docs/DEPLOY.md` seção 2 atualizada; `.env.example` e
+`docker-compose.yml` alinhados ao modelo canônico do `config.py`.
+Validado rodando `npm ci && npm run build` isoladamente (gera o
+`dist/` esperado) — build de imagem Docker completo não testado
+(Docker indisponível neste ambiente, mesma limitação já registrada na
+DA-24).

@@ -89,6 +89,13 @@ def get_chat_model(model_name: str | None = None, config: Settings | None = None
             base_url=cfg.ollama_host,
             temperature=0.0,
             seed=42,
+            # Avaliacao externa (curto prazo, item 4): sem isso, o
+            # cliente HTTP interno do ollama (httpx) nao tem limite de
+            # tempo - um Ollama travado (processo vivo, sem responder)
+            # prenderia a chamada indefinidamente, ao contrario de um
+            # Ollama fora do ar (isso ja cai em TRANSPORT_FAILURE_EXCEPTIONS
+            # rapido, via ConnectionError).
+            client_kwargs={"timeout": cfg.llm_request_timeout_seconds},
         )
 
     if provider == "openai":
@@ -113,6 +120,7 @@ def get_chat_model(model_name: str | None = None, config: Settings | None = None
             base_url=cfg.openai_base_url or None,
             temperature=0.0,
             seed=42,
+            request_timeout=cfg.llm_request_timeout_seconds,
         )
 
     if provider == "azure_openai":
@@ -145,6 +153,7 @@ def get_chat_model(model_name: str | None = None, config: Settings | None = None
             api_version=cfg.azure_openai_api_version,
             temperature=0.0,
             seed=42,
+            request_timeout=cfg.llm_request_timeout_seconds,
         )
 
     raise ConfigurationError(f"llm_provider desconhecido: {provider!r}")

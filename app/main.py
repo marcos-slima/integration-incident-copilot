@@ -5,7 +5,7 @@ import secrets
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Security, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from langfuse import get_client
@@ -18,6 +18,7 @@ from app.a2a.server import router as a2a_router
 from app.agent.graph import run_diagnosis
 from app.config import settings
 from app.events.consumer import handle_incident_event
+from app.exceptions import DiagnosisTimeoutError
 from app.mcp.server import build_mcp_asgi_app
 from app.mcp.server import mcp as mcp_server
 from app.models import (
@@ -67,6 +68,14 @@ def verify_event_mesh_api_key(api_key: str | None = Security(event_mesh_api_key_
         )
 
 
+class MissingRequiredAuthError(RuntimeError):
+    """Levantada no startup quando settings.require_auth=true e uma ou
+    mais chaves de API obrigatorias nao foram configuradas - impede o
+    lifespan do FastAPI de completar, o que faz o processo uvicorn
+    sair sem subir a API (falha alta e imediata, nao um log que pode
+    passar despercebido)."""
+
+
 def _ensure_api_keys_configured() -> None:
     """DA-18: nenhum endpoint protegido (/diagnose via API_KEY, /a2a
     via A2A_API_KEY) deve ficar sem NENHUMA chave em memoria. Antes,
@@ -77,7 +86,34 @@ def _ensure_api_keys_configured() -> None:
     avisamos ALTO no log de startup - preserva o "clone e rode" (zero
     config obrigatoria pra rodar local) sem deixar os endpoints
     abertos por padrao. A chave gerada muda a cada restart; para uma
-    chave estavel, configure API_KEY/A2A_API_KEY no .env."""
+    chave estavel, configure API_KEY/A2A_API_KEY no .env.
+
+    Avaliacao externa (curto prazo, item 1): com settings.require_auth
+    ligado, uma chave efemera gerada aqui NAO e aceitavel - o operador
+    pediu explicitamente que o processo RECUSE subir em vez de rodar
+    com uma chave que ninguem documentou/distribuiu. Verificado ANTES
+    de qualquer geracao automatica, para as 3 chaves (api_key,
+    a2a_api_key, event_mesh_api_key - a ultima nao fazia parte do
+    pedido original da revisao, mas e a mesma categoria de risco;
+    ficar de fora seria inconsistente)."""
+    if settings.require_auth:
+        missing = [
+            name
+            for name, value in (
+                ("API_KEY", settings.api_key),
+                ("A2A_API_KEY", settings.a2a_api_key),
+                ("EVENT_MESH_API_KEY", settings.event_mesh_api_key),
+            )
+            if not value
+        ]
+        if missing:
+            raise MissingRequiredAuthError(
+                "REQUIRE_AUTH=true, mas as seguintes chaves nao estao "
+                f"configuradas no .env: {', '.join(missing)}. Configure-as "
+                "explicitamente (nao ha geracao automatica de chave efemera "
+                "quando REQUIRE_AUTH esta ligado) ou desligue REQUIRE_AUTH "
+                "para o comportamento default de desenvolvimento."
+            )
     if not settings.api_key:
         settings.api_key = secrets.token_urlsafe(32)
         logger.warning(
@@ -145,6 +181,19 @@ app = FastAPI(
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.exception_handler(DiagnosisTimeoutError)
+def _diagnosis_timeout_handler(request: Request, exc: DiagnosisTimeoutError):
+    """Avaliacao externa (curto prazo, item 4): converte o watchdog de
+    settings.diagnosis_timeout_seconds (app/agent/graph.py) num 504
+    Gateway Timeout explicito, em vez de deixar virar um 500 generico -
+    o caller (humano ou outro sistema) precisa distinguir "o pipeline
+    demorou demais" de "o pipeline quebrou". Cobre /diagnose e
+    /events/incident (ambos chamam run_diagnosis diretamente); o A2A
+    (app/a2a/task_manager.py) ja captura Exception por conta propria e
+    marca a task como failed, sem passar por aqui."""
+    return JSONResponse(status_code=status.HTTP_504_GATEWAY_TIMEOUT, content={"detail": str(exc)})
 
 
 # Serve assets do bundle Vite (JS, CSS, fontes)

@@ -49,6 +49,26 @@ class Settings(BaseSettings):
     # nao para orcamento fino de producao.
     llm_gateway_max_cost_usd: float = 0.50
 
+    # Avaliacao externa (curto prazo, item 4): timeout explicito por
+    # chamada LLM - antes disso, nenhum provider (ChatOllama/ChatOpenAI/
+    # AzureChatOpenAI, ver app/llm/factory.py::get_chat_model) tinha
+    # limite de tempo configurado, entao um Ollama travado (nao caido -
+    # caido ja e tratado por TRANSPORT_FAILURE_EXCEPTIONS/circuit
+    # breaker) prenderia a requisicao HTTP indefinidamente. 90s cobre
+    # modelos densos grandes rodando em CPU (ver DA-29:
+    # docs/RERANKER_BENCHMARK.md tem uma nota de latencia real deste
+    # tipo de hardware) sem deixar uma trava real escapar sem limite.
+    llm_request_timeout_seconds: float = 90.0
+
+    # Avaliacao externa (curto prazo, item 4): timeout GLOBAL de todo o
+    # pipeline de diagnostico (run_diagnosis - retrieval + GraphRAG +
+    # 1-2 chamadas LLM do ReAct + relatorio), nao so de uma chamada LLM
+    # isolada. Runa via asyncio.wait_for em torno da invocacao sincrona
+    # do grafo (ver app/agent/graph.py::run_diagnosis) - protege contra
+    # a SOMA de varias etapas lentas (nao so uma travada), que o
+    # timeout por chamada LLM sozinho nao cobre.
+    diagnosis_timeout_seconds: float = 180.0
+
     # AI Gateway v1 (DA-26): circuit breaker por provider - depois de
     # N falhas de transporte CONSECUTIVAS, o provider fica "aberto" por
     # um cooldown (chamadas seguintes pulam direto pro proximo provider
@@ -135,8 +155,20 @@ class Settings(BaseSettings):
     web_search_enabled: bool = True
     web_search_threshold: float = 0.6
 
-    # Auth (opcional — se vazio, API aberta)
+    # Auth (opcional por padrao - se vazio, uma chave aleatoria por
+    # processo e gerada no startup, ver _ensure_api_keys_configured em
+    # app/main.py; para exigir chave EXPLICITA e travar o startup caso
+    # contrario, ver require_auth abaixo)
     api_key: str = ""
+    # Avaliacao externa (curto prazo, item 1): "Auth obrigatoria em modo
+    # producao". Com require_auth=true, o lifespan do FastAPI (app/main.py)
+    # recusa subir se api_key/a2a_api_key/event_mesh_api_key estiverem
+    # vazios - em vez de gerar uma chave efemera por processo (o
+    # comportamento default, pensado pra "clone e rode" sem config
+    # nenhuma). A chave efemera muda a cada restart e so aparece num log
+    # de warning - adequado pra dev local, nao pra um deploy que um
+    # operador espera acessar de forma estavel/documentada.
+    require_auth: bool = False
     apim_oauth_token_url: str = ""
     apim_client_id: str = ""
     apim_client_secret: str = ""

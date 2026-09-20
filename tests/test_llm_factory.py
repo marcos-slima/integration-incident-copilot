@@ -25,6 +25,36 @@ def test_default_provider_is_ollama():
     assert llm.__class__.__name__ == "ChatOllama"
 
 
+def test_ollama_uses_configured_request_timeout():
+    """Avaliacao externa (curto prazo, item 4): sem isso, um Ollama
+    travado (vivo mas sem responder) prendia a chamada indefinidamente -
+    diferente de um Ollama fora do ar, que ja cai rapido em
+    TRANSPORT_FAILURE_EXCEPTIONS."""
+    cfg = Settings(llm_provider="ollama", llm_request_timeout_seconds=42.0)
+    llm = get_chat_model(config=cfg)
+    assert llm.client_kwargs["timeout"] == 42.0
+
+
+def test_openai_uses_configured_request_timeout():
+    cfg = Settings(
+        llm_provider="openai", openai_api_key="sk-fake-for-test", llm_request_timeout_seconds=42.0
+    )
+    llm = get_chat_model(config=cfg)
+    assert llm.request_timeout == 42.0
+
+
+def test_azure_openai_uses_configured_request_timeout():
+    cfg = Settings(
+        llm_provider="azure_openai",
+        azure_openai_endpoint="https://example.openai.azure.com",
+        azure_openai_api_key="fake-key",
+        azure_openai_deployment="gpt-4o-mini",
+        llm_request_timeout_seconds=42.0,
+    )
+    llm = get_chat_model(config=cfg)
+    assert llm.request_timeout == 42.0
+
+
 def test_openai_without_api_key_raises_configuration_error():
     cfg = Settings(llm_provider="openai", openai_api_key="")
     with pytest.raises(ConfigurationError, match="OPENAI_API_KEY"):

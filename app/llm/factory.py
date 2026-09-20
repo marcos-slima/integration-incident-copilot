@@ -33,7 +33,8 @@ configurado, `invoke_with_hybrid_fallback()` (abaixo) roda uma chamada
 com o provider primario e, SO em caso de falha de transporte (Ollama
 fora do ar, timeout - nao erro de aplicacao), refaz a MESMA chamada com
 o provider de fallback antes de desistir. Ver app/agent/nodes.py
-(diagnose_node) para o uso real.
+(_run_diagnosis_agent, usado pelos sub-agentes sap_diagnosis_node/
+saas_diagnosis_node - DA-22) para o uso real.
 """
 
 import logging

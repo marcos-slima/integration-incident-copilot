@@ -1,9 +1,12 @@
 """Grafo LangGraph do SAP Integration Copilot.
 
-Fluxo:
-    connector -> retrieve -> [graph_enrich] -> web_search
-    -> diagnose -> [graph_write] -> report
+Fluxo (DA-22 - multi-agente, supervisor + especialistas):
+    supervisor -> connector -> retrieve -> web_search -> [graph_enrich]
+    -> {sap_diagnose | saas_diagnose} -> [graph_write] -> report
 
+O supervisor (app/agent/supervisor.py) roda PRIMEIRO e decide
+deterministicamente qual sub-agente especialista trata o diagnostico
+(SAP ou multi-fornecedor/generico) - nunca os dois no mesmo incidente.
 Ver docs/ARCHITECTURE.md para detalhamento por camada.
 """
 
@@ -13,14 +16,16 @@ from langfuse import get_client, observe
 
 from app.agent.nodes import (
     connector_node,
-    diagnose_node,
     graph_enrich_node,
     graph_write_node,
     report_node,
     retrieve_node,
+    saas_diagnosis_node,
+    sap_diagnosis_node,
     web_search_node,
 )
 from app.agent.state import CopilotState
+from app.agent.supervisor import supervisor_node
 from app.config import settings
 from app.models import DiagnosisResponse, IncidentRequest
 
@@ -32,21 +37,34 @@ os.environ.setdefault("LANGFUSE_BASE_URL", settings.langfuse_host)
 from langgraph.graph import END, StateGraph
 
 
+def _route_to_specialist(state: CopilotState) -> str:
+    """Roteamento condicional (DA-22): le `agent_domain`, ja decidido
+    pelo supervisor_node no inicio do grafo, e direciona para o node
+    especialista correspondente. "generic" (nenhum dominio identificado)
+    cai no especialista multi-fornecedor - ver
+    app/agent/supervisor.py::classify_domain para a logica completa."""
+    return "sap_diagnose" if state.get("agent_domain") == "sap" else "saas_diagnose"
+
+
 def build_graph():
     """O grafo tem duas formas: linear (default) ou com enriquecimento
     de GraphRAG intercalado, dependendo de `settings.graph_rag_enabled`
     - decidido uma vez na construcao, nao a cada execucao. Com
     GraphRAG desligado (default), o grafo e IDENTICO ao de antes desta
-    fase - zero custo/comportamento novo. Ver app/rag/graph_store.py
-    para como ativar de verdade."""
+    fase - zero custo/comportamento novo (alem do roteamento multi-
+    agente DA-22, que roda sempre, com ou sem GraphRAG). Ver
+    app/rag/graph_store.py para como ativar o GraphRAG de verdade."""
     graph = StateGraph(CopilotState)
+    graph.add_node("supervisor", supervisor_node)
     graph.add_node("connector", connector_node)
     graph.add_node("retrieve", retrieve_node)
     graph.add_node("web_search", web_search_node)
-    graph.add_node("diagnose", diagnose_node)
+    graph.add_node("sap_diagnose", sap_diagnosis_node)
+    graph.add_node("saas_diagnose", saas_diagnosis_node)
     graph.add_node("report", report_node)
 
-    graph.set_entry_point("connector")
+    graph.set_entry_point("supervisor")
+    graph.add_edge("supervisor", "connector")
     graph.add_edge("connector", "retrieve")
     graph.add_edge("retrieve", "web_search")
 
@@ -54,12 +72,22 @@ def build_graph():
         graph.add_node("graph_enrich", graph_enrich_node)
         graph.add_node("graph_write", graph_write_node)
         graph.add_edge("web_search", "graph_enrich")
-        graph.add_edge("graph_enrich", "diagnose")
-        graph.add_edge("diagnose", "graph_write")
+        graph.add_conditional_edges(
+            "graph_enrich",
+            _route_to_specialist,
+            {"sap_diagnose": "sap_diagnose", "saas_diagnose": "saas_diagnose"},
+        )
+        graph.add_edge("sap_diagnose", "graph_write")
+        graph.add_edge("saas_diagnose", "graph_write")
         graph.add_edge("graph_write", "report")
     else:
-        graph.add_edge("web_search", "diagnose")
-        graph.add_edge("diagnose", "report")
+        graph.add_conditional_edges(
+            "web_search",
+            _route_to_specialist,
+            {"sap_diagnose": "sap_diagnose", "saas_diagnose": "saas_diagnose"},
+        )
+        graph.add_edge("sap_diagnose", "report")
+        graph.add_edge("saas_diagnose", "report")
 
     graph.add_edge("report", END)
 
@@ -108,6 +136,7 @@ def run_diagnosis(
         matched_source=diagnosis.get("matched_source"),
         evidence_strength=diagnosis.get("evidence_strength"),
         llm_provider_used=diagnosis.get("llm_provider_used"),
+        agent_domain=final_state.get("agent_domain"),
     )
 
 

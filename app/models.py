@@ -48,3 +48,12 @@ class DiagnosisResponse(BaseModel):
             "indisponivel. Ver DA-20 (Hybrid Inference)."
         ),
     )
+    agent_domain: str | None = Field(
+        default=None,
+        description=(
+            "Dominio do sub-agente especialista que tratou o diagnostico "
+            "('sap', 'saas' ou 'generic'), decidido deterministicamente "
+            "pelo supervisor a partir de interface_type/descricao - nunca "
+            "por autoavaliacao do LLM. Ver DA-22 (Multi-agent)."
+        ),
+    )

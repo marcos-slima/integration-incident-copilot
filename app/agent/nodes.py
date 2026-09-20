@@ -268,7 +268,7 @@ def _truncate(text: str, limit: int) -> str:
     return text[:limit] + f"\n[...truncado - {len(text) - limit} caracteres omitidos...]"
 
 
-def _build_diagnosis_prompt(state: CopilotState) -> str:
+def _build_diagnosis_prompt(state: CopilotState, persona: str) -> str:
     hits = state.get("retrieved_context", [])
     top_hit = hits[0] if hits else None
     other_sources = [h["source"] for h in hits[1:]]
@@ -334,7 +334,7 @@ Resultado de busca web (SAP Community / GitHub SAP) como contexto adicional:
 [Fonte: busca web - use como referencia secundaria, prefira o documento RAG acima se disponivel]
 """
 
-    return f"""Voce e um especialista em integracao SAP (OData, IDoc, RFC, CPI).
+    return f"""{persona}
 
 Incidente reportado:
 {state["description"]}
@@ -464,10 +464,32 @@ def _make_web_search_tool(state):
     return web_search_tool
 
 
-@observe(name="diagnose")
-def diagnose_node(state: CopilotState) -> CopilotState:
+# DA-22 (Multi-agent): antes desta fase existia UM diagnose_node com
+# persona fixa de "especialista SAP", usado para qualquer conector -
+# incoerente com o principio de design multi-fornecedor do projeto
+# (SAP e um conector entre iguais). Agora `_run_diagnosis_agent` e o
+# nucleo compartilhado (ReAct + hybrid inference + parsing + guardrails,
+# tudo igual a antes) parametrizado por `persona`, e dois sub-agentes
+# especialistas (`sap_diagnosis_node`, `saas_diagnosis_node`) o chamam
+# com personas diferentes. O supervisor (app/agent/supervisor.py) decide
+# QUAL dos dois roda, via roteamento condicional em app/agent/graph.py -
+# nunca os dois no mesmo incidente (custo de LLM nao duplica).
+_SAP_SPECIALIST_PERSONA = (
+    "Voce e um especialista em integracao SAP (OData, IDoc, RFC, CPI/Integration Suite, BTP)."
+)
+_ENTERPRISE_SPECIALIST_PERSONA = (
+    "Voce e um especialista em integracoes empresariais multi-fornecedor "
+    "(ServiceNow, Salesforce, Workday, Ariba e APIs corporativas em geral) - "
+    "conhece padroes tipicos de falha em REST/OAuth2, webhooks, rate limits "
+    "e sincronizacao de dados entre sistemas terceiros. Quando o fornecedor "
+    "especifico do incidente nao estiver identificado, aplique o mesmo "
+    "raciocinio generalista de troubleshooting de integracao de sistemas."
+)
+
+
+def _run_diagnosis_agent(state: CopilotState, persona: str) -> dict:
     model_name = state.get("llm_model") or settings.llm_model
-    prompt = _build_diagnosis_prompt(state)
+    prompt = _build_diagnosis_prompt(state, persona)
 
     if state.get("debug"):
         print("=" * 60)
@@ -537,7 +559,22 @@ um JSON valido com exatamente esta estrutura (sem texto adicional antes ou depoi
 
     diagnosis = _apply_confidence_guardrails(diagnosis, state)
     diagnosis["llm_provider_used"] = llm_provider_used
-    return {"diagnosis": diagnosis}
+    return diagnosis
+
+
+@observe(name="sap_specialist")
+def sap_diagnosis_node(state: CopilotState) -> CopilotState:
+    """Sub-agente especialista SAP - roteado pelo supervisor quando
+    `agent_domain == "sap"` (ver app/agent/supervisor.py)."""
+    return {"diagnosis": _run_diagnosis_agent(state, _SAP_SPECIALIST_PERSONA)}
+
+
+@observe(name="saas_specialist")
+def saas_diagnosis_node(state: CopilotState) -> CopilotState:
+    """Sub-agente especialista multi-fornecedor (SaaS empresarial +
+    generalista) - roteado pelo supervisor quando `agent_domain` e
+    "saas" ou "generic" (nenhum dominio SAP identificado)."""
+    return {"diagnosis": _run_diagnosis_agent(state, _ENTERPRISE_SPECIALIST_PERSONA)}
 
 
 def _fallback_diagnosis(raw: str) -> dict:
@@ -608,7 +645,7 @@ def report_node(state: CopilotState) -> CopilotState:
 {connector_line}
 **Causa raiz provavel:** {diagnosis.get("probable_root_cause", "N/A")}
 
-**Confianca:** {diagnosis.get("confidence", 0.0):.0%} (evidence_strength: {diagnosis.get("evidence_strength", 0.0):.0%}, LLM: {diagnosis.get("llm_provider_used", "N/A")})
+**Confianca:** {diagnosis.get("confidence", 0.0):.0%} (evidence_strength: {diagnosis.get("evidence_strength", 0.0):.0%}, LLM: {diagnosis.get("llm_provider_used", "N/A")}, agente: {state.get("agent_domain", "N/A")})
 
 **Documento usado como base:** {matched}
 

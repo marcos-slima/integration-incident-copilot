@@ -7,6 +7,7 @@
 // - FileReader API com TypeScript
 
 import { useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { callDiagnose, ApiError } from '../api/diagnose';
 import type {
   DiagnosisResponse,
@@ -372,10 +373,22 @@ export function DiagnoseView({ onResult }: DiagnoseViewProps) {
                   {showReport ? 'Ocultar relatório completo' : 'Ver relatório completo'}
                 </button>
                 {showReport && (
-                  <div
-                    className="report-body"
-                    dangerouslySetInnerHTML={{ __html: result.report_markdown }}
-                  />
+                  // Avaliacao externa (nova revisao, P1 - XSS): antes
+                  // disto, "report_markdown" (que pode conter texto
+                  // livre digitado pelo usuario - descricao, logs,
+                  // payload) era injetado como HTML CRU via
+                  // dangerouslySetInnerHTML, sem nenhuma sanitizacao -
+                  // um incidente com "<img src=x onerror=...>" na
+                  // descricao executava no browser de quem visse o
+                  // relatorio. react-markdown NAO interpreta tags HTML
+                  // embutidas no texto como HTML de verdade (viram
+                  // texto escapado por padrao, sem o plugin
+                  // rehype-raw, que deliberadamente NAO usamos aqui) -
+                  // so renderiza a sintaxe Markdown real (#, **, -,
+                  // etc.) para os elementos HTML correspondentes.
+                  <div className="report-body">
+                    <ReactMarkdown>{result.report_markdown}</ReactMarkdown>
+                  </div>
                 )}
               </div>
             )}

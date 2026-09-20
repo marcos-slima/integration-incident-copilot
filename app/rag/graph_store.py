@@ -87,6 +87,14 @@ class RelatedIncident:
     matched_document: str | None
     evidence_strength: float = 0.0
     is_grounded: bool = False
+    # DA-28 (VERIFIED_AS): distinto de is_grounded (proxy AUTOMATICO
+    # baseado em threshold de evidence_strength, DA-16) - verified so
+    # fica True apos uma chamada EXPLICITA a verify_incident() (humana
+    # ou de outro sistema), nunca por inferencia de score. Quando
+    # verified=True, verified_root_cause e a causa raiz CONFIRMADA
+    # (pode divergir de root_cause, a hipotese original do LLM).
+    verified: bool = False
+    verified_root_cause: str | None = None
 
 
 def is_enabled() -> bool:
@@ -185,13 +193,73 @@ def upsert_incident_graph(
     )
 
 
+_VERIFY_QUERY = """
+MATCH (i:Incident {id: $incident_id})
+MERGE (rc:RootCause {text: $verified_root_cause})
+MERGE (i)-[v:VERIFIED_AS]->(rc)
+  SET v.verified_by = $verified_by, v.verified_at = datetime()
+SET i.verified = true
+RETURN i.id AS incident_id
+"""
+
+
+def verify_incident(
+    incident_id: str,
+    verified_root_cause: str,
+    verified_by: str = "human",
+    session: _Neo4jSession | None = None,
+) -> bool:
+    """DA-28 (VERIFIED_AS): registra uma verificacao EXPLICITA (humana
+    ou de outro sistema) da causa raiz de um incidente ja gravado no
+    grafo - o unico caminho que marca `verified=true` num Incident.
+
+    Isso e deliberadamente distinto de `is_grounded` (DA-16): grounded
+    e um proxy AUTOMATICO baseado em `evidence_strength >=
+    GROUNDED_EVIDENCE_THRESHOLD` no momento do diagnostico - ainda e a
+    hipotese do LLM, so que com evidencia forte o suficiente para nao
+    ser descartada de cara. `verified` e um fato POSTERIOR, aplicado
+    por alguem (ou algum sistema downstream, ex: ticket fechado como
+    "causa confirmada: X") que efetivamente confirmou o que aconteceu
+    - inclusive quando isso diverge da hipotese original do LLM
+    (`verified_root_cause` pode ser diferente de `root_cause`). Sem
+    essa distincao explicita, uma hipotese razoavelmente confiante do
+    LLM (grounded=true) acabaria indistinguivel de um fato confirmado
+    por um humano depois de investigar - o "loop de retroalimentacao
+    epistemico" que a revisao externa apontou como o maior risco do
+    GraphRAG: hipoteses do LLM viram "verdade historica" via
+    round-trips pelo grafo, sem nunca terem sido de fato confirmadas.
+
+    Modelagem: `(Incident)-[:VERIFIED_AS {verified_by, verified_at}]->
+    (RootCause {text})` em vez de so uma propriedade plana no
+    Incident - um no `RootCause` separado permite (no futuro) agregar
+    quantos incidentes distintos compartilham a mesma causa raiz
+    confirmada, sem reprocessar texto livre.
+
+    Retorna False (no-op) se GraphRAG estiver desligado ou se
+    `incident_id` nao existir no grafo (nada foi verificado)."""
+    if not is_enabled():
+        return False
+    sess = _get_session(session)
+    result = sess.run(
+        _VERIFY_QUERY,
+        incident_id=incident_id,
+        verified_root_cause=verified_root_cause,
+        verified_by=verified_by,
+    )
+    record = next(iter(result), None)
+    return record is not None
+
+
 _RELATED_QUERY = """
 MATCH (f:Interface {type: $interface_type, identifier: $identifier})<-[:AFFECTS]-(i:Incident)
 OPTIONAL MATCH (i)-[:HAS_ROOT_CAUSE_IN]->(d:Document)
 OPTIONAL MATCH (f)-[:RUNS_ON]->(s:System)
+OPTIONAL MATCH (i)-[:VERIFIED_AS]->(rc:RootCause)
 RETURN i.root_cause AS root_cause, s.name AS source_system, d.source AS matched_document,
        coalesce(i.evidence_strength, 0.0) AS evidence_strength,
-       coalesce(i.is_grounded, false) AS is_grounded
+       coalesce(i.is_grounded, false) AS is_grounded,
+       coalesce(i.verified, false) AS verified,
+       rc.text AS verified_root_cause
 ORDER BY i.created_at DESC
 LIMIT $limit
 """
@@ -216,7 +284,15 @@ def graph_context(
     contexto injetado no prompt de novos diagnosticos para nao virarem
     "verdade historica" por repeticao. Passar True so em ferramentas de
     auditoria/analise, nunca no caminho de producao dos sub-agentes de
-    diagnostico (sap_diagnosis_node/saas_diagnosis_node, DA-22)."""
+    diagnostico (sap_diagnosis_node/saas_diagnosis_node, DA-22).
+
+    DA-28: um incidente `verified=true` (via `verify_incident()`)
+    SEMPRE passa neste filtro, mesmo com `is_grounded=false` - uma
+    verificacao humana/sistema explicita e evidencia mais forte que o
+    proxy automatico de `evidence_strength`, entao nunca deveria ser
+    escondida do prompt so porque o diagnostico ORIGINAL teve baixa
+    confianca. O inverso nao existe: `is_grounded=true` continua
+    entrando mesmo sem verificacao, como antes desta mudanca."""
     if not is_enabled() or not interface_type or not identifier:
         return []
 
@@ -232,12 +308,14 @@ def graph_context(
             matched_document=record["matched_document"],
             evidence_strength=float(record["evidence_strength"]),
             is_grounded=bool(record["is_grounded"]),
+            verified=bool(record["verified"]),
+            verified_root_cause=record["verified_root_cause"],
         )
         for record in result
     ]
     if include_ungrounded:
         return related
-    return [r for r in related if r.is_grounded]
+    return [r for r in related if r.is_grounded or r.verified]
 
 
 def format_graph_context_for_prompt(related: list[RelatedIncident]) -> str:
@@ -254,7 +332,17 @@ def format_graph_context_for_prompt(related: list[RelatedIncident]) -> str:
     que uma camada de conhecimento OPERACIONAL deveria destacar.
     Agrupamento e so entre vizinhos (a lista ja vem mais-recente-
     primeiro) - nao junta ocorrencias intercaladas com causas
-    diferentes, para nao esconder que outra coisa aconteceu no meio."""
+    diferentes, para nao esconder que outra coisa aconteceu no meio.
+
+    DA-28: tres niveis de confianca agora, do mais forte ao mais fraco
+    - "VERIFICADA" (`verified=true`, confirmada explicitamente por
+    humano/sistema via `verify_incident()`), "confirmada anteriormente"
+    (`is_grounded=true`, proxy automatico de `evidence_strength`, DA-16)
+    e "HIPOTESE NAO CONFIRMADA" (nenhum dos dois - so a hipotese
+    original do LLM, baixa evidencia). Quando verificada, a linha usa
+    `verified_root_cause` (a causa CONFIRMADA, que pode divergir da
+    hipotese original `root_cause`) em vez de `root_cause` - o LLM nao
+    deve ver as duas misturadas sem saber qual e o fato."""
     if not related:
         return ""
 
@@ -266,6 +354,8 @@ def format_graph_context_for_prompt(related: list[RelatedIncident]) -> str:
                 prev.root_cause == r.root_cause
                 and prev.matched_document == r.matched_document
                 and prev.is_grounded == r.is_grounded
+                and prev.verified == r.verified
+                and prev.verified_root_cause == r.verified_root_cause
             ):
                 grouped[-1] = (prev, count + 1)
                 continue
@@ -273,14 +363,18 @@ def format_graph_context_for_prompt(related: list[RelatedIncident]) -> str:
 
     lines = []
     for r, count in grouped:
-        label = (
-            "causa raiz confirmada anteriormente"
-            if r.is_grounded
-            else "HIPOTESE NAO CONFIRMADA de diagnostico anterior (baixa evidencia - nao trate como fato)"
-        )
+        if r.verified:
+            label = "causa raiz VERIFICADA (confirmada por humano/sistema)"
+            root_cause_text = r.verified_root_cause or r.root_cause
+        elif r.is_grounded:
+            label = "causa raiz confirmada anteriormente"
+            root_cause_text = r.root_cause
+        else:
+            label = "HIPOTESE NAO CONFIRMADA de diagnostico anterior (baixa evidencia - nao trate como fato)"
+            root_cause_text = r.root_cause
         occurrence = f" (ja ocorreu {count}x)" if count > 1 else ""
         lines.append(
-            f"- {label}{occurrence}: {r.root_cause} (documento: {r.matched_document or 'N/A'})"
+            f"- {label}{occurrence}: {root_cause_text} (documento: {r.matched_document or 'N/A'})"
         )
 
     return (

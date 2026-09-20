@@ -7,12 +7,14 @@ certo, sem depender de infraestrutura externa.
 
 from app.config import Settings
 from app.rag.graph_store import (
+    RelatedIncident,
     ensure_constraints,
     format_graph_context_for_prompt,
     graph_context,
     is_enabled,
     prune_ungrounded_hypotheses,
     upsert_incident_graph,
+    verify_incident,
 )
 
 
@@ -105,6 +107,8 @@ def test_graph_context_maps_records_when_enabled(monkeypatch):
                 "matched_document": "rfc_gateway_pool_timeout.md",
                 "evidence_strength": 0.8,
                 "is_grounded": True,
+                "verified": False,
+                "verified_root_cause": None,
             }
         ]
     )
@@ -116,6 +120,8 @@ def test_graph_context_maps_records_when_enabled(monkeypatch):
     assert result[0].matched_document == "rfc_gateway_pool_timeout.md"
     assert result[0].evidence_strength == 0.8
     assert result[0].is_grounded is True
+    assert result[0].verified is False
+    assert result[0].verified_root_cause is None
 
 
 def test_graph_context_filters_out_ungrounded_hypotheses_by_default(monkeypatch):
@@ -131,6 +137,8 @@ def test_graph_context_filters_out_ungrounded_hypotheses_by_default(monkeypatch)
                 "matched_document": None,
                 "evidence_strength": 0.2,
                 "is_grounded": False,
+                "verified": False,
+                "verified_root_cause": None,
             },
             {
                 "root_cause": "causa confirmada",
@@ -138,6 +146,8 @@ def test_graph_context_filters_out_ungrounded_hypotheses_by_default(monkeypatch)
                 "matched_document": "doc.md",
                 "evidence_strength": 0.9,
                 "is_grounded": True,
+                "verified": False,
+                "verified_root_cause": None,
             },
         ]
     )
@@ -149,6 +159,31 @@ def test_graph_context_filters_out_ungrounded_hypotheses_by_default(monkeypatch)
         "rfc", "RFC-GWY-POOL-TIMEOUT-DEMO", include_ungrounded=True, session=session
     )
     assert len(result_all) == 2
+
+
+def test_graph_context_includes_verified_even_when_not_grounded(monkeypatch):
+    """DA-28: uma verificacao humana/sistema explicita (verified=True)
+    sempre passa no filtro, mesmo que o diagnostico ORIGINAL tenha tido
+    baixa evidence_strength (is_grounded=False) - a verificacao e mais
+    forte que o proxy automatico."""
+    monkeypatch.setattr("app.rag.graph_store.settings", Settings(graph_rag_enabled=True))
+    session = FakeSession(
+        records=[
+            {
+                "root_cause": "hipotese original de baixa confianca",
+                "source_system": "RFC",
+                "matched_document": None,
+                "evidence_strength": 0.1,
+                "is_grounded": False,
+                "verified": True,
+                "verified_root_cause": "causa raiz que um humano confirmou depois",
+            }
+        ]
+    )
+    result = graph_context("rfc", "RFC-GWY-POOL-TIMEOUT-DEMO", session=session)
+    assert len(result) == 1
+    assert result[0].verified is True
+    assert result[0].verified_root_cause == "causa raiz que um humano confirmou depois"
 
 
 def test_format_graph_context_for_prompt_empty():
@@ -165,6 +200,8 @@ def test_format_graph_context_for_prompt_with_history(monkeypatch):
                 "matched_document": "doc.md",
                 "evidence_strength": 0.9,
                 "is_grounded": True,
+                "verified": False,
+                "verified_root_cause": None,
             }
         ]
     )
@@ -279,3 +316,119 @@ def test_prune_ungrounded_hypotheses_never_targets_grounded_incidents():
 def test_prune_ungrounded_hypotheses_returns_zero_when_no_records():
     session = FakeSession(records=[])
     assert prune_ungrounded_hypotheses(session=session) == 0
+
+
+def test_verify_incident_returns_false_when_disabled(monkeypatch):
+    monkeypatch.setattr("app.rag.graph_store.settings", Settings(graph_rag_enabled=False))
+    session = FakeSession()
+    result = verify_incident(
+        incident_id="i1", verified_root_cause="causa confirmada", session=session
+    )
+    assert result is False
+    assert session.calls == []  # nem chega a consultar o Neo4j
+
+
+def test_verify_incident_returns_false_when_incident_not_found(monkeypatch):
+    monkeypatch.setattr("app.rag.graph_store.settings", Settings(graph_rag_enabled=True))
+    session = FakeSession(records=[])  # MATCH nao encontrou o Incident -> sem RETURN
+    result = verify_incident(
+        incident_id="inexistente", verified_root_cause="causa confirmada", session=session
+    )
+    assert result is False
+
+
+def test_verify_incident_writes_expected_params_and_returns_true(monkeypatch):
+    monkeypatch.setattr("app.rag.graph_store.settings", Settings(graph_rag_enabled=True))
+    session = FakeSession(records=[{"incident_id": "i1"}])
+    result = verify_incident(
+        incident_id="i1",
+        verified_root_cause="Pool de processos de dialogo esgotado (confirmado por Basis)",
+        verified_by="human",
+        session=session,
+    )
+    assert result is True
+    assert len(session.calls) == 1
+    query, params = session.calls[0]
+    assert "MERGE (rc:RootCause" in query
+    assert "VERIFIED_AS" in query
+    assert "SET i.verified = true" in query
+    assert params["incident_id"] == "i1"
+    assert params["verified_root_cause"] == (
+        "Pool de processos de dialogo esgotado (confirmado por Basis)"
+    )
+    assert params["verified_by"] == "human"
+
+
+def test_verify_incident_defaults_verified_by_to_human(monkeypatch):
+    monkeypatch.setattr("app.rag.graph_store.settings", Settings(graph_rag_enabled=True))
+    session = FakeSession(records=[{"incident_id": "i1"}])
+    verify_incident(incident_id="i1", verified_root_cause="causa confirmada", session=session)
+    _, params = session.calls[0]
+    assert params["verified_by"] == "human"
+
+
+def test_format_graph_context_for_prompt_labels_verified_as_strongest_tier():
+    """DA-28: um incidente verified=True usa o rotulo mais forte
+    ("VERIFICADA") mesmo quando is_grounded tambem e True - e usa
+    verified_root_cause (a causa CONFIRMADA), nao root_cause (a
+    hipotese original do LLM, que pode divergir)."""
+    related = RelatedIncident(
+        interface_identifier="ID-1",
+        source_system="RFC",
+        root_cause="hipotese original do LLM",
+        matched_document="doc.md",
+        evidence_strength=0.9,
+        is_grounded=True,
+        verified=True,
+        verified_root_cause="causa raiz que Basis confirmou depois da investigacao",
+    )
+    text = format_graph_context_for_prompt([related])
+    assert "VERIFICADA" in text
+    assert "causa raiz que Basis confirmou depois da investigacao" in text
+    assert "hipotese original do LLM" not in text
+
+
+def test_format_graph_context_for_prompt_verified_falls_back_to_root_cause_when_missing():
+    related = RelatedIncident(
+        interface_identifier="ID-1",
+        source_system="RFC",
+        root_cause="unica causa disponivel",
+        matched_document=None,
+        evidence_strength=0.9,
+        is_grounded=True,
+        verified=True,
+        verified_root_cause=None,
+    )
+    text = format_graph_context_for_prompt([related])
+    assert "VERIFICADA" in text
+    assert "unica causa disponivel" in text
+
+
+def test_format_graph_context_for_prompt_does_not_group_verified_with_unverified():
+    """DA-28: mesmo com root_cause/matched_document/is_grounded iguais,
+    um incidente verificado e um nao-verificado nao devem ser agrupados
+    na mesma linha com contador - sao niveis de confianca diferentes."""
+    unverified = RelatedIncident(
+        interface_identifier="ID-1",
+        source_system="RFC",
+        root_cause="causa X",
+        matched_document="doc.md",
+        evidence_strength=0.9,
+        is_grounded=True,
+        verified=False,
+        verified_root_cause=None,
+    )
+    verified = RelatedIncident(
+        interface_identifier="ID-1",
+        source_system="RFC",
+        root_cause="causa X",
+        matched_document="doc.md",
+        evidence_strength=0.9,
+        is_grounded=True,
+        verified=True,
+        verified_root_cause="causa X",
+    )
+    text = format_graph_context_for_prompt([verified, unverified])
+    assert "(ja ocorreu 2x)" not in text
+    assert "VERIFICADA" in text
+    assert "causa raiz confirmada anteriormente" in text

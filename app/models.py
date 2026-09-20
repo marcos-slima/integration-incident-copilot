@@ -149,3 +149,29 @@ class DiagnosisResponse(BaseModel):
             "Layer)."
         ),
     )
+    incident_id: str | None = Field(
+        default=None,
+        description=(
+            "Id do incidente gravado no grafo de conhecimento (Neo4j), "
+            "para referenciar depois em POST /incidents/{id}/verify "
+            "(ver DA-28). None quando GraphRAG esta desligado ou o "
+            "incidente nao tinha interface_type/identifier suficientes "
+            "para ser gravado (upsert_incident_graph e no-op nesse "
+            "caso)."
+        ),
+    )
+
+
+class VerifyIncidentRequest(BaseModel):
+    """DA-28 (VERIFIED_AS): corpo de POST /incidents/{incident_id}/verify -
+    registra uma verificacao EXPLICITA (humana ou de outro sistema) da
+    causa raiz de um incidente ja gravado no grafo, distinta da hipotese
+    original do LLM. Ver app/rag/graph_store.py::verify_incident."""
+
+    root_cause: str = Field(
+        description="Causa raiz CONFIRMADA (pode diferir da hipotese original do LLM)."
+    )
+    verified_by: Literal["human", "system"] = Field(
+        default="human",
+        description="Quem verificou - 'human' (padrao) ou 'system' (ex: outra automacao confirmou).",
+    )

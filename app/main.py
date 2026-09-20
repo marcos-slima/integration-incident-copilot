@@ -20,8 +20,13 @@ from app.config import settings
 from app.events.consumer import handle_incident_event
 from app.mcp.server import build_mcp_asgi_app
 from app.mcp.server import mcp as mcp_server
-from app.models import DiagnosisResponse, IncidentEventEnvelope, IncidentRequest
-from app.rag.graph_store import GRAPH_UNAVAILABLE_EXCEPTIONS, ensure_constraints
+from app.models import (
+    DiagnosisResponse,
+    IncidentEventEnvelope,
+    IncidentRequest,
+    VerifyIncidentRequest,
+)
+from app.rag.graph_store import GRAPH_UNAVAILABLE_EXCEPTIONS, ensure_constraints, verify_incident
 
 logger = logging.getLogger(__name__)
 
@@ -195,6 +200,48 @@ def incident_event_webhook(request: Request, envelope: IncidentEventEnvelope) ->
     de API_KEY/A2A_API_KEY.
     """
     return handle_incident_event(envelope)
+
+
+@app.post(
+    "/incidents/{incident_id}/verify",
+    dependencies=[Depends(verify_api_key)],
+)
+@limiter.limit("10/minute")
+def verify_incident_endpoint(
+    request: Request, incident_id: str, body: VerifyIncidentRequest
+) -> dict[str, str]:
+    """DA-28 (VERIFIED_AS): registra a confirmacao EXPLICITA (humana ou
+    de outro sistema) da causa raiz de um incidente ja diagnosticado e
+    gravado no grafo (GraphRAG). Ver app.rag.graph_store.verify_incident
+    para a justificativa completa da distincao entre isto e o
+    `is_grounded` automatico (DA-16).
+
+    404 se GraphRAG estiver desligado ou o `incident_id` nao existir no
+    grafo - nao ha nada silencioso aqui, ao contrario da maioria das
+    funcoes deste modulo (que sao no-op por design quando desligadas),
+    porque este e um endpoint que o operador chama INTENCIONALMENTE
+    esperando um efeito: se o efeito nao aconteceu, ele precisa saber.
+
+    Rate limit: 10 requisicoes por minuto por IP (mesma politica dos
+    demais endpoints mutantes).
+    Autenticacao: X-API-Key header (mesma dependency de /diagnose).
+    """
+    if not settings.graph_rag_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="GraphRAG esta desligado (GRAPH_RAG_ENABLED=false) - nada para verificar.",
+        )
+    verified = verify_incident(
+        incident_id=incident_id,
+        verified_root_cause=body.root_cause,
+        verified_by=body.verified_by,
+    )
+    if not verified:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Incidente '{incident_id}' nao encontrado no grafo.",
+        )
+    return {"incident_id": incident_id, "status": "verified"}
 
 
 @app.get("/.well-known/agent-card.json")

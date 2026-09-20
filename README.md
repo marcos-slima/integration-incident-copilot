@@ -876,3 +876,63 @@ passando no total (`-m "not integration"`).
 Fecha os itens P0/P1 do backlog priorizado pela revisão externa. Os
 itens P2 restantes (evolução do schema do GraphRAG com `VERIFIED_AS`,
 benchmark científico de rerankers) seguem sem ação agendada.
+
+### 27. GraphRAG - modelo `VERIFIED_AS` (DA-28)
+
+Penúltimo item do backlog priorizado pela revisão externa (P2). O
+risco apontado: `is_grounded` (DA-16) é um proxy *automático* —
+`evidence_strength >= GROUNDED_EVIDENCE_THRESHOLD` no momento do
+diagnóstico — ainda é a hipótese do LLM, só que com evidência forte o
+suficiente para não ser descartada de cara. Sem uma distinção
+explícita entre "hipótese com boa evidência" e "fato confirmado por
+alguém que investigou depois", o grafo corria o risco de virar um
+loop de retroalimentação epistêmico: a hipótese do LLM de hoje vira
+"histórico" (fato) para o próximo diagnóstico na mesma interface, sem
+nunca ter sido de fato confirmada.
+
+Escopo escolhido — só o modelo `VERIFIED_AS`, não o grafo de topologia
+completo (`System→API→iFlow→Event→Credential`) que a revisão também
+menciona como evolução possível: o repositório não tem fonte de dados
+real para topologia hoje, e inventar uma seria pior que não ter a
+funcionalidade.
+
+- **`verify_incident(incident_id, verified_root_cause, verified_by)`**
+  (`app/rag/graph_store.py`) — grava
+  `(Incident)-[:VERIFIED_AS {verified_by, verified_at}]->(RootCause
+  {text})` e marca `Incident.verified = true`. Chamada EXPLÍCITA
+  apenas — nunca inferida por score.
+- **`POST /incidents/{incident_id}/verify`** (novo endpoint,
+  autenticado com o mesmo `X-API-Key` de `/diagnose`) — a superfície
+  para um humano (ou outro sistema, ex: ticket fechado com causa
+  confirmada) registrar a verificação.
+- **`DiagnosisResponse.incident_id`** — pré-requisito que faltava:
+  antes desta mudança, o id gravado no Neo4j era gerado dentro de
+  `graph_write_node` e descartado, nunca chegando ao caller — não
+  havia como saber qual id referenciar em `/verify`. Agora é gerado
+  uma vez em `run_diagnosis()`, passado pelo `CopilotState`, usado por
+  `graph_write_node`, e devolvido na resposta (`None` quando GraphRAG
+  está desligado ou o incidente não tinha interface/identificador
+  suficientes para ser gravado).
+- **`graph_context()`** passa a incluir um incidente `verified=true`
+  mesmo que `is_grounded` seja `false` — uma verificação humana é mais
+  forte que o proxy automático de evidência.
+- **`format_graph_context_for_prompt()`** ganha um terceiro nível de
+  confiança no texto injetado no prompt: "causa raiz VERIFICADA"
+  (mais forte) > "causa raiz confirmada anteriormente" (`is_grounded`,
+  automático) > "HIPÓTESE NÃO CONFIRMADA" (mais fraco). Quando
+  verificado, usa `verified_root_cause` (a causa confirmada, que pode
+  divergir da hipótese original do LLM) em vez de `root_cause`.
+
+**Validação:** novos testes em `tests/test_graph_store.py`
+(`verify_incident`, filtro de `graph_context`, formatação por nível de
+confiança), `tests/test_api.py` (endpoint `/verify`, 404 quando
+desligado/incidente inexistente, autenticação), `tests/test_nodes_multiagent.py`
+(`incident_id` threading em `run_diagnosis`) e
+`tests/test_nodes_graph_degradation.py` (`graph_write_node` usa o
+`incident_id` do state) — 180 testes passando no total
+(`-m "not integration"`).
+
+Fecha os itens P2 do backlog priorizado pela revisão externa. O único
+item restante do backlog completo é o benchmark científico de
+rerankers (P2 também, mas tratado à parte por ser um artefato de
+avaliação, não uma mudança de arquitetura).

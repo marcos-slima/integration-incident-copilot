@@ -67,3 +67,45 @@ def test_graph_write_node_propagates_non_transport_errors(monkeypatch):
                 "connector_data": None,
             }
         )
+
+
+def test_graph_write_node_uses_incident_id_from_state(monkeypatch):
+    """DA-28: o incident_id gerado em graph.py::run_diagnosis (e
+    devolvido em DiagnosisResponse.incident_id) tem que ser o mesmo
+    gravado no Neo4j - senao verify_incident() nunca acha o incidente
+    de volta pelo id que o caller recebeu."""
+    captured = {}
+
+    def _capture(*_args, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr("app.agent.nodes.upsert_incident_graph", _capture)
+    graph_write_node(
+        {
+            "description": "incidente qualquer",
+            "diagnosis": {"probable_root_cause": "causa", "confidence": 0.5},
+            "connector_data": None,
+            "incident_id": "id-fixo-do-state",
+        }
+    )
+    assert captured["incident_id"] == "id-fixo-do-state"
+
+
+def test_graph_write_node_falls_back_to_random_id_when_state_lacks_one(monkeypatch):
+    """Seguranca para chamada direta a graph_write_node sem passar por
+    run_diagnosis (ex: um teste antigo, ou um caller futuro que nao
+    popule incident_id) - nao deve quebrar, so gerar um id novo."""
+    captured = {}
+
+    def _capture(*_args, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr("app.agent.nodes.upsert_incident_graph", _capture)
+    graph_write_node(
+        {
+            "description": "incidente qualquer",
+            "diagnosis": {"probable_root_cause": "causa", "confidence": 0.5},
+            "connector_data": None,
+        }
+    )
+    assert captured["incident_id"]  # algum uuid gerado, nao vazio/None

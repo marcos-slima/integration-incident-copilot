@@ -89,3 +89,76 @@ def test_ensure_api_keys_configured_preserves_configured_keys(monkeypatch):
 
     assert configured_settings.api_key == "ja-configurada"
     assert configured_settings.a2a_api_key == "tambem-configurada"
+
+
+def test_verify_incident_returns_404_when_graph_rag_disabled(monkeypatch):
+    monkeypatch.setattr(main_module, "settings", Settings(graph_rag_enabled=False))
+    response = client.post(
+        "/incidents/i1/verify",
+        json={"root_cause": "causa confirmada", "verified_by": "human"},
+    )
+    assert response.status_code == 404
+    assert "desligado" in response.json()["detail"]
+
+
+def test_verify_incident_returns_404_when_incident_not_found(monkeypatch):
+    monkeypatch.setattr(main_module, "settings", Settings(graph_rag_enabled=True))
+    monkeypatch.setattr(main_module, "verify_incident", lambda **kwargs: False)
+    response = client.post(
+        "/incidents/inexistente/verify",
+        json={"root_cause": "causa confirmada", "verified_by": "human"},
+    )
+    assert response.status_code == 404
+    assert "inexistente" in response.json()["detail"]
+
+
+def test_verify_incident_returns_200_on_success(monkeypatch):
+    monkeypatch.setattr(main_module, "settings", Settings(graph_rag_enabled=True))
+    captured = {}
+
+    def _fake_verify_incident(**kwargs):
+        captured.update(kwargs)
+        return True
+
+    monkeypatch.setattr(main_module, "verify_incident", _fake_verify_incident)
+    response = client.post(
+        "/incidents/i1/verify",
+        json={"root_cause": "causa confirmada por Basis", "verified_by": "human"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"incident_id": "i1", "status": "verified"}
+    assert captured["incident_id"] == "i1"
+    assert captured["verified_root_cause"] == "causa confirmada por Basis"
+    assert captured["verified_by"] == "human"
+
+
+def test_verify_incident_defaults_verified_by_to_human(monkeypatch):
+    monkeypatch.setattr(main_module, "settings", Settings(graph_rag_enabled=True))
+    captured = {}
+
+    def _fake_verify_incident(**kwargs):
+        captured.update(kwargs)
+        return True
+
+    monkeypatch.setattr(main_module, "verify_incident", _fake_verify_incident)
+    response = client.post("/incidents/i1/verify", json={"root_cause": "causa confirmada"})
+    assert response.status_code == 200
+    assert captured["verified_by"] == "human"
+
+
+def test_verify_incident_requires_api_key_when_configured(monkeypatch):
+    """Mesma politica de autenticacao de /diagnose (DA-18) - X-API-Key
+    tambem protege este endpoint mutante."""
+    monkeypatch.setattr(
+        main_module, "settings", Settings(api_key="secret-verify", graph_rag_enabled=True)
+    )
+    monkeypatch.setattr(main_module, "verify_incident", lambda **kwargs: True)
+    payload = {"root_cause": "causa confirmada"}
+
+    unauthorized = client.post("/incidents/i1/verify", json=payload)
+    assert unauthorized.status_code == 401
+
+    authorized = client.post(
+        "/incidents/i1/verify", json=payload, headers={"X-API-Key": "secret-verify"}
+    )
+    assert authorized.status_code == 200

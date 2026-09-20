@@ -62,6 +62,7 @@ from app.connectors import (
     ServiceNowConnector,
     WorkdayConnector,
 )
+from app.mcp.policy import enforce
 from app.models import IncidentRequest
 
 mcp = MCPServer(
@@ -95,6 +96,11 @@ def diagnose_incident(
     RFC destination, numero de IDoc/incidente/case/evento/PO, conforme o
     interface_type.
     """
+    # DA-27: Capability Registry + Agent Execution Policy - fail-closed,
+    # ver app/mcp/policy.py. Hoje sempre permite (tool read-only, scope
+    # padrao ja cobre), mas garante que NENHUMA tool roda sem passar
+    # por aqui primeiro, inclusive futuras tools de escrita.
+    enforce("diagnose_incident")
     request = IncidentRequest(
         description=description,
         logs=logs,
@@ -133,6 +139,7 @@ def list_connectors() -> list[dict]:
     Util para um agente cliente decidir quais identificadores/cenarios
     testar antes de chamar `diagnose_incident`.
     """
+    enforce("list_connectors")
     catalog = []
     for interface_type, (connector_cls, settings_attr, vendor) in _CONNECTOR_CATALOG.items():
         if interface_type == "rfc":

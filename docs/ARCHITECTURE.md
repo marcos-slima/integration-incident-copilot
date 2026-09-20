@@ -719,6 +719,62 @@ roteamento, circuit breaker (abre/fecha/expira cooldown, isolado por
 provider) e budget, sem depender de nenhum provider real (mesmo padrao
 ja usado em `test_llm_factory.py` para `invoke_with_hybrid_fallback`).
 
+## Capability Registry + Agent Execution Policy (DA-27)
+
+Ultimo item P1 da segunda revisao arquitetural externa. O servidor
+MCP (`app/mcp/server.py`, DA-19) so tinha autenticacao de TRANSPORTE
+(X-API-Key compartilhada) - nenhuma distincao entre tools por risco.
+Hoje isso nao e um problema pratico (as duas tools expostas,
+`diagnose_incident` e `list_connectors`, sao 100% read-only), mas a
+revisao apontou o motivo de resolver isso ANTES de qualquer tool de
+escrita: um prompt injection contra um LLM que so faz `diagnosis` tem
+como pior consequencia um diagnostico errado; contra um LLM com
+`tool selection -> tool execution`, a consequencia pode ser alterar
+SAP, reiniciar um iFlow ou executar uma operacao real - prompt
+injection deixa de ser um problema de qualidade de resposta e vira um
+problema de AUTORIZACAO OPERACIONAL.
+
+`app/mcp/policy.py` (novo) cria a base para isso:
+
+- **Capability Registry** (`CAPABILITY_REGISTRY`): uma entrada
+  `ToolPolicy` por tool exposta - `risk_level`, `destructive`,
+  `scopes_required`, `approval_required`, `data_sensitivity` (mesma
+  classificacao confidential/public do AI Gateway, DA-26) e
+  timeout/retries.
+- **enforce(tool_name, context)**: FAIL-CLOSED - uma tool SEM entrada
+  no registry e negada por padrao (`PolicyDeniedError`), nunca
+  permitida por omissao. Verifica scopes concedidos no
+  `ExecutionContext` e, quando a tool exige `approval_required=True`,
+  se ja foi explicitamente aprovada.
+- `diagnose_incident` e `list_connectors` (`app/mcp/server.py`) agora
+  chamam `enforce()` como primeira linha - nenhuma tool roda sem
+  passar pelo registry primeiro, inclusive qualquer tool futura.
+
+Com as duas tools atuais sendo read-only e de baixo risco,
+`DEFAULT_EXECUTION_CONTEXT` (usado quando o caller nao passa um
+contexto explicito) sempre permite ambas - o comportamento observavel
+do servidor MCP NAO muda nesta fase. O valor esta em preparar o
+terreno: qualquer tool de escrita futura (ex: `restart_iflow`,
+`close_ticket`) precisa OBRIGATORIAMENTE de uma entrada no
+`CAPABILITY_REGISTRY` antes de ser exposta - esquecer isso resulta em
+`PolicyDeniedError` em runtime, nao em uma tool silenciosamente
+liberada.
+
+**Nao-objetivos explicitos desta v1** (backlog em aberto, ver
+`learnings.md` do projeto): granularidade de scope POR CHAVE de API
+(hoje ha uma unica `X-API-Key` compartilhada por todo o servidor MCP -
+multiplas chaves com scopes diferentes exigiria um esquema de
+credenciais mais rico, ex: OAuth2/TokenVerifier, que `app/mcp/server.py`
+ja documenta como sobre-engenharia para o estagio atual); fluxo de
+aprovacao humana de verdade (o campo `approved` de `ExecutionContext`
+existe para `enforce()` ja saber verificar isso, mas nenhum mecanismo
+real ainda o preenche com `True`).
+
+Validado com `tests/test_mcp_policy.py` (9 testes) - registro das duas
+tools atuais, fail-closed para tool nao registrada, enforcement de
+scope e de aprovacao (usando uma tool hipotetica de escrita registrada
+so dentro do teste, para nao afetar `CAPABILITY_REGISTRY` fora dele).
+
 ## Testes
 
 Testes unitarios (`tests/test_connectors.py`, `test_llm_factory.py`,

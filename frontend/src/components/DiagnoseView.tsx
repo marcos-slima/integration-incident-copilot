@@ -35,6 +35,15 @@ const SYSTEMS: Array<[string, string]> = [
   ['apim', 'SAP API Management'],
 ];
 
+// Limite de tamanho de arquivo p/ upload - alinhado ao limite do backend
+// para logs/payload (MAX_LOGS_LENGTH/MAX_PAYLOAD_LENGTH em app/models.py,
+// 50.000 caracteres). Usamos bytes do arquivo (file.size) como proxy do
+// numero de caracteres: em UTF-8 um caractere nunca ocupa menos de 1 byte,
+// entao um arquivo com ate MAX_UPLOAD_BYTES bytes sempre tem no maximo
+// MAX_UPLOAD_BYTES caracteres - um arquivo aceito aqui nunca estoura o
+// limite da API (422), mesmo com acentos/caracteres multi-byte.
+const MAX_UPLOAD_BYTES = 50_000;
+
 // Identificadores de demonstração
 const DEMO_IDS = [
   { id: 'CPI-401-DEMO',        sys: 'odata', desc: 'iFlow retornando HTTP 401 ao autenticar via OAuth2' },
@@ -117,8 +126,11 @@ export function DiagnoseView({ onResult }: DiagnoseViewProps) {
       setError(`Tipo não suportado. Use: ${ALLOWED.join(', ')}`);
       return;
     }
-    if (file.size > 500_000) {
-      setError('Arquivo muito grande. Limite: 500KB.');
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setError(
+        `Arquivo muito grande. Limite: ${MAX_UPLOAD_BYTES / 1000}KB (mesmo limite de ` +
+          'caracteres aceito pela API para logs/payload).',
+      );
       return;
     }
 
@@ -206,7 +218,7 @@ export function DiagnoseView({ onResult }: DiagnoseViewProps) {
             <label className="upload-zone-label">
               <span>Clique para anexar</span> ou arraste um arquivo
               <div style={{ fontSize: 10, color: '#475569', marginTop: 2 }}>
-                .txt · .log · .xml · .json · .csv (máx. 500KB)
+                .txt · .log · .xml · .json · .csv (máx. {MAX_UPLOAD_BYTES / 1000}KB)
               </div>
             </label>
             <input

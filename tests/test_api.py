@@ -164,6 +164,36 @@ def test_ensure_api_keys_configured_reports_only_the_missing_keys(monkeypatch):
     assert "API_KEY" not in message.replace("A2A_API_KEY", "")
 
 
+def test_ensure_graph_rag_password_configured_rejects_empty_password(monkeypatch):
+    """Avaliacao externa (curto prazo, item 6): com GRAPH_RAG_ENABLED=true,
+    o startup deve recusar subir se NEO4J_PASSWORD nao foi configurada -
+    mesmo motivo do docker-compose.yml nao ter mais um default fraco
+    ("changeme123") para o Neo4j do perfil "graphrag"."""
+    fresh_settings = Settings(graph_rag_enabled=True, neo4j_password="")
+    monkeypatch.setattr(main_module, "settings", fresh_settings)
+
+    with pytest.raises(main_module.MissingGraphRagCredentialsError) as exc_info:
+        main_module._ensure_graph_rag_password_configured()
+
+    assert "NEO4J_PASSWORD" in str(exc_info.value)
+
+
+def test_ensure_graph_rag_password_configured_passes_when_password_set(monkeypatch):
+    fresh_settings = Settings(graph_rag_enabled=True, neo4j_password="uma-senha-forte")
+    monkeypatch.setattr(main_module, "settings", fresh_settings)
+
+    main_module._ensure_graph_rag_password_configured()  # nao deve levantar
+
+
+def test_ensure_graph_rag_password_configured_ignored_when_graph_rag_disabled(monkeypatch):
+    """Sem GRAPH_RAG_ENABLED, uma NEO4J_PASSWORD vazia e irrelevante -
+    o Neo4j nem e usado."""
+    fresh_settings = Settings(graph_rag_enabled=False, neo4j_password="")
+    monkeypatch.setattr(main_module, "settings", fresh_settings)
+
+    main_module._ensure_graph_rag_password_configured()  # nao deve levantar
+
+
 def test_verify_incident_returns_404_when_graph_rag_disabled(monkeypatch):
     monkeypatch.setattr(main_module, "settings", Settings(graph_rag_enabled=False))
     response = client.post(

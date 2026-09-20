@@ -54,7 +54,15 @@ services:
       - "7474:7474"
       - "7687:7687"
     environment:
-      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-changeme123}
+      # Avaliacao externa (curto prazo, item 6): sem default fraco -
+      # NEO4J_PASSWORD tinha um fallback "changeme123" aqui, que
+      # ficaria valendo de verdade se alguem ativasse o profile
+      # graphrag sem configurar a senha no .env (o Neo4j fica
+      # exposto nas portas 7474/7687 do host). "${VAR:?mensagem}" faz
+      # o "docker compose --profile graphrag up" falhar explicitamente
+      # se NEO4J_PASSWORD nao estiver definida, em vez de subir com
+      # uma senha conhecida publicamente.
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:?Defina NEO4J_PASSWORD no .env antes de subir o profile graphrag - sem default fraco}
     volumes:
       - neo4j_data:/data
 

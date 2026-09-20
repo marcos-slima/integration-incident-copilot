@@ -19,7 +19,7 @@ os.environ.setdefault("LANGFUSE_BASE_URL", settings.langfuse_host)
 
 from ddgs import DDGS
 from langchain_core.tools import tool as lc_tool
-from langfuse import get_client, observe
+from langfuse import Langfuse, get_client, observe
 from langfuse.langchain import CallbackHandler
 from langgraph.prebuilt import create_react_agent
 
@@ -34,7 +34,17 @@ from app.rag.graph_store import (
     upsert_incident_graph,
 )
 from app.rag.retriever import retrieve
+from app.redaction import redact_pii_deep, redact_pii_text
 
+# Avaliacao externa (medio prazo, item 4): inicializa o client Langfuse
+# EXPLICITAMENTE com mask=redact_pii_deep, ANTES de qualquer
+# CallbackHandler()/@observe rodar - "get_client()" so cria o client
+# default (sem mask) se nenhum ja existir, entao a ordem aqui importa.
+# Isso cobre "antes do Langfuse": o SDK aplica essa mascara a QUALQUER
+# input/output que @observe capturar automaticamente (o CopilotState
+# inteiro, nao so o texto que sanitize_untrusted_input ja sanitizava
+# manualmente para o prompt).
+Langfuse(mask=redact_pii_deep)
 _langfuse_handler = CallbackHandler()
 
 MAX_LOGS_IN_PROMPT = 3_000
@@ -267,7 +277,13 @@ def sanitize_untrusted_input(text: str | None, field_name: str = "input") -> str
             field_name,
         )
 
-    return sanitized
+    # Avaliacao externa (medio prazo, item 4): redaction de PII "antes
+    # do prompt" - e-mail/CPF/numero de IDoc nunca chegam ao LLM neste
+    # campo (ver app/redaction.py). Depois da sanitizacao de injection
+    # (ordem nao importa para correcao, mas mantem os dois tipos de
+    # neutralizacao juntos, no mesmo lugar onde este campo ja era
+    # tratado como nao-confiavel).
+    return redact_pii_text(sanitized)
 
 
 def _truncate(text: str, limit: int) -> str:

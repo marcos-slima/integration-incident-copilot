@@ -40,9 +40,13 @@ Nao-objetivos explicitos desta v1 (backlog em aberto, ver learnings.md
 do projeto):
 - IAM/auth: ja resolvido na borda HTTP (X-API-Key por endpoint,
   DA-18/DA-23) - nao duplicado aqui.
-- PII/DLP de verdade: um scanner de dados sensiveis no CONTEUDO do
-  prompt. sanitize_untrusted_input (app/agent/nodes.py) protege contra
-  prompt injection, nao e um scanner de PII - permanece pendente.
+- PII/DLP de verdade: um scanner de dados sensiveis (NER/classificador)
+  no CONTEUDO do prompt. Avaliacao externa (medio prazo, item 4)
+  adicionou redaction REGEX-based de e-mail/CPF/numero de IDoc
+  (app/redaction.py, aplicada em sanitize_untrusted_input e como
+  mask= do client Langfuse) - reduz o gap, mas continua sem
+  NER/classificador de PII de verdade (nomes proprios, enderecos,
+  outros formatos de documento nao cobertos pelos 3 padroes acima).
 - Tenant isolation: o projeto ainda e single-tenant.
 - Circuit breaker compartilhado entre replicas: e in-memory, por
   processo - nao compartilhado entre os 2+ pods do deploy Kyma

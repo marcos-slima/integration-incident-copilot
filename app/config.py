@@ -188,6 +188,14 @@ class Settings(BaseSettings):
     neo4j_user: str = "neo4j"
     neo4j_password: str = ""
 
+    # Redis - opcional (app/a2a/task_store.py). Vazio (default) =
+    # tasks A2A ficam so em memoria (comportamento historico, perdido
+    # a cada restart do processo) - mesmo principio de "clone e rode"
+    # sem infra obrigatoria usado no GraphRAG acima. Configurado =
+    # persistencia sobrevive a restart. Avaliacao externa (medio
+    # prazo, item 2): "Persistencia de tasks A2A (Redis/SQLite)".
+    redis_url: str = ""
+
     # Langfuse - opcional; se as chaves ficarem vazias o SDK nao envia
     # trace nenhum (nao quebra), entao rodar sem observabilidade
     # completa (ex: docker-compose.yml deste repo, que nao sobe o stack

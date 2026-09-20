@@ -21,6 +21,11 @@ services:
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
       LANGFUSE_HOST: ${LANGFUSE_HOST:-}
+      # Redis e opt-in (profile "async", ver servico abaixo) - vazio
+      # por default, mesmo principio das chaves do Langfuse acima:
+      # sem REDIS_URL, app/a2a/task_store.py cai no fallback em
+      # memoria, sem quebrar quem nao subiu o profile "async".
+      REDIS_URL: ${REDIS_URL:-}
     depends_on:
       - ollama
       - qdrant
@@ -66,7 +71,23 @@ services:
     volumes:
       - neo4j_data:/data
 
+  # Redis (opt-in) - NAO sobe com "docker compose up" default, mesmo
+  # principio do Neo4j acima (Decisao de Arquitetura #9). Ativar de
+  # verdade exige tambem REDIS_URL no .env - ver
+  # app/a2a/task_store.py. Avaliacao externa (medio prazo, item 2):
+  # persistencia de tasks A2A; o mesmo Redis tambem serve a fila
+  # assincrona de diagnostico (RQ) quando essa parte estiver pronta.
+  redis:
+    image: redis:7.4-alpine
+    profiles: ["async"]
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+
 volumes:
   ollama_data:
   qdrant_data:
   neo4j_data:
+  redis_data:

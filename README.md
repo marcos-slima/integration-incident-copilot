@@ -590,3 +590,54 @@ configurado, troca de provider em falha de transporte, desiste com
 erro de **aplicação** (não de transporte) nunca aciona uma tentativa de
 fallback — o caso que provaria que a lógica está mascarando bugs em vez
 de lidar com indisponibilidade real.
+
+### 19. GraphRAG como camada de conhecimento operacional - hardening (DA-21)
+
+**Contexto:** quinto item do roadmap arquitetural planejado. GraphRAG
+(`app/rag/graph_store.py`) já existia como código real desde uma fase
+anterior, mas desligado por default (`GRAPH_RAG_ENABLED=false`, ver
+Decisão #9) e sem Neo4j real acessível neste ambiente de
+desenvolvimento (sem Docker daemon). A opção considerada aqui não foi
+"validar contra Neo4j real" (impossível neste ambiente) nem "ligar por
+default" (decisão de negócio da #9 continua valendo), e sim: **revisar
+o código existente por lacunas de design que só aparecem em uso
+operacional contínuo** (não numa demo de poucos incidentes) e corrigi-las
+sem depender de infraestrutura real.
+
+**Decisão - três reforços, nenhum muda o comportamento com a flag
+desligada:**
+
+1. **Degradação graciosa por tipo de exceção** — `GRAPH_UNAVAILABLE_EXCEPTIONS`
+   (`neo4j.exceptions.DriverError` + `TransientError`) é o catch-tuple
+   usado agora em `graph_enrich_node`/`graph_write_node`
+   (`app/agent/nodes.py`): uma falha de infraestrutura do Neo4j
+   (conexão recusada, timeout, restart do servidor) não derruba mais o
+   diagnóstico inteiro — cai para "sem histórico"/"escrita pulada" com
+   um log de warning. Deliberadamente exclui `Neo4jError` em geral: um
+   `ConstraintError`/`CypherSyntaxError` é bug nosso (Cypher/schema
+   errado), não indisponibilidade de infra, e deve continuar
+   propagando — mesmo princípio de separar falha de transporte de erro
+   de aplicação usado no Hybrid Inference (DA-20). `ensure_constraints()`
+   também passou a rodar sozinho no `lifespan` do FastAPI quando a flag
+   está ligada (`app/main.py`), eliminando o passo manual `--init`
+   sem bloquear o startup se o Neo4j estiver temporariamente fora do ar.
+2. **Formatação com deduplicação por recorrência** —
+   `format_graph_context_for_prompt()` agrupa ocorrências CONSECUTIVAS
+   da mesma causa raiz numa única linha com contador ("já ocorreu 3x"),
+   em vez de repetir a mesma linha e desperdiçar orçamento de prompt
+   numa interface "flapping" (falhando repetidamente pela mesma causa).
+3. **Utilitário manual de limpeza** — `prune_ungrounded_hypotheses()`
+   (CLI `--prune-ungrounded --older-than-days N`) remove hipóteses NÃO
+   confirmadas antigas; incidentes com causa raiz confirmada nunca são
+   tocados, sob nenhuma idade, e a função nunca é chamada automaticamente.
+
+**Validação:** `tests/test_graph_store.py` (dedup consecutivo vs.
+não-consecutivo, contagem de prune, garantia de que a query do prune
+filtra por `is_grounded=false`) e `tests/test_nodes_graph_degradation.py`
+(novo — `graph_enrich_node`/`graph_write_node` degradam em
+`DriverError`/`TransientError` mas propagam `CypherSyntaxError`), todos
+com driver Neo4j fake (`FakeSession`), mesmo padrão de
+`httpx.MockTransport` usado nos conectores HTTP. **Não-objetivo
+explícito:** validação contra um Neo4j real continua pendente, por
+limitação deste ambiente (sem Docker) — decisão aceita explicitamente
+ao escopar esta fase.

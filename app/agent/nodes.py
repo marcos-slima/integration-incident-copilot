@@ -27,6 +27,7 @@ from app.agent.state import CopilotState, DiagnosisModel
 from app.connectors import get_connector
 from app.llm.factory import invoke_with_hybrid_fallback
 from app.rag.graph_store import (
+    GRAPH_UNAVAILABLE_EXCEPTIONS,
     format_graph_context_for_prompt,
     graph_context,
     upsert_incident_graph,
@@ -67,8 +68,21 @@ def retrieve_node(state: CopilotState) -> CopilotState:
 def graph_enrich_node(state: CopilotState) -> CopilotState:
     """So entra no grafo quando GRAPH_RAG_ENABLED=true (ver
     build_graph()) - consulta o Neo4j por incidentes anteriores na
-    mesma interface, para enriquecer o prompt com recorrencia."""
-    related = graph_context(state.get("interface_type"), state.get("identifier"))
+    mesma interface, para enriquecer o prompt com recorrencia.
+
+    DA-21: uma falha de infraestrutura do Neo4j (conexao recusada,
+    timeout, servidor temporariamente indisponivel) nao pode derrubar
+    o diagnostico inteiro - degrada graciosamente para "sem historico"
+    e loga um warning. Erros que indicam bug nosso (Cypher invalido,
+    violacao de constraint) continuam propagando normalmente."""
+    try:
+        related = graph_context(state.get("interface_type"), state.get("identifier"))
+    except GRAPH_UNAVAILABLE_EXCEPTIONS as exc:
+        logging.getLogger(__name__).warning(
+            "graph_enrich_node: Neo4j indisponivel, seguindo sem historico do grafo: %s",
+            exc,
+        )
+        return {"graph_history": []}
     return {"graph_history": related}
 
 
@@ -77,20 +91,32 @@ def graph_write_node(state: CopilotState) -> CopilotState:
     """So entra no grafo quando GRAPH_RAG_ENABLED=true - grava o
     diagnostico concluido no Neo4j para alimentar consultas futuras de
     `graph_enrich_node`. No-op (via upsert_incident_graph) se nao houver
-    interface/identificador associado a este incidente."""
+    interface/identificador associado a este incidente.
+
+    DA-21: mesma logica de degradacao graciosa de graph_enrich_node -
+    se o Neo4j estiver temporariamente fora do ar, o diagnostico ja
+    concluido nao pode ser perdido/travado so porque a escrita de
+    conhecimento operacional falhou. Loga um warning e segue."""
     diagnosis = state.get("diagnosis", {})
     data = state.get("connector_data")
-    upsert_incident_graph(
-        incident_id=str(uuid4()),
-        description=state["description"],
-        interface_type=state.get("interface_type"),
-        identifier=state.get("identifier"),
-        source_system=data.source_system if data else None,
-        root_cause=diagnosis.get("probable_root_cause", ""),
-        confidence=float(diagnosis.get("confidence", 0.0)),
-        matched_document=diagnosis.get("matched_source"),
-        evidence_strength=float(diagnosis.get("evidence_strength", 0.0)),
-    )
+    try:
+        upsert_incident_graph(
+            incident_id=str(uuid4()),
+            description=state["description"],
+            interface_type=state.get("interface_type"),
+            identifier=state.get("identifier"),
+            source_system=data.source_system if data else None,
+            root_cause=diagnosis.get("probable_root_cause", ""),
+            confidence=float(diagnosis.get("confidence", 0.0)),
+            matched_document=diagnosis.get("matched_source"),
+            evidence_strength=float(diagnosis.get("evidence_strength", 0.0)),
+        )
+    except GRAPH_UNAVAILABLE_EXCEPTIONS as exc:
+        logging.getLogger(__name__).warning(
+            "graph_write_node: Neo4j indisponivel, diagnostico concluido mas nao "
+            "gravado no grafo de conhecimento: %s",
+            exc,
+        )
     return {}
 
 

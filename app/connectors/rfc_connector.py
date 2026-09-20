@@ -95,6 +95,17 @@ _DEFAULT = ConnectorResult(
 
 
 class RFCConnector(SAPConnector):
+    """`use_real=True` forca o caminho RFC real explicitamente na
+    construcao. Alem disso, `fetch()` segue o MESMO criterio de
+    auto-habilitacao usado por `ODataConnector.fetch()`
+    (`self.use_real or settings.odata_service_url`): quando SAP_ASHOST
+    estiver configurado no .env, o modo real e usado mesmo que o
+    caller nao passe use_real=True - isso importa porque
+    `app.connectors.get_connector("rfc")` (usado por /diagnose) sempre
+    instancia `RFCConnector()` sem argumentos, entao antes desse
+    alinhamento nao havia NENHUM jeito de /diagnose alcancar o
+    conector RFC real, mesmo com SAP_ASHOST configurado."""
+
     def __init__(self, use_real: bool = False):
         self.use_real = use_real
         if use_real and not HAS_PYRFC:
@@ -107,7 +118,16 @@ class RFCConnector(SAPConnector):
             )
 
     def fetch(self, identifier: str) -> ConnectorResult:
-        if self.use_real:
+        if self.use_real or settings.sap_ashost:
+            if not HAS_PYRFC:
+                raise ConfigurationError(
+                    "SAP_ASHOST esta configurado no .env, mas o pacote "
+                    "'pyrfc' e o SAP NetWeaver RFC SDK nao estao instalados "
+                    "no sistema operacional (binario distribuido pela SAP, "
+                    "nao via PyPI) - sem isso nao ha como fazer a chamada "
+                    "RFC real. Remova SAP_ASHOST do .env para usar o modo "
+                    "demo/mock, ou instale pyrfc + o SDK."
+                )
             return self._fetch_real(identifier)
         return _MOCK_SCENARIOS.get(identifier, _DEFAULT)
 

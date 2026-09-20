@@ -14,7 +14,7 @@ import httpx
 import pytest
 
 from app.config import Settings
-from app.connectors import get_connector
+from app.connectors import ConnectorResult, get_connector
 from app.connectors.ariba_connector import AribaConnector
 from app.connectors.odata_connector import ODataConnector
 from app.connectors.rfc_connector import RFCConnector
@@ -80,6 +80,55 @@ def test_rfc_connector_use_real_without_pyrfc_raises_configuration_error(monkeyp
     monkeypatch.setattr("app.connectors.rfc_connector.HAS_PYRFC", False)
     with pytest.raises(ConfigurationError, match="pyrfc"):
         RFCConnector(use_real=True)
+
+
+def test_rfc_connector_fetch_auto_enables_real_mode_when_sap_ashost_configured(monkeypatch):
+    # get_connector("rfc") (o que /diagnose de fato usa) sempre instancia
+    # RFCConnector() SEM use_real - antes do alinhamento com o criterio do
+    # ODataConnector, isso significava que o conector real nunca era
+    # alcancavel via /diagnose, mesmo com SAP_ASHOST configurado.
+    monkeypatch.setattr("app.connectors.rfc_connector.settings.sap_ashost", "sapprd.example.com")
+    monkeypatch.setattr("app.connectors.rfc_connector.HAS_PYRFC", True)
+    calls: list[str] = []
+
+    def _fake_fetch_real(self, identifier: str) -> ConnectorResult:
+        calls.append(identifier)
+        return ConnectorResult(
+            source_system="RFC",
+            status="ok",
+            error_code=None,
+            message="ok (fake)",
+            raw="",
+            is_mock=False,
+        )
+
+    monkeypatch.setattr(RFCConnector, "_fetch_real", _fake_fetch_real)
+
+    connector = get_connector("rfc")
+    assert connector.use_real is False  # get_connector nao passa use_real=True
+
+    result = connector.fetch("0000000001234567")
+
+    assert calls == ["0000000001234567"]
+    assert result.is_mock is False
+
+
+def test_rfc_connector_fetch_raises_configuration_error_when_sap_ashost_configured_without_pyrfc(
+    monkeypatch,
+):
+    monkeypatch.setattr("app.connectors.rfc_connector.settings.sap_ashost", "sapprd.example.com")
+    monkeypatch.setattr("app.connectors.rfc_connector.HAS_PYRFC", False)
+
+    connector = get_connector("rfc")
+    with pytest.raises(ConfigurationError, match="pyrfc"):
+        connector.fetch("0000000001234567")
+
+
+def test_rfc_connector_stays_mock_when_sap_ashost_not_configured(monkeypatch):
+    monkeypatch.setattr("app.connectors.rfc_connector.settings.sap_ashost", "")
+    connector = get_connector("rfc")
+    result = connector.fetch("RFC-IDOC-51-DEMO")
+    assert result.error_code == "51"
 
 
 def test_servicenow_connector_demo_mode_known_scenario(monkeypatch):

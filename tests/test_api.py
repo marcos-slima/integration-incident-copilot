@@ -77,6 +77,72 @@ def test_diagnose_requires_api_key_when_configured(monkeypatch):
     assert authorized.json()["matched_source"] == "doc_teste.md"
 
 
+def test_diagnose_async_returns_503_when_redis_not_configured(monkeypatch):
+    """Avaliacao externa (medio prazo, item 6): sem REDIS_URL
+    configurada, POST /diagnose/async deve falhar explicito (503),
+    nao tentar enfileirar silenciosamente ou travar - ver
+    app.queue.AsyncQueueUnavailableError."""
+    from app.queue import AsyncQueueUnavailableError
+
+    def _raise_unavailable(request_data):
+        raise AsyncQueueUnavailableError(
+            "Fila assincrona de diagnostico requer REDIS_URL configurada."
+        )
+
+    monkeypatch.setattr(main_module, "enqueue_diagnosis", _raise_unavailable)
+
+    response = client.post("/diagnose/async", json={"description": "iFlow travando"})
+
+    assert response.status_code == 503
+
+
+def test_diagnose_async_returns_202_with_job_id_when_queued(monkeypatch):
+    monkeypatch.setattr(main_module, "enqueue_diagnosis", lambda request_data: "job-abc")
+
+    response = client.post("/diagnose/async", json={"description": "iFlow travando"})
+
+    assert response.status_code == 202
+    assert response.json() == {"job_id": "job-abc", "status": "queued"}
+
+
+def test_diagnose_async_status_returns_404_when_job_not_found(monkeypatch):
+    monkeypatch.setattr(main_module, "get_job_status", lambda job_id: None)
+
+    response = client.get("/diagnose/async/nao-existe")
+
+    assert response.status_code == 404
+
+
+def test_diagnose_async_status_returns_503_when_redis_not_configured(monkeypatch):
+    from app.queue import AsyncQueueUnavailableError
+
+    def _raise_unavailable(job_id):
+        raise AsyncQueueUnavailableError(
+            "Fila assincrona de diagnostico requer REDIS_URL configurada."
+        )
+
+    monkeypatch.setattr(main_module, "get_job_status", _raise_unavailable)
+
+    response = client.get("/diagnose/async/job-abc")
+
+    assert response.status_code == 503
+
+
+def test_diagnose_async_status_returns_finished_job_result(monkeypatch):
+    fake_status = {
+        "job_id": "job-abc",
+        "status": "finished",
+        "result": {"probable_root_cause": "Certificado expirado"},
+        "error": None,
+    }
+    monkeypatch.setattr(main_module, "get_job_status", lambda job_id: fake_status)
+
+    response = client.get("/diagnose/async/job-abc")
+
+    assert response.status_code == 200
+    assert response.json() == fake_status
+
+
 def test_diagnose_returns_504_on_diagnosis_timeout(monkeypatch):
     """Avaliacao externa (curto prazo, item 4): o watchdog global de
     settings.diagnosis_timeout_seconds (app/agent/graph.py) precisa

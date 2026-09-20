@@ -33,12 +33,17 @@ dependencies = [
     "slowapi>=0.1.10",
     "mcp>=1.9.0",
     # Opcional em runtime (REDIS_URL vazio = nao usado, ver
-    # app/a2a/task_store.py) - declarado como dependencia principal
-    # (nao um extra) pelo mesmo motivo de "neo4j" acima: import tardio
-    # (so acontece se a feature estiver configurada), mas sem exigir
-    # um "pip install" extra do operador quando ele decide ligar
-    # REDIS_URL.
+    # app/a2a/task_store.py e app/queue.py) - declarado como
+    # dependencia principal (nao um extra) pelo mesmo motivo de
+    # "neo4j" acima: import tardio (so acontece se a feature estiver
+    # configurada), mas sem exigir um "pip install" extra do operador
+    # quando ele decide ligar REDIS_URL.
     "redis>=5.2",
+    # Fila assincrona de diagnostico (app/queue.py) - mesmo Redis do
+    # REDIS_URL acima, so importado/usado se REDIS_URL estiver
+    # configurada. Sem isso o "worker" opt-in (docker-compose.yml,
+    # profile "async") nao teria o que rodar.
+    "rq>=2.12.0",
 ]
 
 [project.optional-dependencies]

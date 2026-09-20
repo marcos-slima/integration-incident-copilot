@@ -86,6 +86,44 @@ services:
       - redis_data:/data
     command: ["redis-server", "--appendonly", "yes"]
 
+  # Worker RQ (opt-in, mesmo profile "async" do redis acima) -
+  # avaliacao externa (medio prazo, item 6): consome a fila de
+  # diagnostico (app/queue.py) enfileirada por POST /diagnose/async.
+  # Mesma imagem da API (build: .) - precisa do mesmo acesso a
+  # Ollama/Qdrant/Langfuse que a API tem, pois "run_diagnosis_job"
+  # (app/queue.py) chama o MESMO pipeline (app/agent/graph.py) rodando
+  # aqui dentro, nao um subconjunto. Sem REDIS_URL configurada, o
+  # worker nao tem o que consumir - "${VAR:?...}" falha explicito ao
+  # subir o profile, mesmo principio do NEO4J_PASSWORD acima (sem
+  # default fraco/silencioso).
+  worker:
+    build: .
+    profiles: ["async"]
+    command:
+      - ".venv/bin/rq"
+      - "worker"
+      - "--url"
+      - "${REDIS_URL:?Defina REDIS_URL no .env antes de subir o profile async - o worker RQ nao tem fila para consumir sem ela}"
+      - "diagnosis"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      LLM_PROVIDER: ollama
+      OLLAMA_HOST: http://host.docker.internal:11434
+      LLM_MODEL: ${LLM_MODEL:-qwen3-coder-next:latest}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+      QDRANT_URL: http://qdrant:6333
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      LANGFUSE_HOST: ${LANGFUSE_HOST:-}
+      REDIS_URL: ${REDIS_URL:-}
+    depends_on:
+      - redis
+      - ollama
+      - qdrant
+    volumes:
+      - ./data/sample_docs:/app/data/sample_docs:ro
+
 volumes:
   ollama_data:
   qdrant_data:

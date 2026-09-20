@@ -987,3 +987,21 @@ suíte de testes automatizada).
 Com isso, **todos os itens do backlog da segunda revisão arquitetural
 externa estão fechados** (P0/P1/P2 — ver `learnings.md` do projeto
 para o histórico completo item a item).
+
+**Atualização (avaliação externa, médio prazo item 6 — "Fila
+assíncrona"):** novo `POST /diagnose/async` enfileira o diagnóstico via
+RQ (mesmo Redis usado pela persistência de tasks A2A, item 2 acima —
+ver `app/queue.py`) e devolve `{"job_id", "status": "queued"}` (202),
+em vez de bloquear a requisição até o LLM terminar. `GET
+/diagnose/async/{job_id}` faz o polling do resultado
+(`{"job_id", "status", "result", "error"}`). `POST /diagnose` síncrono
+continua existindo sem nenhuma mudança. Sem `REDIS_URL` configurada,
+os dois endpoints assíncronos devolvem 503 em vez de degradar
+silenciosamente. O processamento de verdade depende de um worker RQ
+rodando (`docker compose --profile async up -d redis worker`) — sem
+ele, jobs enfileirados ficam presos em `"queued"` indefinidamente.
+
+**Validação:** `tests/test_queue.py` (camada `DiagnosisQueue`
+testada com fakes, sem Redis/RQ reais) e `tests/test_api.py`
+(endpoints `/diagnose/async`, incluindo 503 sem `REDIS_URL` e 404 para
+job inexistente).

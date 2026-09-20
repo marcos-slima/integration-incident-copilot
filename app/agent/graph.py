@@ -175,6 +175,16 @@ def run_diagnosis(
     final_state = _invoke_graph_with_timeout(initial_state)
     diagnosis = final_state.get("diagnosis", {})
 
+    # Avaliacao externa (medio prazo, item 5): captura o trace_id do
+    # Langfuse ENQUANTO ainda estamos dentro do span de
+    # "sap_copilot_diagnosis" (este @observe, ver decorator acima) -
+    # get_current_trace_id() resolve pelo contexto da execucao atual,
+    # entao so funciona chamado daqui de dentro, nao depois. None se o
+    # Langfuse nao estiver configurado/ativo (tracing desabilitado) -
+    # graceful, mesmo padrao de qualquer outra integracao opcional
+    # deste projeto.
+    trace_id = get_client().get_current_trace_id()
+
     return DiagnosisResponse(
         probable_root_cause=diagnosis.get("probable_root_cause", "N/A"),
         confidence=float(diagnosis.get("confidence", 0.0)),
@@ -199,6 +209,7 @@ def run_diagnosis(
         incident_id=incident_id
         if settings.graph_rag_enabled and request.interface_type and request.identifier
         else None,
+        trace_id=trace_id,
     )
 
 

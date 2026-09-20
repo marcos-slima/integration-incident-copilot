@@ -872,6 +872,17 @@ sucesso, autenticacao) e `tests/test_nodes_multiagent.py` +
 `run_diagnosis()` ate `graph_write_node`) - 180 testes passando no
 total (`-m "not integration"`).
 
+**Atualizacao (avaliacao externa, medio prazo item 5 - "Metricas e
+feedback"):** o endpoint `/verify` ganhou um segundo efeito
+independente do grafo - um score booleano `diagnosis_correct` no trace
+Langfuse original (`DiagnosisResponse.trace_id`, capturado em
+`run_diagnosis()` independente de GraphRAG). GraphRAG desligado deixou
+de ser 404 automatico - vira 400 SO se tambem nao houver trace_id/
+correct informados (nada para registrar em lugar nenhum); GraphRAG
+ligado com incident_id inexistente continua 404. Ver
+`app/models.py::VerifyIncidentRequest` (campos `correct`/`trace_id`
+novos) e `app/main.py::verify_incident_endpoint`.
+
 ## Benchmark cientifico de rerankers (DA-29)
 
 Ultimo item do backlog da segunda revisao arquitetural externa. O

@@ -160,13 +160,37 @@ class DiagnosisResponse(BaseModel):
             "caso)."
         ),
     )
+    trace_id: str | None = Field(
+        default=None,
+        description=(
+            "Id do trace Langfuse deste diagnostico, se o Langfuse "
+            "estiver configurado e ativo - independente de GraphRAG "
+            "(diferente de incident_id acima). Guarde este valor para "
+            "enviar de volta em POST /incidents/{id}/verify (campo "
+            "trace_id do corpo) e associar o feedback correto/incorreto "
+            "ao trace certo no Langfuse. Avaliacao externa (medio "
+            "prazo, item 5): 'Metricas e feedback'."
+        ),
+    )
 
 
 class VerifyIncidentRequest(BaseModel):
-    """DA-28 (VERIFIED_AS): corpo de POST /incidents/{incident_id}/verify -
-    registra uma verificacao EXPLICITA (humana ou de outro sistema) da
-    causa raiz de um incidente ja gravado no grafo, distinta da hipotese
-    original do LLM. Ver app/rag/graph_store.py::verify_incident."""
+    """DA-28 (VERIFIED_AS) + avaliacao externa (medio prazo, item 5 -
+    'Metricas e feedback'): corpo de POST /incidents/{incident_id}/verify.
+
+    Dois efeitos independentes, cada um so acontece se as
+    pre-condicoes dele estiverem presentes - nenhum bloqueia o outro:
+      1. Grava VERIFIED_AS no grafo (Neo4j) - exige GraphRAG ligado e
+         `incident_id` correspondendo a um incidente ja gravado (ver
+         app/rag/graph_store.py::verify_incident). Comportamento
+         identico ao de antes desta mudanca (DA-28).
+      2. Registra um score booleano ('correto'/'incorreto') no trace
+         Langfuse do diagnostico original - exige `trace_id` (devolvido
+         em DiagnosisResponse.trace_id) e Langfuse configurado.
+    400 se NENHUM dos dois puder acontecer (GraphRAG desligado/
+    incidente nao gravado E trace_id ausente) - nao ha nada credivel
+    para fazer com a chamada nesse caso.
+    """
 
     root_cause: str = Field(
         description="Causa raiz CONFIRMADA (pode diferir da hipotese original do LLM)."
@@ -174,4 +198,24 @@ class VerifyIncidentRequest(BaseModel):
     verified_by: Literal["human", "system"] = Field(
         default="human",
         description="Quem verificou - 'human' (padrao) ou 'system' (ex: outra automacao confirmou).",
+    )
+    correct: bool | None = Field(
+        default=None,
+        description=(
+            "Veredito do analista: o diagnostico original (hipotese do "
+            "LLM) estava correto? None = nao informado (so grava "
+            "root_cause no grafo, sem score de feedback no Langfuse, "
+            "mesmo comportamento de antes desta mudanca). True/False "
+            "gera um score booleano 'diagnosis_correct' no trace "
+            "Langfuse referenciado por trace_id."
+        ),
+    )
+    trace_id: str | None = Field(
+        default=None,
+        description=(
+            "Id do trace Langfuse do diagnostico original "
+            "(DiagnosisResponse.trace_id) - necessario para gravar o "
+            "score de feedback no Langfuse. Sem isso, o feedback so "
+            "afeta o grafo (Neo4j), quando GraphRAG estiver ligado."
+        ),
     )

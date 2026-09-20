@@ -48,7 +48,46 @@ def test_index_serves_built_frontend_when_present(monkeypatch, tmp_path):
 def test_health_endpoint():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    body = response.json()
+    assert body["status"] == "ok"
+    # Avaliacao externa (qualidade, item 27): StatusView no frontend
+    # renderizava uma lista hardcoda em vez de consultar o backend real -
+    # /health agora devolve o estado de cada conector e das principais
+    # flags de infraestrutura, derivado do .env atual (app.connectors.
+    # connector_status), que e o que o StatusView passou a consumir.
+    assert set(body["connectors"]) == {
+        "odata",
+        "rfc",
+        "servicenow",
+        "salesforce",
+        "workday",
+        "ariba",
+        "cap",
+        "apim",
+    }
+    for connector_info in body["connectors"].values():
+        assert connector_info["status"] in {"real", "mock", "misconfigured"}
+        assert isinstance(connector_info["note"], str) and connector_info["note"]
+    assert set(body["infra"]) == {
+        "llm_provider",
+        "graph_rag_enabled",
+        "langfuse_enabled",
+        "async_queue_enabled",
+        "auth_required",
+    }
+
+
+def test_health_endpoint_reflects_connector_config(monkeypatch):
+    """Prova que /health e derivado do .env atual, nao hardcoded - ao
+    configurar ODATA_SERVICE_URL, o conector odata deve aparecer como
+    "real", e sem ele como "mock"."""
+    monkeypatch.setattr(
+        "app.connectors.settings.odata_service_url", "https://sap.example.com/odata"
+    )
+    assert client.get("/health").json()["connectors"]["odata"]["status"] == "real"
+
+    monkeypatch.setattr("app.connectors.settings.odata_service_url", "")
+    assert client.get("/health").json()["connectors"]["odata"]["status"] == "mock"
 
 
 def test_health_endpoint_is_rate_limited_by_global_default():

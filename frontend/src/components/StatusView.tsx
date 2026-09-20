@@ -1,86 +1,211 @@
 // StatusView — estado dos conectores e infraestrutura.
 //
-// CONCEITO: tipos literais em arrays de objetos
-// status: 'ok' | 'warn' | 'mock' — só esses três valores são válidos
+// Avaliacao externa (qualidade, item 27): esta view renderizava arrays
+// hardcoded (nomes de SDK, "Validado — PDI real" etc.) que nao refletiam
+// o backend real e ficavam desatualizados a cada mudanca de config. Agora
+// busca o estado de verdade em GET /health (app.connectors.connector_status,
+// derivado do .env atual do backend) ao montar o componente.
 
-type ConnectorStatus = 'ok' | 'warn' | 'mock';
+import { useEffect, useState } from 'react';
+import { callHealth } from '../api/health';
+import { ApiError } from '../api/diagnose';
+import type { ConnectorHealthStatus, HealthResponse, InterfaceType } from '../types/models';
 
-interface ConnectorRow {
-  name: string;
-  status: ConnectorStatus;
-  note: string;
-}
+// Nome de exibicao de cada conector - so rotulagem, o estado vem do backend
+const CONNECTOR_LABELS: Record<InterfaceType, string> = {
+  odata: 'ODataConnector',
+  rfc: 'RFCConnector',
+  servicenow: 'ServiceNowConnector',
+  salesforce: 'SalesforceConnector',
+  workday: 'WorkdayConnector',
+  ariba: 'AribaConnector',
+  cap: 'CAPConnector',
+  apim: 'APIManagementConnector',
+};
 
-interface InfraRow {
-  name: string;
-  value: string;
-  status: ConnectorStatus;
-}
-
-const CONNECTORS: ConnectorRow[] = [
-  { name: 'ODataConnector',          status: 'mock', note: 'ODATA_SERVICE_URL não configurado' },
-  { name: 'RFCConnector',            status: 'ok',   note: 'SDK 7.50 PL19 + pyrfc 3.3.1 · ABAP Trial A4H rel 754' },
-  { name: 'ServiceNowConnector',     status: 'ok',   note: 'Validado — PDI real' },
-  { name: 'SalesforceConnector',     status: 'ok',   note: 'Validado — Developer Edition' },
-  { name: 'WorkdayConnector',        status: 'mock', note: 'Sem sandbox gratuito disponível' },
-  { name: 'AribaConnector',          status: 'mock', note: 'Sandbox incompatível com OAuth2 CC' },
-  { name: 'CAPConnector',            status: 'ok',   note: 'Validado — BTP Trial (HANA Cloud + XSUAA)' },
-  { name: 'APIManagementConnector',  status: 'warn', note: 'Schema especulativo · não validado' },
+// Ordem de exibicao (a mesma do dropdown de conectores em DiagnoseView)
+const CONNECTOR_ORDER: InterfaceType[] = [
+  'odata',
+  'rfc',
+  'servicenow',
+  'salesforce',
+  'workday',
+  'ariba',
+  'cap',
+  'apim',
 ];
 
-const INFRA: InfraRow[] = [
-  { name: 'LLM Gateway',      value: 'qwen3-coder-next:latest · 80B/3B · 262K ctx', status: 'ok' },
-  { name: 'RAG (Qdrant)',      value: 'dense + sparse BM25 · fusão RRF · reranker cross-encoder', status: 'ok' },
-  { name: 'GraphRAG',          value: 'Neo4j opt-in · desligado por padrão', status: 'mock' },
-  { name: 'Observabilidade',   value: 'Langfuse · trace por execução', status: 'ok' },
-  { name: 'A2A',               value: 'JSON-RPC 2.0 · aguardando Joule GA Q4/2026', status: 'warn' },
-];
-
-function dotClass(s: ConnectorStatus): string {
-  return s === 'ok' ? 'status-dot-ok' : s === 'warn' ? 'status-dot-warn' : 'status-dot-mock';
+function dotClass(s: ConnectorHealthStatus): string {
+  if (s === 'real') return 'status-dot-ok';
+  if (s === 'misconfigured') return 'status-dot-warn';
+  return 'status-dot-mock';
 }
 
-function tagColor(s: ConnectorStatus): string {
-  return s === 'ok' ? '#10B981' : s === 'warn' ? '#F59E0B' : '#475569';
+function tagColor(s: ConnectorHealthStatus): string {
+  if (s === 'real') return '#10B981';
+  if (s === 'misconfigured') return '#F59E0B';
+  return '#475569';
+}
+
+function boolDotClass(v: boolean): string {
+  return v ? 'status-dot-ok' : 'status-dot-mock';
+}
+
+function boolTagColor(v: boolean): string {
+  return v ? '#10B981' : '#475569';
 }
 
 export function StatusView() {
+  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    callHealth()
+      .then((res) => {
+        if (!cancelled) setHealth(res);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        if (e instanceof ApiError) setError(`Erro ${e.status}: ${e.message}`);
+        else setError('Falha ao consultar o backend. Verifique se a API está ativa.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="view">
       <h1 className="page-title">Status da stack</h1>
-      <p className="page-sub">Estado atual dos conectores e serviços de infraestrutura.</p>
+      <p className="page-sub">
+        Estado atual dos conectores e serviços de infraestrutura, consultado ao vivo em
+        GET /health.
+      </p>
 
-      <div className="status-section">
-        <div className="status-section-label">Conectores (8)</div>
-        {CONNECTORS.map((c) => (
-          <div key={c.name} className="status-row">
-            <span className={`status-dot ${dotClass(c.status)}`} />
-            <span className="status-name" style={{ width: 210 }}>{c.name}</span>
-            <span className="status-note">{c.note}</span>
-            <span className="status-tag" style={{ color: tagColor(c.status) }}>
-              {c.status}
-            </span>
-          </div>
-        ))}
-      </div>
+      {loading && <p className="page-sub">Consultando /health…</p>}
+      {error && <p className="page-sub" style={{ color: '#EF4444' }}>{error}</p>}
 
-      <div className="status-section">
-        <div className="status-section-label">Infraestrutura</div>
-        {INFRA.map((s) => (
-          <div key={s.name} className="status-row">
-            <span className={`status-dot ${dotClass(s.status)}`} />
-            <span className="status-name" style={{ width: 150 }}>{s.name}</span>
-            <span className="status-note" style={{
-              fontFamily: "'JetBrains Mono', monospace", fontSize: 10,
-            }}>
-              {s.value}
-            </span>
-            <span className="status-tag" style={{ color: tagColor(s.status) }}>
-              {s.status}
-            </span>
+      {health && (
+        <>
+          <div className="status-section">
+            <div className="status-section-label">
+              Conectores ({CONNECTOR_ORDER.length})
+            </div>
+            {CONNECTOR_ORDER.map((name) => {
+              const info = health.connectors[name];
+              return (
+                <div key={name} className="status-row">
+                  <span className={`status-dot ${dotClass(info.status)}`} />
+                  <span className="status-name" style={{ width: 210 }}>
+                    {CONNECTOR_LABELS[name]}
+                  </span>
+                  <span className="status-note">{info.note}</span>
+                  <span className="status-tag" style={{ color: tagColor(info.status) }}>
+                    {info.status}
+                  </span>
+                </div>
+              );
+            })}
           </div>
-        ))}
-      </div>
+
+          <div className="status-section">
+            <div className="status-section-label">Infraestrutura</div>
+            <div className="status-row">
+              <span className="status-dot status-dot-ok" />
+              <span className="status-name" style={{ width: 150 }}>
+                LLM Provider
+              </span>
+              <span
+                className="status-note"
+                style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10 }}
+              >
+                {health.infra.llm_provider}
+              </span>
+            </div>
+            <div className="status-row">
+              <span className={`status-dot ${boolDotClass(health.infra.graph_rag_enabled)}`} />
+              <span className="status-name" style={{ width: 150 }}>
+                GraphRAG (Neo4j)
+              </span>
+              <span
+                className="status-note"
+                style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10 }}
+              >
+                {health.infra.graph_rag_enabled ? 'ligado' : 'desligado (opt-in)'}
+              </span>
+              <span
+                className="status-tag"
+                style={{ color: boolTagColor(health.infra.graph_rag_enabled) }}
+              >
+                {health.infra.graph_rag_enabled ? 'on' : 'off'}
+              </span>
+            </div>
+            <div className="status-row">
+              <span className={`status-dot ${boolDotClass(health.infra.langfuse_enabled)}`} />
+              <span className="status-name" style={{ width: 150 }}>
+                Observabilidade (Langfuse)
+              </span>
+              <span
+                className="status-note"
+                style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10 }}
+              >
+                {health.infra.langfuse_enabled ? 'credenciais configuradas' : 'sem credenciais no .env'}
+              </span>
+              <span
+                className="status-tag"
+                style={{ color: boolTagColor(health.infra.langfuse_enabled) }}
+              >
+                {health.infra.langfuse_enabled ? 'on' : 'off'}
+              </span>
+            </div>
+            <div className="status-row">
+              <span className={`status-dot ${boolDotClass(health.infra.async_queue_enabled)}`} />
+              <span className="status-name" style={{ width: 150 }}>
+                Fila assíncrona (RQ)
+              </span>
+              <span
+                className="status-note"
+                style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10 }}
+              >
+                {health.infra.async_queue_enabled
+                  ? 'REDIS_URL configurada'
+                  : '/diagnose/async indisponível (sem REDIS_URL)'}
+              </span>
+              <span
+                className="status-tag"
+                style={{ color: boolTagColor(health.infra.async_queue_enabled) }}
+              >
+                {health.infra.async_queue_enabled ? 'on' : 'off'}
+              </span>
+            </div>
+            <div className="status-row">
+              <span className={`status-dot ${boolDotClass(health.infra.auth_required)}`} />
+              <span className="status-name" style={{ width: 150 }}>
+                Autenticação (X-API-Key)
+              </span>
+              <span
+                className="status-note"
+                style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10 }}
+              >
+                {health.infra.auth_required ? 'exigida em /diagnose e /a2a' : 'desligada'}
+              </span>
+              <span
+                className="status-tag"
+                style={{ color: boolTagColor(health.infra.auth_required) }}
+              >
+                {health.infra.auth_required ? 'on' : 'off'}
+              </span>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

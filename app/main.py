@@ -18,6 +18,7 @@ from app.a2a.agent_card import get_agent_card
 from app.a2a.server import router as a2a_router
 from app.agent.graph import run_diagnosis
 from app.config import settings
+from app.connectors import connector_status
 from app.events.consumer import handle_incident_event
 from app.exceptions import DiagnosisTimeoutError
 from app.mcp.server import build_mcp_asgi_app
@@ -277,8 +278,23 @@ def index() -> FileResponse | JSONResponse:
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> dict:
+    """Alem do status geral, devolve o estado real (derivado do .env
+    atual, ver app.connectors.connector_status) de cada conector e das
+    principais flags de infraestrutura - fonte que o frontend
+    (StatusView) consulta em vez de manter uma lista hardcoded que
+    nao reflete o backend de verdade."""
+    return {
+        "status": "ok",
+        "connectors": connector_status(),
+        "infra": {
+            "llm_provider": settings.llm_provider,
+            "graph_rag_enabled": settings.graph_rag_enabled,
+            "langfuse_enabled": bool(settings.langfuse_public_key and settings.langfuse_secret_key),
+            "async_queue_enabled": bool(settings.redis_url),
+            "auth_required": bool(settings.api_key),
+        },
+    }
 
 
 @app.post(

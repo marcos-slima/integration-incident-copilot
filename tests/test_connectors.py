@@ -414,3 +414,54 @@ def test_ariba_connector_real_mode_connection_error(monkeypatch):
 
     assert result.error_code == "CONNECTION_ERROR"
     assert result.is_fallback is True
+
+
+def test_connector_status_reports_mock_for_all_when_unconfigured(monkeypatch):
+    for attr in (
+        "odata_service_url",
+        "sap_ashost",
+        "servicenow_instance_url",
+        "salesforce_instance_url",
+        "workday_tenant",
+        "ariba_base_url",
+        "cap_service_url",
+        "apim_analytics_url",
+    ):
+        monkeypatch.setattr(f"app.connectors.settings.{attr}", "")
+
+    from app.connectors import connector_status
+
+    status = connector_status()
+    assert set(status) == {
+        "odata",
+        "rfc",
+        "servicenow",
+        "salesforce",
+        "workday",
+        "ariba",
+        "cap",
+        "apim",
+    }
+    for info in status.values():
+        assert info["status"] == "mock"
+
+
+def test_connector_status_reports_real_when_setting_configured(monkeypatch):
+    monkeypatch.setattr(
+        "app.connectors.settings.servicenow_instance_url", "https://dev.service-now.com"
+    )
+
+    from app.connectors import connector_status
+
+    assert connector_status()["servicenow"]["status"] == "real"
+
+
+def test_connector_status_reports_misconfigured_for_rfc_without_pyrfc(monkeypatch):
+    monkeypatch.setattr("app.connectors.settings.sap_ashost", "sapprd.example.com")
+    monkeypatch.setattr("app.connectors.HAS_PYRFC", False)
+
+    from app.connectors import connector_status
+
+    result = connector_status()["rfc"]
+    assert result["status"] == "misconfigured"
+    assert "pyrfc" in result["note"]

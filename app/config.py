@@ -30,6 +30,17 @@ class Settings(BaseSettings):
     # ele ja tenha contratado - sem reescrever o grafo.
     llm_provider: Literal["ollama", "openai", "azure_openai"] = "ollama"
 
+    # Hybrid Inference (DA-20): se preenchido, o LLM Gateway
+    # (app/llm/factory.py::invoke_with_hybrid_fallback) tenta este
+    # provider automaticamente quando `llm_provider` falhar por
+    # INDISPONIBILIDADE de transporte (Ollama fora do ar, timeout de
+    # rede) - nao para erros de aplicacao (JSON malformado, por
+    # exemplo), que continuam subindo normalmente. Vazio (default) =
+    # sem fallback, comportamento identico ao de antes desta fase.
+    # Exige as credenciais do provider de fallback configuradas
+    # normalmente (OPENAI_API_KEY ou AZURE_OPENAI_*, conforme o caso).
+    llm_fallback_provider: Literal["openai", "azure_openai", ""] = ""
+
     # Ollama (default local-first)
     ollama_host: str = "http://127.0.0.1:11434"
     llm_model: str = "qwen3-coder-next:latest"

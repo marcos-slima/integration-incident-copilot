@@ -4,6 +4,6 @@ Ver docs/ARCHITECTURE.md e a Decisao de Arquitetura #10 no README
 para o raciocinio por tras deste modulo.
 """
 
-from app.llm.factory import get_chat_model
+from app.llm.factory import get_chat_model, invoke_with_hybrid_fallback
 
-__all__ = ["get_chat_model"]
+__all__ = ["get_chat_model", "invoke_with_hybrid_fallback"]

@@ -558,3 +558,35 @@ original) e a fronteira de autenticação via `TestClient` real no app
 montado — incluindo um teste de round-trip completo do handshake
 `initialize` do protocolo MCP contra um servidor `uvicorn` real rodando
 de verdade nesta sessão (não só mockado).
+
+### 18. Hybrid Inference - fallback de resiliência entre providers de LLM (DA-20)
+
+**Contexto:** quarto item do roadmap arquitetural planejado. Três
+critérios possíveis para decidir quando escalar de Ollama local para
+nuvem: resiliência (fallback em falha de transporte), qualidade
+(escalar por `evidence_strength` baixo, ver DA-15) ou roteamento por
+complexidade do caso antes de chamar o LLM. Escolhido: **resiliência**
+— as outras duas custam uma segunda chamada de LLM em parte dos casos e
+exigem calibrar um limiar subjetivo; resiliência só age quando o
+provider primário está genuinamente indisponível.
+
+**Decisão:** `app/llm/factory.py::invoke_with_hybrid_fallback()` roda a
+chamada com `settings.llm_provider` e, se `settings.llm_fallback_provider`
+estiver configurado (vazio por default — comportamento idêntico a antes
+desta fase) **e** a falha for de transporte (`ConnectionError`/
+`httpx.ConnectError`/`httpx.TimeoutException` — Ollama fora do ar,
+timeout de rede), refaz a MESMA chamada com o provider de fallback
+antes de desistir. Erro de aplicação (JSON malformado, prompt inválido)
+nunca aciona o fallback — mascarar um bug real atrás de uma segunda
+chamada de LLM seria pior do que deixá-lo estourar. `diagnose_node` é o
+único consumidor hoje; qual provider respondeu de fato fica exposto em
+`DiagnosisResponse.llm_provider_used` — transparência, não um fallback
+silencioso.
+
+**Validação:** `tests/test_llm_factory.py` cobre as quatro decisões
+(usa primário quando funciona, propaga erro quando não há fallback
+configurado, troca de provider em falha de transporte, desiste com
+`ConfigurationError` quando os dois falham) e, especificamente, que um
+erro de **aplicação** (não de transporte) nunca aciona uma tentativa de
+fallback — o caso que provaria que a lógica está mascarando bugs em vez
+de lidar com indisponibilidade real.

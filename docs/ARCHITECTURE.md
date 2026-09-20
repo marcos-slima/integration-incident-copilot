@@ -83,6 +83,31 @@ codigo (`app/agent/nodes.py`, prompt, guardrails) precisar saber qual foi
 escolhido - todos implementam a mesma interface `BaseChatModel` do
 LangChain.
 
+## Hybrid Inference - fallback de resiliencia (DA-20)
+
+Quarto item do roadmap "Projeto evolucao planejada" (apos AI Gateway/
+Evidence Layer, fechamento de autenticacao do A2A e servidor MCP).
+Criterio escolhido: RESILIENCIA, nao roteamento por qualidade/
+complexidade (as duas alternativas descartadas - escalar por
+`evidence_strength` baixo, ou rotear por complexidade do caso antes de
+chamar o LLM - custam uma segunda chamada de LLM em parte dos casos e
+exigem calibrar um limiar; resiliencia so entra em acao quando o
+provider primario esta genuinamente indisponivel).
+
+`app/llm/factory.py::invoke_with_hybrid_fallback()` roda a chamada com
+`settings.llm_provider` (Ollama, tipicamente) e, SE
+`settings.llm_fallback_provider` estiver configurado (`.env`, vazio por
+default = comportamento identico a antes desta fase) E a falha for de
+TRANSPORTE (`ConnectionError`/`httpx.ConnectError`/
+`httpx.TimeoutException` - Ollama fora do ar, timeout de rede), refaz a
+MESMA chamada com o provider de fallback antes de desistir. Erro de
+APLICACAO (JSON malformado, prompt invalido) NUNCA aciona o fallback -
+subir normalmente evita mascarar um bug real atras de uma segunda
+chamada de LLM (custo/latencia desnecessarios). `diagnose_node` (unico
+consumidor hoje) usa isso para a chamada ao agente ReAct; qual provider
+respondeu de fato fica exposto em `DiagnosisResponse.llm_provider_used`
+- transparencia, nao so um fallback silencioso.
+
 ## Conectores - mock vs. real, hoje
 
 Todo conector agora segue o MESMO criterio: configuracao ausente = modo

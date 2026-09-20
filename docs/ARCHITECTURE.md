@@ -941,3 +941,29 @@ pulados automaticamente (nao falham) quando essa stack nao esta
 acessivel - ver `tests/conftest.py`. O CI (`.github/workflows/tests.yml`)
 roda `pytest tests/ -m "not integration"` - toda a suite nao-integracao,
 nao mais um arquivo especifico (gap corrigido nesta fase).
+
+**Atualizacao (avaliacao externa, medio prazo item 6 - "Fila
+assincrona"):** novo `POST /diagnose/async` enfileira o diagnostico
+via RQ (mesmo Redis usado pela persistencia de tasks A2A, item 2
+acima - ver `app/queue.py`) e devolve `{"job_id", "status": "queued"}`
+(202), em vez de bloquear a requisicao ate o LLM terminar. `GET
+/diagnose/async/{job_id}` faz o polling do resultado
+(`{"job_id", "status", "result", "error"}`). `POST /diagnose` sincrono
+continua existindo sem nenhuma mudanca. Sem `REDIS_URL` configurada,
+os dois endpoints assincronos devolvem 503 em vez de degradar
+silenciosamente. O processamento de verdade depende de um worker RQ
+rodando (`docker compose --profile async up -d redis worker`, novo
+servico "worker" em docker-compose.yml, mesma imagem da API) - sem
+ele, jobs enfileirados ficam presos em "queued" indefinidamente.
+
+Design: `DiagnosisQueue` (app/queue.py) e uma camada fina, testavel
+via injecao de fakes (mesmo espirito de `RedisTaskStore`,
+app/a2a/task_store.py) - a funcao efetivamente executada pelo worker
+(`run_diagnosis_job`) precisa ser importavel por dotted-path
+("app.queue.run_diagnosis_job"), requisito do RQ para desserializar o
+job no processo do worker.
+
+**Validacao:** `tests/test_queue.py` (camada `DiagnosisQueue` testada
+com fakes, sem Redis/RQ reais) e `tests/test_api.py` (endpoints
+`/diagnose/async`, incluindo 503 sem `REDIS_URL` e 404 para job
+inexistente).

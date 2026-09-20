@@ -27,6 +27,7 @@ from app.models import (
     IncidentRequest,
     VerifyIncidentRequest,
 )
+from app.queue import AsyncQueueUnavailableError, enqueue_diagnosis, get_job_status
 from app.rag.graph_store import GRAPH_UNAVAILABLE_EXCEPTIONS, ensure_constraints, verify_incident
 from app.rate_limit import limiter
 
@@ -257,6 +258,68 @@ def diagnose(request: Request, body: IncidentRequest) -> DiagnosisResponse:
     Autenticacao: X-API-Key header (se API_KEY configurado no .env).
     """
     return run_diagnosis(body)
+
+
+@app.post(
+    "/diagnose/async",
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(verify_api_key)],
+)
+@limiter.limit("10/minute")
+def diagnose_async(request: Request, body: IncidentRequest) -> dict[str, str]:
+    """Avaliacao externa (medio prazo, item 6 - "Fila assincrona"):
+    versao assincrona de /diagnose - enfileira o diagnostico via RQ
+    (mesmo Redis de app/a2a/task_store.py, ver app/queue.py) e devolve
+    um job_id para consulta via GET /diagnose/async/{job_id}, em vez
+    de bloquear a requisicao ate o LLM terminar (o /diagnose sincrono
+    continua existindo sem nenhuma mudanca, para quem prefere/precisa
+    de resposta imediata).
+
+    Requer REDIS_URL configurada (503 caso contrario) e um worker RQ
+    rodando para de fato processar o job (docker-compose.yml, servico
+    "worker", profile "async") - sem worker, o job fica "queued"
+    indefinidamente.
+
+    Rate limit: 10 requisicoes por minuto por IP (mesma politica de
+    /diagnose).
+    Autenticacao: X-API-Key header (se API_KEY configurado no .env).
+    """
+    try:
+        job_id = enqueue_diagnosis(body.model_dump())
+    except AsyncQueueUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+    return {"job_id": job_id, "status": "queued"}
+
+
+@app.get(
+    "/diagnose/async/{job_id}",
+    dependencies=[Depends(verify_api_key)],
+)
+def diagnose_async_status(job_id: str) -> dict[str, object]:
+    """Consulta (polling) o status/resultado de um diagnostico
+    enfileirado via POST /diagnose/async. Formato da resposta:
+    {"job_id", "status", "result", "error"} - "status" e um dos
+    valores do RQ ("queued", "started", "finished", "failed", etc.),
+    "result" (o DiagnosisResponse serializado) so e preenchido quando
+    status == "finished", "error" so quando status == "failed".
+
+    404 se job_id nao existir (id invalido, ou resultado ja expirado -
+    RQ mantem jobs finalizados por um TTL default).
+    Autenticacao: X-API-Key header (mesma dependency de /diagnose).
+    """
+    try:
+        job_status = get_job_status(job_id)
+    except AsyncQueueUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+    if job_status is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Job '{job_id}' nao encontrado."
+        )
+    return job_status
 
 
 @app.post(

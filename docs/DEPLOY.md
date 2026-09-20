@@ -160,6 +160,29 @@ curl -s -X POST http://127.0.0.1:8000/mcp/ \
 
 Deve retornar um evento `message` com `serverInfo.name == "sap-integration-copilot"` e as ferramentas `diagnose_incident`/`list_connectors` disponíveis.
 
+Desde a **DA-23**, também existe um caminho de **ingestão orientada a
+evento**: `POST /events/incident` simula o que um assinante de webhook
+do SAP Event Mesh (modo REST/Webhook push subscription) receberia -
+dispara o mesmo diagnóstico automaticamente, sem chamada manual.
+Requer o header dedicado `X-Event-Mesh-Api-Key` (chave separada de
+`X-API-Key`/`X-A2A-Api-Key` - ver log de startup ou `EVENT_MESH_API_KEY`
+no `.env`):
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/events/incident \
+  -H "Content-Type: application/json" \
+  -H "X-Event-Mesh-Api-Key: <chave-do-log-ou-do-.env>" \
+  -d '{
+        "type": "com.sap.integration.incident.detected.v1",
+        "source": "cpi-monitor",
+        "data": {"description": "IDoc travado com status 51", "interface_type": "rfc"}
+      }'
+```
+
+Deve retornar o mesmo formato de `DiagnosisResponse` de `/diagnose`. Um
+`type` diferente de `com.sap.integration.incident.detected.v1` retorna
+`422 Unprocessable Content` (formato de evento não reconhecido).
+
 ---
 
 ## Resolução de problemas
@@ -171,6 +194,8 @@ Deve retornar um evento `message` com `serverInfo.name == "sap-integration-copil
 | `ConnectionError: Failed to connect to Ollama` dentro do container | `OLLAMA_HOST` errado, ou Ollama nativo só em `127.0.0.1` | Ver seção 3-B, passos 2 e 3 |
 | Container `api` reinicia sozinho com erro de DNS/`python-discovery` | `uv run` tentando sync sem rede | Ver seção 4 |
 | `401 Unauthorized` em `/diagnose` ou `/a2a` | Header `X-API-Key`/`X-A2A-Api-Key` ausente ou errado (DA-18: chave sempre exigida, gerada automaticamente se não configurada) | Ver a chave gerada no log de startup (`docker logs ... \| grep API_KEY`), ou configure `API_KEY`/`A2A_API_KEY` no `.env` |
+| `401 Unauthorized` em `/events/incident` | Header `X-Event-Mesh-Api-Key` ausente/errado, ou reusando `X-API-Key` por engano (DA-23: chave dedicada, não compartilhada com `/diagnose`/`/a2a`) | Ver a chave gerada no log de startup, ou configure `EVENT_MESH_API_KEY` no `.env` |
+| `422 Unprocessable Content` em `/events/incident` | Campo `type` do evento diferente de `com.sap.integration.incident.detected.v1` (DA-23: único tipo de evento reconhecido hoje) | Ajustar o `type` do payload, ou aguardar suporte a novos tipos de evento em fase futura |
 | `307 Temporary Redirect` em `POST /mcp` | Faltou a barra final - `app.mount()` do Starlette redireciona `/mcp` → `/mcp/` antes de checar autenticação (comportamento padrão, não é bug do MCP) | Chame `/mcp/` (com barra final) diretamente, ou configure o cliente MCP para seguir redirects |
 | `RuntimeError: Directory 'static/dist/assets' does not exist` | Frontend não buildado / não copiado para a imagem | Ver seção 2 |
 | `Collection 'sap_incident_docs' doesn't exist` | Qdrant do compose está vazio (esperado em ambiente novo) | Ver seção 6 |

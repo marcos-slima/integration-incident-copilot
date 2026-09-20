@@ -17,9 +17,10 @@ from app.a2a.agent_card import get_agent_card
 from app.a2a.server import router as a2a_router
 from app.agent.graph import run_diagnosis
 from app.config import settings
+from app.events.consumer import handle_incident_event
 from app.mcp.server import build_mcp_asgi_app
 from app.mcp.server import mcp as mcp_server
-from app.models import DiagnosisResponse, IncidentRequest
+from app.models import DiagnosisResponse, IncidentEventEnvelope, IncidentRequest
 from app.rag.graph_store import GRAPH_UNAVAILABLE_EXCEPTIONS, ensure_constraints
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
 # Se API_KEY nao estiver configurado no .env, autenticacao e desabilitada.
 # Para habilitar: API_KEY=sua-chave-secreta no .env
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+event_mesh_api_key_header = APIKeyHeader(name="X-Event-Mesh-Api-Key", auto_error=False)
 
 
 def verify_api_key(api_key: str | None = Security(api_key_header)) -> None:
@@ -44,6 +46,19 @@ def verify_api_key(api_key: str | None = Security(api_key_header)) -> None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="X-API-Key invalida ou ausente",
+        )
+
+
+def verify_event_mesh_api_key(api_key: str | None = Security(event_mesh_api_key_header)) -> None:
+    """DA-23: chave DEDICADA para o webhook de eventos - nao reaproveita
+    verify_api_key/API_KEY, para que um webhook secret vazado (exposto
+    na configuracao do sistema de monitoracao externo que publica os
+    eventos) nao comprometa o endpoint /diagnose humano nem o A2A."""
+    configured_key = settings.event_mesh_api_key
+    if not secrets.compare_digest(api_key or "", configured_key):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="X-Event-Mesh-Api-Key invalida ou ausente",
         )
 
 
@@ -71,6 +86,13 @@ def _ensure_api_keys_configured() -> None:
             "A2A_API_KEY nao configurada no .env - chave gerada automaticamente "
             "para esta execucao (header X-A2A-Api-Key): %s",
             settings.a2a_api_key,
+        )
+    if not settings.event_mesh_api_key:
+        settings.event_mesh_api_key = secrets.token_urlsafe(32)
+        logger.warning(
+            "EVENT_MESH_API_KEY nao configurada no .env - chave gerada "
+            "automaticamente para esta execucao (header X-Event-Mesh-Api-Key): %s",
+            settings.event_mesh_api_key,
         )
 
 
@@ -147,6 +169,32 @@ def diagnose(request: Request, body: IncidentRequest) -> DiagnosisResponse:
     Autenticacao: X-API-Key header (se API_KEY configurado no .env).
     """
     return run_diagnosis(body)
+
+
+@app.post(
+    "/events/incident",
+    response_model=DiagnosisResponse,
+    dependencies=[Depends(verify_event_mesh_api_key)],
+)
+@limiter.limit("10/minute")
+def incident_event_webhook(request: Request, envelope: IncidentEventEnvelope) -> DiagnosisResponse:
+    """DA-23 (Event Mesh) - ingestao orientada a evento: recebe um
+    envelope CloudEvents (formato usado pelo SAP Event Mesh em modo
+    REST/Webhook push subscription) representando uma falha de
+    integracao detectada por um sistema de monitoracao externo, e
+    dispara run_diagnosis() automaticamente - sem chamada manual a
+    /diagnose. So `type == "com.sap.integration.incident.detected.v1"`
+    e aceito hoje; qualquer outro valor e rejeitado com 422 (ver
+    IncidentEventEnvelope em app/models.py).
+
+    Rate limit: 10 requisicoes por minuto por IP (mesma politica de
+    /diagnose - uma fila real de eventos, se o volume justificar,
+    trocaria isso por backpressure/processamento assincrono; nao e o
+    caso hoje, escopo deliberadamente fora desta fase).
+    Autenticacao: X-Event-Mesh-Api-Key header, chave dedicada e isolada
+    de API_KEY/A2A_API_KEY.
+    """
+    return handle_incident_event(envelope)
 
 
 @app.get("/.well-known/agent-card.json")

@@ -681,3 +681,37 @@ ausente, propagação até `DiagnosisResponse`) — mockando
 `invoke_with_hybrid_fallback` diretamente, sem depender de LLM real.
 `build_graph()` verificado compilando com sucesso nos dois modos de
 GraphRAG (ligado/desligado), confirmando os nodes esperados.
+
+### 21. Event Mesh - ingestão orientada a evento (DA-23)
+
+**Contexto:** sexto item do roadmap arquitetural planejado. Até esta
+fase o Copilot só reagia a chamadas explícitas (`/diagnose` humano,
+A2A, MCP) — para virar um copiloto de verdade em produção, precisa
+reagir a eventos publicados por sistemas de monitoração (CPI, Solution
+Manager, um listener de fila/IDoc), não só esperar alguém chamar a API.
+
+**Decisão:** `POST /events/incident` (`app/main.py` + `app/events/`)
+recebe um envelope [CloudEvents](https://cloudevents.io/) — o formato
+que o SAP Event Mesh usa em modo **REST/Webhook push subscription**
+(além do AMQP 1.0 nativo) — e dispara `run_diagnosis()` automaticamente.
+Webhook foi escolhido em vez de um consumidor AMQP porque é um modo de
+entrega de primeira classe do próprio Event Mesh e o único testável de
+ponta a ponta sem depender de um broker real — mesma lógica pragmática
+de DA-19/DA-21. Só `type ==
+"com.sap.integration.incident.detected.v1"` é aceito hoje (`Literal`
+em `IncidentEventEnvelope`); qualquer outro valor vira `422`
+automaticamente. Autenticação usa uma chave **dedicada**
+(`X-Event-Mesh-Api-Key`, gerada automaticamente se não configurada,
+mesmo padrão DA-18) — isolada de `API_KEY`/`A2A_API_KEY`, porque o
+webhook secret normalmente vive num sistema externo fora do controle
+direto deste projeto.
+
+**Não-objetivo explícito:** processamento é síncrono (sujeito ao mesmo
+rate limit de `/diagnose`) e não há consumo AMQP direto — fila
+real/backpressure seria evolução natural se o volume justificar, não
+um gap escondido.
+
+**Validação:** `tests/test_events.py` cobre mapeamento evento→
+`IncidentRequest`, chamada a `run_diagnosis()`, autenticação (401),
+rejeição de `type` desconhecido (422), limite de tamanho (422) e
+geração automática da chave — tudo mockado, sem Ollama/Qdrant reais.

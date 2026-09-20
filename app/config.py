@@ -163,6 +163,17 @@ class Settings(BaseSettings):
     # significa "sem chave fixa configurada pelo operador".
     a2a_api_key: str = ""
 
+    # Event Mesh (DA-23) - ingestao orientada a evento: POST
+    # /events/incident recebe um envelope CloudEvents (formato usado
+    # pelo SAP Event Mesh em modo REST/Webhook push subscription) e
+    # dispara run_diagnosis() automaticamente, sem chamada manual a
+    # /diagnose. Chave DEDICADA (nao reaproveita api_key/a2a_api_key) -
+    # isola o blast radius de um webhook vazado dos outros dois canais.
+    # Vazia aqui (default) NAO significa autenticacao desabilitada -
+    # mesmo padrao DA-18: app.main._ensure_api_keys_configured gera uma
+    # chave aleatoria no startup se continuar vazia.
+    event_mesh_api_key: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

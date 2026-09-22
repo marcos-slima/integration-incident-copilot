@@ -25,7 +25,6 @@ dependencies = [
     "fastembed>=0.8.0",
     "numpy>=2.5.1",
     "aiofiles>=25.1.0",
-    "duckduckgo-search>=8.1.1",
     "ddgs>=9.16.0",
     "pymupdf4llm>=1.28.2",
     "sentence-transformers>=6.0.1",

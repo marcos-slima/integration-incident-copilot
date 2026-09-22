@@ -115,3 +115,53 @@ def test_get_default_task_store_returns_redis_backed_when_configured(monkeypatch
 
     store = get_default_task_store()
     assert isinstance(store, RedisTaskStore)
+
+
+def test_in_memory_task_store_evicts_oldest_when_max_reached():
+    """Quando o limite e atingido, a task mais antiga (FIFO) deve ser descartada."""
+    store = InMemoryTaskStore(max_tasks=3)
+    from app.a2a.task_manager import A2ATask
+
+    t1 = A2ATask(id="t1", state="completed", input_description="x")
+    t2 = A2ATask(id="t2", state="completed", input_description="y")
+    t3 = A2ATask(id="t3", state="completed", input_description="z")
+    t4 = A2ATask(id="t4", state="completed", input_description="w")
+
+    store.set(t1)
+    store.set(t2)
+    store.set(t3)
+    # Neste ponto o store esta cheio (3 tasks)
+    assert store.get("t1") is not None
+
+    # Inserir t4 deve descartar t1 (mais antiga)
+    store.set(t4)
+    assert store.get("t1") is None
+    assert store.get("t2") is not None
+    assert store.get("t3") is not None
+    assert store.get("t4") is not None
+
+
+def test_in_memory_task_store_update_does_not_evict():
+    """Atualizar uma task ja existente nao deve contar como nova insercao."""
+    store = InMemoryTaskStore(max_tasks=2)
+    from app.a2a.task_manager import A2ATask
+
+    t1 = A2ATask(id="t1", state="working", input_description="x")
+    t2 = A2ATask(id="t2", state="working", input_description="y")
+
+    store.set(t1)
+    store.set(t2)
+
+    # Atualizar t1 (ja existente) - nao deve expulsar nenhuma task
+    t1_updated = A2ATask(id="t1", state="completed", input_description="x")
+    store.set(t1_updated)
+
+    assert store.get("t1").state == "completed"
+    assert store.get("t2") is not None
+
+
+def test_in_memory_task_store_default_limit_is_large():
+    """O limite default deve ser alto o suficiente para uso normal."""
+    from app.a2a.task_store import _IN_MEMORY_MAX_TASKS
+
+    assert _IN_MEMORY_MAX_TASKS >= 100

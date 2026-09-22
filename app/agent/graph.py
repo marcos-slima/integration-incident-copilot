@@ -1,7 +1,7 @@
 """Grafo LangGraph do SAP Integration Copilot.
 
 Fluxo (DA-22 - multi-agente, supervisor + especialistas):
-    supervisor -> connector -> retrieve -> [graph_enrich] -> {sap_diagnose | saas_diagnose} -> [graph_write] -> report
+    supervisor -> connector -> retrieve -> [graph_enrich] -> {sap_diagnose | saas_diagnose | generic_diagnose} -> [graph_write] -> report
 
 Busca web: realizada pelo tool do agente ReAct dentro de sap_diagnose/saas_diagnose
     quando web_search_enabled=True e o LLM decide chamar (nao e um node separado no grafo).
@@ -27,6 +27,7 @@ from app.agent.nodes import (
     report_node,
     retrieve_node,
     saas_diagnosis_node,
+    generic_diagnosis_node,
     sap_diagnosis_node,
 )
 from app.agent.state import CopilotState
@@ -49,7 +50,12 @@ def _route_to_specialist(state: CopilotState) -> str:
     especialista correspondente. "generic" (nenhum dominio identificado)
     cai no especialista multi-fornecedor - ver
     app/agent/supervisor.py::classify_domain para a logica completa."""
-    return "sap_diagnose" if state.get("agent_domain") == "sap" else "saas_diagnose"
+    domain = state.get("agent_domain")
+    if domain == "sap":
+        return "sap_diagnose"
+    if domain == "generic":
+        return "generic_diagnose"
+    return "saas_diagnose"
 
 
 def build_graph():
@@ -66,6 +72,7 @@ def build_graph():
     graph.add_node("retrieve", retrieve_node)
     graph.add_node("sap_diagnose", sap_diagnosis_node)
     graph.add_node("saas_diagnose", saas_diagnosis_node)
+    graph.add_node("generic_diagnose", generic_diagnosis_node)
     graph.add_node("report", report_node)
 
     graph.set_entry_point("supervisor")
@@ -79,19 +86,29 @@ def build_graph():
         graph.add_conditional_edges(
             "graph_enrich",
             _route_to_specialist,
-            {"sap_diagnose": "sap_diagnose", "saas_diagnose": "saas_diagnose"},
+            {
+                "sap_diagnose": "sap_diagnose",
+                "saas_diagnose": "saas_diagnose",
+                "generic_diagnose": "generic_diagnose",
+            },
         )
         graph.add_edge("sap_diagnose", "graph_write")
         graph.add_edge("saas_diagnose", "graph_write")
+        graph.add_edge("generic_diagnose", "graph_write")
         graph.add_edge("graph_write", "report")
     else:
         graph.add_conditional_edges(
             "retrieve",
             _route_to_specialist,
-            {"sap_diagnose": "sap_diagnose", "saas_diagnose": "saas_diagnose"},
+            {
+                "sap_diagnose": "sap_diagnose",
+                "saas_diagnose": "saas_diagnose",
+                "generic_diagnose": "generic_diagnose",
+            },
         )
         graph.add_edge("sap_diagnose", "report")
         graph.add_edge("saas_diagnose", "report")
+        graph.add_edge("generic_diagnose", "report")
 
     graph.add_edge("report", END)
 

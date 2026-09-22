@@ -40,3 +40,75 @@ def test_classify_domain_generic_when_interface_type_not_recognized():
 def test_supervisor_node_returns_agent_domain_key():
     result = supervisor_node({"interface_type": "salesforce", "description": ""})
     assert result == {"agent_domain": "saas"}
+
+
+# ── DA-22 fix: keywords expandidos ──────────────────────────────────────────
+def test_classify_domain_keyword_odata():
+    assert (
+        classify_domain({"interface_type": None, "description": "Erro na query OData /SalesOrders"})
+        == "sap"
+    )
+
+
+def test_classify_domain_keyword_hana():
+    assert (
+        classify_domain({"interface_type": None, "description": "HANA connection timeout"}) == "sap"
+    )
+
+
+def test_classify_domain_keyword_s4hana():
+    assert (
+        classify_domain({"interface_type": None, "description": "falha ao integrar com S4HANA"})
+        == "sap"
+    )
+
+
+def test_classify_domain_keyword_solution_manager():
+    assert (
+        classify_domain({"interface_type": None, "description": "alerta do Solution Manager"})
+        == "sap"
+    )
+
+
+def test_classify_domain_keyword_solman():
+    assert (
+        classify_domain({"interface_type": None, "description": "ticket aberto via SolMan"})
+        == "sap"
+    )
+
+
+def test_classify_domain_keyword_successfactors():
+    assert (
+        classify_domain(
+            {"interface_type": None, "description": "replicacao SuccessFactors para S/4"}
+        )
+        == "sap"
+    )
+
+
+def test_classify_domain_keyword_sfsf():
+    assert classify_domain({"interface_type": None, "description": "erro na API SFSF EC"}) == "sap"
+
+
+def test_classify_domain_keyword_ariba():
+    assert (
+        classify_domain({"interface_type": None, "description": "PO Ariba nao replicou"}) == "sap"
+    )
+
+
+def test_classify_domain_keyword_case_insensitive_odata():
+    assert (
+        classify_domain({"interface_type": None, "description": "ODATA endpoint retornou 500"})
+        == "sap"
+    )
+
+
+# ── DA-22 fix: nó generic_diagnosis_node existe e roteia corretamente ───────
+def test_supervisor_node_returns_generic_for_unknown():
+    result = supervisor_node({"interface_type": None, "description": "falha desconhecida"})
+    assert result == {"agent_domain": "generic"}
+
+
+def test_supervisor_node_returns_sap_for_odata_keyword():
+    result = supervisor_node({"interface_type": None, "description": "erro na query OData v4"})
+    assert result == {"agent_domain": "sap"}

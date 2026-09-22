@@ -32,7 +32,7 @@ QDRANT_URL = settings.qdrant_url
 
 DEFAULT_SCORE_THRESHOLD = 0.5
 HYBRID_PREFETCH_LIMIT = 20  # candidatos por perna (dense/sparse) antes da fusao
-RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+RERANKER_MODEL = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"  # DA-29: mmarco supera baseline em +7pp Hit@1, +4pp MRR@5, 3.5x mais rapido
 RERANKER_TOP_K = 3  # quantos candidatos retornar apos o reranking
 
 # DA-25: piso baixo aplicado ANTES do reranker - so descarta ruido

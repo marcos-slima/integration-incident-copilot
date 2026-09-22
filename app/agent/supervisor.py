@@ -33,8 +33,11 @@ _SAAS_INTERFACE_TYPES = {"servicenow", "salesforce", "workday", "ariba"}
 # Heuristica de fallback quando interface_type nao foi informado (fluxo
 # livre por descricao textual, ver test_graph_e2e.py casos com
 # interface_type=None) - termos que aparecem nos documentos de
-# conhecimento SAP deste repositorio (idoc, iflow, cpi, rfc, sm59,
-# bapi, abap, btp).
+# conhecimento SAP deste repositorio — 24 termos cobrindo vocabulario
+# de integracao SAP (OData, HANA, BTP, SuccessFactors, Ariba, etc.).
+# DA-22 fix: lista expandida para cobrir vocabulario SAP alternativo
+# que aparece quando interface_type nao vem preenchido. Termos ordenados
+# do mais especifico (sem ambiguidade) para o mais generico.
 _SAP_KEYWORDS = (
     "sap",
     "iflow",
@@ -46,7 +49,20 @@ _SAP_KEYWORDS = (
     "abap",
     "btp",
     "s/4hana",
+    "s4hana",
     "netweaver",
+    "odata",
+    "hana",
+    "solution manager",
+    "solman",
+    "pi/po",
+    "xi/pi",
+    "nwds",
+    "fica",
+    "fi-tv",
+    "successfactors",
+    "sfsf",
+    "ariba",
 )
 
 

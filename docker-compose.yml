@@ -26,14 +26,28 @@ services:
       # sem REDIS_URL, app/a2a/task_store.py cai no fallback em
       # memoria, sem quebrar quem nao subiu o profile "async".
       REDIS_URL: ${REDIS_URL:-}
+    # DA-34: condition: service_healthy garante que Qdrant e Ollama
+    # estejam prontos antes da API comecar a servir requisicoes — sem
+    # isso a API subia antes do Qdrant estar pronto e as primeiras
+    # chamadas ao /diagnose falhavam com "collection not found".
     depends_on:
-      - ollama
-      - qdrant
+      ollama:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
     volumes:
       - ./data/sample_docs:/app/data/sample_docs:ro
 
   ollama:
     image: ollama/ollama:0.34.1
+    # DA-34: healthcheck — garante que Ollama esta pronto para servir
+    # requisicoes antes da API comecar (condition: service_healthy abaixo).
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     ports:
       - "11434:11434"
     volumes:
@@ -41,6 +55,13 @@ services:
 
   qdrant:
     image: qdrant/qdrant:v1.19.0
+    # DA-34: healthcheck — Qdrant expoe /healthz desde v1.3.0.
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     ports:
       - "${QDRANT_HOST_PORT:-6333}:6333"
     volumes:
@@ -55,6 +76,14 @@ services:
   neo4j:
     image: neo4j:5.26.0-community
     profiles: ["graphrag"]
+    # DA-34: healthcheck — Neo4j expoe /db/neo4j/available (HTTP
+    # acessivel em 7474 sem autenticacao para health).
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7474/db/neo4j/available"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     ports:
       - "7474:7474"
       - "7687:7687"

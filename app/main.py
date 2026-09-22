@@ -277,15 +277,59 @@ def index() -> FileResponse | JSONResponse:
     return FileResponse(str(_STATIC_DIST_INDEX))
 
 
+def _probe_infra_services() -> dict[str, str]:
+    """Testa conectividade real com Qdrant e Ollama (timeout curto para
+    nao tornar o /health lento). Retorna dict {servico: "ok"|"degraded"}.
+
+    DA-35: /health antes retornava status="ok" sempre, independente de
+    Qdrant/Ollama estarem acessiveis — nao era um readiness probe real.
+    Agora faz GET nos endpoints de health de cada servico configurado,
+    com timeout de 1s para nao impactar o tempo de resposta do /health.
+    """
+    import httpx  # import local: mantém ordenacao de imports sem quebrar isort
+
+    results: dict[str, str] = {}
+    _timeout = httpx.Timeout(1.0)
+
+    if settings.qdrant_url:
+        try:
+            r = httpx.get(f"{settings.qdrant_url.rstrip('/')}/healthz", timeout=_timeout)
+            results["qdrant"] = "ok" if r.is_success else "degraded"
+        except (OSError, httpx.HTTPError):
+            results["qdrant"] = "degraded"
+    else:
+        results["qdrant"] = "not_configured"
+
+    if settings.ollama_host:
+        try:
+            r = httpx.get(f"{settings.ollama_host.rstrip('/')}/api/tags", timeout=_timeout)
+            results["ollama"] = "ok" if r.is_success else "degraded"
+        except (OSError, httpx.HTTPError):
+            results["ollama"] = "degraded"
+    else:
+        results["ollama"] = "not_configured"
+
+    return results
+
+
 @app.get("/health")
 def health() -> dict:
     """Alem do status geral, devolve o estado real (derivado do .env
     atual, ver app.connectors.connector_status) de cada conector e das
     principais flags de infraestrutura - fonte que o frontend
     (StatusView) consulta em vez de manter uma lista hardcoded que
-    nao reflete o backend de verdade."""
+    nao reflete o backend de verdade.
+
+    DA-35: probe real em Qdrant/Ollama via _probe_infra_services() —
+    o /health agora reflete disponibilidade real, nao so configuracao.
+    Quando algum servico esta degradado, "status" passa a "degraded"
+    (nao "ok") para que load balancers e liveness probes detectem."""
+    infra_probes = _probe_infra_services()
+    all_ok = all(v == "ok" for v in infra_probes.values() if v != "not_configured")
+    overall = "ok" if all_ok else "degraded"
+
     return {
-        "status": "ok",
+        "status": overall,
         "connectors": connector_status(),
         "infra": {
             "llm_provider": settings.llm_provider,
@@ -294,6 +338,7 @@ def health() -> dict:
             "async_queue_enabled": bool(settings.redis_url),
             "auth_required": bool(settings.api_key),
         },
+        "services": infra_probes,
     }
 
 

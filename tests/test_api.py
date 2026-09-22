@@ -49,12 +49,11 @@ def test_health_endpoint():
     response = client.get("/health")
     assert response.status_code == 200
     body = response.json()
-    assert body["status"] == "ok"
-    # Avaliacao externa (qualidade, item 27): StatusView no frontend
-    # renderizava uma lista hardcoda em vez de consultar o backend real -
-    # /health agora devolve o estado de cada conector e das principais
-    # flags de infraestrutura, derivado do .env atual (app.connectors.
-    # connector_status), que e o que o StatusView passou a consumir.
+    # DA-35: status agora pode ser "ok" ou "degraded" dependendo da
+    # disponibilidade real de Qdrant/Ollama — em testes unitarios os
+    # servicos nao estao no ar, entao o valor esperado e "degraded".
+    # O importante aqui e que o campo existe e tem um valor valido.
+    assert body["status"] in {"ok", "degraded"}
     assert set(body["connectors"]) == {
         "odata",
         "rfc",
@@ -75,6 +74,10 @@ def test_health_endpoint():
         "async_queue_enabled",
         "auth_required",
     }
+    # DA-35: campo "services" com probe real de Qdrant/Ollama
+    assert "services" in body
+    for svc_status in body["services"].values():
+        assert svc_status in {"ok", "degraded", "not_configured"}
 
 
 def test_health_endpoint_reflects_connector_config(monkeypatch):
@@ -497,3 +500,56 @@ def test_verify_incident_requires_api_key_when_configured(monkeypatch):
         "/incidents/i1/verify", json=payload, headers={"X-API-Key": "secret-verify"}
     )
     assert authorized.status_code == 200
+
+
+# ── DA-35: _probe_infra_services — readiness real ────────────────────────────
+
+
+def test_health_services_degraded_when_qdrant_unreachable(monkeypatch):
+    """DA-35: quando Qdrant nao responde, /health retorna status=degraded."""
+    import app.main as main_module
+    from app.config import Settings
+
+    def _probe_degraded():
+        return {"qdrant": "degraded", "ollama": "not_configured"}
+
+    monkeypatch.setattr(main_module, "_probe_infra_services", _probe_degraded)
+    monkeypatch.setattr(main_module, "settings", Settings(qdrant_url="http://qdrant:6333"))
+
+    result = main_module.health()
+    assert result["services"]["qdrant"] == "degraded"
+    assert result["status"] == "degraded"
+
+
+def test_health_services_ok_when_qdrant_responds(monkeypatch):
+    """DA-35: quando Qdrant responde 200, servico aparece como ok."""
+    import app.main as main_module
+    from app.config import Settings
+
+    def _probe_ok():
+        return {"qdrant": "ok", "ollama": "not_configured"}
+
+    monkeypatch.setattr(main_module, "_probe_infra_services", _probe_ok)
+    monkeypatch.setattr(main_module, "settings", Settings(qdrant_url="http://qdrant:6333"))
+
+    result = main_module.health()
+    assert result["services"]["qdrant"] == "ok"
+    assert result["status"] == "ok"
+
+
+def test_health_services_not_configured_when_no_qdrant_url(monkeypatch):
+    """DA-35: sem QDRANT_URL configurado, status e 'not_configured'."""
+    import app.main as main_module
+    from app.config import Settings
+
+    def _probe_not_configured():
+        return {"qdrant": "not_configured", "ollama": "not_configured"}
+
+    monkeypatch.setattr(main_module, "_probe_infra_services", _probe_not_configured)
+    monkeypatch.setattr(main_module, "settings", Settings(qdrant_url="", ollama_host=""))
+
+    result = main_module.health()
+    assert result["services"]["qdrant"] == "not_configured"
+    assert result["services"]["ollama"] == "not_configured"
+    # sem servicos configurados, nao pode ser "degraded" (nao ha nada pra degradar)
+    assert result["status"] == "ok"

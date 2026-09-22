@@ -73,9 +73,13 @@ def test_route_to_specialist_sends_sap_domain_to_sap_node():
     assert _route_to_specialist({"agent_domain": "sap"}) == "sap_diagnose"
 
 
-def test_route_to_specialist_sends_saas_and_generic_to_enterprise_node():
+def test_route_to_specialist_sends_saas_to_saas_node():
     assert _route_to_specialist({"agent_domain": "saas"}) == "saas_diagnose"
-    assert _route_to_specialist({"agent_domain": "generic"}) == "saas_diagnose"
+
+
+def test_route_to_specialist_sends_generic_to_generic_node():
+    # DA-22 fix: generic agora tem seu proprio node, nao reutiliza o saas_diagnose
+    assert _route_to_specialist({"agent_domain": "generic"}) == "generic_diagnose"
 
 
 def test_route_to_specialist_defaults_to_enterprise_node_when_domain_missing():

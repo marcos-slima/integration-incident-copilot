@@ -21,8 +21,12 @@ neste ambiente.
 
 from __future__ import annotations
 
+import logging
+
 from app.agent.graph import run_diagnosis
 from app.models import DiagnosisResponse, IncidentEventEnvelope, IncidentRequest
+
+_logger = logging.getLogger(__name__)
 
 
 def to_incident_request(envelope: IncidentEventEnvelope) -> IncidentRequest:
@@ -37,5 +41,17 @@ def to_incident_request(envelope: IncidentEventEnvelope) -> IncidentRequest:
 def handle_incident_event(envelope: IncidentEventEnvelope) -> DiagnosisResponse:
     """Disparo automatico do diagnostico a partir de um evento -
     mesma orquestracao (`run_diagnosis`) usada por /diagnose e pela
-    camada A2A, sem nenhuma logica duplicada."""
+    camada A2A, sem nenhuma logica duplicada.
+
+    DA-23: os campos informativos do envelope CloudEvents (source, id, time)
+    sao logados para rastreabilidade/correlacao antes de iniciar o diagnostico.
+    Nao alternam a logica de negocio - sao observabilidade pura.
+    """
+    _logger.info(
+        "[events] Evento de incidente recebido — "
+        "cloudevents.source=%s cloudevents.id=%s cloudevents.time=%s",
+        getattr(envelope, "source", None),
+        getattr(envelope, "id", None),
+        getattr(envelope, "time", None),
+    )
     return run_diagnosis(to_incident_request(envelope))

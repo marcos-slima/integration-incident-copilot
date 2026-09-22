@@ -500,6 +500,7 @@ def _assemble_evidence(state: CopilotState) -> list[dict]:
     execucao, com trust_level decidido pelo TIPO da fonte:
 
     - system_observed: dado real de conector (nao mock, nao fallback)
+      OU regra curada do rule engine (DA-33) — confianca maxima
     - simulated: dado de conector mock/fallback (nao um sistema real)
     - retrieved_document: chunk RAG (Qdrant, ja passado pelo reranker)
       ou historico do GraphRAG
@@ -508,6 +509,24 @@ def _assemble_evidence(state: CopilotState) -> list[dict]:
       verificada de forma independente, e o sinal mais fraco de todos.
     """
     evidence: list[dict] = []
+
+    # DA-33 + DA-25: quando o rule engine resolveu o incidente deterministicamente,
+    # registra como evidencia de maxima confianca (nao e dado de usuario,
+    # nao e RAG, nao e web — e uma regra curada, conhecimento incorporado).
+    diagnosis = state.get("diagnosis") or {}
+    if str(diagnosis.get("llm_provider_used", "")).startswith("rule_engine"):
+        category = diagnosis.get("rule_engine_category", "unknown")
+        evidence.append(
+            {
+                "source_id": f"rule_engine:{category}",
+                "source_type": "rule_engine",
+                "locator": category,
+                "excerpt": diagnosis.get("probable_root_cause", "")[:500],
+                "retrieval_score": diagnosis.get("confidence"),
+                "rerank_score": None,
+                "trust_level": "system_observed",  # regra curada = confianca maxima
+            }
+        )
 
     data = state.get("connector_data")
     if data is not None:
@@ -693,6 +712,18 @@ _ENTERPRISE_SPECIALIST_PERSONA = (
     "especifico do incidente nao estiver identificado, aplique o mesmo "
     "raciocinio generalista de troubleshooting de integracao de sistemas."
 )
+# DA-22: persona propria para incidentes sem dominio identificado (agent_domain="generic").
+# Usa linguagem agnosta de fornecedor — foco em protocolo, transporte e middleware —
+# sem assumir vocabulario SAP nem SaaS especifico.
+_GENERIC_INTEGRATION_PERSONA = (
+    "Voce e um especialista em integracao de sistemas e middleware, com dominio "
+    "amplo em padroes de comunicacao (REST, SOAP, gRPC, mensageria), protocolos "
+    "de autenticacao (OAuth2, SAML, mTLS), formatos de dados (JSON, XML, CSV) "
+    "e ferramentas de integracao (ESB, iPaaS, API gateways). Nao assuma "
+    "nenhum fornecedor especifico — analise o incidente com base nos sinais "
+    "tecnicos observados (erros HTTP, timeouts, falhas de autenticacao, "
+    "problemas de mapeamento) e recomende acoes pragmaticas de troubleshooting."
+)
 
 
 def _run_diagnosis_agent(state: CopilotState, persona: str) -> dict:
@@ -858,10 +889,18 @@ def sap_diagnosis_node(state: CopilotState) -> CopilotState:
 
 @observe(name="saas_specialist")
 def saas_diagnosis_node(state: CopilotState) -> CopilotState:
-    """Sub-agente especialista multi-fornecedor (SaaS empresarial +
-    generalista) - roteado pelo supervisor quando `agent_domain` e
-    "saas" ou "generic" (nenhum dominio SAP identificado)."""
+    """Sub-agente especialista multi-fornecedor (SaaS empresarial) -
+    roteado pelo supervisor quando `agent_domain == "saas"`."""
     return {"diagnosis": _run_diagnosis_agent(state, _ENTERPRISE_SPECIALIST_PERSONA)}
+
+
+@observe(name="generic_specialist")
+def generic_diagnosis_node(state: CopilotState) -> CopilotState:
+    """Sub-agente generalista de integracao - roteado pelo supervisor
+    quando `agent_domain == "generic"` (nenhum dominio identificado).
+    DA-22: usa persona agnosta de fornecedor em vez de reutilizar a
+    persona SaaS, que assumia vocabulario de fornecedores especificos."""
+    return {"diagnosis": _run_diagnosis_agent(state, _GENERIC_INTEGRATION_PERSONA)}
 
 
 def _fallback_diagnosis(raw: str) -> dict:

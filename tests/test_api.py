@@ -61,6 +61,7 @@ def test_health_endpoint():
         "salesforce",
         "workday",
         "ariba",
+        "successfactors",
         "cap",
         "apim",
     }

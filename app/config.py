@@ -152,6 +152,15 @@ class Settings(BaseSettings):
     workday_client_id: str = ""
     workday_client_secret: str = ""
 
+    # SAP SuccessFactors Employee Central (app/connectors/successfactors_connector.py)
+    # OAuth2 Client Credentials via SAP BTP/IAS + OData v2 PerPerson API.
+    # Representa o cenario de referencia SuccessFactors<->S/4HANA (replicacao
+    # de funcionario falhando por divergencia de dados ou bloqueio MDI).
+    sfsf_base_url: str = ""  # ex: https://<tenant>.successfactors.com
+    sfsf_oauth_token_url: str = ""  # ex: https://<tenant>.auth.us10.hana.ondemand.com/oauth/token
+    sfsf_client_id: str = ""
+    sfsf_client_secret: str = ""
+
     # SAP Ariba / Business Network (app/connectors/ariba_connector.py) -
     # OAuth2 Client Credentials contra o token endpoint da Ariba, REST
     # sobre o status de pedido de compra na rede. Representa o cenario

@@ -19,8 +19,8 @@ from app.a2a.server import router as a2a_router
 from app.agent.graph import run_diagnosis
 from app.config import settings
 from app.connectors import connector_status
-from app.events.consumer import handle_incident_event
 from app.events.amqp_consumer import amqp_consumer  # DA-32
+from app.events.consumer import handle_incident_event
 from app.exceptions import DiagnosisTimeoutError
 from app.mcp.server import build_mcp_asgi_app
 from app.mcp.server import mcp as mcp_server

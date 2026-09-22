@@ -22,12 +22,12 @@ from langfuse import get_client, observe
 from app.agent.nodes import (
     _assemble_evidence,
     connector_node,
+    generic_diagnosis_node,
     graph_enrich_node,
     graph_write_node,
     report_node,
     retrieve_node,
     saas_diagnosis_node,
-    generic_diagnosis_node,
     sap_diagnosis_node,
 )
 from app.agent.state import CopilotState

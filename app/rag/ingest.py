@@ -274,7 +274,7 @@ def ensure_collection(
                     field_name=field_name,
                     field_schema=field_schema,
                 )
-            except Exception:  # noqa: BLE001
+            except Exception:  # noqa: BLE001 S110
                 pass  # índice já existe ou versão do Qdrant não suporta — não crítico
 
 

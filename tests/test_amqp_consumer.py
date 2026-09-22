@@ -10,7 +10,6 @@ import pytest
 
 from app.events.amqp_consumer import AmqpConsumerTask, _parse_envelope
 
-
 # ---------------------------------------------------------------------------
 # _parse_envelope
 # ---------------------------------------------------------------------------

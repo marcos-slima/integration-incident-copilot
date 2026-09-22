@@ -24,11 +24,11 @@ from langfuse import Langfuse, get_client, observe
 from langfuse.langchain import CallbackHandler
 from langgraph.prebuilt import create_react_agent
 
+from app.agent.rules import match_known_error
 from app.agent.state import CopilotState, DiagnosisModel
 from app.connectors import get_connector
 from app.llm.factory import TRANSPORT_FAILURE_EXCEPTIONS
 from app.llm.gateway import invoke_via_gateway
-from app.agent.rules import match_known_error
 from app.rag.graph_store import (
     GRAPH_UNAVAILABLE_EXCEPTIONS,
     format_graph_context_for_prompt,

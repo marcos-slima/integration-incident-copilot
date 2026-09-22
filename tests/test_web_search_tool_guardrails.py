@@ -134,6 +134,6 @@ def test_run_diagnosis_agent_does_not_pass_web_tool_when_web_search_disabled(mon
 
     _run_diagnosis_agent({"description": "x", "retrieved_context": []}, "persona")
 
-    assert (
-        captured_tools == []
-    ), "Quando web_search_enabled=False, o ReAct agent nao deve receber nenhum tool"
+    assert captured_tools == [], (
+        "Quando web_search_enabled=False, o ReAct agent nao deve receber nenhum tool"
+    )

@@ -14,9 +14,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-
 from app.agent.rules import KNOWN_ERROR_RULES, ErrorRule, match_known_error
-
 
 # ---------------------------------------------------------------------------
 # Testes de match_known_error

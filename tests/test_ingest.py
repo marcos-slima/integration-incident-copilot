@@ -132,12 +132,12 @@ def test_run_ingest_returns_error_count_on_failure(tmp_path, monkeypatch):
     class _FakeQdrant:
         def get_collections(self):
             class _R:
-                collections = []
+                collections = []  # noqa: RUF012
 
             return _R()
 
         def get_collection(self, *a, **kw):
-            raise Exception("nao existe")
+            raise RuntimeError("nao existe")
 
         def create_collection(self, *a, **kw):
             pass

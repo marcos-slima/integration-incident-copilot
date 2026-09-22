@@ -11,9 +11,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-
 from app.redaction import redact_pii_text
-
 
 # ─────────────────────────────────────────────────────────────
 # 1. redact_pii_text — padroes novos
@@ -175,7 +173,7 @@ class TestGatewayBackoff:
         from app.llm.factory import TRANSPORT_FAILURE_EXCEPTIONS
         from app.llm.gateway import invoke_via_gateway
 
-        fake_exc = list(TRANSPORT_FAILURE_EXCEPTIONS)[0]("timeout simulado")
+        fake_exc = next(iter(TRANSPORT_FAILURE_EXCEPTIONS))("timeout simulado")
         build_and_invoke_mock = MagicMock(side_effect=fake_exc)
 
         with (
@@ -187,7 +185,7 @@ class TestGatewayBackoff:
                     build_and_invoke=build_and_invoke_mock,
                     state={"description": "teste", "connector_data": None},
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001 S110
                 pass  # esperado — todos os providers falham
 
         # sleep deve ter sido chamado pelo menos uma vez
@@ -201,7 +199,7 @@ class TestGatewayBackoff:
         from app.llm.factory import TRANSPORT_FAILURE_EXCEPTIONS
         from app.llm.gateway import invoke_via_gateway
 
-        fake_exc = list(TRANSPORT_FAILURE_EXCEPTIONS)[0]("timeout simulado")
+        fake_exc = next(iter(TRANSPORT_FAILURE_EXCEPTIONS))("timeout simulado")
         build_and_invoke_mock = MagicMock(side_effect=fake_exc)
 
         with (
@@ -224,7 +222,7 @@ class TestGatewayBackoff:
                     build_and_invoke=build_and_invoke_mock,
                     state={"description": "teste", "connector_data": None},
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001 S110
                 pass
 
         # Com base=0, sleep NAO deve ter sido chamado

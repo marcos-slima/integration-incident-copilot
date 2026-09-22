@@ -9,8 +9,8 @@ from app.connectors.cap_connector import CAPConnector
 from app.connectors.odata_connector import ODataConnector
 from app.connectors.rfc_connector import HAS_PYRFC, RFCConnector
 from app.connectors.salesforce_connector import SalesforceConnector
-from app.connectors.successfactors_connector import SuccessFactorsConnector
 from app.connectors.servicenow_connector import ServiceNowConnector
+from app.connectors.successfactors_connector import SuccessFactorsConnector
 from app.connectors.workday_connector import WorkdayConnector
 
 _REGISTRY: dict[str, type[SAPConnector]] = {
@@ -84,8 +84,8 @@ __all__ = [
     "RFCConnector",
     "SAPConnector",
     "SalesforceConnector",
-    "SuccessFactorsConnector",
     "ServiceNowConnector",
+    "SuccessFactorsConnector",
     "WorkdayConnector",
     "connector_status",
     "get_connector",

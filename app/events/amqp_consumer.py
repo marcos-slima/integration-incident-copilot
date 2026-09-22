@@ -86,8 +86,8 @@ async def _process_message(message: aiormq.abc.DeliveredMessage) -> None:
         await asyncio.to_thread(handle_incident_event, envelope)
         await message.channel.basic_ack(delivery_tag=delivery_tag)
         logger.info("amqp | mensagem processada com sucesso delivery_tag=%s", delivery_tag)
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("amqp | erro ao processar mensagem delivery_tag=%s: %s", delivery_tag, exc)
+    except Exception:
+        logger.exception("amqp | erro ao processar mensagem delivery_tag=%s", delivery_tag)
         # requeue=True para tentar novamente (dead-letter após N tentativas no broker)
         await message.channel.basic_nack(delivery_tag=delivery_tag, requeue=True)
 
@@ -148,7 +148,7 @@ async def _consume_loop(stop_event: asyncio.Event) -> None:
             if connection and not connection.is_closed:
                 try:
                     await connection.close()
-                except Exception:  # noqa: BLE001
+                except Exception:  # noqa: BLE001 S110
                     pass
 
 
@@ -183,7 +183,7 @@ class AmqpConsumerTask:
         if self._task and not self._task.done():
             try:
                 await asyncio.wait_for(self._task, timeout=10)
-            except (asyncio.TimeoutError, asyncio.CancelledError):
+            except (TimeoutError, asyncio.CancelledError):
                 self._task.cancel()
                 logger.warning("amqp | task encerrada forçadamente no shutdown")
         logger.info("amqp | consumidor encerrado")

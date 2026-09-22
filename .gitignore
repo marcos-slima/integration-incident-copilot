@@ -43,3 +43,5 @@ promptfoo-output*
 scripts/backup-scripts/
 *.trc
 dev_rfc.log
+.precommit-cache-tmp/
+.precommit-cache-tmp/

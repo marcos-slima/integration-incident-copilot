@@ -335,7 +335,8 @@ def run_ingest(
     excludes: list[str],
     reset_state: bool,
     reset_collection: bool,
-) -> None:
+) -> int:
+    """Retorna o numero de arquivos que falharam (0 = sucesso total)."""
     cfg = TARGETS[target]
     source_dir = resolve_source_dir(cfg)
     print(f"[{target}] Fonte: {source_dir}")
@@ -364,7 +365,7 @@ def run_ingest(
 
     if not pending:
         print(f"[{target}] Nada a fazer.")
-        return
+        return 0
 
     embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
     splitter = MarkdownTextSplitter(
@@ -381,9 +382,10 @@ def run_ingest(
     state_lock = threading.Lock()
     progress_lock = threading.Lock()
     done_count = 0
+    error_count = 0
 
     def process_one(path: Path) -> None:
-        nonlocal done_count
+        nonlocal done_count, error_count
         rel = path.relative_to(source_dir)
         try:
             filename = path.name
@@ -449,6 +451,7 @@ def run_ingest(
         except Exception as exc:  # noqa: BLE001
             with progress_lock:
                 done_count += 1
+                error_count += 1
                 print(
                     f"[{target}] ({done_count}/{len(pending)}) {rel} -- [ERRO] {exc} -- pulando este arquivo"
                 )
@@ -463,7 +466,14 @@ def run_ingest(
         for fut in as_completed(futures):
             fut.result()  # relanca excecao inesperada (nao deveria ocorrer, ja tratada acima)
 
-    print(f"[{target}] Concluido. Total processado ate agora: {len(processed)} arquivo(s).")
+    if error_count:
+        print(
+            f"[{target}] Concluido com {error_count} erro(s). "
+            f"Sucesso: {len(processed)} arquivo(s). Falha: {error_count} arquivo(s)."
+        )
+    else:
+        print(f"[{target}] Concluido. Total processado ate agora: {len(processed)} arquivo(s).")
+    return error_count
 
 
 def main() -> None:
@@ -486,8 +496,13 @@ def main() -> None:
     args = parser.parse_args()
 
     targets = ["incidents", "reference"] if args.target == "all" else [args.target]
+    total_errors = 0
     for t in targets:
-        run_ingest(t, args.limit, args.exclude, args.reset_state, args.reset_collection)
+        total_errors += run_ingest(
+            t, args.limit, args.exclude, args.reset_state, args.reset_collection
+        )
+    if total_errors:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

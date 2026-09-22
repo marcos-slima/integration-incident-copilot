@@ -93,3 +93,72 @@ def test_embed_and_upsert_reuses_same_point_ids_when_source_content_changes():
     first_point_id = client.upsert_calls[0]["points"][0].id
     second_point_id = client.upsert_calls[1]["points"][0].id
     assert first_point_id == second_point_id
+
+
+# ---------------------------------------------------------------------------
+# Testes de exit code / contagem de erros
+# ---------------------------------------------------------------------------
+
+
+def test_run_ingest_returns_zero_when_nothing_pending(tmp_path, monkeypatch):
+    """run_ingest retorna 0 (sem erros) quando nao ha arquivos pendentes."""
+    import app.rag.ingest as ingest_module
+
+    monkeypatch.setattr(ingest_module, "QDRANT_URL", "http://localhost:6333")
+    monkeypatch.setattr(ingest_module, "find_files", lambda src, excl: [])
+    monkeypatch.setattr(ingest_module, "load_state", lambda _: {})
+    monkeypatch.setattr(ingest_module, "resolve_source_dir", lambda cfg: tmp_path)
+
+    result = ingest_module.run_ingest(
+        "incidents", limit=None, excludes=[], reset_state=False, reset_collection=False
+    )
+    assert result == 0
+
+
+def test_run_ingest_returns_error_count_on_failure(tmp_path, monkeypatch):
+    """run_ingest retorna o numero de arquivos que lancaram excecao dentro de process_one."""
+    import app.rag.ingest as ingest_module
+
+    bad_file = tmp_path / "bad.md"
+    bad_file.write_text("conteudo que vai falhar no embed")
+
+    monkeypatch.setattr(ingest_module, "QDRANT_URL", "http://localhost:6333")
+    monkeypatch.setattr(ingest_module, "find_files", lambda src, excl: [bad_file])
+    monkeypatch.setattr(ingest_module, "load_state", lambda _: {})
+    monkeypatch.setattr(ingest_module, "save_state", lambda *_: None)
+    monkeypatch.setattr(ingest_module, "resolve_source_dir", lambda cfg: tmp_path)
+
+    # QdrantClient precisa existir (criado antes de pending check); faz um stub minimo
+    class _FakeQdrant:
+        def get_collections(self):
+            class _R:
+                collections = []
+
+            return _R()
+
+        def get_collection(self, *a, **kw):
+            raise Exception("nao existe")
+
+        def create_collection(self, *a, **kw):
+            pass
+
+    monkeypatch.setattr(ingest_module, "QdrantClient", lambda **kw: _FakeQdrant())
+
+    # embed_and_upsert e o ponto onde o erro de verdade ocorreria
+    def _fail_embed(*args, **kwargs):
+        raise RuntimeError("embedding falhou")
+
+    monkeypatch.setattr(ingest_module, "embed_and_upsert", _fail_embed)
+
+    # OllamaEmbeddings e probe_vector_size precisam de stubs
+    class _FakeEmbeddings:
+        pass
+
+    monkeypatch.setattr(ingest_module, "OllamaEmbeddings", lambda model: _FakeEmbeddings())
+    monkeypatch.setattr(ingest_module, "probe_vector_size", lambda emb: 768)
+    monkeypatch.setattr(ingest_module, "ensure_collection", lambda *a, **kw: None)
+
+    result = ingest_module.run_ingest(
+        "incidents", limit=None, excludes=[], reset_state=False, reset_collection=False
+    )
+    assert result == 1

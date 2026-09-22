@@ -20,6 +20,7 @@ from app.agent.graph import run_diagnosis
 from app.config import settings
 from app.connectors import connector_status
 from app.events.consumer import handle_incident_event
+from app.events.amqp_consumer import amqp_consumer  # DA-32
 from app.exceptions import DiagnosisTimeoutError
 from app.mcp.server import build_mcp_asgi_app
 from app.mcp.server import mcp as mcp_server
@@ -197,7 +198,11 @@ async def lifespan(app: FastAPI):
     # UM `with TestClient(app) as ...` (que dispara o lifespan) em toda
     # a suite de testes - ver tests/test_mcp.py.
     async with mcp_server.session_manager.run():
-        yield
+        await amqp_consumer.start()  # DA-32: inicia consumidor AMQP (no-op se AMQP_ENABLED=false)
+        try:
+            yield
+        finally:
+            await amqp_consumer.stop()  # DA-32: graceful shutdown
     get_client().flush()
 
 

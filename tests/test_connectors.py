@@ -424,6 +424,7 @@ def test_connector_status_reports_mock_for_all_when_unconfigured(monkeypatch):
         "salesforce_instance_url",
         "workday_tenant",
         "ariba_base_url",
+        "sfsf_base_url",
         "cap_service_url",
         "apim_analytics_url",
     ):
@@ -439,6 +440,7 @@ def test_connector_status_reports_mock_for_all_when_unconfigured(monkeypatch):
         "salesforce",
         "workday",
         "ariba",
+        "successfactors",
         "cap",
         "apim",
     }
@@ -465,3 +467,157 @@ def test_connector_status_reports_misconfigured_for_rfc_without_pyrfc(monkeypatc
     result = connector_status()["rfc"]
     assert result["status"] == "misconfigured"
     assert "pyrfc" in result["note"]
+
+
+# ---------------------------------------------------------------------------
+# SuccessFactors connector (DA-34)
+# ---------------------------------------------------------------------------
+
+
+def test_successfactors_connector_demo_mode_known_scenario(monkeypatch):
+    monkeypatch.setattr("app.connectors.successfactors_connector.settings.sfsf_base_url", "")
+    connector = get_connector("successfactors")
+
+    result = connector.fetch("SFSF-REPL-FAIL-DEMO")
+
+    assert result.status == "error"
+    assert result.error_code == "REPLICATION_FAILED"
+    assert result.source_system == "SuccessFactors"
+    assert "MDI" in result.message or "replicacao" in result.message.lower()
+
+
+def test_successfactors_connector_demo_mode_inactive_employee(monkeypatch):
+    monkeypatch.setattr("app.connectors.successfactors_connector.settings.sfsf_base_url", "")
+    connector = get_connector("successfactors")
+
+    result = connector.fetch("SFSF-INACTIVE-DEMO")
+
+    assert result.status == "error"
+    assert result.error_code == "EMPLOYEE_INACTIVE"
+
+
+def test_successfactors_connector_demo_mode_unknown_returns_default(monkeypatch):
+    monkeypatch.setattr("app.connectors.successfactors_connector.settings.sfsf_base_url", "")
+    connector = get_connector("successfactors")
+
+    result = connector.fetch("ID-NAO-EXISTE")
+
+    assert result.is_fallback is True
+    assert result.source_system == "SuccessFactors"
+
+
+def test_successfactors_connector_real_mode_active_employee(monkeypatch):
+    from app.config import Settings
+    from app.connectors.successfactors_connector import SuccessFactorsConnector
+
+    monkeypatch.setattr(
+        "app.connectors.successfactors_connector.settings",
+        Settings(
+            sfsf_base_url="https://api4.successfactors.com",
+            sfsf_oauth_token_url="https://acme.auth.us10.hana.ondemand.com/oauth/token",
+            sfsf_client_id="cid",
+            sfsf_client_secret="csecret",
+        ),
+    )
+
+    cassette = load_cassette("successfactors_employee")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "oauth" in str(request.url) or "token" in str(request.url):
+            return httpx.Response(200, json={"access_token": "fake-token"})
+        return httpx.Response(200, json=cassette)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    result = SuccessFactorsConnector(client=client).fetch("SFSF-REPL-OK-TEST")
+
+    assert result.status == "ok"
+    assert result.is_mock is False
+    assert result.source_system == "SuccessFactors"
+
+
+def test_successfactors_connector_real_mode_replication_failed(monkeypatch):
+    from app.config import Settings
+    from app.connectors.successfactors_connector import SuccessFactorsConnector
+
+    monkeypatch.setattr(
+        "app.connectors.successfactors_connector.settings",
+        Settings(
+            sfsf_base_url="https://api4.successfactors.com",
+            sfsf_oauth_token_url="https://acme.auth.us10.hana.ondemand.com/oauth/token",
+            sfsf_client_id="cid",
+            sfsf_client_secret="csecret",
+        ),
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "oauth" in str(request.url) or "token" in str(request.url):
+            return httpx.Response(200, json={"access_token": "fake-token"})
+        return httpx.Response(
+            200,
+            json={
+                "d": {
+                    "personIdExternal": "EMP-999",
+                    "replicationStatus": "FAILED",
+                    "employmentNav": {"results": [{"employmentStatus": "active"}]},
+                }
+            },
+        )
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    result = SuccessFactorsConnector(client=client).fetch("EMP-999")
+
+    assert result.status == "error"
+    assert result.error_code == "REPLICATION_FAILED"
+    assert result.is_mock is False
+
+
+def test_successfactors_connector_real_mode_connection_error(monkeypatch):
+    from app.config import Settings
+    from app.connectors.successfactors_connector import SuccessFactorsConnector
+
+    monkeypatch.setattr(
+        "app.connectors.successfactors_connector.settings",
+        Settings(
+            sfsf_base_url="https://api4.successfactors.com",
+            sfsf_oauth_token_url="https://acme.auth.us10.hana.ondemand.com/oauth/token",
+            sfsf_client_id="cid",
+            sfsf_client_secret="csecret",
+        ),
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "oauth" in str(request.url) or "token" in str(request.url):
+            return httpx.Response(200, json={"access_token": "fake-token"})
+        raise httpx.ConnectError("connection refused", request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    result = SuccessFactorsConnector(client=client).fetch("EMP-ERR")
+
+    assert result.error_code == "CONNECTION_ERROR"
+    assert result.is_fallback is True
+
+
+def test_successfactors_connector_real_mode_401(monkeypatch):
+    from app.config import Settings
+    from app.connectors.successfactors_connector import SuccessFactorsConnector
+
+    monkeypatch.setattr(
+        "app.connectors.successfactors_connector.settings",
+        Settings(
+            sfsf_base_url="https://api4.successfactors.com",
+            sfsf_oauth_token_url="https://acme.auth.us10.hana.ondemand.com/oauth/token",
+            sfsf_client_id="cid",
+            sfsf_client_secret="csecret",
+        ),
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "oauth" in str(request.url) or "token" in str(request.url):
+            return httpx.Response(200, json={"access_token": "fake-token"})
+        return httpx.Response(401, text="Unauthorized")
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    result = SuccessFactorsConnector(client=client).fetch("EMP-401")
+
+    assert result.error_code == "401"
+    assert result.is_fallback is True

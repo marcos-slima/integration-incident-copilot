@@ -1,0 +1,18 @@
+{
+  "_source": "SAP SuccessFactors OData v2 PerPerson API (GET /odata/v2/PerPerson?personIdExternal='...'&$expand=employmentNav), formato documentado em https://api.sap.com/api/ECEmploymentInformation/overview — campos employmentStatus/replicationStatus refletem o estado real de replicacao via SAP Master Data Integration (MDI).",
+  "response": {
+    "d": {
+      "personIdExternal": "SFSF-REPL-OK-TEST",
+      "replicationStatus": "",
+      "employmentNav": {
+        "results": [
+          {
+            "employmentStatus": "active",
+            "jobCode": "60003456",
+            "costCenter": "4710"
+          }
+        ]
+      }
+    }
+  }
+}

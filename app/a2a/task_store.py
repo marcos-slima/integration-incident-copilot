@@ -57,18 +57,38 @@ class TaskStore(Protocol):
     def set(self, task: A2ATask) -> None: ...
 
 
+# Limite de tasks em memoria: evita crescimento sem limite quando
+# REDIS_URL nao esta configurada (mesmo principio do TTL de 24h do
+# RedisTaskStore). Quando o limite e atingido, a task mais antiga e
+# descartada (FIFO). Valor alto o suficiente para uso normal em
+# desenvolvimento/staging; producao deve usar RedisTaskStore.
+_IN_MEMORY_MAX_TASKS = 1_000
+
+
 class InMemoryTaskStore:
     """Comportamento historico (pre-medio-prazo item 2): dict simples,
     perdido a cada restart do processo. Usado quando REDIS_URL nao
-    esta configurada."""
+    esta configurada.
 
-    def __init__(self) -> None:
+    Possui evicao FIFO com limite de _IN_MEMORY_MAX_TASKS entradas para
+    evitar crescimento sem limite - equivalente ao TTL de 24h do
+    RedisTaskStore (ambos descartam tasks antigas apos um volume/tempo
+    razoavel sem precisar de infraestrutura Redis)."""
+
+    def __init__(self, max_tasks: int = _IN_MEMORY_MAX_TASKS) -> None:
+        self._max_tasks = max_tasks
+        # dict preserva ordem de insercao (Python 3.7+), o que permite
+        # evicao FIFO eficiente via next(iter(self._tasks)).
         self._tasks: dict[str, A2ATask] = {}
 
     def get(self, task_id: str) -> A2ATask | None:
         return self._tasks.get(task_id)
 
     def set(self, task: A2ATask) -> None:
+        if task.id not in self._tasks and len(self._tasks) >= self._max_tasks:
+            # Descarta a task mais antiga (FIFO)
+            oldest_key = next(iter(self._tasks))
+            del self._tasks[oldest_key]
         self._tasks[task.id] = task
 
 

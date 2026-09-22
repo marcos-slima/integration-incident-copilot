@@ -29,7 +29,7 @@ AGENT_CARD: dict = {
         "Salesforce, Workday, SAP Ariba) com uma base de conhecimento via RAG "
         "para propor causa raiz provavel e proximos passos."
     ),
-    "version": "0.1.0",
+    "version": "1.2.0",
     # DA-30: url relativa (/a2a) nao e um URL absoluto valido pelo spec;
     # get_agent_card() resolve para URL absoluta a partir de A2A_BASE_URL.
     # Mantida aqui como fallback para testes unitarios que nao configuram

@@ -20,7 +20,8 @@ LD_LIBRARY_PATH=/usr/local/sap/nwrfcsdk/lib uv run python -m app.rag.ingest [op�
 | `--target` | `incidents` \| `reference` \| `all` | `incidents` | Qual base indexar |
 | `--limit` | inteiro | `None` (sem limite) | Processa apenas os N primeiros arquivos |
 | `--exclude` | string (repetível) | `[]` | Exclui arquivos pelo nome (substring) |
-| `--reset` | flag | `False` | Apaga todos os chunks existentes e reindexe do zero |
+| `--reset` / `--reset-state` | flag | `False` | Apaga o estado local e reindexa os arquivos; **não** apaga a collection Qdrant |
+| `--reset-collection` | flag | `False` | Apaga e recria a collection Qdrant do zero; também limpa o estado local ⚠️ perde todos os dados indexados |
 
 ---
 
@@ -33,12 +34,20 @@ uv run python -m app.rag.ingest
 Processa `data/sample_docs/` — os documentos `.md` de casos de troubleshooting.
 Só indexa arquivos novos (não reprocessa o que já está no estado).
 
-### Indexar base de troubleshooting do zero
+### Reiniciar indexação dos incidentes (manter collection)
 ```bash
-uv run python -m app.rag.ingest --target incidents --reset
+uv run python -m app.rag.ingest --target incidents --reset-state
 ```
-Apaga todos os chunks de `sap_incident_docs` no Qdrant e reindexe todos os arquivos.
-Use quando mudar o schema de metadata ou o modelo de embeddings.
+Apaga apenas o estado local e reindexa todos os arquivos; os dados já no Qdrant são substituídos.
+Use quando os arquivos `.md` mudaram mas o schema de embeddings não mudou.
+
+### Recriar collection de incidentes do zero
+```bash
+uv run python -m app.rag.ingest --target incidents --reset-collection
+```
+Apaga e recria a collection `sap_incident_docs` no Qdrant e reindexa tudo do zero.
+Use quando mudar o schema de metadata, o modelo de embeddings, ou a configuração de vetores.
+⚠️ Todos os dados indexados serão perdidos.
 
 ### Indexar biblioteca de referência (PDFs/EPUBs)
 ```bash
@@ -47,12 +56,12 @@ LD_LIBRARY_PATH=/usr/local/sap/nwrfcsdk/lib uv run python -m app.rag.ingest --ta
 Processa `data/reference_library/` — PDFs e EPUBs técnicos SAP.
 Continua de onde parou (usa estado salvo em `data/.ingest_state_reference.json`).
 
-### Indexar biblioteca de referência do zero
+### Recriar collection de referência do zero
 ```bash
-LD_LIBRARY_PATH=/usr/local/sap/nwrfcsdk/lib uv run python -m app.rag.ingest --target reference --reset
+LD_LIBRARY_PATH=/usr/local/sap/nwrfcsdk/lib uv run python -m app.rag.ingest --target reference --reset-collection
 ```
-Apaga todos os chunks de `sap_reference_library` e reindexe tudo.
-⚠️ Com 2.000+ arquivos pode levar várias horas (OCR via pymupdf4llm).
+Apaga e recria a collection `sap_reference_library` e reindexa tudo.
+⚠️ Com 2.000+ arquivos pode levar várias horas (OCR via pymupdf4llm). Todos os dados indexados serão perdidos.
 
 ### Indexar todas as bases
 ```bash

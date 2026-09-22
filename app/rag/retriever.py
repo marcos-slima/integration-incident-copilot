@@ -188,8 +188,11 @@ def _retrieve_dense_only(
 @lru_cache(maxsize=1)
 def _get_reranker() -> CrossEncoder:
     """Carrega o cross-encoder de reranking (cache — carrega uma vez por processo).
-    Modelo: ms-marco-MiniLM-L-6-v2 (~22MB, rapido, preciso para recuperacao
-    de documentos tecnicos).
+
+    Modelo: mmarco-mMiniLMv2-L12-H384-v1 (multilingual, ~120MB) — escolhido
+    na DA-29 por superar o baseline ms-marco-MiniLM-L-6-v2 em +7pp Hit@1 e
+    +4pp MRR@5 nos incidentes SAP/integração em PT-BR/EN, sendo 3.5x mais
+    rapido que modelos L-12 em FP32 (ver docs/RERANKER_BENCHMARK.md).
     """
     return CrossEncoder(RERANKER_MODEL)
 

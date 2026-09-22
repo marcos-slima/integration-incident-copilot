@@ -349,6 +349,171 @@ KNOWN_ERROR_RULES: list[ErrorRule] = [
             "Se o documento existente estiver incorreto, reverter/estornar antes de reprocessar.",
         ],
     ),
+    # ------------------------------------------------------------------
+    # IDoc — múltiplos objetos / status 68 / parceiro
+    # ------------------------------------------------------------------
+    ErrorRule(
+        patterns=[
+            r"IDOC_ERROR_MULTIPLE_OBJECTS",
+            r"multiple.*objects.*idoc",
+            r"idoc.*multiple.*objects",
+        ],
+        category="sap_idoc_multiple_objects",
+        probable_root_cause=(
+            "Erro IDOC_ERROR_MULTIPLE_OBJECTS: o IDoc referencia múltiplos objetos "
+            "de negócio onde apenas um é esperado (ex: vários materiais em um IDoc "
+            "que aceita somente posição única)."
+        ),
+        next_steps=[
+            "Analisar o IDoc em WE02/WE05 para identificar quantos segmentos E1 estão presentes.",
+            "Revisar o mapeamento de origem para garantir que apenas um objeto seja enviado por IDoc.",
+            "Se o problema for recorrente, considerar dividir o lote antes do envio (splitter no iFlow).",
+            "Verificar a configuração de parceiro (WE20) para limites de segmento.",
+        ],
+    ),
+    ErrorRule(
+        patterns=[
+            r"IDoc.*status.*68",
+            r"status.*68.*IDoc",
+            r"IDOC.*SYNTAX.*ERROR.*SENDER",
+            r"port.*not.*found.*partner",
+            r"port.*nao.*encontrado",
+            r"PARTNER.*PORT.*NOT.*FOUND",
+        ],
+        category="sap_idoc_port_partner",
+        probable_root_cause=(
+            "Erro de configuração de parceiro ou porta IDoc (status 68 ou port not found). "
+            "O sistema de destino não reconhece o parceiro de comunicação ou a porta configurada."
+        ),
+        next_steps=[
+            "Verificar a configuração de parceiro em WE20 (Parceiros de comunicação IDoc).",
+            "Confirmar que a porta (BD64/WE21) está configurada e ativa.",
+            "Verificar se o logical system do remetente está correto (BD54/BD97).",
+            "Reprocessar o IDoc após corrigir a configuração do parceiro (BD87/WE19).",
+        ],
+    ),
+    # ------------------------------------------------------------------
+    # BAdI / Enhancement Framework
+    # ------------------------------------------------------------------
+    ErrorRule(
+        patterns=[
+            r"BAdI.*exception",
+            r"BAdi.*error",
+            r"enhancement.*spot.*exception",
+            r"IF_EX_.*=>.*exception",
+            r"CX_BADI",
+        ],
+        category="sap_badi_exception",
+        probable_root_cause=(
+            "Exceção lançada em implementação de BAdI (Business Add-In). "
+            "Uma lógica de extensão customizada no SAP disparou uma exception não tratada."
+        ),
+        next_steps=[
+            "Identificar qual BAdI foi executado via SE18/SE19 (Enhancement Builder).",
+            "Analisar o dump ABAP em ST22 para o call stack completo da exception.",
+            "Verificar os logs da implementação do BAdI (CX_BADI ou subclasse).",
+            "Contatar o desenvolvedor responsável pela implementação customizada para correção.",
+        ],
+    ),
+    # ------------------------------------------------------------------
+    # BAPI — falha de retorno
+    # ------------------------------------------------------------------
+    ErrorRule(
+        patterns=[
+            r"BAPI.*RETURN.*E\b",
+            r"BAPI.*failure",
+            r"BAPI.*error",
+            r"BAPIRET.*TYPE.*E",
+            r"BAPI_FAILURE",
+            r"bapi.*retornou.*erro",
+        ],
+        category="sap_bapi_failure",
+        probable_root_cause=(
+            "BAPI retornou mensagem de erro (TYPE='E' ou 'A' na tabela RETURN). "
+            "A operação de negócio ABAP falhou — dado inválido ou pré-condição não atendida."
+        ),
+        next_steps=[
+            "Extrair as mensagens da tabela RETURN do BAPI (campo MESSAGE) para diagnóstico específico.",
+            "Verificar no SE37 o BAPI executado e reproduzir manualmente com os mesmos parâmetros.",
+            "Corrigir os dados de entrada conforme a mensagem de erro (campo inválido, objeto não encontrado, etc.).",
+            "Se for erro de autorização no BAPI, verificar SU53 para o usuário técnico.",
+        ],
+    ),
+    # ------------------------------------------------------------------
+    # Número de série / Serial number
+    # ------------------------------------------------------------------
+    ErrorRule(
+        patterns=[
+            r"serial.*number.*duplicate",
+            r"numero.*serie.*duplicado",
+            r"serial.*already.*assigned",
+            r"SERIALNR.*ALREADY",
+            r"MM60.*serial",
+            r"duplicate.*serial",
+        ],
+        category="sap_serial_number_duplicate",
+        probable_root_cause=(
+            "Número de série duplicado — o serial já está atribuído a outro material/equipamento "
+            "no sistema SAP (tabela SER01/OBJK)."
+        ),
+        next_steps=[
+            "Verificar a atribuição atual do número de série via IQ03 (Exibir Número de Série).",
+            "Confirmar se o serial foi criado incorretamente em uma tentativa anterior.",
+            "Se a tentativa anterior falhou parcialmente, verificar QMEL/IQ09 para cancelar o registro duplicado.",
+            "Revisar o controle de série do material (MM03 → aba Dados de Planta/Armazém 1, campo Controle de Série).",
+        ],
+    ),
+    # ------------------------------------------------------------------
+    # SD — bloqueio de crédito
+    # ------------------------------------------------------------------
+    ErrorRule(
+        patterns=[
+            r"credit.*block",
+            r"bloqueio.*credito",
+            r"credit.*limit.*exceeded",
+            r"limite.*credito.*excedido",
+            r"VKM1",
+            r"RVKRED",
+            r"credit.*check.*failed",
+        ],
+        category="sap_sd_credit_block",
+        probable_root_cause=(
+            "Pedido de venda bloqueado por verificação de crédito (SD Credit Management). "
+            "O cliente ultrapassou o limite de crédito configurado no sistema SAP."
+        ),
+        next_steps=[
+            "Verificar o status de bloqueio de crédito do cliente em VD04 ou FD32.",
+            "Liberar o bloqueio manualmente via VKM1 (se autorizado) após confirmação com o financeiro.",
+            "Verificar se o limite de crédito do cliente precisa ser atualizado (FD32/FD33).",
+            "Se o bloqueio for recorrente, revisar a regra de verificação de crédito (OVA8).",
+        ],
+    ),
+    # ------------------------------------------------------------------
+    # MDG / MDI — bloqueio de replicação master data
+    # ------------------------------------------------------------------
+    ErrorRule(
+        patterns=[
+            r"MDG.*lock",
+            r"MDI.*replicate.*fail",
+            r"master.*data.*governance.*error",
+            r"MDG.*error",
+            r"MDI.*error",
+            r"master.*data.*integration.*fail",
+            r"BP.*lock.*governance",
+        ],
+        category="sap_mdg_mdi_lock",
+        probable_root_cause=(
+            "Erro de replicação ou bloqueio no SAP Master Data Governance (MDG) / "
+            "Master Data Integration (MDI). O processo de harmonização de dados mestres "
+            "está bloqueado ou a replicação para o sistema spoke falhou."
+        ),
+        next_steps=[
+            "Verificar o status da replicação no MDG Cockpit (NWBC → MDG Cockpit → Monitoring).",
+            "Analisar os logs de replicação no MDI (SAP Business Data Cloud → Replication Monitoring).",
+            "Verificar se há locks pendentes no BP/Business Partner (SM12 ou MDGC).",
+            "Contatar o administrador MDG/MDI para liberação do lock ou reprocessamento manual.",
+        ],
+    ),
 ]
 
 

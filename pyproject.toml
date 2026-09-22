@@ -1,6 +1,6 @@
 [project]
 name = "integration-incident-copilot"
-version = "0.1.0"
+version = "1.2.0"
 description = "Assistente de IA para diagnóstico de incidentes de integração SAP (RAG + agentes + conectores SAP)"
 license = "MIT"
 requires-python = ">=3.12"
@@ -8,7 +8,6 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
     "pydantic>=2.9",
-    "pandas>=2.2",
     "langgraph>=1.2",
     "langchain>=1.3",
     "langchain-community>=0.4",
@@ -81,7 +80,6 @@ build-backend = "hatchling.build"
 dev = [
     "debugpy>=1.8.21",
     "httpx>=0.28.1",
-    "httpx2>=2.12.0",
     "langchain-openai>=1.6.0",
     "pre-commit>=4.6.1",
     "pytest>=9.1.1",

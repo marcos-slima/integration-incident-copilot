@@ -179,11 +179,14 @@ LLM usa o `CallbackHandler` do LangChain — capturando tempo de
 execução, tokens e o payload completo de entrada/saída de cada etapa,
 visível em `http://localhost:3000`.
 
-**Bug encontrado e corrigido no processo:** em execuções via `pytest`
-(diferente do CLI), o SDK não fazia `flush()` automático antes do
-processo terminar — de 16 execuções de teste, só 8 traces chegavam ao
-Langfuse. Corrigido com uma fixture `autouse` no `conftest.py` que
-força o flush ao final da sessão de testes.
+**Bug encontrado e corrigido no processo:** o SDK não fazia `flush()`
+automático antes do processo terminar, então traces ficavam no buffer
+e nunca chegavam ao Langfuse. Corrigido chamando `get_client().flush()`
+nos dois pontos onde o processo pode terminar: no lifespan de
+shutdown do FastAPI (`app/main.py`) e ao final da execução via CLI
+(`app/agent/graph.py`, bloco `if __name__ == "__main__"`) - não uma
+fixture de teste (`pytest` sobe/derruba o app via `TestClient`, que
+já passa pelo mesmo lifespan).
 
 ### 6. Configuração centralizada (eliminando hardcoded)
 

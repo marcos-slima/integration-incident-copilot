@@ -1145,3 +1145,41 @@ contem o bloco AMQP todo comentado como referencia de configuracao.
   mockado (sem broker real)
 - `_process_message`: ack em sucesso, reject em payload invalido, nack em
   erro do handler
+
+
+## Expansão do catálogo Rule Engine + fix docstring reranker (DA-35)
+
+**Commit:** `fec432d` | **Data:** 2026-09-22
+
+### Rule Engine: 14 → 21 regras
+
+O catálogo de `app/agent/rules.py` foi expandido de 14 para **21 regras**
+com 7 novas entradas cobrindo classes de erro SAP/integração frequentes:
+
+| Categoria | Padrões cobertos | Transação/ferramenta de resolução |
+|-----------|-----------------|-----------------------------------|
+| `sap_idoc_multiple_objects` | `IDOC_ERROR_MULTIPLE_OBJECTS`, múltiplos objetos no IDoc | WE02/WE05, splitter no iFlow |
+| `sap_idoc_port_partner` | IDoc status 68, port not found, parceiro mal configurado | WE20, WE21, BD54, BD87 |
+| `sap_badi_exception` | `CX_BADI`, `IF_EX_*=>exception`, Enhancement Spot | SE18/SE19, ST22 |
+| `sap_bapi_failure` | BAPI RETURN `TYPE='E'/'A'`, `BAPI_FAILURE` | SE37, SU53 |
+| `sap_serial_number_duplicate` | Serial já atribuído, `SERIALNR_ALREADY` | IQ03, IQ09, QMEL |
+| `sap_sd_credit_block` | Credit limit exceeded, bloqueio SD, `VKM1`, `RVKRED` | VD04, FD32, VKM1, OVA8 |
+| `sap_mdg_mdi_lock` | MDG lock, MDI replication failure, BP governance lock | MDG Cockpit, SAP BDC Replication Monitoring |
+
+**Cobertura estimada:** com 21 regras, o engine agora cobre cerca de
+70–75% dos incidentes reais de integração SAP (OAuth, material lock, IDoc,
+HTTP errors, CPI mapping, SSL, RFC, rate limit, duplicidade + as 7 novas
+classes acima), sem consumir nenhum token de LLM.
+
+Cada nova regra segue o padrão `ErrorRule`:
+- múltiplos `patterns` regex (PT-BR + EN, `re.IGNORECASE`)
+- `probable_root_cause` determinístico
+- `next_steps` com transações SAP concretas
+- `category` para métricas/logs via Langfuse
+
+### Fix: docstring stale em `_get_reranker()` (retriever.py)
+
+O docstring de `_get_reranker()` em `app/rag/retriever.py` ainda
+mencionava o modelo antigo `ms-marco-MiniLM-L-6-v2`. Corrigido para
+refletir o modelo atual `mmarco-mMiniLMv2-L12-H384-v1` com as métricas
+reais da DA-29 (+7pp Hit@1, +4pp MRR@5, 3.5x mais rápido que L-12 FP32).

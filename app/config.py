@@ -163,7 +163,9 @@ class Settings(BaseSettings):
     apim_analytics_url: str = ""
 
     # Web search fallback (v1.1+)
-    web_search_enabled: bool = True
+    web_search_enabled: bool = (
+        False  # opt-in explícito — evita exfiltração de dados do incidente para a web
+    )
     web_search_threshold: float = 0.6
 
     # Avaliacao externa (nova revisao, P1 - "Agente ReAct pode vazar

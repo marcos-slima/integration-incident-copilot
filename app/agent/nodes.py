@@ -346,7 +346,10 @@ Dados coletados diretamente do sistema SAP (via conector {data.source_system}{" 
   detalhe bruto: {safe_raw}{fallback_warning}
 """
 
-    graph_block = format_graph_context_for_prompt(state.get("graph_history", []))
+    _raw_graph_block = format_graph_context_for_prompt(state.get("graph_history", []))
+    graph_block = (
+        sanitize_untrusted_input(_raw_graph_block, "graph_context") if _raw_graph_block else ""
+    )
 
     extras = ""
     if state.get("logs"):
@@ -550,6 +553,20 @@ def _apply_confidence_guardrails(diagnosis: dict, state: CopilotState) -> dict:
                 f"[confianca limitada - nenhum documento relevante encontrado] "
                 f"{diagnosis.get('probable_root_cause', '')}"
             )
+
+    # Valida matched_source contra as fontes realmente recuperadas
+    # Impede que o LLM invente ou alucine um nome de documento
+    retrieved = state.get("retrieved_context") or []
+    valid_sources = {h["source"] for h in retrieved if h.get("source")}
+    claimed_source = diagnosis.get("matched_source")
+    if claimed_source and valid_sources and claimed_source not in valid_sources:
+        diagnosis["matched_source"] = None
+        diagnosis["confidence"] = min(diagnosis["confidence"], 0.3)
+        diagnosis["probable_root_cause"] = (
+            f"[matched_source '{claimed_source}' nao esta entre os documentos recuperados - "
+            f"confianca limitada] "
+            f"{diagnosis.get('probable_root_cause', '')}"
+        )
 
     return diagnosis
 

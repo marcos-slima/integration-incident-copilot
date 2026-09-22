@@ -220,7 +220,7 @@ if __name__ == "__main__":
     parser.add_argument("description", nargs="*", default=[])
     parser.add_argument(
         "--interface",
-        choices=["odata", "rfc", "servicenow", "salesforce", "workday", "ariba"],
+        choices=["odata", "rfc", "servicenow", "salesforce", "workday", "ariba", "cap", "apim"],
         default=None,
     )
     parser.add_argument("--id", dest="identifier", default=None)

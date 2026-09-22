@@ -204,7 +204,11 @@ def probe_vector_size(embeddings: OllamaEmbeddings) -> int:
 
 
 def ensure_collection(
-    client: QdrantClient, collection_name: str, vector_size: int, hybrid: bool
+    client: QdrantClient,
+    collection_name: str,
+    vector_size: int,
+    hybrid: bool,
+    allow_recreate: bool = False,
 ) -> None:
     """Cria a collection se nao existir. Se existir com schema
     incompativel (ex: vetor unico antigo, sem suporte a hybrid),
@@ -231,8 +235,14 @@ def ensure_collection(
             needs_recreate = True
         if needs_recreate:
             expected_schema = "hybrid (dense + sparse)" if hybrid else "dense-only"
+            if not allow_recreate:
+                raise RuntimeError(
+                    f"Collection '{collection_name}' tem schema incompativel com {expected_schema}. "
+                    f"Execute novamente com --reset-collection para recriar do zero "
+                    f"(atenção: todos os dados indexados serão perdidos)."
+                )
             print(
-                f"Collection '{collection_name}' tem schema incompativel com {expected_schema} - recriando."
+                f"Collection '{collection_name}' tem schema incompativel com {expected_schema} - recriando (--reset-collection ativo)."
             )
             client.delete_collection(collection_name)
             existing.remove(collection_name)
@@ -250,6 +260,22 @@ def ensure_collection(
                 vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
             )
         print(f"Collection '{collection_name}' criada ({'hybrid' if hybrid else 'dense-only'}).")
+        # Payload indexes para campos usados em filtros — melhora performance
+        # à medida que a collection cresce (Qdrant docs: payload indexes).
+        for field_name, field_schema in [
+            ("source", "keyword"),
+            ("document_id", "keyword"),
+            ("category", "keyword"),
+            ("file_hash", "keyword"),
+        ]:
+            try:
+                client.create_payload_index(
+                    collection_name=collection_name,
+                    field_name=field_name,
+                    field_schema=field_schema,
+                )
+            except Exception:  # noqa: BLE001
+                pass  # índice já existe ou versão do Qdrant não suporta — não crítico
 
 
 def deterministic_point_id(document_id: str, chunk_index: int) -> str:
@@ -372,7 +398,9 @@ def run_ingest(
         chunk_size=cfg["chunk_size"], chunk_overlap=cfg["chunk_overlap"]
     )
     vector_size = probe_vector_size(embeddings)
-    ensure_collection(client, cfg["collection"], vector_size, cfg["hybrid"])
+    ensure_collection(
+        client, cfg["collection"], vector_size, cfg["hybrid"], allow_recreate=reset_collection
+    )
 
     # Carrega o BM25 antes do paralelismo; o acesso posterior e somente para
     # gerar vetores, nao para inicializar/downloadar o modelo em varias threads.

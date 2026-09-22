@@ -204,7 +204,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="SAP Integration Copilot",
     description="Assistente de IA para diagnostico de incidentes de integracao SAP",
-    version="0.1.0",
+    version="1.2.0",
     lifespan=lifespan,
 )
 

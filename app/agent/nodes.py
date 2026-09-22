@@ -28,6 +28,7 @@ from app.agent.state import CopilotState, DiagnosisModel
 from app.connectors import get_connector
 from app.llm.factory import TRANSPORT_FAILURE_EXCEPTIONS
 from app.llm.gateway import invoke_via_gateway
+from app.agent.rules import match_known_error
 from app.rag.graph_store import (
     GRAPH_UNAVAILABLE_EXCEPTIONS,
     format_graph_context_for_prompt,
@@ -696,6 +697,24 @@ _ENTERPRISE_SPECIALIST_PERSONA = (
 
 def _run_diagnosis_agent(state: CopilotState, persona: str) -> dict:
     model_name = state.get("llm_model") or settings.llm_model
+
+    # DA-33: Rule Engine deterministico — camada zero de custo.
+    # Avaliada ANTES de qualquer chamada ao LLM. Combina a descricao
+    # textual com a mensagem do conector (se disponivel) para maximizar
+    # a cobertura de padroes. Se bater com uma regra conhecida, devolve
+    # o diagnostico diretamente sem chamar o LLM (sem consumo de tokens,
+    # sem latencia do modelo).
+    if settings.rule_engine_enabled:
+        _connector_msg = ""
+        _cd = state.get("connector_data")
+        if _cd and _cd.message:
+            _connector_msg = f" {_cd.message}"
+        _rule_text = (state.get("description") or "") + _connector_msg
+        _rule_match = match_known_error(_rule_text)
+        if _rule_match:
+            _rule_match = _apply_confidence_guardrails(_rule_match, state)
+            return _rule_match
+
     prompt = _build_diagnosis_prompt(state, persona)
 
     if state.get("debug"):

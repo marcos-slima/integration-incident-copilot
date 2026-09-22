@@ -7,6 +7,7 @@ Instrumentado com Langfuse via @observe.
 import json
 import logging
 import os
+import re
 import re as re_module
 from uuid import uuid4
 
@@ -293,10 +294,69 @@ def sanitize_untrusted_input(text: str | None, field_name: str = "input") -> str
     return redact_pii_text(sanitized)
 
 
-def _truncate(text: str, limit: int) -> str:
+# Linhas de excecao relevantes em stack traces SAP/Java/Groovy/XSLT —
+# capturar essas linhas antes de truncar garante que o LLM veja o que
+# importa mesmo quando o log e grande. Ordem importa: as linhas mais
+# especificas (SAP fault, HTTP status, iFlow) ficam primeiro.
+_EXCEPTION_LINE_RE = re.compile(
+    r"^.*(?:"
+    r"Caused by|"
+    r"Exception|"
+    r"Error:|"
+    r"SAP Fault|"
+    r"SAP_BASIS_ERR|"
+    r"HTTP [45]\d{2}|"
+    r"MAPPING_FAIL|"
+    r"XSLT_PARS|"
+    r"iflow|"
+    r"Message Processing Log"
+    r").*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+_MAX_EXCEPTION_LINES = 30
+
+
+def _smart_truncate(text: str, limit: int) -> str:
+    """Truncagem inteligente para stack traces e logs de integracao SAP.
+
+    Estrategia:
+    1. Se o texto cabe no limite -> devolve inteiro.
+    2. Extrai linhas de excecao/erro relevantes (Caused by, HTTP 4xx/5xx,
+       SAP Fault, etc.) via regex — capped em _MAX_EXCEPTION_LINES.
+    3. Se o extracto relevante cabe no limite -> usa so ele, com cabecalho
+       indicando que o log foi filtrado.
+    4. Caso contrario -> trunca o extracto no limite (raro; seria um log
+       com dezenas de excecoes aninhadas).
+
+    Avaliacao externa (Fase 1 DA-30): "Estrategia de Truncagem Inteligente
+    para Stack Traces — extrair apenas as linhas relevantes de excecao
+    (Caused by, SAP Fault Details, HTTP Response Code)".
+    """
     if len(text) <= limit:
         return text
-    return text[:limit] + f"\n[...truncado - {len(text) - limit} caracteres omitidos...]"
+
+    matches = _EXCEPTION_LINE_RE.findall(text)
+    if not matches:
+        # Sem linhas de excecao reconhecidas — truncagem simples.
+        return text[:limit] + f"\n[...truncado - {len(text) - limit} chars omitidos...]"
+
+    relevant = matches[:_MAX_EXCEPTION_LINES]
+    excerpt = "\n".join(relevant)
+    header = (
+        f"[log filtrado: {len(text)} chars -> {len(relevant)}/{len(matches)} "
+        f"linhas relevantes extraidas]\n"
+    )
+    full = header + excerpt
+
+    if len(full) <= limit:
+        return full
+    return full[:limit] + f"\n[...truncado - {len(full) - limit} chars omitidos...]"
+
+
+def _truncate(text: str, limit: int) -> str:
+    """Alias de compatibilidade — delega para _smart_truncate.
+    Mantido para nao quebrar referencias existentes ao _truncate simples."""
+    return _smart_truncate(text, limit)
 
 
 def _build_diagnosis_prompt(state: CopilotState, persona: str) -> str:

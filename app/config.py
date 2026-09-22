@@ -77,6 +77,13 @@ class Settings(BaseSettings):
     # replicas Kyma).
     llm_gateway_circuit_failure_threshold: int = 3
     llm_gateway_circuit_cooldown_seconds: float = 30.0
+    # Backoff exponencial antes de abrir o circuit (DA-30): cada falha
+    # de transporte espera min(base * 2^tentativa, max) segundos antes de
+    # tentar o proximo provider. Jitter aleatorio de +/- 20% do delay
+    # calculado evita thundering herd em deploy multi-instancia.
+    # 0.0 desabilita o backoff (util em testes de velocidade).
+    llm_gateway_backoff_base_seconds: float = 0.5
+    llm_gateway_backoff_max_seconds: float = 8.0
 
     # Avaliacao externa (medio prazo, item 3): mesmo mecanismo do
     # circuit breaker do AI Gateway acima (app/circuit_breaker.py),

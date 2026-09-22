@@ -53,10 +53,42 @@ _CPF_DIGITS_RE = re.compile(r"(?<!\d)\d{11}(?!\d)")
 # tratado aqui com o mesmo mecanismo.
 _IDOC_NUMBER_RE = re.compile(r"(?<!\d)\d{16}(?!\d)")
 
+# CNPJ: formatado (12.345.678/0001-99) — 14 digitos, pontuacao obrigatoria
+# para diferenciar de outros numeros; sem pontuacao e ambiguo demais.
+_CNPJ_RE = re.compile(r"\b\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b")
+
+# Bearer token / Authorization header — captura o token em si (nao o
+# prefixo "Bearer "), para nao redigir o cabecalho inteiro (que pode
+# ser util para debug) mas proteger o valor do token.
+# Cobre: "Bearer eyJ...", "Authorization: Bearer eyJ..."
+_BEARER_TOKEN_RE = re.compile(r"(?i)(?:bearer|token)\s+([A-Za-z0-9\-_=.+/]{20,})")
+
+# Senha em XML/JSON — cobre as formas mais comuns que chegam em
+# payloads de integracao SAP:
+#   JSON: "Password": "valor", "password": "valor", "senha": "valor"
+#   XML:  <Password>valor</Password>, <password>valor</password>
+# Usa lookahead para preservar a chave/tag (util no log de debug) e
+# so substituir o valor.
+_PASSWORD_JSON_RE = re.compile(
+    r'(?i)("(?:password|senha|secret|api_?key|client_?secret)"\s*:\s*)"[^"]+"'
+)
+_PASSWORD_XML_RE = re.compile(
+    r"(?i)(<(?:password|senha|secret|apikey)>)[^<]*(</)",
+    re.IGNORECASE,
+)
+
 _REDACTION_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (_EMAIL_RE, "[EMAIL_REDACTED]"),
+    (_CNPJ_RE, "[CNPJ_REDACTED]"),
     (_CPF_FORMATTED_RE, "[CPF_REDACTED]"),
     (_IDOC_NUMBER_RE, "[IDOC_REDACTED]"),
+    # Bearer token — substitui so o valor, preserva o prefixo para
+    # que a linha "Authorization: Bearer [TOKEN_REDACTED]" ainda seja
+    # legivel no log.
+    (_BEARER_TOKEN_RE, r"[TOKEN_REDACTED]"),
+    # Senha em JSON/XML — preserva a chave/tag.
+    (_PASSWORD_JSON_RE, r'\1"[PASSWORD_REDACTED]"'),
+    (_PASSWORD_XML_RE, r"\1[PASSWORD_REDACTED]\2"),
     # CPF sem pontuacao verificado por ULTIMO e so se os 11 digitos
     # ainda nao foram consumidos por outro padrao (ex.: parte de um
     # numero de 16 digitos ja redigido acima) - ordem importa aqui.

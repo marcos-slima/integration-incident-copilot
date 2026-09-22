@@ -55,6 +55,7 @@ do projeto):
 """
 
 import logging
+import random
 import time
 from typing import Literal
 
@@ -222,6 +223,25 @@ def invoke_via_gateway(
         except TRANSPORT_FAILURE_EXCEPTIONS as exc:
             latency = time.monotonic() - started_at
             circuit_breaker.record_failure(provider, cfg.llm_gateway_circuit_failure_threshold)
+            # DA-30 — backoff exponencial com jitter antes de tentar o
+            # proximo provider. Evita bombardear um provider degradado
+            # com retentativas imediatas e reduz thundering herd em
+            # deploy multi-instancia (o jitter dispersa as janelas).
+            # base=0.0 desabilita (ex.: testes de velocidade).
+            _backoff_base = cfg.llm_gateway_backoff_base_seconds
+            if _backoff_base > 0.0:
+                _attempt = circuit_breaker._state(provider).consecutive_failures
+                _raw_delay = _backoff_base * (2 ** min(_attempt - 1, 6))
+                _capped = min(_raw_delay, cfg.llm_gateway_backoff_max_seconds)
+                _jitter = _capped * random.uniform(-0.2, 0.2)
+                _delay = max(0.0, _capped + _jitter)
+                logger.debug(
+                    "AI Gateway backoff: provider=%s attempt=%d delay_s=%.2f",
+                    provider,
+                    _attempt,
+                    _delay,
+                )
+                time.sleep(_delay)
             logger.warning(
                 "AI Gateway audit: provider=%s sensitivity=%s status=failure "
                 "latency_s=%.2f error=%s",

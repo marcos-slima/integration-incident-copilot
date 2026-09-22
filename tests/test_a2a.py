@@ -229,3 +229,99 @@ def test_a2a_endpoint_is_rate_limited():
 
     limited = client.post("/a2a", json=payload)
     assert limited.status_code == 429
+
+
+# ── DA-30: Agent Card — protocolVersion, preferredTransport, URL absoluta ──
+
+
+def test_agent_card_has_protocol_version():
+    """DA-30: protocolVersion e obrigatorio pelo spec A2A 0.3."""
+    response = client.get("/.well-known/agent-card.json")
+    card = response.json()
+    assert card.get("protocolVersion") == "0.3.0"
+
+
+def test_agent_card_has_preferred_transport():
+    """DA-30: preferredTransport recomendado pelo spec A2A 0.3."""
+    response = client.get("/.well-known/agent-card.json")
+    card = response.json()
+    assert card.get("preferredTransport") == "JSONRPC"
+
+
+def test_agent_card_url_is_absolute_when_a2a_base_url_configured(monkeypatch):
+    """DA-30: quando A2A_BASE_URL configurado, 'url' deve ser URL absoluta."""
+    monkeypatch.setattr(
+        "app.a2a.agent_card.settings",
+        Settings(a2a_base_url="https://copilot.empresa.com"),
+    )
+    from app.a2a.agent_card import get_agent_card
+
+    card = get_agent_card()
+    assert card["url"] == "https://copilot.empresa.com/a2a"
+
+
+# ── DA-31: Task to_dict() — kind e contextId ────────────────────────────────
+
+
+def test_task_dict_has_kind_and_context_id():
+    """DA-31: kind='task' e contextId sao obrigatorios pelo spec A2A 0.3."""
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "message/send",
+        "params": {
+            "message": {
+                "parts": [{"kind": "text", "text": "erro OData"}],
+            }
+        },
+    }
+    response = client.post("/a2a", json=payload)
+    result = response.json()["result"]
+    assert result["kind"] == "task"
+    assert "contextId" in result
+    assert result["contextId"] == result["id"]
+
+
+# ── DA-32: JSON-RPC validation — corpo dict + jsonrpc=="2.0" ─────────────────
+
+
+def test_jsonrpc_rejects_non_object_body():
+    """DA-32: um array JSON valido no topo deve retornar -32600."""
+    response = client.post("/a2a", content=b"[1,2,3]", headers={"Content-Type": "application/json"})
+    body = response.json()
+    assert body["error"]["code"] == -32600
+    assert "objeto" in body["error"]["message"]
+
+
+def test_jsonrpc_rejects_missing_jsonrpc_field():
+    """DA-32: campo 'jsonrpc' ausente deve retornar -32600."""
+    payload = {"id": 1, "method": "message/send", "params": {}}
+    response = client.post("/a2a", json=payload)
+    body = response.json()
+    assert body["error"]["code"] == -32600
+    assert "'2.0'" in body["error"]["message"] or "2.0" in body["error"]["message"]
+
+
+def test_jsonrpc_rejects_wrong_version():
+    """DA-32: campo 'jsonrpc' com valor diferente de '2.0' deve retornar -32600."""
+    payload = {"jsonrpc": "1.0", "id": 1, "method": "message/send", "params": {}}
+    response = client.post("/a2a", json=payload)
+    body = response.json()
+    assert body["error"]["code"] == -32600
+
+
+# ── DA-33: async handle_message (asyncio.to_thread) ─────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_handle_message_is_awaitable():
+    """DA-33: handle_message agora e async — deve poder ser aguardado
+    sem bloquear o event loop."""
+    from app.a2a.task_manager import TaskManager
+
+    manager = TaskManager(diagnosis_fn=_stub_diagnosis)
+    task = await manager.handle_message(
+        {"parts": [{"kind": "text", "text": "erro RFC connection refused"}]}
+    )
+    assert task.state == "completed"
+    assert task.result is not None

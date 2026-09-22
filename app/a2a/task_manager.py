@@ -49,7 +49,13 @@ class A2ATask:
 
     def to_dict(self) -> dict:
         payload: dict = {
+            # DA-31: kind e contextId sao obrigatorios pelo spec A2A 0.3.
+            # contextId reutiliza o proprio task id como correlation id
+            # (este agente nao tem sessao de conversacao multi-turno, entao
+            # task id == context id e o mapeamento correto aqui).
+            "kind": "task",
             "id": self.id,
+            "contextId": self.id,
             "status": {"state": self.state},
         }
         if self.result is not None:
@@ -114,7 +120,7 @@ class TaskManager:
         self._diagnosis_fn = diagnosis_fn or run_diagnosis
         self._store = task_store if task_store is not None else get_default_task_store()
 
-    def handle_message(self, message: dict) -> A2ATask:
+    async def handle_message(self, message: dict) -> A2ATask:
         task = A2ATask(id=str(uuid4()))
         self._store.set(task)
 
@@ -130,7 +136,15 @@ class TaskManager:
         task.input_description = request.description
         self._store.set(task)
         try:
-            task.result = self._diagnosis_fn(request)
+            # DA-33: run_diagnosis e um pipeline LangGraph sincrono — chamado
+            # diretamente num async def bloquearia o event loop do FastAPI
+            # durante toda a execucao do LLM (potencialmente varios segundos).
+            # asyncio.to_thread delega para o ThreadPoolExecutor default do
+            # loop, liberando o event loop para servir outras requisicoes
+            # enquanto o diagnostico roda em background thread.
+            import asyncio
+
+            task.result = await asyncio.to_thread(self._diagnosis_fn, request)
             task.state = "completed"
         except Exception as exc:  # noqa: BLE001 - task failed e o resultado A2A esperado, nao 500
             task.state = "failed"

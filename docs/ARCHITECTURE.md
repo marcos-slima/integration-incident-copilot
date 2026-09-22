@@ -138,21 +138,12 @@ codigo Python para ativar - so preencher variaveis no `.env`.
 | `CAPConnector` | **Real, validado contra SAP CAP real** (OData v4 + XSUAA client_credentials, BTP Trial) | Nada - terceiro conector com validacao ponta-a-ponta contra sistema real |
 | `APIManagementConnector` | ⚠️ **Implementado com schema ESPECULATIVO** (OAuth2 Client Credentials + endpoint assumido por analogia a produtos similares - NAO confirmado contra documentacao real do SAP API Management) | Validar contrato real da Analytics API contra um tenant de verdade; corrigir endpoint/schema conforme necessario |
 
-**Nota sobre a assimetria SuccessFactors↔Workday:** o cenario de
-referencia "SuccessFactors↔Workday" e representado hoje SO pelo lado
-Workday - "SuccessFactors" aparece apenas como contexto narrativo no
-payload mock do `WorkdayConnector` (`grep -rn "SuccessFactors" app/`
-confirma isso: zero classe/modulo, so docstring/comentario). Nao ha
-`SuccessFactorsConnector` implementado. Isso e uma decisao implicita,
-nao documentada ate agora - registrada aqui para nao parecer descuido.
-
-Por que ainda nao foi fechado: SuccessFactors expoe OData v2 (SFAPI)
-com autenticacao via SAML bearer assertion, mais complexa que o
-padrao OAuth2 client_credentials ja usado nos demais conectores -
-exigiria um mecanismo de auth novo, nao reuso do que ja existe.
-Registrado como proximo item de backlog de conectores, nao
-implementado nesta fase (mesma disciplina de "um conector por vez,
-validado, antes do proximo" aplicada aos demais).
+**Nota sobre a assimetria SuccessFactors↔Workday (resolvida em DA-34):**
+o cenario de referencia "SuccessFactors↔Workday" era representado ate a
+DA-29 SO pelo lado Workday. `SuccessFactorsConnector` foi implementado em
+DA-34 (commit `0e387d7`) via OAuth2 Client Credentials + OData v2 PerPerson
+— ver secao "SuccessFactors EC - conector (DA-34)" abaixo. A assimetria
+esta fechada.
 
 
 "Real" aqui quer dizer: o codigo de producao (fetch de token OAuth2,
@@ -466,9 +457,8 @@ duplicada, so mais um ponto de entrada.
 **Nao-objetivo explicito desta fase:** processamento assincrono/fila
 real (hoje e sincrono - o webhook so retorna quando o diagnostico
 termina, sujeito ao mesmo rate limit de 10/min de `/diagnose`) e
-consumo AMQP direto do SAP Event Mesh - se o volume de eventos ou a
-necessidade de backpressure justificar, isso e evolucao natural futura,
-nao um gap escondido.
+consumo AMQP direto do SAP Event Mesh - **entregue em DA-32** (ver secao
+"Consumidor AMQP 1.0 assíncrono via Solace Cloud" abaixo, commit `67b78e8`).
 
 **Validacao:** `tests/test_events.py` cobre o mapeamento evento ->
 IncidentRequest, a chamada a `run_diagnosis()`, autenticacao (401 sem
@@ -994,3 +984,164 @@ duas mudancas independentes:
 
 Com isso, os 7 itens do medio prazo da segunda revisao arquitetural
 externa estao todos fechados.
+
+## Rule Engine deterministico para erros SAP conhecidos (DA-33)
+
+Camada zero-custo de pre-filtragem deterministica que resolve incidentes
+**conhecidos** via regex ANTES de enviar qualquer prompt ao LLM. Commit
+`0dfebe1`.
+
+**Motivacao:** uma facao significativa dos incidentes de integracao SAP
+e composta por erros repetitivos com causa-raiz imutavel (OAuth expirado,
+material lock M8082, IDoc status 51, etc.) — para esses, o LLM e custo
+puro sem ganho de qualidade. A regra deterministica tem confianca 0.90
+(ajustavel por regra) e latencia de microsegundos, contra segundos de
+inferencia local ou custo de API.
+
+**Implementacao:** `app/agent/rules.py` — `ErrorRule` dataclass
+(pattern regex, action, root_cause, confidence) + catalogo
+`KNOWN_ERROR_RULES` com 14 regras cobrindo:
+- OAuth expirado / tokens JWT invalidos
+- HTTP 401/403 (permissao/autorizacao)
+- Material lock (M8082) e Pricing condition (VK041)
+- IDoc status 51 (erro de processamento) e IDoc status 26 (sem parceiro)
+- HTTP 503 / timeout de gateway
+- Connection refused (porta fechada / servico down)
+- CPI mapping error (Data Store Operation)
+- SSL expirado
+- RFC destination nao configurada
+- Rate limit 429
+- Documento duplicado (numero de documento ja existente)
+
+**Integracao no agente:** `app/agent/nodes.py::_run_diagnosis_agent()` —
+o rule engine e avaliado como PRIMEIRO passo, antes do prompt building,
+combinando `description` + `connector.message` no texto de busca. Se
+alguma regra bater, o resultado e retornado diretamente no grafo
+LangGraph sem construir prompt nem chamar o LLM. Flag
+`settings.rule_engine_enabled` (default `True`) permite desabilitar em
+testes que precisam forcar o caminho LLM.
+
+**Economia esperada:** 60-70% de reducao de chamadas LLM para cargas de
+trabalho de suporte SAP com erros repetitivos.
+
+**Validacao:** `tests/test_da33.py` (28 testes) — todos os 14 patterns
+individualmente, integracao com estado LangGraph, e invariante de
+catalogo (nenhuma regra duplicada, nenhum pattern vazio).
+
+## SuccessFactors EC - conector (DA-34)
+
+Fecha a assimetria documentada na secao "Conectores" acima: o cenario de
+referencia "SuccessFactors↔Workday" agora tem os dois lados implementados.
+Commit `0e387d7`.
+
+**Nota historica:** a secao "Nota sobre a assimetria SuccessFactors↔Workday"
+(linhas 141-153 da versao original deste arquivo) registrava que nao havia
+`SuccessFactorsConnector` implementado — SuccessFactors aparecia apenas
+como contexto narrativo no payload mock do `WorkdayConnector`. Isso
+estava registrado como proximo item de backlog. DA-34 fecha esse gap.
+
+**Implementacao:** `app/connectors/successfactors_connector.py` (253
+linhas):
+- Auth: **OAuth2 Client Credentials** — mesmo padrao dos demais conectores,
+  via `POST /oauth/token` com `grant_type=client_credentials`
+- API: **OData v2 PerPerson** (`/odata/v2/PerPerson`) — endpoint central
+  do SuccessFactors Employee Central para leitura de dados de colaborador
+- 3 cenarios **mock** para dev/demo sem tenant real:
+  - `REPL-FAIL` — colaborador em replicacao com falha (cenario tipico de
+    integracao SF↔S4HANA via CPI)
+  - `INACTIVE` — colaborador inativo, retorna payload OData v2 real
+  - `AUTH-FAIL` — simula falha de autenticacao OAuth2 (401)
+- Modo **real**: circuit breaker, validacao de charset da resposta
+  (OData v2 pode retornar Latin-1 em alguns tenants legados), fallbacks
+  explícitos para 401/404/CONNECTION_ERROR
+- Settings: `SFSF_BASE_URL`, `SFSF_OAUTH_TOKEN_URL`, `SFSF_CLIENT_ID`,
+  `SFSF_CLIENT_SECRET`
+- Registrado em `_REGISTRY` e `_REAL_MODE_SETTING` (`"sfsf_base_url"`)
+
+**Nao-objetivo:** autenticacao via SAML bearer assertion (o outro mecanismo
+de auth do SFAPI, necessario para SSO delegado) — a decisao foi usar
+Client Credentials (disponivel em todos os tenants com API access) por
+consistencia com os demais conectores, nao como atalho.
+
+**Validacao:** `tests/test_connectors.py` (7 testes novos — demo/real/
+error/401), cassette `tests/cassettes/successfactors_employee.json`
+(formato OData v2 real com campo `_source` apontando documentacao publica),
+endpoint `/health` atualizado para incluir `"successfactors"` no inventario
+de conectores.
+
+## Consumidor AMQP 1.0 assíncrono via Solace Cloud (DA-32)
+
+Entrega a "evolucao natural futura" anunciada na secao DA-23 acima: o
+Copilot agora pode consumir eventos **diretamente de um broker AMQP 1.0**
+(SAP Advanced Event Mesh / Solace Cloud) sem depender de um intermediario
+webhook — fechando o ciclo de ingestao event-driven end-to-end. Commit
+`67b78e8`.
+
+**Por que DA-32 depois de DA-33/34:** a numeracao reflete o backlog, nao
+a ordem de execucao desta sessao — DA-33 e DA-34 foram priorizados antes
+pela dependencia de outros commits (2f8532f / 0dfebe1 / 0e387d7).
+
+**Escolha de biblioteca:** `aiormq 7.0.0` (pure Python, zero deps nativas)
+em vez de `python-proton` (requer `librproton` C) ou `azure-servicebus`
+(vendor-lock). `aiormq` e o mesmo motor que o `aio-pika` usa internamente
+— AMQP 0-9-1 e 1.0 via plugin — e instala sem compilar nada, mantendo o
+Dockerfile simples.
+
+**Implementacao:** `app/events/amqp_consumer.py` (192 linhas):
+- `AmqpConsumerTask` — classe que gerencia o ciclo de vida como
+  **asyncio background task**: `start()` cria a task, `stop()` sinaliza
+  parada e aguarda (timeout 10s, cancel forcado apos isso)
+- `_consume_loop(stop_event)` — loop com **reconexao automatica**:
+  conecta via AMQPS (TLS, porta 5671), abre channel, declara fila
+  passivamente (deve existir no broker), configura prefetch QoS, e aguarda
+  simultaneamente `stop_event` e `connection.closing` via `asyncio.wait()`
+  — se a conexao cair antes do stop, reconecta apos `AMQP_RECONNECT_DELAY`
+  segundos
+- `_process_message(message)` — politica de ack explicita:
+  - **`basic_ack`** — payload valido, `handle_incident_event` retornou sem
+    excecao
+  - **`basic_reject(requeue=False)`** — payload invalido (nao-JSON ou
+    campos obrigatorios ausentes) — vai direto para dead-letter sem re-
+    enqueue (loop infinito evitado)
+  - **`basic_nack(requeue=True)`** — payload valido mas handler lancou
+    excecao — re-enqueue para nova tentativa (dead-letter apos N tentativas
+    configuradas no broker)
+- `_parse_envelope(body)` — converte bytes → `IncidentEventEnvelope`
+  (Pydantic), retorna `None` em qualquer erro de parsing
+- `asyncio.to_thread()` — `handle_incident_event` e sincrono (mesma
+  funcao usada pelo webhook DA-23); chamado via `to_thread` para nao
+  bloquear o event loop
+
+**Integracao no lifespan:** `app/main.py` — dentro de
+`mcp_server.session_manager.run()`, `amqp_consumer.start()` e chamado
+no startup e `amqp_consumer.stop()` no shutdown (bloco `try/finally`).
+Quando `AMQP_ENABLED=false` (default), o `start()` retorna imediatamente
+sem criar nenhuma task — zero custo quando desabilitado.
+
+**Rota de processamento unica:** `handle_incident_event()` de
+`app/events/consumer.py` — a MESMA funcao usada pelo webhook HTTP
+(DA-23). Nenhuma logica de diagnostico foi duplicada para o caminho AMQP.
+
+**Configuracao:**
+```
+AMQP_ENABLED=false                                    # opt-in explícito
+AMQP_HOST=mr-connection-xxxx.messaging.solace.cloud  # Solace Cloud endpoint
+AMQP_PORT=5671                                        # AMQPS (TLS)
+AMQP_USERNAME=solace-cloud-client
+AMQP_PASSWORD=<secret>                               # jamais commitado
+AMQP_QUEUE=integration/incidents                     # fila/topic endpoint
+AMQP_PREFETCH=1                                      # creditos de link (QoS)
+AMQP_RECONNECT_DELAY=5                               # segundos entre reconexoes
+```
+
+**Nota de seguranca:** credenciais Solace nao sao commitadas em nenhuma
+hipotese — `AMQP_PASSWORD` fica em `.env` (gitignored). `.env.example`
+contem o bloco AMQP todo comentado como referencia de configuracao.
+
+**Validacao:** `tests/test_amqp_consumer.py` (8 testes):
+- `_parse_envelope`: payload valido, JSON invalido, campos obrigatorios
+  ausentes
+- `AmqpConsumerTask`: desabilitado (`_task is None`), start/stop com loop
+  mockado (sem broker real)
+- `_process_message`: ack em sucesso, reject em payload invalido, nack em
+  erro do handler

@@ -21,6 +21,8 @@ from app.config import settings
 
 AGENT_CARD: dict = {
     "name": "SAP Integration Copilot",
+    # DA-30: protocolVersion obrigatorio pelo spec A2A 0.3.
+    "protocolVersion": "0.3.0",
     "description": (
         "Agente de diagnostico de incidentes de integracao - correlaciona "
         "dados de sistemas SAP (OData/CPI, RFC/IDoc) e nao-SAP (ServiceNow, "
@@ -28,11 +30,17 @@ AGENT_CARD: dict = {
         "para propor causa raiz provavel e proximos passos."
     ),
     "version": "0.1.0",
+    # DA-30: url relativa (/a2a) nao e um URL absoluto valido pelo spec;
+    # get_agent_card() resolve para URL absoluta a partir de A2A_BASE_URL.
+    # Mantida aqui como fallback para testes unitarios que nao configuram
+    # A2A_BASE_URL.
     "url": "/a2a",
     "capabilities": {
         "streaming": False,
         "pushNotifications": False,
     },
+    # DA-30: preferredTransport recomendado pelo spec A2A 0.3.
+    "preferredTransport": "JSONRPC",
     "defaultInputModes": ["text/plain", "application/json"],
     "defaultOutputModes": ["text/markdown"],
     "skills": [
@@ -74,6 +82,13 @@ def get_agent_card() -> dict:
     segredo no card publico) - so controla o header exigido nas
     chamadas ao endpoint JSON-RPC, ver app/a2a/server.py."""
     card = dict(AGENT_CARD)
+    # DA-30: resolve URL absoluta para o campo "url" do card — o spec
+    # A2A 0.3 exige URL absoluta, nao um path relativo. Usa A2A_BASE_URL
+    # quando configurado (ex: "https://copilot.empresa.com"), senao
+    # mantém o path relativo do AGENT_CARD como fallback seguro para
+    # ambientes de desenvolvimento/teste.
+    if settings.a2a_base_url:
+        card["url"] = settings.a2a_base_url.rstrip("/") + "/a2a"
     card["securitySchemes"] = (
         {
             "apiKeyAuth": {

@@ -60,6 +60,24 @@ async def handle_jsonrpc(
     except Exception:  # noqa: BLE001
         return JSONResponse(_jsonrpc_error(None, -32700, "Parse error: corpo nao e JSON valido"))
 
+    # DA-32: JSON valido mas nao e um objeto/dict (ex: array, numero) —
+    # request.json() aceita qualquer JSON, mas JSON-RPC 2.0 exige objeto.
+    # Sem essa checagem body.get("id") lancaría AttributeError.
+    if not isinstance(body, dict):
+        return JSONResponse(
+            _jsonrpc_error(None, -32600, "Invalid Request: corpo deve ser um objeto JSON")
+        )
+
+    # DA-32: "jsonrpc" == "2.0" e obrigatorio pelo spec JSON-RPC 2.0.
+    if body.get("jsonrpc") != "2.0":
+        return JSONResponse(
+            _jsonrpc_error(
+                body.get("id"),
+                -32600,
+                "Invalid Request: campo 'jsonrpc' deve ser '2.0'",
+            )
+        )
+
     request_id = body.get("id")
 
     if not _check_auth(x_a2a_api_key):
@@ -77,7 +95,7 @@ async def handle_jsonrpc(
             return JSONResponse(
                 _jsonrpc_error(request_id, -32602, "Invalid params: 'message' e obrigatorio")
             )
-        task = task_manager.handle_message(message)
+        task = await task_manager.handle_message(message)
         return JSONResponse(_jsonrpc_result(request_id, task.to_dict()))
 
     if method == "tasks/get":

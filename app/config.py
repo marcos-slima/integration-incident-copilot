@@ -241,6 +241,12 @@ class Settings(BaseSettings):
     # significa "sem chave fixa configurada pelo operador".
     a2a_api_key: str = ""
 
+    # DA-30: URL base publica deste agente, usada para montar a URL
+    # absoluta no Agent Card (spec A2A 0.3 exige URL absoluta, nao
+    # path relativo). Ex: "https://copilot.empresa.com". Vazio (default)
+    # mantém o path relativo "/a2a" no card — ok para desenvolvimento.
+    a2a_base_url: str = ""
+
     # Event Mesh (DA-23) - ingestao orientada a evento: POST
     # /events/incident recebe um envelope CloudEvents (formato usado
     # pelo SAP Event Mesh em modo REST/Webhook push subscription) e

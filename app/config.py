@@ -281,6 +281,18 @@ class Settings(BaseSettings):
     # chave aleatoria no startup se continuar vazia.
     event_mesh_api_key: str = ""
 
+    # AMQP 1.0 — Solace Cloud / SAP Advanced Event Mesh (DA-32)
+    # Consumidor assíncrono de eventos de incidente via fila AMQP.
+    # AMQP_ENABLED=false desabilita sem remover a dependência aiormq.
+    amqp_enabled: bool = False
+    amqp_host: str = ""
+    amqp_port: int = 5671
+    amqp_username: str = ""
+    amqp_password: str = ""
+    amqp_queue: str = "integration/incidents"
+    amqp_prefetch: int = 1
+    amqp_reconnect_delay: int = 5
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

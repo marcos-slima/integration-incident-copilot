@@ -12,6 +12,7 @@ confianca ja usada por score_threshold, guardrails e pelos testes
 existentes (calibrados para cosseno, nao para escala RRF).
 """
 
+import logging
 from functools import lru_cache
 
 import numpy as np
@@ -22,6 +23,8 @@ from qdrant_client.models import Fusion, FusionQuery, Prefetch, SparseVector
 from sentence_transformers import CrossEncoder
 
 from app.config import settings
+
+_logger = logging.getLogger(__name__)
 
 EMBEDDING_MODEL = settings.embedding_model
 SPARSE_MODEL_NAME = "Qdrant/bm25"
@@ -303,8 +306,14 @@ def _retrieve_unified(
                         REFERENCE_FALLBACK_THRESHOLD,
                     )
                 )
-        except (ValueError, RuntimeError):
-            pass
+        except (ValueError, RuntimeError) as _ref_err:
+            # Distingue falha de infra (Qdrant inacessivel) de colecao vazia:
+            # sem log, o diagnóstico parece correto quando na verdade o retrieval falhou.
+            _logger.warning(
+                "[retriever] sap_reference_library indisponivel — "
+                "continuando sem contexto de referencia: %s",
+                _ref_err,
+            )
 
     # Funde por score (cosseno denso ja normalizado 0-1)
     # Remove duplicatas por source+text, mantendo o maior score

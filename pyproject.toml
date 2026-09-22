@@ -44,19 +44,6 @@ dependencies = [
     "rq>=2.12.0",
 ]
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=8.3",
-    "pytest-asyncio>=0.24",
-    "ruff>=0.7",
-    # DA-29: usados so por scripts/benchmark_rerankers.py (RSS do
-    # processo + limpeza do cache local do HF Hub entre modelos) - ja
-    # vinham transitivamente via sentence-transformers/transformers,
-    # mas declarados aqui explicitamente porque o script depende deles
-    # diretamente (import direto), nao so de forma incidental.
-    "psutil>=7.2",
-    "huggingface-hub>=0.30",
-]
 # Opcional: so necessario se LLM_PROVIDER=openai ou azure_openai no
 # .env (default e "ollama", que nao precisa disso). Mantido fora das
 # dependencias principais de proposito - o caminho local-first nao
@@ -79,8 +66,11 @@ build-backend = "hatchling.build"
 dev = [
     "debugpy>=1.8.21",
     "httpx>=0.28.1",
+    # DA-29: usados so por scripts/benchmark_rerankers.py
+    "huggingface-hub>=0.30",
     "langchain-openai>=1.6.0",
     "pre-commit>=4.6.1",
+    "psutil>=7.2",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "ruff>=0.16.1",

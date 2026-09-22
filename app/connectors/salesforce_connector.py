@@ -91,9 +91,14 @@ class SalesforceConnector(ExternalSystemConnector):
         if (invalid := validate_identifier_charset(identifier, "Salesforce")) is not None:
             return invalid
         client = self._injected_client or httpx.Client(timeout=self.timeout)
+        # A REST API do Salesforce nao suporta bind variables no SOQL — a query
+        # e sempre interpolada. validate_identifier_charset (acima) bloqueia
+        # caracteres perigosos, mas escapamos apostrofos explicitamente como
+        # defesa em profundidade (o escape canonico do SOQL e duplicar a apostrofe).
+        safe_identifier = identifier.replace("'", "''")
         soql = (
-            f"SELECT CaseNumber, Priority, Subject, Status, Origin FROM Case "
-            f"WHERE CaseNumber = '{identifier}' LIMIT 1"
+            "SELECT CaseNumber, Priority, Subject, Status, Origin FROM Case "
+            f"WHERE CaseNumber = '{safe_identifier}' LIMIT 1"
         )
         try:
             token = self._get_access_token(client)

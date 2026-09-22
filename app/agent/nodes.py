@@ -36,6 +36,21 @@ from app.rag.graph_store import (
 from app.rag.retriever import retrieve
 from app.redaction import redact_pii_deep, redact_pii_text
 
+# Mapeamento de interface_type para fontes de busca web — compartilhado entre
+# web_search_node (fallback do grafo) e _make_web_search_tool (ReAct tool).
+# Centralizado aqui para evitar duplicidade e garantir consistência.
+_WEB_SEARCH_SITE_MAP: dict[str, str] = {
+    "odata": "site:help.sap.com OR site:community.sap.com/t5/technology-blogs-by-sap",
+    "rfc": "site:help.sap.com/docs/SAP_NETWEAVER OR site:community.sap.com OR site:github.com/SAP/PyRFC",
+    "cap": "site:cap.cloud.sap OR site:github.com/SAP/cloud-cap-samples OR site:community.sap.com",
+    "servicenow": "site:developer.servicenow.com OR site:community.sap.com OR site:help.sap.com",
+    "salesforce": "site:developer.salesforce.com OR site:community.sap.com OR site:github.com/SAP",
+    "workday": "site:community.workday.com OR site:community.sap.com",
+    "ariba": "site:help.sap.com/docs/ARIBA OR site:community.sap.com",
+    "apim": "site:help.sap.com/docs/SAP_API_MANAGEMENT OR site:community.sap.com",
+}
+_WEB_SEARCH_SITE_MAP_DEFAULT = "site:community.sap.com OR site:github.com/SAP OR site:help.sap.com"
+
 # Avaliacao externa (medio prazo, item 4): inicializa o client Langfuse
 # EXPLICITAMENTE com mask=redact_pii_deep, ANTES de qualquer
 # CallbackHandler()/@observe rodar - "get_client()" so cria o client
@@ -162,22 +177,7 @@ def web_search_node(state: CopilotState) -> CopilotState:
     description = state["description"]
     interface_type = state.get("interface_type", "")
 
-    # Mapeamento de interface_type para fontes mais relevantes —
-    # cada protocolo tem documentacao e comunidade especifica.
-    # Fallback generico cobre casos sem interface_type definido.
-    SITE_MAP = {
-        "odata": "site:help.sap.com OR site:community.sap.com/t5/technology-blogs-by-sap",
-        "rfc": "site:help.sap.com/docs/SAP_NETWEAVER OR site:community.sap.com OR site:github.com/SAP/PyRFC",
-        "cap": "site:cap.cloud.sap OR site:github.com/SAP/cloud-cap-samples OR site:community.sap.com",
-        "servicenow": "site:developer.servicenow.com OR site:community.sap.com OR site:help.sap.com",
-        "salesforce": "site:developer.salesforce.com OR site:community.sap.com OR site:github.com/SAP",
-        "workday": "site:community.workday.com OR site:community.sap.com",
-        "ariba": "site:help.sap.com/docs/ARIBA OR site:community.sap.com",
-        "apim": "site:help.sap.com/docs/SAP_API_MANAGEMENT OR site:community.sap.com",
-    }
-    site_filter = SITE_MAP.get(
-        interface_type, "site:community.sap.com OR site:github.com/SAP OR site:help.sap.com"
-    )
+    site_filter = _WEB_SEARCH_SITE_MAP.get(interface_type, _WEB_SEARCH_SITE_MAP_DEFAULT)
     tech_term = {
         "odata": "OData SAP Gateway",
         "rfc": "RFC ABAP BAPI",
@@ -575,17 +575,7 @@ def _make_web_search_tool(state):
     """Fabrica um tool de busca web contextualizado com o interface_type
     do incidente — o agente ReAct decide quando chamar."""
     interface_type = state.get("interface_type") or ""
-    SITE_MAP = {
-        "odata": "site:help.sap.com OR site:community.sap.com",
-        "rfc": "site:help.sap.com/docs/SAP_NETWEAVER OR site:community.sap.com OR site:github.com/SAP",
-        "cap": "site:cap.cloud.sap OR site:github.com/SAP/cloud-cap-samples OR site:community.sap.com",
-        "servicenow": "site:developer.servicenow.com OR site:community.sap.com",
-        "salesforce": "site:developer.salesforce.com OR site:community.sap.com",
-        "workday": "site:community.workday.com OR site:community.sap.com",
-        "ariba": "site:help.sap.com/docs/ARIBA OR site:community.sap.com",
-        "apim": "site:help.sap.com/docs/SAP_API_MANAGEMENT OR site:community.sap.com",
-    }
-    site_filter = SITE_MAP.get(interface_type, "site:community.sap.com OR site:help.sap.com")
+    site_filter = _WEB_SEARCH_SITE_MAP.get(interface_type, _WEB_SEARCH_SITE_MAP_DEFAULT)
 
     @lc_tool
     def web_search_tool(query: str) -> str:

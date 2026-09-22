@@ -102,3 +102,38 @@ def test_run_diagnosis_agent_sets_recursion_limit_on_react_agent_invoke(monkeypa
     assert len(_FakeReactAgent.captured_configs) == 1
     config = _FakeReactAgent.captured_configs[0]
     assert config["recursion_limit"] == 8
+
+
+def test_run_diagnosis_agent_does_not_pass_web_tool_when_web_search_disabled(monkeypatch):
+    """DA-29: com WEB_SEARCH_ENABLED=false o agente ReAct nao deve receber
+    o tool de busca web — antes tools=[web_tool] era passado sempre."""
+    import app.agent.nodes as nodes_module
+    from app.config import Settings
+
+    captured_tools: list = []
+
+    class _CapturingReactAgent:
+        def invoke(self, messages, config=None):
+            return {
+                "messages": [
+                    _FakeMessage(
+                        '{"matched_source": null, "probable_root_cause": "x", '
+                        '"confidence": 0.5, "next_steps": []}'
+                    )
+                ]
+            }
+
+    def _capturing_create_react_agent(llm, tools=None, **kwargs):
+        captured_tools.extend(tools or [])
+        return _CapturingReactAgent()
+
+    monkeypatch.setattr(nodes_module, "create_react_agent", _capturing_create_react_agent)
+    monkeypatch.setattr(nodes_module, "invoke_via_gateway", _fake_invoke_via_gateway)
+    monkeypatch.setattr(nodes_module, "_build_diagnosis_prompt", lambda state, persona: "p")
+    monkeypatch.setattr(nodes_module, "settings", Settings(web_search_enabled=False))
+
+    _run_diagnosis_agent({"description": "x", "retrieved_context": []}, "persona")
+
+    assert (
+        captured_tools == []
+    ), "Quando web_search_enabled=False, o ReAct agent nao deve receber nenhum tool"

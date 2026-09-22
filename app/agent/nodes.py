@@ -640,7 +640,14 @@ def _run_diagnosis_agent(state: CopilotState, persona: str) -> dict:
 
     # v1.3 - agente ReAct: o modelo decide autonomamente quando e
     # quantas vezes buscar na web antes de retornar o diagnostico.
+    # DA-29: WEB_SEARCH_ENABLED=false nao desativava o web_search_tool
+    # do agente ReAct — so desativava o web_search_NODE do grafo (passe
+    # pre-retrieval). O agente ReAct e uma segunda via de busca web que
+    # tambem precisa respeitar a flag. tools=[] quando desabilitado garante
+    # que o LLM nao tenha o tool disponivel independente de instrucao de
+    # prompt (enforcement de codigo, nao de prompt).
     web_tool = _make_web_search_tool(state)
+    react_tools = [web_tool] if settings.web_search_enabled else []
     # Instrucao adicional para forcar JSON na resposta final do agente ReAct
     json_instruction = """
 
@@ -664,7 +671,7 @@ um JSON valido com exatamente esta estrutura (sem texto adicional antes ou depoi
         # parsing por regex abaixo (_extract_diagnosis_from_raw_message)
         # deixa de ser o caminho principal e vira o ULTIMO fallback, so
         # usado quando structured_response nao vem preenchido.
-        react_agent = create_react_agent(llm, tools=[web_tool], response_format=DiagnosisModel)
+        react_agent = create_react_agent(llm, tools=react_tools, response_format=DiagnosisModel)
         messages = {"messages": [{"role": "user", "content": prompt + json_instruction}]}
         config = {
             "callbacks": [_langfuse_handler],
@@ -694,7 +701,7 @@ um JSON valido com exatamente esta estrutura (sem texto adicional antes ou depoi
                 "refazendo sem ele - caindo no parsing por regex: %s",
                 exc,
             )
-            react_agent_plain = create_react_agent(llm, tools=[web_tool])
+            react_agent_plain = create_react_agent(llm, tools=react_tools)
             return react_agent_plain.invoke(messages, config=config)
 
     # AI Gateway v1 (DA-26): centraliza Hybrid Inference (DA-20) +

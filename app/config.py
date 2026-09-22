@@ -85,6 +85,11 @@ class Settings(BaseSettings):
     llm_gateway_backoff_base_seconds: float = 0.5
     llm_gateway_backoff_max_seconds: float = 8.0
 
+    # DA-33: Rule Engine deterministico — avaliado ANTES do LLM para
+    # incidentes conhecidos (OAuth expirado, material lock, IDoc 51, etc.).
+    # Desabilitar so para testes que precisam forcas o caminho LLM.
+    rule_engine_enabled: bool = True
+
     # Avaliacao externa (medio prazo, item 3): mesmo mecanismo do
     # circuit breaker do AI Gateway acima (app/circuit_breaker.py),
     # agora tambem para os conectores HTTP reais (SAP OData/CAP/API

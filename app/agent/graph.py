@@ -1,8 +1,10 @@
 """Grafo LangGraph do SAP Integration Copilot.
 
 Fluxo (DA-22 - multi-agente, supervisor + especialistas):
-    supervisor -> connector -> retrieve -> web_search -> [graph_enrich]
-    -> {sap_diagnose | saas_diagnose} -> [graph_write] -> report
+    supervisor -> connector -> retrieve -> [graph_enrich] -> {sap_diagnose | saas_diagnose} -> [graph_write] -> report
+
+Busca web: realizada pelo tool do agente ReAct dentro de sap_diagnose/saas_diagnose
+    quando web_search_enabled=True e o LLM decide chamar (nao e um node separado no grafo).
 
 O supervisor (app/agent/supervisor.py) roda PRIMEIRO e decide
 deterministicamente qual sub-agente especialista trata o diagnostico
@@ -26,7 +28,6 @@ from app.agent.nodes import (
     retrieve_node,
     saas_diagnosis_node,
     sap_diagnosis_node,
-    web_search_node,
 )
 from app.agent.state import CopilotState
 from app.agent.supervisor import supervisor_node
@@ -63,7 +64,6 @@ def build_graph():
     graph.add_node("supervisor", supervisor_node)
     graph.add_node("connector", connector_node)
     graph.add_node("retrieve", retrieve_node)
-    graph.add_node("web_search", web_search_node)
     graph.add_node("sap_diagnose", sap_diagnosis_node)
     graph.add_node("saas_diagnose", saas_diagnosis_node)
     graph.add_node("report", report_node)
@@ -71,12 +71,11 @@ def build_graph():
     graph.set_entry_point("supervisor")
     graph.add_edge("supervisor", "connector")
     graph.add_edge("connector", "retrieve")
-    graph.add_edge("retrieve", "web_search")
 
     if settings.graph_rag_enabled:
         graph.add_node("graph_enrich", graph_enrich_node)
         graph.add_node("graph_write", graph_write_node)
-        graph.add_edge("web_search", "graph_enrich")
+        graph.add_edge("retrieve", "graph_enrich")
         graph.add_conditional_edges(
             "graph_enrich",
             _route_to_specialist,
@@ -87,7 +86,7 @@ def build_graph():
         graph.add_edge("graph_write", "report")
     else:
         graph.add_conditional_edges(
-            "web_search",
+            "retrieve",
             _route_to_specialist,
             {"sap_diagnose": "sap_diagnose", "saas_diagnose": "saas_diagnose"},
         )

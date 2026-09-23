@@ -43,8 +43,85 @@ jobs:
 
       - name: Pytest
         # Exclui testes marcados como integration: eles exigem Qdrant e Ollama,
-        # que não existem no runner do GitHub
-        run: uv run pytest -m "not integration" -v --tb=short
+        # que não existem no runner do GitHub.
+        # §3.10: --cov + --cov-fail-under=80 — CI falha se cobertura < 80%.
+        run: uv run pytest -m "not integration" -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=80
+
+
+  security:
+    name: security — pip-audit + bandit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # §3.10: pip-audit verifica CVEs nas dependencias; bandit faz SAST.
+    # pip-audit: continue-on-error: true para nao bloquear o CI por CVEs
+    # em dependencias transitivas sem fix disponivel.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Instalar Python
+        run: uv python install
+
+      - name: Sincronizar dependências
+        run: uv sync --dev
+
+      - name: pip-audit — CVEs nas dependências
+        continue-on-error: true
+        run: uv run pip-audit --requirement <(uv export --no-dev --format requirements-txt)
+
+      - name: bandit — SAST Python
+        run: uv run bandit -r app/ -ll -f json -o bandit-report.json || uv run bandit -r app/ -ll
+
+      - name: Upload relatórios de segurança
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+          if-no-files-found: ignore
+
+  compose-smoke:
+    name: compose smoke — API /health
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # §3.10: smoke test que sobe o stack real via docker compose.
+    # Valida que a API sobe e responde /health sem LLM (OLLAMA_HOST
+    # aponta para host inexistente — intencional, so testa o startup).
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Subir stack (api + qdrant)
+        run: docker compose up -d api qdrant
+        env:
+          LLM_PROVIDER: ollama
+          OLLAMA_HOST: http://localhost:11434
+          LLM_MODEL: qwen3-coder-next:latest
+
+      - name: Aguardar API responder /health
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/health; then
+              echo "API pronta."
+              exit 0
+            fi
+            echo "Aguardando API (tentativa $i/30)..."
+            sleep 3
+          done
+          echo "API nao respondeu a tempo." >&2
+          docker compose logs api
+          exit 1
+
+      - name: Derrubar stack
+        if: always()
+        run: docker compose down -v
 
   neo4j-smoke:
     name: smoke test GraphRAG (Neo4j real)

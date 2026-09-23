@@ -24,6 +24,7 @@ tests/test_a2a_task_store.py).
 from __future__ import annotations
 
 import json
+import logging as _logging
 from functools import lru_cache
 from typing import TYPE_CHECKING, Protocol
 
@@ -92,29 +93,55 @@ class InMemoryTaskStore:
         self._tasks[task.id] = task
 
 
+_logger = _logging.getLogger(__name__)
+
+
 class RedisTaskStore:
     """Serializa `A2ATask` (incluindo o `DiagnosisResponse` aninhado em
     `.result`, um model Pydantic) para JSON. `client` e injetavel para
     os testes usarem um fake Redis (dict + TTL simulado) sem precisar
     de um Redis real no ar - mesmo padrao de injecao de dependencia
     usado em `_get_session`/`FakeSession` (app/rag/graph_store.py) e
-    nos conectores HTTP."""
+    nos conectores HTTP.
+
+    §3.7: get/set agora capturam excecoes de conexao Redis e degradam
+    graciosamente em vez de propagar para o caller (A2A server HTTP 500).
+    get retorna None (task nao encontrada); set loga WARNING e descarta.
+    O A2A server continua operando - apenas perde persistencia enquanto
+    o Redis estiver indisponivel."""
 
     def __init__(self, client) -> None:
         self._client = client
 
     def get(self, task_id: str) -> A2ATask | None:
-        raw = self._client.get(_REDIS_KEY_PREFIX + task_id)
+        try:
+            raw = self._client.get(_REDIS_KEY_PREFIX + task_id)
+        except Exception:
+            _logger.warning(
+                "[task_store] Redis indisponivel em get(task_id=%s) — "
+                "retornando None (degradacao graciosamente)",
+                task_id,
+                exc_info=True,
+            )
+            return None
         if raw is None:
             return None
         return self._deserialize(raw)
 
     def set(self, task: A2ATask) -> None:
-        self._client.set(
-            _REDIS_KEY_PREFIX + task.id,
-            self._serialize(task),
-            ex=_REDIS_TASK_TTL_SECONDS,
-        )
+        try:
+            self._client.set(
+                _REDIS_KEY_PREFIX + task.id,
+                self._serialize(task),
+                ex=_REDIS_TASK_TTL_SECONDS,
+            )
+        except Exception:
+            _logger.warning(
+                "[task_store] Redis indisponivel em set(task_id=%s) — "
+                "task nao persistida (perdida no restart do processo)",
+                task.id,
+                exc_info=True,
+            )
 
     @staticmethod
     def _serialize(task: A2ATask) -> str:

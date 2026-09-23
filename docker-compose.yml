@@ -1,3 +1,24 @@
+# §3.8: x-common-env extrai as variaveis de ambiente compartilhadas
+# entre "api" e "worker" num anchor YAML — elimina a duplicata que
+# existia antes (as mesmas 8 vars eram listadas duas vezes). Qualquer
+# mudanca de valor agora e feita em UM so lugar.
+x-common-env: &common-env
+  LLM_PROVIDER: ollama
+  OLLAMA_HOST: http://host.docker.internal:11434
+  LLM_MODEL: ${LLM_MODEL:-qwen3-coder-next:latest}
+  EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+  QDRANT_URL: http://qdrant:6333
+  # Langfuse e opcional - sem chaves, o app roda normal, so sem
+  # tracing (ver app/config.py). Aponte para um Langfuse externo
+  # (self-hosted ou cloud) via .env se quiser observabilidade.
+  LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+  LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+  LANGFUSE_HOST: ${LANGFUSE_HOST:-}
+  # Redis e opt-in (profile "async", ver servico abaixo) - vazio
+  # por default: sem REDIS_URL, app/a2a/task_store.py cai no fallback
+  # em memoria (§3.7: degradacao graciosamente).
+  REDIS_URL: ${REDIS_URL:-}
+
 services:
   api:
     # DA-24: o "command:" que sobrescrevia o CMD do Dockerfile para
@@ -10,26 +31,14 @@ services:
     ports:
       - "8000:8000"
     environment:
-      LLM_PROVIDER: ollama
-      OLLAMA_HOST: http://host.docker.internal:11434
-      LLM_MODEL: ${LLM_MODEL:-qwen3-coder-next:latest}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
-      QDRANT_URL: http://qdrant:6333
-      # Langfuse e opcional - sem chaves, o app roda normal, so sem
-      # tracing (ver app/config.py). Aponte para um Langfuse externo
-      # (self-hosted ou cloud) via .env se quiser observabilidade.
-      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
-      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
-      LANGFUSE_HOST: ${LANGFUSE_HOST:-}
-      # Redis e opt-in (profile "async", ver servico abaixo) - vazio
-      # por default, mesmo principio das chaves do Langfuse acima:
-      # sem REDIS_URL, app/a2a/task_store.py cai no fallback em
-      # memoria, sem quebrar quem nao subiu o profile "async".
-      REDIS_URL: ${REDIS_URL:-}
+      <<: *common-env
+    # §3.8: restart: unless-stopped — reinicia automaticamente apos
+    # crash ou apos "docker compose restart", mas nao quando parado
+    # manualmente ("docker compose stop"). Evita interrupco de servico
+    # por falhas transitórias (OOM, excecao nao tratada, etc.).
+    restart: unless-stopped
     # DA-34: condition: service_healthy garante que Qdrant e Ollama
-    # estejam prontos antes da API comecar a servir requisicoes — sem
-    # isso a API subia antes do Qdrant estar pronto e as primeiras
-    # chamadas ao /diagnose falhavam com "collection not found".
+    # estejam prontos antes da API comecar a servir requisicoes.
     depends_on:
       ollama:
         condition: service_healthy
@@ -48,6 +57,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    restart: unless-stopped
     ports:
       - "11434:11434"
     volumes:
@@ -62,6 +72,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    restart: unless-stopped
     ports:
       - "${QDRANT_HOST_PORT:-6333}:6333"
     volumes:
@@ -84,6 +95,7 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+    restart: unless-stopped
     ports:
       - "7474:7474"
       - "7687:7687"
@@ -109,6 +121,13 @@ services:
   redis:
     image: redis:7.4-alpine
     profiles: ["async"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
     ports:
       - "${REDIS_HOST_PORT:-6379}:6379"
     volumes:
@@ -137,19 +156,19 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      LLM_PROVIDER: ollama
-      OLLAMA_HOST: http://host.docker.internal:11434
-      LLM_MODEL: ${LLM_MODEL:-qwen3-coder-next:latest}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
-      QDRANT_URL: http://qdrant:6333
-      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
-      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
-      LANGFUSE_HOST: ${LANGFUSE_HOST:-}
-      REDIS_URL: ${REDIS_URL:-}
+      <<: *common-env
+    restart: unless-stopped
+    # §3.8: condition: service_healthy no redis garante que o worker
+    # so sobe depois do Redis estar aceitando conexoes — sem isso, o
+    # worker RQ subia e tentava conectar ao Redis que ainda estava
+    # inicializando, falhando silenciosamente.
     depends_on:
-      - redis
-      - ollama
-      - qdrant
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
     volumes:
       - ./data/sample_docs:/app/data/sample_docs:ro
 

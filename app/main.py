@@ -5,8 +5,8 @@ import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Security, status
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Security, status
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from langfuse import get_client
@@ -20,7 +20,7 @@ from app.agent.graph import run_diagnosis
 from app.config import settings
 from app.connectors import connector_status
 from app.events.amqp_consumer import amqp_consumer  # DA-32
-from app.events.consumer import handle_incident_event
+from app.events.consumer import handle_incident_event_async
 from app.exceptions import DiagnosisTimeoutError
 from app.mcp.server import build_mcp_asgi_app
 from app.mcp.server import mcp as mcp_server
@@ -426,28 +426,35 @@ def diagnose_async_status(job_id: str) -> dict[str, object]:
 
 @app.post(
     "/events/incident",
-    response_model=DiagnosisResponse,
+    status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(verify_event_mesh_api_key)],
 )
 @limiter.limit("10/minute")
-def incident_event_webhook(request: Request, envelope: IncidentEventEnvelope) -> DiagnosisResponse:
+def incident_event_webhook(
+    request: Request,
+    envelope: IncidentEventEnvelope,
+    background_tasks: BackgroundTasks,
+) -> Response:
     """DA-23 (Event Mesh) - ingestao orientada a evento: recebe um
     envelope CloudEvents (formato usado pelo SAP Event Mesh em modo
     REST/Webhook push subscription) representando uma falha de
     integracao detectada por um sistema de monitoracao externo, e
-    dispara run_diagnosis() automaticamente - sem chamada manual a
+    dispara run_diagnosis() em background - sem chamada manual a
     /diagnose. So `type == "com.sap.integration.incident.detected.v1"`
     e aceito hoje; qualquer outro valor e rejeitado com 422 (ver
     IncidentEventEnvelope em app/models.py).
 
-    Rate limit: 10 requisicoes por minuto por IP (mesma politica de
-    /diagnose - uma fila real de eventos, se o volume justificar,
-    trocaria isso por backpressure/processamento assincrono; nao e o
-    caso hoje, escopo deliberadamente fora desta fase).
+    §3.4: responde 202 Accepted imediatamente, sem bloquear o
+    publicador enquanto o LLM raciocina. O diagnostico roda em
+    background (BackgroundTasks do FastAPI). Idempotencia por
+    cloudevents.id e DLQ de log em app/events/consumer.py.
+
+    Rate limit: 10 requisicoes por minuto por IP.
     Autenticacao: X-Event-Mesh-Api-Key header, chave dedicada e isolada
     de API_KEY/A2A_API_KEY.
     """
-    return handle_incident_event(envelope)
+    handle_incident_event_async(envelope, background_tasks)
+    return Response(status_code=status.HTTP_202_ACCEPTED)
 
 
 @app.post(

@@ -19,6 +19,7 @@ explicavel e 100% testavel sem depender de LLM real.
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 from app.agent.state import CopilotState
@@ -38,8 +39,15 @@ _SAAS_INTERFACE_TYPES = {"servicenow", "salesforce", "workday", "ariba"}
 # DA-22 fix: lista expandida para cobrir vocabulario SAP alternativo
 # que aparece quando interface_type nao vem preenchido. Termos ordenados
 # do mais especifico (sem ambiguidade) para o mais generico.
+#
+# §3.5: "sap" foi removido desta tupla e tratado separadamente com
+# word boundary (\bsap\b). Sem o boundary, "sap" como substring
+# disparava falsos positivos em palavras portuguesas comuns:
+#   "sapato", "sapiens", "sapphire", "sapatilha", "desapareceu",
+#   "desapropriado", etc. Os demais termos da lista sao suficientemente
+# especificos para nao ter esse problema (ex.: "iflow", "idoc",
+# "s/4hana" nao aparecem em palavras portuguesas aleatorias).
 _SAP_KEYWORDS = (
-    "sap",
     "iflow",
     "idoc",
     "cpi",
@@ -65,6 +73,11 @@ _SAP_KEYWORDS = (
     "ariba",
 )
 
+# Padrao com word boundary para "sap" — evita falsos positivos em
+# palavras portuguesas que contem "sap" como substrings
+# (sapato, sapiens, desapareceu, etc.).
+_SAP_WORD_RE = re.compile(r"\bsap\b")
+
 
 def classify_domain(state: CopilotState) -> AgentDomain:
     """Decide qual sub-agente especialista deve tratar o incidente.
@@ -80,7 +93,9 @@ def classify_domain(state: CopilotState) -> AgentDomain:
         return "saas"
 
     description = (state.get("description") or "").lower()
-    if any(keyword in description for keyword in _SAP_KEYWORDS):
+    # §3.5: "sap" verificado com word boundary; demais keywords por
+    # substring (sao especificos o suficiente para nao ter ambiguidade).
+    if _SAP_WORD_RE.search(description) or any(keyword in description for keyword in _SAP_KEYWORDS):
         return "sap"
 
     return "generic"

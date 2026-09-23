@@ -142,7 +142,7 @@ def graph_write_node(state: CopilotState) -> CopilotState:
             identifier=state.get("identifier"),
             source_system=data.source_system if data else None,
             root_cause=diagnosis.get("probable_root_cause", ""),
-            confidence=float(diagnosis.get("confidence", 0.0)),
+            confidence=float(diagnosis.get("model_confidence", diagnosis.get("confidence", 0.0))),
             matched_document=diagnosis.get("matched_source"),
             evidence_strength=float(diagnosis.get("evidence_strength", 0.0)),
         )
@@ -162,21 +162,32 @@ def web_search_node(state: CopilotState) -> CopilotState:
     ou nenhum hit). Direciona a busca para SAP Community e GitHub SAP
     para resultados mais relevantes ao contexto SAP/integracao.
 
-    Privacidade: usa apenas a descricao textual do incidente, NUNCA
-    dados do conector (que podem conter informacoes sensiveis do
-    cliente como numeros de IDoc, nomes de sistema, etc.).
+    Privacidade (P0.2, 23/09/2026): a query nunca contem a descricao
+    original do incidente — apenas tech_term (derivado de interface_type)
+    + mensagem sanitizada do conector (sem PII) + site_filter.
 
-    So ativa quando confidence_threshold nao foi atingido pelo RAG
-    local - nao substitui o RAG, e um fallback complementar."""
+    Politica de egress controlada por WEB_SEARCH_POLICY:
+      disabled    — nunca executa (default seguro para producao/Kyma)
+      approved    — executa com query sanitizada
+      public_only — so executa se classificacao de sensibilidade = 'public'
+
+    So ativa quando threshold do RAG local nao foi atingido."""
+    from app.llm.gateway import classify_sensitivity
+
     hits = state.get("retrieved_context", [])
     top_score = hits[0]["score"] if hits else 0.0
 
-    # Threshold: so busca na web se o melhor resultado RAG for fraco
-    # Configuravel via WEB_SEARCH_THRESHOLD no .env (default: 0.6)
+    # Politica de egress (P0.2): WEB_SEARCH_POLICY tem precedencia sobre
+    # web_search_enabled legado
+    policy = settings.web_search_policy
+    if policy == "disabled":
+        return {"web_search_results": []}
+    if policy == "public_only" and classify_sensitivity(state) != "public":
+        return {"web_search_results": []}
+    # policy == "approved": prossegue, mas so se habilitado E score baixo
     if not settings.web_search_enabled or top_score >= settings.web_search_threshold:
         return {"web_search_results": []}
 
-    description = state["description"]
     interface_type = state.get("interface_type", "")
 
     site_filter = _WEB_SEARCH_SITE_MAP.get(interface_type, _WEB_SEARCH_SITE_MAP_DEFAULT)
@@ -191,7 +202,23 @@ def web_search_node(state: CopilotState) -> CopilotState:
         "apim": "SAP API Management",
     }.get(interface_type, "SAP integration")
 
-    query = f"{description} {tech_term} {site_filter}".strip()
+    # P0.2 (revisao arquitetural externa, 23/09/2026): a descricao ORIGINAL do
+    # incidente nunca vai para a rede — pode conter nome de cliente, sistema,
+    # ambiente, IDoc, RFC, endpoint, stack trace (informacao corporativa interna).
+    # A query e construida SOMENTE a partir de:
+    #   1. tech_term  — termo tecnico derivado do interface_type (enum, nao dado livre)
+    #   2. connector_data.message — mensagem de erro do conector, ja sanitizada via
+    #      sanitize_untrusted_input antes de chegar aqui; redact_pii_text garante
+    #      defesa em profundidade (mesma funcao aplicada em _make_web_search_tool)
+    #   3. site_filter — filtro de dominio SAP (nao dado do incidente)
+    # Isso garante que a busca web receba apenas termos genericos/tecnicos, nunca
+    # contexto corporativo especifico do cliente.
+    connector_message = ""
+    data = state.get("connector_data")
+    if data and data.message:
+        connector_message = redact_pii_text(str(data.message))
+
+    query = f"{tech_term} {connector_message} {site_filter}".strip()
 
     try:
         with DDGS() as ddgs:
@@ -603,31 +630,41 @@ def _assemble_evidence(state: CopilotState) -> list[dict]:
 
 def _apply_confidence_guardrails(diagnosis: dict, state: CopilotState) -> dict:
     """Guardrails deterministicos - nao confia so na autoavaliacao do
-    LLM nem so na validacao de schema."""
-    diagnosis["confidence"] = max(0.0, min(1.0, float(diagnosis.get("confidence", 0.0))))
+    LLM nem so na validacao de schema.
+
+    P1.5 (revisao arquitetural externa, 23/09/2026): confidence renomeado
+    para model_confidence (auto-relatado pelo LLM, ajustado pelos guardrails)
+    e novo campo diagnosis_confidence calculado deterministicamente pelo
+    pipeline (nao depende de autoavaliacao do LLM).
+
+    O campo interno "confidence" do DiagnosisModel (saida do LLM) e mapeado
+    para model_confidence aqui. O caller (run_diagnosis em graph.py) recebe
+    o dict com ambos os campos preenchidos.
+    """
+    # Normaliza a confianca reportada pelo LLM para [0.0, 1.0]
+    raw_model_confidence = float(diagnosis.pop("confidence", diagnosis.get("model_confidence", 0.0)))
+    model_confidence = max(0.0, min(1.0, raw_model_confidence))
 
     evidence_strength = _compute_evidence_strength(state)
     diagnosis["evidence_strength"] = round(evidence_strength, 3)
 
     evidence_ceiling = min(1.0, evidence_strength + EVIDENCE_CONFIDENCE_MARGIN)
-    diagnosis["confidence"] = min(diagnosis["confidence"], evidence_ceiling)
+    model_confidence = min(model_confidence, evidence_ceiling)
 
     data = state.get("connector_data")
     if data and data.is_fallback:
-        original = diagnosis["confidence"]
-        capped = min(original, 0.4)
-        if capped < original:
-            diagnosis["confidence"] = capped
+        capped = min(model_confidence, 0.4)
+        if capped < model_confidence:
+            model_confidence = capped
             diagnosis["probable_root_cause"] = (
                 f"[confianca limitada - identificador nao reconhecido pelo sistema] "
                 f"{diagnosis.get('probable_root_cause', '')}"
             )
 
     if not state.get("retrieved_context") and not data:
-        original = diagnosis["confidence"]
-        capped = min(original, 0.3)
-        if capped < original:
-            diagnosis["confidence"] = capped
+        capped = min(model_confidence, 0.3)
+        if capped < model_confidence:
+            model_confidence = capped
             diagnosis["matched_source"] = None
             diagnosis["probable_root_cause"] = (
                 f"[confianca limitada - nenhum documento relevante encontrado] "
@@ -641,12 +678,28 @@ def _apply_confidence_guardrails(diagnosis: dict, state: CopilotState) -> dict:
     claimed_source = diagnosis.get("matched_source")
     if claimed_source and valid_sources and claimed_source not in valid_sources:
         diagnosis["matched_source"] = None
-        diagnosis["confidence"] = min(diagnosis["confidence"], 0.3)
+        model_confidence = min(model_confidence, 0.3)
         diagnosis["probable_root_cause"] = (
             f"[matched_source '{claimed_source}' nao esta entre os documentos recuperados - "
             f"confianca limitada] "
             f"{diagnosis.get('probable_root_cause', '')}"
         )
+
+    diagnosis["model_confidence"] = round(model_confidence, 3)
+
+    # P1.5: diagnosis_confidence — metrica CALCULADA (nao auto-relatada pelo LLM).
+    # Formula: max(evidence_strength, model_confidence * evidence_strength).
+    # Interpreta: "quao confiavel e este diagnostico dado o que o pipeline
+    # efetivamente encontrou". E o valor recomendado para automacao.
+    # - Se evidence_strength=0 (nenhum contexto), diagnosis_confidence=0
+    #   independente do que o LLM disse.
+    # - Se evidence_strength=1 (dado real de conector), diagnosis_confidence=
+    #   max(1.0, model_confidence) = 1.0 (o pipeline observou diretamente).
+    # - Em geral: ancoreia a confianca nos sinais objetivos do pipeline,
+    #   usando model_confidence so como amplificador dentro desse teto.
+    diagnosis["diagnosis_confidence"] = round(
+        max(evidence_strength, model_confidence * evidence_strength), 3
+    )
 
     return diagnosis
 
@@ -918,14 +971,16 @@ def _record_quality_metrics(state: CopilotState, diagnosis: dict) -> None:
     """Grava metricas de qualidade no trace Langfuse atual.
 
     Metricas gravadas:
-    - confidence: confianca do diagnostico (0-1)
+    - model_confidence: confianca auto-relatada pelo LLM pos-guardrail (P1.5)
+    - diagnosis_confidence: confianca calculada pelo pipeline (P1.5)
     - has_matched_source: 1 se encontrou documento, 0 se nao (proxy de hallucination)
     - rerank_top_score: score do reranker no top resultado (qualidade do retrieval)
     - web_search_used: 1 se a busca web foi ativada nesta execucao
     """
     try:
         client = get_client()
-        confidence = float(diagnosis.get("confidence", 0.0))
+        confidence = float(diagnosis.get("model_confidence", diagnosis.get("confidence", 0.0)))
+        diagnosis_confidence = float(diagnosis.get("diagnosis_confidence", 0.0))
         has_source = 1.0 if diagnosis.get("matched_source") else 0.0
         web_used = (
             1.0
@@ -938,7 +993,8 @@ def _record_quality_metrics(state: CopilotState, diagnosis: dict) -> None:
         top_hit = state.get("retrieved_context", [{}])[0] if state.get("retrieved_context") else {}
         rerank_score = float(top_hit.get("rerank_score", top_hit.get("score", 0.0)))
 
-        client.score_current_trace(name="confidence", value=confidence)
+        client.score_current_trace(name="model_confidence", value=confidence)
+        client.score_current_trace(name="diagnosis_confidence", value=diagnosis_confidence)
         client.score_current_trace(name="has_matched_source", value=has_source)
         client.score_current_trace(name="rerank_top_score", value=rerank_score)
         client.score_current_trace(name="web_search_used", value=web_used)
@@ -948,11 +1004,16 @@ def _record_quality_metrics(state: CopilotState, diagnosis: dict) -> None:
 
 @observe(name="report")
 def report_node(state: CopilotState) -> CopilotState:
+    """P1.5 + P1.6 (revisao arquitetural externa, 23/09/2026):
+    - P1.5: exibe model_confidence e diagnosis_confidence separados no report.
+    - P1.6: Evidence Bundle — classifica evidencias em Primary Evidence
+      (fontes de alta confianca: system_observed) e Supporting Facts
+      (retrieved_document, web_untrusted, user_reported, simulated),
+      em vez de uma lista plana. Deixa claro para o analista o que o
+      pipeline observou diretamente versus o que veio de inferencia/RAG.
+    """
     diagnosis = state.get("diagnosis", {})
     _record_quality_metrics(state, diagnosis)
-    sources = ", ".join(sorted({h["source"] for h in state.get("retrieved_context", [])})) or (
-        "nenhuma fonte relevante encontrada"
-    )
 
     next_steps_md = "\n".join(f"- {step}" for step in diagnosis.get("next_steps", []))
     matched = diagnosis.get("matched_source") or "nenhum documento especifico identificado"
@@ -966,17 +1027,36 @@ def report_node(state: CopilotState) -> CopilotState:
             f"status={data.status}, codigo={data.error_code}\n"
         )
 
-    # DA-25: evidencias montadas deterministicamente (nunca citadas
-    # pelo LLM) - ver _assemble_evidence().
-    def _evidence_line(item: dict) -> str:
-        locator_suffix = f" ({item['locator']})" if item.get("locator") else ""
-        return f"- [{item['trust_level']}] {item['source_type']}{locator_suffix}"
+    # P1.5: exibe ambas as metricas de confianca para o analista
+    model_conf = diagnosis.get("model_confidence", diagnosis.get("confidence", 0.0))
+    diag_conf = diagnosis.get("diagnosis_confidence", 0.0)
+    evidence_str = diagnosis.get("evidence_strength", 0.0)
 
+    # P1.6: Evidence Bundle — classifica evidencias por confianca
+    # Primary Evidence: sistema observou diretamente (conector real, rule engine)
+    # Supporting Facts: inferencia/RAG/web/usuario (revisao humana recomendada)
     evidence_items = _assemble_evidence(state)
-    evidence_md = (
-        "\n".join(_evidence_line(item) for item in evidence_items)
-        if evidence_items
-        else "- (nenhuma evidencia disponivel)"
+    primary = [e for e in evidence_items if e["trust_level"] == "system_observed"]
+    supporting = [e for e in evidence_items if e["trust_level"] != "system_observed"]
+
+    def _evidence_line(item: dict) -> str:
+        locator_suffix = f" `{item['locator']}`" if item.get("locator") else ""
+        score_suffix = ""
+        if item.get("rerank_score") is not None:
+            score_suffix = f" (rerank={item['rerank_score']:.3f})"
+        elif item.get("retrieval_score") is not None:
+            score_suffix = f" (score={item['retrieval_score']:.3f})"
+        return f"- **[{item['trust_level']}]** {item['source_type']}{locator_suffix}{score_suffix}"
+
+    primary_md = (
+        "\n".join(_evidence_line(e) for e in primary)
+        if primary
+        else "- (nenhuma evidencia direta do sistema — diagnostico baseado em inferencia)"
+    )
+    supporting_md = (
+        "\n".join(_evidence_line(e) for e in supporting)
+        if supporting
+        else "- (nenhum fato de suporte)"
     )
 
     report = f"""## Diagnostico do Incidente
@@ -985,16 +1065,21 @@ def report_node(state: CopilotState) -> CopilotState:
 {connector_line}
 **Causa raiz provavel:** {diagnosis.get("probable_root_cause", "N/A")}
 
-**Confianca:** {diagnosis.get("confidence", 0.0):.0%} (evidence_strength: {diagnosis.get("evidence_strength", 0.0):.0%}, LLM: {diagnosis.get("llm_provider_used", "N/A")}, agente: {state.get("agent_domain", "N/A")})
+**Confianca:**
+- `diagnosis_confidence` (pipeline): {diag_conf:.0%} — use este para automacao
+- `model_confidence` (LLM pos-guardrail): {model_conf:.0%}
+- `evidence_strength` (retrieval/conector): {evidence_str:.0%}
+- Provider: {diagnosis.get("llm_provider_used", "N/A")} | Agente: {state.get("agent_domain", "N/A")}
 
 **Documento usado como base:** {matched}
 
 **Proximos passos:**
 {next_steps_md if next_steps_md else "- (nenhum passo sugerido)"}
 
-**Fontes recuperadas (candidatas):** {sources}
+**Primary Evidence** (observado diretamente pelo sistema — alta confianca):
+{primary_md}
 
-**Evidencias (DA-25 - trust_level por tipo de fonte, nao autoavaliado pelo LLM):**
-{evidence_md}
+**Supporting Facts** (RAG / busca web / relato do usuario — revisao humana recomendada):
+{supporting_md}
 """
     return {"report_markdown": report}

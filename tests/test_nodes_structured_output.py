@@ -69,7 +69,7 @@ def test_structured_response_used_directly_when_present(monkeypatch):
     # sobre o resultado independente da origem (structured_response ou
     # regex) - sem contexto/conector real, o teto de evidencia (0.25)
     # sempre vence a confianca autoavaliada pelo LLM (0.85 aqui).
-    assert result["diagnosis"]["confidence"] == 0.25
+    assert result["diagnosis"]["model_confidence"] == 0.25
     assert result["diagnosis"]["matched_source"] == "idoc_status_51.md"
 
 
@@ -107,7 +107,7 @@ def test_falls_back_to_regex_when_structured_output_call_raises(monkeypatch):
     assert call_count["n"] == 2  # 1a tentativa (structured) + 2a (fallback, sem response_format)
     assert result["diagnosis"]["probable_root_cause"] == "causa via regex"
     assert (
-        result["diagnosis"]["confidence"] == 0.25
+        result["diagnosis"]["model_confidence"] == 0.25
     )  # teto de evidencia, mesmo motivo do teste acima
 
 

@@ -113,7 +113,7 @@ def test_diagnose_endpoint_known_case():
     assert response.status_code == 200
     body = response.json()
     assert body["matched_source"] == "cpi_http_401.md"
-    assert body["confidence"] >= 0.5
+    assert body["model_confidence"] >= 0.5
     assert "report_markdown" in body
 
 

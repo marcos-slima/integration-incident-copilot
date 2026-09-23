@@ -203,7 +203,8 @@ def run_diagnosis(
 
     return DiagnosisResponse(
         probable_root_cause=diagnosis.get("probable_root_cause", "N/A"),
-        confidence=float(diagnosis.get("confidence", 0.0)),
+        model_confidence=float(diagnosis.get("model_confidence", diagnosis.get("confidence", 0.0))),
+        diagnosis_confidence=float(diagnosis.get("diagnosis_confidence", 0.0)),
         next_steps=diagnosis.get("next_steps", []),
         report_markdown=final_state.get("report_markdown", ""),
         matched_source=diagnosis.get("matched_source"),

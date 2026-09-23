@@ -214,6 +214,8 @@ def test_report_markdown_includes_evidence_section():
     result = report_node(state)
     markdown = result["report_markdown"]
 
-    assert "Evidencias" in markdown
-    assert "[retrieved_document] rag (cpi_http_401.md)" in markdown
-    assert "[user_reported] user" in markdown
+    assert "Supporting Facts" in markdown
+    assert "[retrieved_document]" in markdown
+    assert "rag" in markdown
+    assert "cpi_http_401.md" in markdown
+    assert "[user_reported]" in markdown

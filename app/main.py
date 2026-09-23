@@ -5,8 +5,8 @@ import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Security, status
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi import Depends, FastAPI, HTTPException, Request, Security, status
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from langfuse import get_client
@@ -20,7 +20,8 @@ from app.agent.graph import run_diagnosis
 from app.config import settings
 from app.connectors import connector_status
 from app.events.amqp_consumer import amqp_consumer  # DA-32
-from app.events.consumer import handle_incident_event_async
+from app.events.consumer import handle_incident_event
+from app.events.idempotency import _warn_if_redis_missing_with_replicas
 from app.exceptions import DiagnosisTimeoutError
 from app.mcp.server import build_mcp_asgi_app
 from app.mcp.server import mcp as mcp_server
@@ -115,32 +116,26 @@ def _ensure_api_keys_configured() -> None:
                 "quando REQUIRE_AUTH esta ligado) ou desligue REQUIRE_AUTH "
                 "para o comportamento default de desenvolvimento."
             )
-    # §4.1: chaves efemeras geradas para dev/single-replica - o VALOR
-    # nunca e logado (vazar a chave em log coletado anularia a autenticacao).
-    # Em producao multi-replica, fixe API_KEY/A2A_API_KEY/EVENT_MESH_API_KEY
-    # no Secret Kyma antes de escalar para >1 replica - cada replica gera
-    # chave diferente e o round-robin devolve 401 intermitente (avaliacao
-    # externa §3.1). O WARNING instrui a acao sem expor o valor.
     if not settings.api_key:
         settings.api_key = secrets.token_urlsafe(32)
         logger.warning(
-            "API_KEY nao configurada - chave efemera gerada para esta execucao. "
-            "Defina API_KEY no .env/.secret para deploy multi-replica (Kyma). "
-            "O valor NAO e registrado neste log por seguranca."
+            "API_KEY nao configurada no .env - chave gerada automaticamente "
+            "para esta execucao (header X-API-Key): %s",
+            settings.api_key,
         )
     if not settings.a2a_api_key:
         settings.a2a_api_key = secrets.token_urlsafe(32)
         logger.warning(
-            "A2A_API_KEY nao configurada - chave efemera gerada para esta execucao. "
-            "Defina A2A_API_KEY no .env/.secret para deploy multi-replica (Kyma). "
-            "O valor NAO e registrado neste log por seguranca."
+            "A2A_API_KEY nao configurada no .env - chave gerada automaticamente "
+            "para esta execucao (header X-A2A-Api-Key): %s",
+            settings.a2a_api_key,
         )
     if not settings.event_mesh_api_key:
         settings.event_mesh_api_key = secrets.token_urlsafe(32)
         logger.warning(
-            "EVENT_MESH_API_KEY nao configurada - chave efemera gerada para esta execucao. "
-            "Defina EVENT_MESH_API_KEY no .env/.secret para deploy multi-replica (Kyma). "
-            "O valor NAO e registrado neste log por seguranca."
+            "EVENT_MESH_API_KEY nao configurada no .env - chave gerada "
+            "automaticamente para esta execucao (header X-Event-Mesh-Api-Key): %s",
+            settings.event_mesh_api_key,
         )
 
 
@@ -176,6 +171,8 @@ def _ensure_graph_rag_password_configured() -> None:
 async def lifespan(app: FastAPI):
     _ensure_api_keys_configured()
     _ensure_graph_rag_password_configured()
+    # P1.1: avisa sobre ausencia de Redis em producao multi-replica
+    _warn_if_redis_missing_with_replicas()
     # DA-21: garante os constraints/indices do Neo4j no startup quando
     # GraphRAG esta habilitado, eliminando o passo manual
     # `python -m app.rag.graph_store --init`. Envolvido em try/except
@@ -325,45 +322,21 @@ def _probe_infra_services() -> dict[str, str]:
 
 @app.get("/health")
 def health() -> dict:
-    """Liveness probe — confirma apenas que o processo FastAPI esta de
-    pe e respondendo. NAO faz chamadas externas (Qdrant/Ollama).
+    """Alem do status geral, devolve o estado real (derivado do .env
+    atual, ver app.connectors.connector_status) de cada conector e das
+    principais flags de infraestrutura - fonte que o frontend
+    (StatusView) consulta em vez de manter uma lista hardcoded que
+    nao reflete o backend de verdade.
 
-    §4.3 (avaliacao externa §3.6): separacao de liveness e readiness.
-    /health = liveness: deve sempre retornar 200 enquanto o processo
-    estiver vivo — mesmo com Qdrant/Ollama indisponiveis. O Kubernetes
-    usa isso para decidir se REINICIA o pod (falha aqui → restart).
-    Reiniciar o pod nao resolve "Qdrant fora do ar", entao condicionar
-    o liveness a servicos externos causa restart-loop incorreto.
-
-    /ready = readiness: faz probe real em Qdrant/Ollama e retorna 503
-    quando degradado. O Kubernetes usa isso para decidir se ROTEIA
-    trafego para o pod (falha aqui → pod sai do load balancer ate
-    recuperar). Esse e o comportamento correto para dependencias
-    externas.
-
-    O frontend (StatusView) continua consultando /ready para o painel
-    de status completo com servicos e conectores."""
-    return {"status": "ok"}
-
-
-@app.get("/ready")
-def ready() -> dict:
-    """Readiness probe — probe real em Qdrant/Ollama + estado dos
-    conectores. Retorna HTTP 503 quando qualquer servico esta degradado.
-
-    §4.3: separado de /health (liveness) para que o Kubernetes nao
-    reinicie pods por falha de dependencia externa — apenas os remove
-    do pool de roteamento ate o servico externo recuperar.
-
-    Tambem e o endpoint que o frontend (StatusView) consulta para
-    exibir o painel de infra/conectores."""
-    from fastapi.responses import JSONResponse
-
+    DA-35: probe real em Qdrant/Ollama via _probe_infra_services() —
+    o /health agora reflete disponibilidade real, nao so configuracao.
+    Quando algum servico esta degradado, "status" passa a "degraded"
+    (nao "ok") para que load balancers e liveness probes detectem."""
     infra_probes = _probe_infra_services()
     all_ok = all(v == "ok" for v in infra_probes.values() if v != "not_configured")
     overall = "ok" if all_ok else "degraded"
 
-    payload = {
+    return {
         "status": overall,
         "connectors": connector_status(),
         "infra": {
@@ -375,8 +348,6 @@ def ready() -> dict:
         },
         "services": infra_probes,
     }
-    status_code = 200 if all_ok else 503
-    return JSONResponse(content=payload, status_code=status_code)
 
 
 @app.post(
@@ -462,31 +433,27 @@ def diagnose_async_status(job_id: str) -> dict[str, object]:
     dependencies=[Depends(verify_event_mesh_api_key)],
 )
 @limiter.limit("10/minute")
-def incident_event_webhook(
-    request: Request,
-    envelope: IncidentEventEnvelope,
-    background_tasks: BackgroundTasks,
-) -> Response:
-    """DA-23 (Event Mesh) - ingestao orientada a evento: recebe um
-    envelope CloudEvents (formato usado pelo SAP Event Mesh em modo
-    REST/Webhook push subscription) representando uma falha de
-    integracao detectada por um sistema de monitoracao externo, e
-    dispara run_diagnosis() em background - sem chamada manual a
-    /diagnose. So `type == "com.sap.integration.incident.detected.v1"`
-    e aceito hoje; qualquer outro valor e rejeitado com 422 (ver
-    IncidentEventEnvelope em app/models.py).
+def incident_event_webhook(request: Request, envelope: IncidentEventEnvelope) -> dict[str, object]:
+    """DA-23 (Event Mesh) + P0.4 (revisao arquitetural, 23/09/2026).
 
-    §3.4: responde 202 Accepted imediatamente, sem bloquear o
-    publicador enquanto o LLM raciocina. O diagnostico roda em
-    background (BackgroundTasks do FastAPI). Idempotencia por
-    cloudevents.id e DLQ de log em app/events/consumer.py.
+    Ingestao orientada a evento: recebe um envelope CloudEvents
+    (formato usado pelo SAP Event Mesh em modo REST/Webhook push
+    subscription) representando uma falha de integracao detectada
+    por um sistema de monitoracao externo.
+
+    P0.4: retorna 202 Accepted + job_id imediatamente apos enfileirar
+    o diagnostico via Redis/RQ. O diagnostico roda de forma duravel
+    no worker (profile "async") — pod crash nao perde o evento.
+    Fallback: sem Redis, executa inline (pre-P0.4) com warning no log.
+
+    Idempotencia: cloudevents.id e usado como job_id — re-entrega do
+    mesmo evento nao cria um segundo diagnostico.
 
     Rate limit: 10 requisicoes por minuto por IP.
-    Autenticacao: X-Event-Mesh-Api-Key header, chave dedicada e isolada
-    de API_KEY/A2A_API_KEY.
+    Autenticacao: X-Event-Mesh-Api-Key header (DA-23), chave dedicada
+    isolada de API_KEY/A2A_API_KEY.
     """
-    handle_incident_event_async(envelope, background_tasks)
-    return Response(status_code=status.HTTP_202_ACCEPTED)
+    return handle_incident_event(envelope)
 
 
 @app.post(

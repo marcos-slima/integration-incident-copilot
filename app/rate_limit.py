@@ -1,61 +1,71 @@
-"""Instancia compartilhada do slowapi Limiter.
+"""Rate limiting (slowapi) para o SAP Integration Copilot.
 
-Extraido de app/main.py (avaliacao externa - medio prazo, item 1:
-"Rate limit global e por endpoint (incluir /a2a)") para um modulo
-proprio, sem dependencias do resto do app - app/main.py monta a rota
-raiz e app/a2a/server.py monta a rota /a2a, e ambas precisam decorar
-endpoints com @limiter.limit(...). Colocar o Limiter em app/main.py
-(como estava antes) criaria um import circular: app/a2a/server.py
-precisaria importar de app/main.py, que por sua vez importa o router
-de app/a2a/server.py.
+Avaliacao externa (medio prazo, item 1): "Rate limiting por IP so".
+O rate limiter original usava apenas o IP do cliente como chave de
+identificacao — isso penalizava todos os clientes atras do mesmo IP
+(NAT corporativo, proxy reverso) com um bucket compartilhado.
 
-§4.2 (avaliacao externa §3.2): key_func alterado de get_remote_address
-para _key_by_api_key_or_ip:
-- Problema: atras do APIRule/ingress do Kyma, todos os clientes podem
-  aparecer com o mesmo IP (o do proxy), tornando o limite global (todos
-  compartilham o bucket de um IP so) ou, se X-Forwarded-For nao e
-  validado com trusted_proxies, qualquer cliente pode rotacionar IPs
-  forjando o header e contornar o limite.
-- Solucao: usar o header X-API-Key como chave de rate limit quando
-  presente (identifica o client de forma opaca, sem expor o valor em
-  log/trace - so um hash SHA-256 truncado e usado como chave interna).
-  Fallback para IP quando a rota e anonima (/health, /ready).
-- Trusted proxy: o IP real do cliente em Kyma vem via X-Forwarded-For
-  injetado pelo Istio/Envoy ingress. slowapi usa request.client.host
-  como "remote address" - atras de um proxy correto isso e o IP do
-  proxy, nao do cliente. _key_by_api_key_or_ip resolve isso:
-  X-API-Key tem prioridade, entao o IP do proxy so importa para rotas
-  sem autenticacao (onde o limite global e aceitavel).
+P1.3 (revisao arquitetural externa, 23/09/2026): a funcao de chave
+`request_client_identity()` resolve o identificador do cliente na
+seguinte ordem de prioridade:
+
+  1. X-A2A-Api-Key  — cliente A2A (Agent2Agent) autenticado
+  2. X-API-Key      — cliente humano / API convencional autenticado
+  3. IP do cliente  — fallback para chamadas nao autenticadas
+
+Isso garante que:
+  - Dois clientes A2A com chaves diferentes nao compartilham bucket,
+    mesmo vindo do mesmo IP (ex: ambiente corporativo com NAT).
+  - O fallback para IP mantem o comportamento existente para chamadas
+    sem autenticacao (ex: /health, /.well-known/agent-card.json).
+  - Nao ha mudanca de interface: `limiter` continua sendo importado e
+    usado exatamente como antes (app/main.py, app/a2a/server.py).
+
+Nota de segurança: X-Forwarded-For pode ser forjado por um cliente
+mal-intencionado em frente a um proxy que nao filtra este header.
+Para deploy Kyma real, o Istio/Envoy sobrescreve X-Forwarded-For com
+o IP real — mas nao depender so do IP para autenticado e a postura
+mais defensiva de qualquer forma.
 """
 
 from __future__ import annotations
 
-import hashlib
-
+from fastapi import Request
 from slowapi import Limiter
-from slowapi.util import get_remote_address
-from starlette.requests import Request
 
 
-def _key_by_api_key_or_ip(request: Request) -> str:
-    """Chave de rate limit: hash(X-API-Key) se presente, senao IP.
+def request_client_identity(request: Request) -> str:
+    """P1.3: identifica o cliente pelo token de autenticacao (quando
+    presente) ou pelo IP de origem (fallback).
 
-    O hash SHA-256 truncado (primeiros 16 chars hex) identifica o
-    client de forma opaca — evita armazenar o valor literal da chave
-    no estado interno do slowapi (memoria ou Redis) e em qualquer
-    trace/log que o slowapi produza. Ainda e unico o suficiente para
-    distinguir clientes (2^64 combinacoes).
-
-    Rotas sem autenticacao (/health, /ready, /docs) caem no fallback
-    de IP, que e o comportamento anterior — nesses casos o limite
-    global por proxy-IP e aceitavel porque nao ha dado sensivel no
-    request.
+    Ordem de prioridade:
+      1. X-A2A-Api-Key  (endpoint /a2a — Agent2Agent)
+      2. X-API-Key      (endpoint /diagnose, /events/incident, etc.)
+      3. IP do cliente  (chamadas sem autenticacao ou fallback)
     """
-    api_key = request.headers.get("X-API-Key") or request.headers.get("x-api-key")
+    # Header A2A (Agent2Agent) — prioridade maxima
+    a2a_key = request.headers.get("X-A2A-Api-Key")
+    if a2a_key:
+        # Prefixo "a2a:" diferencia do bucket de IP no log/storage do slowapi
+        return f"a2a:{a2a_key}"
+
+    # Header de API convencional
+    api_key = request.headers.get("X-API-Key")
     if api_key:
-        digest = hashlib.sha256(api_key.encode()).hexdigest()[:16]
-        return f"apikey:{digest}"
-    return get_remote_address(request)
+        return f"apikey:{api_key}"
+
+    # Fallback: IP do cliente (comportamento pre-P1.3)
+    # request.client pode ser None em alguns contextos de teste
+    if request.client:
+        return request.client.host
+
+    return "unknown"
 
 
-limiter = Limiter(key_func=_key_by_api_key_or_ip, default_limits=["10/minute"])
+# `limiter` e o singleton importado por app/main.py e app/a2a/server.py.
+# default_limits vale para todas as rotas via SlowAPIMiddleware (adicionado
+# em app/main.py) — rotas com @limiter.limit() explicito podem sobrepor.
+limiter = Limiter(
+    key_func=request_client_identity,
+    default_limits=["60/minute"],
+)

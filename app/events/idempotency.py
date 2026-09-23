@@ -111,7 +111,7 @@ def is_duplicate(event_id: str) -> bool:
         added = client.sadd(_REDIS_KEY, event_id)
         if added == 0:
             _logger.info(
-                "[idempotency] Evento duplicado detectado — ignorando. " "cloudevents.id=%s",
+                "[idempotency] Evento duplicado detectado — ignorando. cloudevents.id=%s",
                 event_id,
             )
             return True

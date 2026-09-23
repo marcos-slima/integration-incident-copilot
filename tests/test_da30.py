@@ -180,12 +180,12 @@ class TestGatewayBackoff:
         with (
             patch("app.llm.gateway.get_chat_model", return_value=MagicMock()),
             patch("app.llm.gateway.time.sleep") as mock_sleep,
-        ):
-            with contextlib.suppress(Exception):  # esperado — todos os providers falham
-                invoke_via_gateway(
-                    build_and_invoke=build_and_invoke_mock,
-                    state={"description": "teste", "connector_data": None},
-                )
+            contextlib.suppress(Exception),
+        ):  # esperado — todos os providers falham
+            invoke_via_gateway(
+                build_and_invoke=build_and_invoke_mock,
+                state={"description": "teste", "connector_data": None},
+            )
 
         # sleep deve ter sido chamado pelo menos uma vez
         assert mock_sleep.called, "backoff nao chamou time.sleep"

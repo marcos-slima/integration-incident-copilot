@@ -44,13 +44,15 @@ spec:
                 name: sap-integration-copilot-config
             - secretRef:
                 name: sap-integration-copilot-secrets
-          # DA-24: probes usam GET /health - endpoint sem autenticacao
-          # e sem dependencia de Qdrant/LLM (so retorna {"status":"ok"}
-          # se o processo FastAPI esta de pe), entao nao gera falso
-          # negativo de readiness so porque o Qdrant externo esta lento.
+          # §4.3: liveness e readiness agora apontam para endpoints
+          # distintos (avaliacao externa §3.6 — antes ambos usavam /health,
+          # que apos DA-35 passou a fazer probe de Qdrant/Ollama, causando
+          # restart-loop incorreto quando o Qdrant esta fora).
+          # /health = liveness: processo FastAPI vivo? (sem IO externo)
+          # /ready  = readiness: Qdrant/Ollama acessiveis? (HTTP probe 1s)
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10

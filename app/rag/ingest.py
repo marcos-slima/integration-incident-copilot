@@ -39,11 +39,35 @@ from qdrant_client.models import (
 
 from app.config import settings
 
-# Desativa o motor de layout via ONNX (pymupdf.layout / BoxRFDGNN) - crasha
-# o processo (SIGSEGV, sem traceback Python) em determinados PDFs/EPUBs,
-# independente de threading (reproduzido isolado, single-thread, com
-# PYTHONFAULTHANDLER=1). Volta ao parser heuristico legado do pymupdf4llm
-# (sem ML), estavel para o volume e diversidade de arquivos deste projeto.
+# §4.5 (avaliacao externa §3.5): pymupdf4llm.use_layout(False) desativa
+# o motor de layout ONNX (BoxRFDGNN) que detecta colunas/tabelas em PDFs.
+#
+# POR QUE ESTA DESATIVADO:
+#   Determinados PDFs/EPUBs causam SIGSEGV dentro de page.get_layout()
+#   (crash nativo sem traceback Python, reproduzido com PYTHONFAULTHANDLER=1
+#   em single-thread isolado - nao e race condition). O documento culpado
+#   nao foi isolado no corpus de 2.000+ PDFs tecnicos SAP deste projeto.
+#
+# CONSEQUENCIA:
+#   Perda de fidelidade estrutural em tabelas/colunas — justamente os
+#   manuais SAP com mais tabelas de configuracao e matrizes de conector
+#   sao os mais afetados. O parser heuristico legado (sem ML) e estavel
+#   mas produz texto linearizado, sem distincao entre celulas de tabela.
+#
+# GARGALO DE THROUGHPUT:
+#   _pdf_extract_lock serializa toda extracao de PDF (ver abaixo). Com
+#   layout ativado (quando o crash for resolvido), o lock continuara
+#   necessario porque pymupdf usa estado global nativo (MuPDF) que
+#   segfaulta com threads concorrentes. Consequencia: MAX_WORKERS=4
+#   threads so paralelizam embedding/upsert, nao a extracao em si.
+#
+# PROXIMOS PASSOS (quando pymupdf4llm estabilizar):
+#   1. Montar corpus de regressao com PDFs variados (incluindo o culpado).
+#   2. Reabilitar com use_layout(True) e rodar pytest -m pdf_regression.
+#   3. Avaliar subprocess-isolation para PDF culpado (forkserver) em vez
+#      de desativar o layout para todos.
+#
+# REFERENCIA: avaliacao externa §3.5 e DA pending "PDF layout regression".
 pymupdf4llm.use_layout(False)
 
 BASE_DIR = Path(__file__).resolve().parents[2]

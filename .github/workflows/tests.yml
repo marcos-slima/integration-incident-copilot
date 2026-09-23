@@ -123,6 +123,63 @@ jobs:
         if: always()
         run: docker compose down -v
 
+  rag-quality:
+    name: quality gate RAG (Qdrant real)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # §4.4 (avaliacao externa §3.8): o quality gate RAG
+    # (tests/test_rag_quality.py) estava marcado so como "integration"
+    # e nunca rodava no CI porque exige Qdrant vivo. Espelha o padrao
+    # do job "neo4j-smoke" (service container real) para garantir que
+    # as metricas Hit@1/Hit@3/MRR nao regridam silenciosamente a cada
+    # pull request. O Ollama NAO e necessario para este job: eval_rag
+    # usa embeddings locais (SentenceTransformer, sem GPU) e consultas
+    # diretas ao Qdrant — nenhuma chamada LLM.
+    services:
+      qdrant:
+        image: qdrant/qdrant:v1.19.0
+        ports:
+          - 6333:6333
+        options: >-
+          --health-cmd "curl -sf http://localhost:6333/healthz"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 15s
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Instalar Python
+        run: uv python install
+
+      - name: Sincronizar dependencias
+        run: uv sync --dev
+
+      - name: Ingerir documentos de avaliacao no Qdrant
+        env:
+          QDRANT_URL: http://localhost:6333
+          LLM_PROVIDER: ollama
+          OLLAMA_HOST: http://localhost:11434
+          EMBEDDING_MODEL: nomic-embed-text
+        run: |
+          uv run python -m scripts.ingest --source data/sample_docs --collection sap_docs
+
+      - name: Pytest — quality gate RAG
+        env:
+          QDRANT_URL: http://localhost:6333
+          LLM_PROVIDER: ollama
+          OLLAMA_HOST: http://localhost:11434
+          EMBEDDING_MODEL: nomic-embed-text
+        run: uv run pytest -m rag_quality -v --tb=short
+
   neo4j-smoke:
     name: smoke test GraphRAG (Neo4j real)
     runs-on: ubuntu-latest

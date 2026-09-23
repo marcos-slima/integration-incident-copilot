@@ -21,6 +21,7 @@ THRESHOLDS = {
 
 
 @pytest.mark.integration
+@pytest.mark.rag_quality
 def test_rag_quality_gate():
     """Falha se metricas RAG caírem abaixo dos thresholds."""
     from scripts.eval_rag import evaluate

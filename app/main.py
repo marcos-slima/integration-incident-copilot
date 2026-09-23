@@ -115,26 +115,32 @@ def _ensure_api_keys_configured() -> None:
                 "quando REQUIRE_AUTH esta ligado) ou desligue REQUIRE_AUTH "
                 "para o comportamento default de desenvolvimento."
             )
+    # §4.1: chaves efemeras geradas para dev/single-replica - o VALOR
+    # nunca e logado (vazar a chave em log coletado anularia a autenticacao).
+    # Em producao multi-replica, fixe API_KEY/A2A_API_KEY/EVENT_MESH_API_KEY
+    # no Secret Kyma antes de escalar para >1 replica - cada replica gera
+    # chave diferente e o round-robin devolve 401 intermitente (avaliacao
+    # externa §3.1). O WARNING instrui a acao sem expor o valor.
     if not settings.api_key:
         settings.api_key = secrets.token_urlsafe(32)
         logger.warning(
-            "API_KEY nao configurada no .env - chave gerada automaticamente "
-            "para esta execucao (header X-API-Key): %s",
-            settings.api_key,
+            "API_KEY nao configurada - chave efemera gerada para esta execucao. "
+            "Defina API_KEY no .env/.secret para deploy multi-replica (Kyma). "
+            "O valor NAO e registrado neste log por seguranca."
         )
     if not settings.a2a_api_key:
         settings.a2a_api_key = secrets.token_urlsafe(32)
         logger.warning(
-            "A2A_API_KEY nao configurada no .env - chave gerada automaticamente "
-            "para esta execucao (header X-A2A-Api-Key): %s",
-            settings.a2a_api_key,
+            "A2A_API_KEY nao configurada - chave efemera gerada para esta execucao. "
+            "Defina A2A_API_KEY no .env/.secret para deploy multi-replica (Kyma). "
+            "O valor NAO e registrado neste log por seguranca."
         )
     if not settings.event_mesh_api_key:
         settings.event_mesh_api_key = secrets.token_urlsafe(32)
         logger.warning(
-            "EVENT_MESH_API_KEY nao configurada no .env - chave gerada "
-            "automaticamente para esta execucao (header X-Event-Mesh-Api-Key): %s",
-            settings.event_mesh_api_key,
+            "EVENT_MESH_API_KEY nao configurada - chave efemera gerada para esta execucao. "
+            "Defina EVENT_MESH_API_KEY no .env/.secret para deploy multi-replica (Kyma). "
+            "O valor NAO e registrado neste log por seguranca."
         )
 
 
@@ -319,21 +325,45 @@ def _probe_infra_services() -> dict[str, str]:
 
 @app.get("/health")
 def health() -> dict:
-    """Alem do status geral, devolve o estado real (derivado do .env
-    atual, ver app.connectors.connector_status) de cada conector e das
-    principais flags de infraestrutura - fonte que o frontend
-    (StatusView) consulta em vez de manter uma lista hardcoded que
-    nao reflete o backend de verdade.
+    """Liveness probe — confirma apenas que o processo FastAPI esta de
+    pe e respondendo. NAO faz chamadas externas (Qdrant/Ollama).
 
-    DA-35: probe real em Qdrant/Ollama via _probe_infra_services() —
-    o /health agora reflete disponibilidade real, nao so configuracao.
-    Quando algum servico esta degradado, "status" passa a "degraded"
-    (nao "ok") para que load balancers e liveness probes detectem."""
+    §4.3 (avaliacao externa §3.6): separacao de liveness e readiness.
+    /health = liveness: deve sempre retornar 200 enquanto o processo
+    estiver vivo — mesmo com Qdrant/Ollama indisponiveis. O Kubernetes
+    usa isso para decidir se REINICIA o pod (falha aqui → restart).
+    Reiniciar o pod nao resolve "Qdrant fora do ar", entao condicionar
+    o liveness a servicos externos causa restart-loop incorreto.
+
+    /ready = readiness: faz probe real em Qdrant/Ollama e retorna 503
+    quando degradado. O Kubernetes usa isso para decidir se ROTEIA
+    trafego para o pod (falha aqui → pod sai do load balancer ate
+    recuperar). Esse e o comportamento correto para dependencias
+    externas.
+
+    O frontend (StatusView) continua consultando /ready para o painel
+    de status completo com servicos e conectores."""
+    return {"status": "ok"}
+
+
+@app.get("/ready")
+def ready() -> dict:
+    """Readiness probe — probe real em Qdrant/Ollama + estado dos
+    conectores. Retorna HTTP 503 quando qualquer servico esta degradado.
+
+    §4.3: separado de /health (liveness) para que o Kubernetes nao
+    reinicie pods por falha de dependencia externa — apenas os remove
+    do pool de roteamento ate o servico externo recuperar.
+
+    Tambem e o endpoint que o frontend (StatusView) consulta para
+    exibir o painel de infra/conectores."""
+    from fastapi.responses import JSONResponse
+
     infra_probes = _probe_infra_services()
     all_ok = all(v == "ok" for v in infra_probes.values() if v != "not_configured")
     overall = "ok" if all_ok else "degraded"
 
-    return {
+    payload = {
         "status": overall,
         "connectors": connector_status(),
         "infra": {
@@ -345,6 +375,8 @@ def health() -> dict:
         },
         "services": infra_probes,
     }
+    status_code = 200 if all_ok else 503
+    return JSONResponse(content=payload, status_code=status_code)
 
 
 @app.post(

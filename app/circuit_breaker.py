@@ -67,7 +67,7 @@ def _get_redis_client():
         _redis_available = True
         _logger.info("[circuit_breaker] Backend Redis ativo — estado distribuido entre pods.")
         return _redis_client
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         _logger.warning(
             "[circuit_breaker] Redis nao disponivel — fallback para estado "
             "em-memoria (nao compartilhado entre replicas Kyma). "
@@ -124,7 +124,7 @@ class CircuitBreaker:
                 consecutive_failures=failures,
                 opened_at=opened_at,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             _logger.warning(
                 "[circuit_breaker] Erro ao ler estado Redis key=%s — fallback em-memoria. erro=%s",
                 key,
@@ -132,7 +132,9 @@ class CircuitBreaker:
             )
             return None
 
-    def _write_state_redis(self, key: str, state: _CircuitBreakerState, cooldown_seconds: float) -> bool:
+    def _write_state_redis(
+        self, key: str, state: _CircuitBreakerState, cooldown_seconds: float
+    ) -> bool:
         """Escreve estado no Redis com TTL. Retorna True se bem-sucedido."""
         client = _get_redis_client()
         if client is None:
@@ -148,7 +150,7 @@ class CircuitBreaker:
             ttl = max(int(cooldown_seconds * 10), 3600)
             client.expire(rkey, ttl)
             return True
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             _logger.warning(
                 "[circuit_breaker] Erro ao escrever estado Redis key=%s. erro=%s",
                 key,
@@ -163,8 +165,8 @@ class CircuitBreaker:
             return
         try:
             client.delete(self._redis_key(key))
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001
+            _logger.debug("[circuit_breaker] Nao foi possivel remover chave Redis key=%s.", key)
 
     # ------------------------------------------------------------------
     # Helpers em-memoria (fallback)
@@ -228,5 +230,5 @@ class CircuitBreaker:
             keys = client.keys(pattern)
             if keys:
                 client.delete(*keys)
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001
+            _logger.debug("[circuit_breaker] Nao foi possivel limpar chaves Redis namespace=%s.", self._namespace)

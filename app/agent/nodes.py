@@ -509,7 +509,7 @@ def _compute_evidence_strength(state: CopilotState) -> float:
     data = state.get("connector_data")
     hits = state.get("retrieved_context") or []
     top_hit = hits[0] if hits else {}
-    rag_score = float(top_hit.get("rerank_score", top_hit.get("score", 0.0))) if top_hit else 0.0
+    rag_score = float(top_hit.get("rerank_score_calibrated", top_hit.get("score", 0.0))) if top_hit else 0.0  # DA-42: usa sigmoid calibrado
 
     connector_is_real_evidence = bool(data) and not data.is_mock and not data.is_fallback
     strength = max(rag_score, 0.75) if connector_is_real_evidence else rag_score
@@ -580,6 +580,7 @@ def _assemble_evidence(state: CopilotState) -> list[dict]:
                 "excerpt": _truncate(hit.get("text") or "", 500),
                 "retrieval_score": hit.get("score"),
                 "rerank_score": hit.get("rerank_score"),
+                "rerank_score_calibrated": hit.get("rerank_score_calibrated"),  # DA-42
                 "trust_level": "retrieved_document",
             }
         )
@@ -991,7 +992,7 @@ def _record_quality_metrics(state: CopilotState, diagnosis: dict) -> None:
         )
 
         top_hit = state.get("retrieved_context", [{}])[0] if state.get("retrieved_context") else {}
-        rerank_score = float(top_hit.get("rerank_score", top_hit.get("score", 0.0)))
+        rerank_score = float(top_hit.get("rerank_score_calibrated", top_hit.get("score", 0.0)))  # DA-42: calibrated
 
         client.score_current_trace(name="model_confidence", value=confidence)
         client.score_current_trace(name="diagnosis_confidence", value=diagnosis_confidence)

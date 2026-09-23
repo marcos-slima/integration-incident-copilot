@@ -38,7 +38,7 @@ dependencies = [
     # quando ele decide ligar REDIS_URL.
     "redis>=5.2",
     # AMQP 1.0 puro Python para Solace Cloud / SAP AEM (DA-32)
-    "aiormq>=6.8",
+    "python-qpid-proton>=0.39",  # DA-40: AMQP 1.0 (Solace/SAP Event Mesh); substituiu aiormq (0.9.1),
     # Fila assincrona de diagnostico (app/queue.py) - mesmo Redis do
     # REDIS_URL acima, so importado/usado se REDIS_URL estiver
     # configurada. Sem isso o "worker" opt-in (docker-compose.yml,

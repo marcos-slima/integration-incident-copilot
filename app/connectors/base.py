@@ -76,7 +76,7 @@ ExternalSystemConnector = SAPConnector
 # "ServiceNow", "Salesforce" - circuitos independentes por sistema,
 # mesma instancia de CircuitBreaker). Mesmo nao-objetivo do AI
 # Gateway: in-memory, por processo, nao compartilhado entre replicas.
-connector_circuit_breaker = CircuitBreaker()
+connector_circuit_breaker = CircuitBreaker(namespace="conn")  # DA-41: Redis distribuido
 
 
 def circuit_breaker_guard(source_system: str) -> ConnectorResult | None:

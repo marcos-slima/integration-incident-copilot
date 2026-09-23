@@ -226,6 +226,26 @@ def _get_reranker() -> CrossEncoder:
     return CrossEncoder(RERANKER_MODEL)
 
 
+def _sigmoid_calibrate(raw_score: float) -> float:
+    """DA-42: converte logit raw do CrossEncoder para probabilidade calibrada [0,1].
+
+    CrossEncoder.predict() retorna logits (escala tipicamente -5 a +5,
+    mas pode chegar a +/-10 em modelos fine-tuned). Clamp simples para
+    [0,1] descarta toda informacao de scores negativos (todos viram 0)
+    e comprime a escala positiva de forma nao-linear — um score 0.8 e
+    um score 4.0 seriam tratados como iguais apos clamp.
+
+    Sigmoid transforma a escala de logits para probabilidade de relevancia:
+      sigma(0)  = 0.50  — incerto
+      sigma(2)  = 0.88  — provavelmente relevante
+      sigma(4)  = 0.98  — altamente relevante
+      sigma(-2) = 0.12  — provavelmente irrelevante
+    Preserva a monotonia (ordenacao de ranking nao muda) e produz uma
+    escala semanticamente interpretavel para admission_score e evidence_strength.
+    """
+    return float(1.0 / (1.0 + np.exp(-raw_score)))
+
+
 def rerank(query: str, hits: list[dict], top_k: int = RERANKER_TOP_K) -> list[dict]:
     """Reranqueia candidatos RAG usando cross-encoder semantico.
 
@@ -236,18 +256,24 @@ def rerank(query: str, hits: list[dict], top_k: int = RERANKER_TOP_K) -> list[di
     O score do reranker substitui o score composto RRF para a ordenacao
     final, mas o score cosseno original e preservado para os guardrails
     (que sao calibrados para escala cosseno).
+
+    DA-42: rerank_score armazena o logit raw do CrossEncoder (para
+    auditoria/debug); rerank_score_calibrated armazena sigma(logit),
+    a probabilidade calibrada [0,1] usada em _evidence_admission_score
+    e _compute_evidence_strength.
     """
     if not hits:
         return hits
 
     reranker = _get_reranker()
     pairs = [(query, h["text"]) for h in hits]
-    scores = reranker.predict(pairs)
+    raw_scores = reranker.predict(pairs)
 
-    for hit, score in zip(hits, scores):
-        hit["rerank_score"] = float(score)
+    for hit, raw in zip(hits, raw_scores):
+        hit["rerank_score"] = float(raw)  # logit raw (auditoria)
+        hit["rerank_score_calibrated"] = _sigmoid_calibrate(float(raw))  # DA-42: prob [0,1]
 
-    reranked = sorted(hits, key=lambda h: h["rerank_score"], reverse=True)
+    reranked = sorted(hits, key=lambda h: h["rerank_score_calibrated"], reverse=True)
     return reranked[:top_k]
 
 
@@ -272,7 +298,7 @@ def _evidence_admission_score(hit: dict) -> float:
     rerank_score = hit.get("rerank_score")
     scores = [hit["score"]]
     if rerank_score is not None:
-        scores.append(max(0.0, min(1.0, rerank_score)))
+        scores.append(hit.get("rerank_score_calibrated", max(0.0, min(1.0, rerank_score))))  # DA-42: usa sigmoid calibrado
     return max(scores)
 
 

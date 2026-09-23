@@ -101,7 +101,7 @@ class PolicyViolationError(ConfigurationError):
 # medio prazo item 3) - reexportado por "from ... import CircuitBreaker"
 # acima para nao quebrar "from app.llm.gateway import CircuitBreaker"
 # em tests/test_llm_gateway.py.
-circuit_breaker = CircuitBreaker()
+circuit_breaker = CircuitBreaker(namespace="llm")  # DA-41: Redis distribuido
 
 
 def classify_sensitivity(state: dict) -> Sensitivity:

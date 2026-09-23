@@ -286,13 +286,16 @@ def index() -> FileResponse | JSONResponse:
 
 
 def _probe_infra_services() -> dict[str, str]:
-    """Testa conectividade real com Qdrant e Ollama (timeout curto para
-    nao tornar o /health lento). Retorna dict {servico: "ok"|"degraded"}.
+    """Testa conectividade com Qdrant e com o provider LLM configurado.
 
-    DA-35: /health antes retornava status="ok" sempre, independente de
-    Qdrant/Ollama estarem acessiveis — nao era um readiness probe real.
-    Agora faz GET nos endpoints de health de cada servico configurado,
-    com timeout de 1s para nao impactar o tempo de resposta do /health.
+    DA-39: antes checava Ollama incondicionalmente - um pod Kyma com
+    LLM_PROVIDER=openai ficava sempre "degraded" por nao ter OLLAMA_HOST,
+    o que deixava o readinessProbe do Kubernetes retornando 503 e o pod
+    nunca passava para "Ready". Agora a checagem e provider-aware:
+    - ollama -> proba /api/tags no OLLAMA_HOST configurado
+    - openai -> verifica se OPENAI_API_KEY foi configurada (nao faz chamada
+      de rede para nao expor a key e nao adicionar latencia/custo)
+    - azure_openai -> idem para AZURE_OPENAI_API_KEY
     """
     import httpx  # import local: mantém ordenacao de imports sem quebrar isort
 
@@ -308,14 +311,27 @@ def _probe_infra_services() -> dict[str, str]:
     else:
         results["qdrant"] = "not_configured"
 
-    if settings.ollama_host:
-        try:
-            r = httpx.get(f"{settings.ollama_host.rstrip('/')}/api/tags", timeout=_timeout)
-            results["ollama"] = "ok" if r.is_success else "degraded"
-        except (OSError, httpx.HTTPError):
-            results["ollama"] = "degraded"
+    # DA-39: checagem do LLM depende do provider configurado
+    provider = settings.llm_provider
+    if provider == "ollama":
+        if settings.ollama_host:
+            try:
+                r = httpx.get(
+                    f"{settings.ollama_host.rstrip('/')}/api/tags", timeout=_timeout
+                )
+                results["ollama"] = "ok" if r.is_success else "degraded"
+            except (OSError, httpx.HTTPError):
+                results["ollama"] = "degraded"
+        else:
+            results["ollama"] = "not_configured"
+    elif provider == "openai":
+        results["openai"] = "ok" if settings.openai_api_key else "not_configured"
+    elif provider == "azure_openai":
+        results["azure_openai"] = (
+            "ok" if settings.azure_openai_api_key else "not_configured"
+        )
     else:
-        results["ollama"] = "not_configured"
+        results[provider] = "unknown_provider"
 
     return results
 

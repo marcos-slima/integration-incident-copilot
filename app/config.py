@@ -85,6 +85,15 @@ class Settings(BaseSettings):
     llm_gateway_backoff_base_seconds: float = 0.5
     llm_gateway_backoff_max_seconds: float = 8.0
 
+    # DA-39: politica de data sovereignty para o AI Gateway.
+    # 'strict' (default): dado confidencial so pode ir para providers locais
+    #   (ollama). Comportamento original, adequado para ambientes on-premise.
+    # 'cloud_with_dlp': dado confidencial pode ir para cloud providers
+    #   (openai/azure_openai) DESDE QUE PII ja tenha sido redacted antes de
+    #   chegar ao gateway (garantido por redact_pii_deep em nodes.py).
+    #   Use em deploys Kyma/cloud onde Ollama local nao esta disponivel.
+    data_sovereignty_mode: str = 'strict'  # 'strict' | 'cloud_with_dlp'
+
     # DA-33: Rule Engine deterministico — avaliado ANTES do LLM para
     # incidentes conhecidos (OAuth expirado, material lock, IDoc 51, etc.).
     # Desabilitar so para testes que precisam forcas o caminho LLM.

@@ -132,9 +132,10 @@ jobs:
     # e nunca rodava no CI porque exige Qdrant vivo. Espelha o padrao
     # do job "neo4j-smoke" (service container real) para garantir que
     # as metricas Hit@1/Hit@3/MRR nao regridam silenciosamente a cada
-    # pull request. O Ollama NAO e necessario para este job: eval_rag
-    # usa embeddings locais (SentenceTransformer, sem GPU) e consultas
-    # diretas ao Qdrant — nenhuma chamada LLM.
+    # pull request. O Ollama NAO e necessario para este job: com
+    # EMBEDDING_BACKEND=fastembed o retriever usa fastembed.TextEmbedding
+    # (BAAI/bge-small-en-v1.5, local, sem GPU, sem Ollama) tanto na
+    # ingestao (scripts.ingest) quanto na consulta (eval_rag.py).
     services:
       qdrant:
         image: qdrant/qdrant:v1.19.0
@@ -167,8 +168,7 @@ jobs:
         env:
           QDRANT_URL: http://localhost:6333
           LLM_PROVIDER: ollama
-          OLLAMA_HOST: http://localhost:11434
-          EMBEDDING_MODEL: nomic-embed-text
+          EMBEDDING_BACKEND: fastembed
         run: |
           uv run python -m scripts.ingest --source data/sample_docs --collection sap_docs
 
@@ -176,8 +176,7 @@ jobs:
         env:
           QDRANT_URL: http://localhost:6333
           LLM_PROVIDER: ollama
-          OLLAMA_HOST: http://localhost:11434
-          EMBEDDING_MODEL: nomic-embed-text
+          EMBEDDING_BACKEND: fastembed
         run: uv run pytest -m rag_quality -v --tb=short
 
   neo4j-smoke:

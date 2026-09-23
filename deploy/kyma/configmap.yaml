@@ -28,6 +28,14 @@ data:
   GRAPH_RAG_ENABLED: "false"
   WEB_SEARCH_ENABLED: "true"
   WEB_SEARCH_THRESHOLD: "0.6"
+  # DA-39: politica de data sovereignty — alinhada com o provider cloud
+  # configurado acima (openai/azure_openai). "cloud_with_dlp" permite
+  # que o AI Gateway rotei dados confidenciais para providers cloud,
+  # assumindo que PII ja foi redacted pelo pipeline antes do gateway
+  # (garantido por redact_pii_deep em app/agent/nodes.py).
+  # Altere para "strict" se implantar um Ollama local no cluster.
+  DATA_SOVEREIGNTY_MODE: "cloud_with_dlp"
+
   # Langfuse (observabilidade) e opcional - vazio aqui, sem tracing.
   # Aponte para um Langfuse self-hosted ou cloud via Secret se quiser
   # observabilidade em produção (nao precisa ser ConfigMap, mas as

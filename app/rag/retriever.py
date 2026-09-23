@@ -16,7 +16,9 @@ import logging
 from functools import lru_cache
 
 import numpy as np
-from fastembed import SparseTextEmbedding
+import os
+
+from fastembed import SparseTextEmbedding, TextEmbedding
 from langchain_ollama import OllamaEmbeddings
 from qdrant_client import QdrantClient
 from qdrant_client.models import Fusion, FusionQuery, Prefetch, SparseVector
@@ -58,8 +60,28 @@ def _get_qdrant_client() -> QdrantClient:
     return QdrantClient(url=QDRANT_URL)
 
 
+# DA-38: suporte a EMBEDDING_BACKEND=fastembed para o CI de avaliacao RAG
+# (job rag-quality no GitHub Actions nao tem Ollama disponivel). Em producao
+# EMBEDDING_BACKEND nao e definido (default='ollama') e o comportamento e
+# identico ao anterior.
+_EMBEDDING_BACKEND = os.environ.get('EMBEDDING_BACKEND', 'ollama').lower()
+
+
+class _FastEmbedWrapper:
+    """Adaptador minimo de fastembed.TextEmbedding para a interface .embed_query()."""
+
+    def __init__(self, model_name: str = 'BAAI/bge-small-en-v1.5') -> None:
+        self._model = TextEmbedding(model_name=model_name)
+
+    def embed_query(self, text: str) -> list[float]:
+        return list(next(self._model.embed([text])))
+
+
 @lru_cache(maxsize=1)
-def _get_embeddings() -> OllamaEmbeddings:
+def _get_embeddings() -> 'OllamaEmbeddings | _FastEmbedWrapper':
+    if _EMBEDDING_BACKEND == 'fastembed':
+        _logger.info('EMBEDDING_BACKEND=fastembed: usando TextEmbedding local (sem Ollama)')
+        return _FastEmbedWrapper()
     return OllamaEmbeddings(model=EMBEDDING_MODEL, base_url=settings.ollama_host)
 
 

@@ -105,17 +105,23 @@ def _retrieve_hybrid(query: str, collection_name: str, top_k: int) -> list[dict]
         with_vectors=["dense"],
     ).points
 
-    # Score composto: combina cosseno denso (semantica) com o score RRF
-    # devolvido pelo Qdrant (que captura contribuicao do BM25 esparso).
+    # Score composto: combina cosseno denso (semantica) com rank posicional
+    # normalizado (sinal do BM25 esparso via RRF do Qdrant).
     # alpha=0.7: semantica tem peso maior, mas BM25 ainda influencia
     # quando um termo exato (codigo de erro, nome de transacao) aparece
     # no documento mas nao no espaco semantico do embedding.
     #
-    # Nota: o Qdrant ja executa a fusao RRF real internamente via
-    # FusionQuery(fusion=Fusion.RRF) e devolve hit.score na escala
-    # correta. Re-derivar o score por posicao em fused (enumerate) seria
-    # "double ranking" - aplicar RRF sobre output de RRF - o que e
-    # matematicamente incorreto. Usamos hit.score diretamente.
+    # Normalizacao do sinal RRF: hit.score do Qdrant esta na escala
+    # 1/(60+rank) ≈ 0.015–0.016, entao com alpha=0.7/0.3 o BM25 contribuia
+    # apenas ~0.005 no composite_score — efetivamente irrelevante para a
+    # ordenacao. Substituimos por score posicional normalizado 1/(rank+1),
+    # que varia em [1/N, 1] e preserva o sinal de rank sem escala tiny.
+    # O rank aqui e da lista fused pos-RRF (ja fusionada), entao rank=0
+    # = melhor candidato combinado denso+esparso.
+    #
+    # Contrato: hit.score original e preservado em rrf_raw_score para
+    # observabilidade. "score" reportado continua sendo cosseno puro
+    # (guardrails, thresholds e eval calibrados para escala cosseno).
     ALPHA = 0.7
 
     results = []
@@ -123,12 +129,11 @@ def _retrieve_hybrid(query: str, collection_name: str, top_k: int) -> list[dict]
         stored_dense = hit.vector["dense"] if isinstance(hit.vector, dict) else hit.vector
         cosine_score = _cosine_similarity(dense_query, stored_dense)
 
-        # hit.score e o score RRF verdadeiro calculado pelo Qdrant
-        # internamente (por lista densa e esparsa separadas) - usamos
-        # diretamente como sinal de rank esparso.
-        qdrant_rrf_score = hit.score
+        # Normaliza para [1/N, 1]: rank=0 -> 1.0, rank=1 -> 0.5, ...
+        # Preserva a ordem relativa da fusao RRF sem a escala tiny (0.015).
+        rrf_normalized = 1.0 / (rank + 1)
 
-        composite_score = ALPHA * cosine_score + (1 - ALPHA) * qdrant_rrf_score
+        composite_score = ALPHA * cosine_score + (1 - ALPHA) * rrf_normalized
 
         # DA-25: so descarta ruido extremo aqui (MIN_CANDIDATE_FLOOR) -
         # a decisao real de confianca (score_threshold) acontece DEPOIS
@@ -150,6 +155,8 @@ def _retrieve_hybrid(query: str, collection_name: str, top_k: int) -> list[dict]
                 "cosine_score": cosine_score,
                 "composite_score": composite_score,
                 "rrf_rank": rank,
+                "rrf_normalized": rrf_normalized,
+                "rrf_raw_score": hit.score,
                 "collection": collection_name,
             }
         )

@@ -741,7 +741,8 @@ def _run_diagnosis_agent(state: CopilotState, persona: str) -> dict:
         if _cd and _cd.message:
             _connector_msg = f" {_cd.message}"
         _rule_text = (state.get("description") or "") + _connector_msg
-        _rule_match = match_known_error(_rule_text)
+        _has_connector = bool(_cd and not _cd.is_mock and not _cd.is_fallback)
+        _rule_match = match_known_error(_rule_text, has_connector_data=_has_connector)
         if _rule_match:
             _rule_match = _apply_confidence_guardrails(_rule_match, state)
             return _rule_match

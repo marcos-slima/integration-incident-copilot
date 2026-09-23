@@ -134,38 +134,52 @@ class TestMatchKnownError:
         assert isinstance(result["next_steps"], list)
         assert len(result["next_steps"]) >= 1
 
+    def test_evidence_strength_without_connector(self):
+        """Só texto digitado → evidence_strength reduzido (0.70)."""
+        result = match_known_error("oauth token expired", has_connector_data=False)
+        assert result is not None
+        assert result["evidence_strength"] == 0.70
+
+    def test_evidence_strength_with_connector(self):
+        """Conector real presente → evidence_strength máximo (0.95)."""
+        result = match_known_error("oauth token expired", has_connector_data=True)
+        assert result is not None
+        assert result["evidence_strength"] == 0.95
+
+    def test_evidence_strength_default_is_text_only(self):
+        """Valor padrão (sem argumento) deve ser equivalente a has_connector_data=False."""
+        result_default = match_known_error("HTTP 503 backend unavailable")
+        result_explicit = match_known_error("HTTP 503 backend unavailable", has_connector_data=False)
+        assert result_default is not None
+        assert result_explicit is not None
+        assert result_default["evidence_strength"] == result_explicit["evidence_strength"] == 0.70
+
+
+
     def test_idoc_multiple_objects(self):
         result = match_known_error("IDOC_ERROR_MULTIPLE_OBJECTS raised for IDoc type ORDERS05")
         assert result is not None
         assert result["rule_engine_category"] == "sap_idoc_multiple_objects"
 
     def test_idoc_port_partner_status_68(self):
-        result = match_known_error(
-            "IDoc status 68 — IDOC SYNTAX ERROR SENDER, port not found in partner profile"
-        )
+        result = match_known_error("IDoc status 68 — IDOC SYNTAX ERROR SENDER, port not found in partner profile")
         assert result is not None
         assert result["rule_engine_category"] == "sap_idoc_port_partner"
         assert "WE20" in " ".join(result["next_steps"])
 
     def test_badi_exception(self):
-        result = match_known_error(
-            "BAdI exception raised in IF_EX_ME_PROCESS_PO_CUST=>PROCESS_ITEM: CX_BADI validation error"
-        )
+        result = match_known_error("BAdI exception raised in IF_EX_ME_PROCESS_PO_CUST=>PROCESS_ITEM: CX_BADI validation error")
         assert result is not None
         assert result["rule_engine_category"] == "sap_badi_exception"
         assert "ST22" in " ".join(result["next_steps"])
 
     def test_bapi_failure(self):
-        result = match_known_error(
-            "BAPI_SALESORDER_CREATEFROMDAT2 RETURN TYPE E: Material 100-200 not found"
-        )
+        result = match_known_error("BAPI_SALESORDER_CREATEFROMDAT2 RETURN TYPE E: Material 100-200 not found")
         assert result is not None
         assert result["rule_engine_category"] == "sap_bapi_failure"
 
     def test_serial_number_duplicate(self):
-        result = match_known_error(
-            "Serial number SN-00123 duplicate — already assigned to another material"
-        )
+        result = match_known_error("Serial number SN-00123 duplicate — already assigned to another material")
         assert result is not None
         assert result["rule_engine_category"] == "sap_serial_number_duplicate"
         assert "IQ03" in " ".join(result["next_steps"])
@@ -177,12 +191,9 @@ class TestMatchKnownError:
         assert "FD32" in " ".join(result["next_steps"])
 
     def test_mdg_mdi_lock(self):
-        result = match_known_error(
-            "MDI error: master data integration replication failed — MDG lock on BP 0001234"
-        )
+        result = match_known_error("MDI error: master data integration replication failed — MDG lock on BP 0001234")
         assert result is not None
         assert result["rule_engine_category"] == "sap_mdg_mdi_lock"
-
 
 # ---------------------------------------------------------------------------
 # Testes de integração com _run_diagnosis_agent

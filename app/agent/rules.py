@@ -522,7 +522,7 @@ KNOWN_ERROR_RULES: list[ErrorRule] = [
 # ---------------------------------------------------------------------------
 
 
-def match_known_error(text: str) -> dict | None:
+def match_known_error(text: str, has_connector_data: bool = False) -> dict | None:
     """Avalia o texto contra todas as regras conhecidas.
 
     Retorna um dict compatível com DiagnosisModel se alguma regra bater,
@@ -530,15 +530,25 @@ def match_known_error(text: str) -> dict | None:
 
     Args:
         text: Texto combinado (description + mensagem do conector, se houver).
+        has_connector_data: True quando o estado possui connector_data real
+            (não mock/fallback). Usado para calibrar evidence_strength:
+            com evidência objetiva do conector → 0.95; só texto digitado → 0.70.
+            Um regex sobre texto puro é mais frágil que um código de erro
+            capturado diretamente do sistema de origem.
     """
     if not text:
         return None
 
+    evidence_strength = 0.95 if has_connector_data else 0.70
+
     for rule in KNOWN_ERROR_RULES:
         if rule.matches(text):
             _logger.info(
-                "[rule_engine] Incidente resolvido deterministicamente — categoria=%s",
+                "[rule_engine] Incidente resolvido deterministicamente — "
+                "categoria=%s evidence_strength=%.2f (connector_data=%s)",
                 rule.category,
+                evidence_strength,
+                has_connector_data,
             )
             return {
                 "matched_source": f"rule_engine:{rule.category}",
@@ -547,6 +557,6 @@ def match_known_error(text: str) -> dict | None:
                 "next_steps": rule.next_steps,
                 "rule_engine_category": rule.category,
                 "llm_provider_used": "rule_engine",
-                "evidence_strength": 0.95,
+                "evidence_strength": evidence_strength,
             }
     return None

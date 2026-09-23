@@ -80,7 +80,7 @@ def _get_client():
         _redis_client.ping()
         _redis_available = True
         return _redis_client
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         _logger.warning(
             "[idempotency] Redis nao disponivel — idempotencia distribuida "
             "desabilitada (fallback: sem deduplicacao entre pods). "
@@ -119,7 +119,7 @@ def is_duplicate(event_id: str) -> bool:
         # nao expire enquanto eventos recentes ainda estao sendo processados
         client.expire(_REDIS_KEY, _IDEMPOTENCY_TTL_SECONDS)
         return False
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         _logger.warning(
             "[idempotency] Erro ao verificar idempotencia no Redis — "
             "processando evento normalmente (fail-open). "

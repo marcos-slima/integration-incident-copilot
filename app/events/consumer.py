@@ -110,7 +110,7 @@ def _run_diagnosis_background(envelope: IncidentEventEnvelope) -> None:
         # DLQ: log estruturado com todos os campos para reprocessamento
         # manual. Nao e silencioso - nivel ERROR garante que o operador
         # veja (alertas de log tipicamente filtram por nivel >= ERROR).
-        _logger.error(
+        _logger.exception(
             "[events] Falha no diagnostico em background (DLQ) — "
             "cloudevents.source=%s cloudevents.id=%s cloudevents.time=%s "
             "description=%r",
@@ -118,7 +118,6 @@ def _run_diagnosis_background(envelope: IncidentEventEnvelope) -> None:
             event_id,
             getattr(envelope, "time", None),
             getattr(envelope.data, "description", None),
-            exc_info=True,
         )
 
 

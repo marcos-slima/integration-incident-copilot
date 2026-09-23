@@ -92,4 +92,5 @@ markers = [
     # estao configuradas, o que ja cobre "sem Neo4j disponivel" tanto
     # localmente quanto no job padrao "test" ('-m "not integration"').
     "neo4j_smoke: requer um Neo4j real vivo (GRAPH_RAG_ENABLED + credenciais); ver job 'neo4j-smoke' do CI",
+    "rag_quality: quality gate RAG contra Qdrant real com dataset de avaliacao; ver job 'rag-quality' do CI",
 ]

@@ -151,8 +151,15 @@ def _estimate_cost_usd(
 
 
 def _select_allowed_providers(sensitivity: Sensitivity, primary: str, fallback: str) -> list[str]:
-    """Aplica a policy de roteamento. Para dado confidencial, um
-    provider cloud NUNCA entra na lista - nem como fallback."""
+    """Aplica a policy de roteamento.
+
+    DA-39: comportamento depende de settings.data_sovereignty_mode:
+    - "strict" (default): dado confidencial so pode ir para providers
+      locais (ollama). Adequado para on-premise / self-hosted.
+    - "cloud_with_dlp": dado confidencial pode ir para cloud providers
+      (openai/azure_openai) porque PII ja foi redacted antes de chegar
+      aqui (redact_pii_deep em nodes.py). Use em deploy Kyma/cloud.
+    """
     candidates = [primary] + ([fallback] if fallback else [])
     # remove duplicatas preservando ordem (primario tem prioridade)
     seen: set[str] = set()
@@ -160,7 +167,14 @@ def _select_allowed_providers(sensitivity: Sensitivity, primary: str, fallback: 
 
     if sensitivity == "public":
         return candidates
-    return [p for p in candidates if PROVIDER_LOCALITY.get(p) == "local"]
+
+    # strict: apenas providers locais
+    if settings.data_sovereignty_mode == "strict":
+        return [p for p in candidates if PROVIDER_LOCALITY.get(p) == "local"]
+
+    # cloud_with_dlp: todos os providers sao permitidos — PII ja foi
+    # redacted pelo pipeline antes de chegar aqui (redact_pii_deep).
+    return candidates
 
 
 def invoke_via_gateway(

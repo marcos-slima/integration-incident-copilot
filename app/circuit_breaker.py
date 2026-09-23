@@ -56,6 +56,12 @@ class CircuitBreaker:
         if state.consecutive_failures >= failure_threshold:
             state.opened_at = time.monotonic()
 
+    def consecutive_failures(self, key: str) -> int:
+        """Numero de falhas consecutivas para `key` - API publica para
+        que chamadores (ex.: app/llm/gateway.py) nao precisem acessar
+        `_state()` diretamente (atributo privado)."""
+        return self._state(key).consecutive_failures
+
     def reset(self) -> None:
         """So para testes - limpa todo o estado do circuito."""
         self._states.clear()

@@ -129,10 +129,25 @@ def _estimate_tokens(text: str) -> int:
     return max(1, len(text) // 4)
 
 
-def _estimate_cost_usd(provider: str, text: str) -> float:
-    tokens = _estimate_tokens(text)
+# Multiplicador de tokens de completion em relacao ao prompt (teto
+# conservador para a estimativa de budget). O prompt de diagnostico
+# tipicamente tem mais tokens do que a resposta; 0.5 e um teto
+# razoavel sem subestimar. Ajustavel via config futuramente.
+_COMPLETION_TOKEN_RATIO = 0.5
+
+
+def _estimate_cost_usd(
+    provider: str, prompt_text: str, completion_ratio: float = _COMPLETION_TOKEN_RATIO
+) -> float:
+    """Estima custo em USD considerando tokens de prompt E completion.
+    Antes: so contava tokens do prompt (subestimava o custo real em ~33%).
+    Agora: acrescenta `completion_ratio * prompt_tokens` como estimativa
+    do completion - mais conservador, ainda sem tokenizer real."""
+    prompt_tokens = _estimate_tokens(prompt_text)
+    completion_tokens = int(prompt_tokens * completion_ratio)
+    total_tokens = prompt_tokens + completion_tokens
     price = _PRICE_PER_1K_TOKENS_USD.get(provider, 0.0)
-    return (tokens / 1000.0) * price
+    return (total_tokens / 1000.0) * price
 
 
 def _select_allowed_providers(sensitivity: Sensitivity, primary: str, fallback: str) -> list[str]:
@@ -230,7 +245,7 @@ def invoke_via_gateway(
             # base=0.0 desabilita (ex.: testes de velocidade).
             _backoff_base = cfg.llm_gateway_backoff_base_seconds
             if _backoff_base > 0.0:
-                _attempt = circuit_breaker._state(provider).consecutive_failures
+                _attempt = circuit_breaker.consecutive_failures(provider)
                 _raw_delay = _backoff_base * (2 ** min(_attempt - 1, 6))
                 _capped = min(_raw_delay, cfg.llm_gateway_backoff_max_seconds)
                 _jitter = _capped * random.uniform(-0.2, 0.2)
@@ -241,6 +256,15 @@ def invoke_via_gateway(
                     _attempt,
                     _delay,
                 )
+                # LIMITACAO CONHECIDA: time.sleep() bloqueia a thread do
+                # uvicorn (FastAPI e WSGI por default, nao async). Para
+                # endpoints async (/diagnose/async + worker RQ) o impacto
+                # e zero. Para endpoints sync (/diagnose, /events/incident)
+                # bloqueia UMA thread do threadpool por no maximo
+                # llm_gateway_backoff_max_seconds (default: 30s). Aceitavel
+                # em producao single-instance (workaround: aumentar
+                # uvicorn --workers); para async completo, migrar
+                # invoke_via_gateway para async def + asyncio.sleep.
                 time.sleep(_delay)
             logger.warning(
                 "AI Gateway audit: provider=%s sensitivity=%s status=failure "

@@ -132,19 +132,6 @@ wheels = [
 ]
 
 [[package]]
-name = "aiormq"
-version = "7.0.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pamqp" },
-    { name = "yarl" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/00/16/7e1c2bb887db6cbad191db9a1562e1cf5c0c61ad93f194ddc7baf5661f02/aiormq-7.0.0.tar.gz", hash = "sha256:f524121f1afbb875f50235b2748f81331e3be47542ee600e83c321c4e97ea168", size = 49231, upload-time = "2026-07-09T11:40:51.775Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/53/88/8da3627882f6bd75f780f87e46d0b58da99332c1b71d038db7a127a80648/aiormq-7.0.0-py3-none-any.whl", hash = "sha256:df49bb2282e5374a28507c4c43948e8c8e5321590f2998781c2d90a34e100789", size = 32152, upload-time = "2026-07-09T11:40:50.508Z" },
-]
-
-[[package]]
 name = "aiosignal"
 version = "1.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1096,7 +1083,6 @@ version = "1.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiofiles" },
-    { name = "aiormq" },
     { name = "ddgs" },
     { name = "fastapi" },
     { name = "fastembed" },
@@ -1115,6 +1101,7 @@ dependencies = [
     { name = "pymupdf4llm" },
     { name = "pypdf" },
     { name = "python-dotenv" },
+    { name = "python-qpid-proton" },
     { name = "qdrant-client" },
     { name = "redis" },
     { name = "rq" },
@@ -1139,7 +1126,6 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiofiles", specifier = ">=25.1.0" },
-    { name = "aiormq", specifier = ">=6.8" },
     { name = "ddgs", specifier = ">=9.16.0" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "fastembed", specifier = ">=0.8.0" },
@@ -1158,6 +1144,7 @@ requires-dist = [
     { name = "pymupdf4llm", specifier = ">=1.28.2" },
     { name = "pypdf", specifier = ">=6.15.0" },
     { name = "python-dotenv", specifier = ">=1.0" },
+    { name = "python-qpid-proton", specifier = ">=0.39" },
     { name = "qdrant-client", specifier = ">=1.19" },
     { name = "redis", specifier = ">=5.2" },
     { name = "rq", specifier = ">=2.12.0" },
@@ -2522,15 +2509,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pamqp"
-version = "4.0.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/31/4c/33a0ddaaac7bc42f9a542dbaaee8b580ceca3f89bf5da7c498d1fa97ff9a/pamqp-4.0.1.tar.gz", hash = "sha256:9dd13b828e346622793981f14a5df817fce5de998c746209d6c0154eb8403970", size = 137192, upload-time = "2026-07-06T16:37:51.732Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/71/14/1dfc08b743ba995a38dee0ea09beb46a05c7fe8ac53d729095905f7bf11d/pamqp-4.0.1-py3-none-any.whl", hash = "sha256:a547f45128b06e42ce8d7a739b0cfcc40f2c724770622eaaff4a3f587b1cf7d0", size = 32773, upload-time = "2026-07-06T16:37:50.623Z" },
-]
-
-[[package]]
 name = "pillow"
 version = "12.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3126,6 +3104,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/5b/42/55c32bb9b12693c092ad250a0e82edb5b31ddeda6eb772de5f308b3804ad/python_multipart-0.0.32.tar.gz", hash = "sha256:be54b7f3fa167bb83e4fcd936b887b708f4e57fe75911c02aebf53efaf8d938e", size = 46881, upload-time = "2026-06-04T16:18:58.647Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e1/04/e8135ebd1ad02c56ec633277529b2602ff99ff634be76cdba5744cf554fd/python_multipart-0.0.32-py3-none-any.whl", hash = "sha256:ff6d3f776f16878c894e52e107296ffc890e913c611b1a4ec6c44e2821fe2e23", size = 30042, upload-time = "2026-06-04T16:18:57.319Z" },
+]
+
+[[package]]
+name = "python-qpid-proton"
+version = "0.40.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cffi" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d5/dd/e9e5066009517bdfee92374264a2b6794fa0987bfeddcbf4d2a08dccaf36/python_qpid_proton-0.40.0.tar.gz", hash = "sha256:7680d607cf6e9684f97bf5b2ba16cda7d8512aab9e4ff78f98d44a4644fc819a", size = 354215, upload-time = "2025-05-19T18:45:37.932Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/40/92/bc61052af9542accc0ea9fdebebe585f6b2f2d28588d952180d808972239/python_qpid_proton-0.40.0-cp312-cp312-macosx_13_0_x86_64.whl", hash = "sha256:fe56211c6dcc7ea1fb9d78a017208a4c08043cd901780b6602a74ff70f38bf1f", size = 324371, upload-time = "2025-05-19T20:12:39.224Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/dd/a82c1e377f08d62d83898c1aa9b39aef890e910f683fca6dc5242a123f6b/python_qpid_proton-0.40.0-cp313-cp313-win_amd64.whl", hash = "sha256:a19d8c71c908700ceb38f6cbc1eb4a039428570f96bfc2caeeafdfec804fb94f", size = 277376, upload-time = "2025-05-19T19:39:31.201Z" },
 ]
 
 [[package]]

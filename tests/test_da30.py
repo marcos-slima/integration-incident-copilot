@@ -9,6 +9,7 @@ Cobre:
 
 from __future__ import annotations
 
+import contextlib
 from unittest.mock import MagicMock, patch
 
 from app.redaction import redact_pii_text
@@ -180,13 +181,11 @@ class TestGatewayBackoff:
             patch("app.llm.gateway.get_chat_model", return_value=MagicMock()),
             patch("app.llm.gateway.time.sleep") as mock_sleep,
         ):
-            try:
+            with contextlib.suppress(Exception):  # esperado — todos os providers falham
                 invoke_via_gateway(
                     build_and_invoke=build_and_invoke_mock,
                     state={"description": "teste", "connector_data": None},
                 )
-            except Exception:  # noqa: BLE001 S110
-                pass  # esperado — todos os providers falham
 
         # sleep deve ter sido chamado pelo menos uma vez
         assert mock_sleep.called, "backoff nao chamou time.sleep"
@@ -217,13 +216,11 @@ class TestGatewayBackoff:
             mock_settings.llm_fallback_provider = None
             mock_settings.llm_model = "qwen3-coder-next:latest"
 
-            try:
+            with contextlib.suppress(Exception):
                 invoke_via_gateway(
                     build_and_invoke=build_and_invoke_mock,
                     state={"description": "teste", "connector_data": None},
                 )
-            except Exception:  # noqa: BLE001 S110
-                pass
 
         # Com base=0, sleep NAO deve ter sido chamado
         assert not mock_sleep.called, "sleep foi chamado mesmo com backoff desabilitado"

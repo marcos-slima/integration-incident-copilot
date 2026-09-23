@@ -77,7 +77,7 @@ class Evidence(BaseModel):
     source_id: str = Field(
         description="Identificador legivel da fonte (ex: 'rag:cpi_http_401.md', 'connector:OData')."
     )
-    source_type: Literal["connector", "rag", "graph", "web", "user"]
+    source_type: Literal["connector", "rag", "graph", "web", "user", "rule_engine"]
     locator: str | None = Field(
         default=None,
         description="Nome do documento/sistema referenciado, quando aplicavel (ex: nome do arquivo RAG).",
@@ -106,7 +106,45 @@ class Evidence(BaseModel):
 
 class DiagnosisResponse(BaseModel):
     probable_root_cause: str
-    confidence: float = Field(ge=0.0, le=1.0)
+
+    # P1.5 (revisao arquitetural externa, 23/09/2026): confidence dividido em
+    # dois campos com semanticas distintas:
+    #
+    # - model_confidence: o que o LLM auto-reportou (0.0-1.0), ajustado pelos
+    #   guardrails deterministicos de _apply_confidence_guardrails() (teto por
+    #   evidence_strength, teto por fallback, etc.). E o campo que existia antes
+    #   com nome "confidence" — renomeado para deixar claro que e uma estimativa
+    #   do MODELO, nao uma metrica objetiva do pipeline.
+    #
+    # - diagnosis_confidence: metrica CALCULADA pelo pipeline com base nos sinais
+    #   objetivos disponiveis (evidence_strength + presenca de dado real de conector
+    #   + correspondencia RAG). Nao depende de nenhuma autoavaliacao do LLM.
+    #   Formula: max(evidence_strength, model_confidence * evidence_strength).
+    #   Leitura: "quao confiavel e este diagnostico dado o que o pipeline
+    #   efetivamente encontrou" — e o numero que um consumidor deveria usar para
+    #   decidir se o diagnostico e acionavel sem revisao humana.
+    model_confidence: float = Field(
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Confianca auto-reportada pelo LLM, ajustada pelos guardrails "
+            "deterministicos (teto por evidence_strength, fallback, ausencia de RAG). "
+            "Anteriormente chamada 'confidence'. Ver P1.5."
+        ),
+    )
+    diagnosis_confidence: float = Field(
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Confianca CALCULADA pelo pipeline (nao auto-relatada pelo LLM): "
+            "max(evidence_strength, model_confidence * evidence_strength). "
+            "Usa apenas sinais objetivos — evidence_strength do retrieval/conector "
+            "e model_confidence pos-guardrail. E o valor recomendado para decisoes "
+            "de automacao (ex: 'acionar runbook se diagnosis_confidence > 0.8'). "
+            "Ver P1.5."
+        ),
+    )
+
     next_steps: list[str]
     report_markdown: str
     matched_source: str | None = None

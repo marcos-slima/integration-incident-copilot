@@ -114,14 +114,15 @@ def test_redact_pii_deep_on_pydantic_model():
 
     model = DiagnosisResponse(
         probable_root_cause="contato joao@empresa.com para detalhes",
-        confidence=0.7,
+        model_confidence=0.7,
+        diagnosis_confidence=0.0,
         next_steps=["Passo 1"],
         report_markdown="## Diagnostico",
         matched_source=None,
     )
     result = redact_pii_deep(model)
     assert result["probable_root_cause"] == "contato [EMAIL_REDACTED] para detalhes"
-    assert result["confidence"] == 0.7
+    assert result["model_confidence"] == 0.7
 
 
 def test_redact_pii_deep_never_raises_on_unmaskable_object():

@@ -64,7 +64,8 @@ def test_diagnose_incident_tool_calls_run_diagnosis_and_returns_dict(monkeypatch
         assert request.description == "iFlow falhando com erro 401"
         return DiagnosisResponse(
             probable_root_cause="Causa raiz de teste (stub)",
-            confidence=0.75,
+            model_confidence=0.75,
+            diagnosis_confidence=0.0,
             next_steps=["Passo 1"],
             report_markdown="## Diagnostico\n\nCausa raiz de teste (stub)",
             matched_source="doc_teste.md",
@@ -75,7 +76,7 @@ def test_diagnose_incident_tool_calls_run_diagnosis_and_returns_dict(monkeypatch
     result = diagnose_incident(description="iFlow falhando com erro 401")
 
     assert result["probable_root_cause"] == "Causa raiz de teste (stub)"
-    assert result["confidence"] == 0.75
+    assert result["model_confidence"] == 0.75
     assert result["matched_source"] == "doc_teste.md"
 
 

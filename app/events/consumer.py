@@ -106,7 +106,7 @@ def _run_diagnosis_background(envelope: IncidentEventEnvelope) -> None:
             result.confidence,
             result.llm_provider_used,
         )
-    except Exception:  # noqa: BLE001
+    except Exception:
         # DLQ: log estruturado com todos os campos para reprocessamento
         # manual. Nao e silencioso - nivel ERROR garante que o operador
         # veja (alertas de log tipicamente filtram por nivel >= ERROR).
@@ -164,7 +164,7 @@ def handle_incident_event_async(
     )
     if _is_duplicate(event_id):
         _logger.warning(
-            "[events] Evento duplicado descartado (idempotencia) — " "cloudevents.id=%s",
+            "[events] Evento duplicado descartado (idempotencia) — cloudevents.id=%s",
             event_id,
         )
         return

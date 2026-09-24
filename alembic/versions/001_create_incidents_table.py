@@ -23,8 +23,9 @@ from __future__ import annotations
 import uuid
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "001"
 down_revision = None
@@ -85,15 +86,11 @@ def upgrade() -> None:
     op.create_index("ix_incidents_created_at", "incidents", ["created_at"])
 
     # Índices compostos para queries analíticas dos dashboards Grafana
-    op.create_index(
-        "ix_incidents_agent_created", "incidents", ["agent_domain", "created_at"]
-    )
+    op.create_index("ix_incidents_agent_created", "incidents", ["agent_domain", "created_at"])
     op.create_index(
         "ix_incidents_provider_created", "incidents", ["llm_provider_used", "created_at"]
     )
-    op.create_index(
-        "ix_incidents_sensitivity", "incidents", ["sensitivity_level", "created_at"]
-    )
+    op.create_index("ix_incidents_sensitivity", "incidents", ["sensitivity_level", "created_at"])
 
 
 def downgrade() -> None:

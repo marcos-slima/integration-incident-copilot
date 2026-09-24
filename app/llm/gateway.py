@@ -60,10 +60,10 @@ import time
 from typing import Literal
 
 from app.circuit_breaker import CircuitBreaker
-from app.metrics import CIRCUIT_BREAKER_OPEN_TOTAL, CIRCUIT_BREAKER_STATE, LLM_FALLBACK_TOTAL
 from app.config import Settings, settings
 from app.exceptions import ConfigurationError
 from app.llm.factory import TRANSPORT_FAILURE_EXCEPTIONS, get_chat_model
+from app.metrics import CIRCUIT_BREAKER_OPEN_TOTAL, CIRCUIT_BREAKER_STATE, LLM_FALLBACK_TOTAL
 
 logger = logging.getLogger(__name__)
 
@@ -256,7 +256,9 @@ def invoke_via_gateway(
             latency = time.monotonic() - started_at
             circuit_breaker.record_failure(provider, cfg.llm_gateway_circuit_failure_threshold)
             CIRCUIT_BREAKER_STATE.labels(target=provider).set(
-                1 if circuit_breaker.is_open(provider, cfg.llm_gateway_circuit_cooldown_seconds) else 0
+                1
+                if circuit_breaker.is_open(provider, cfg.llm_gateway_circuit_cooldown_seconds)
+                else 0
             )
             # DA-30 — backoff exponencial com jitter antes de tentar o
             # proximo provider. Evita bombardear um provider degradado

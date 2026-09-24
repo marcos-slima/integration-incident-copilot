@@ -19,17 +19,18 @@ import os
 import sys
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import engine_from_config, pool
+
+from alembic import context
 
 # Garante que o pacote `app` é importável a partir do root do projeto
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.config import settings  # noqa: E402
-from app.db import Base  # noqa: E402
+from app.config import settings
+from app.db import Base
 
 # Importar modelos para que o metadata os registre (autogenerate)
-from app.services.incident_repository import Incident  # noqa: E402, F401
+from app.services.incident_repository import Incident  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # Configuração Alembic
@@ -44,10 +45,8 @@ if config.config_file_name is not None:
 _raw_url = settings.database_url or ""
 if _raw_url:
     # Alembic CLI usa psycopg2 (sync) — garantir dialeto correto
-    _sync_url = (
-        _raw_url
-        .replace("postgresql+asyncpg://", "postgresql://")
-        .replace("postgres+asyncpg://", "postgresql://")
+    _sync_url = _raw_url.replace("postgresql+asyncpg://", "postgresql://").replace(
+        "postgres+asyncpg://", "postgresql://"
     )
     config.set_main_option("sqlalchemy.url", _sync_url)
 
@@ -57,6 +56,7 @@ target_metadata = Base.metadata
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def run_migrations_offline() -> None:
     """Gera SQL sem abrir conexão real (modo offline)."""

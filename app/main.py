@@ -19,12 +19,22 @@ from app.a2a.server import router as a2a_router
 from app.agent.graph import run_diagnosis
 from app.config import settings
 from app.connectors import connector_status
+from app.db import AsyncSessionLocal, is_db_enabled
 from app.events.amqp_consumer import amqp_consumer  # DA-32
 from app.events.consumer import handle_incident_event
 from app.events.idempotency import _warn_if_redis_missing_with_replicas
 from app.exceptions import DiagnosisTimeoutError
 from app.mcp.server import build_mcp_asgi_app
 from app.mcp.server import mcp as mcp_server
+from app.metrics import (
+    DIAGNOSIS_LATENCY,
+    DIAGNOSIS_TOTAL,
+    DIAGNOSIS_VERIFIED_TOTAL,
+    PII_DETECTED_TOTAL,
+    REDACTION_APPLIED_TOTAL,
+    SENSITIVE_INCIDENT_TOTAL,
+    setup_metrics,
+)
 from app.models import (
     DiagnosisResponse,
     IncidentEventEnvelope,
@@ -33,22 +43,8 @@ from app.models import (
 )
 from app.queue import AsyncQueueUnavailableError, enqueue_diagnosis, get_job_status
 from app.rag.graph_store import GRAPH_UNAVAILABLE_EXCEPTIONS, ensure_constraints, verify_incident
-from app.db import AsyncSessionLocal, is_db_enabled
-from app.metrics import (
-    CIRCUIT_BREAKER_OPEN_TOTAL,
-    CIRCUIT_BREAKER_STATE,
-    DIAGNOSIS_LATENCY,
-    DIAGNOSIS_TOTAL,
-    DIAGNOSIS_VERIFIED_TOTAL,
-    LLM_FALLBACK_TOTAL,
-    PII_DETECTED_TOTAL,
-    REDACTION_APPLIED_TOTAL,
-    RULE_ENGINE_HIT_TOTAL,
-    SENSITIVE_INCIDENT_TOTAL,
-    setup_metrics,
-)
-from app.services.incident_repository import IncidentRepository
 from app.rate_limit import limiter
+from app.services.incident_repository import IncidentRepository
 
 logger = logging.getLogger(__name__)
 
@@ -421,6 +417,7 @@ def diagnose(request: Request, body: IncidentRequest) -> DiagnosisResponse:
     Autenticacao: X-API-Key header (se API_KEY configurado no .env).
     """
     import time
+
     _t0 = time.monotonic()
     result = run_diagnosis(body)
     _latency_ms = int((time.monotonic() - _t0) * 1000)
@@ -460,8 +457,7 @@ def diagnose(request: Request, body: IncidentRequest) -> DiagnosisResponse:
                 try:
                     repo = IncidentRepository(_session)
                     _evidence_list = [
-                        {"source": e.source, "content": e.content}
-                        for e in (result.evidence or [])
+                        {"source": e.source, "content": e.content} for e in (result.evidence or [])
                     ]
                     await repo.create(
                         interface_type=getattr(body, "interface_type", None),

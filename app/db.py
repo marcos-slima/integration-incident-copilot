@@ -24,7 +24,7 @@ Migrations (Alembic):
 from __future__ import annotations
 
 import logging
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -40,6 +40,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Normalização da URL
 # ---------------------------------------------------------------------------
+
 
 def _async_url(raw: str) -> str:
     """Garante dialeto asyncpg independente de como o operador configurou."""
@@ -66,7 +67,7 @@ if is_db_enabled():
     _url = _async_url(settings.database_url)  # type: ignore[attr-defined]
     engine = create_async_engine(
         _url,
-        echo=False,          # True em dev se quiser ver SQL no log
+        echo=False,  # True em dev se quiser ver SQL no log
         pool_pre_ping=True,  # detecta conexões mortas antes de usar
         pool_size=5,
         max_overflow=10,
@@ -78,14 +79,13 @@ if is_db_enabled():
     )
     logger.info("PostgreSQL engine criado: %s", _url.split("@")[-1])
 else:
-    logger.debug(
-        "DATABASE_URL não configurada — persistência de incidentes desabilitada."
-    )
+    logger.debug("DATABASE_URL não configurada — persistência de incidentes desabilitada.")
 
 
 # ---------------------------------------------------------------------------
 # Base declarativa ORM
 # ---------------------------------------------------------------------------
+
 
 class Base(DeclarativeBase):
     """Base para todos os modelos SQLAlchemy deste projeto."""
@@ -94,6 +94,7 @@ class Base(DeclarativeBase):
 # ---------------------------------------------------------------------------
 # Dependency FastAPI / helper de sessão
 # ---------------------------------------------------------------------------
+
 
 async def get_db_session() -> AsyncGenerator[AsyncSession | None, None]:
     """FastAPI Dependency que fornece sessão assíncrona (ou None se DB off).

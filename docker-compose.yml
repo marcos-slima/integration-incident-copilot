@@ -223,6 +223,36 @@ services:
     volumes:
       - ./data/sample_docs:/app/data/sample_docs:ro
 
+
+  # ---------------------------------------------------------------------------
+  # Fase 4 — Relatórios agendados (COI/IOC, SOC, iPaaS)
+  # ---------------------------------------------------------------------------
+  # Gera relatórios diários e semanais em Excel + Markdown.
+  # Executa como cron container: roda e sai (restart: "no").
+  # Agendar via host cron ou orquestrador:
+  #   0 6  * * *  docker compose --profile observability run --rm reporter
+  #   0 6  * * 1  docker compose --profile observability run --rm reporter --period weekly
+  reporter:
+    build: .
+    profiles: ["observability"]
+    command:
+      - ".venv/bin/python"
+      - "scripts/generate_reports.py"
+      - "--period"
+      - "${REPORT_PERIOD:-daily}"
+      - "--output-dir"
+      - "/app/reports"
+    environment:
+      DATABASE_URL: "${DATABASE_URL:-}"
+      REPORT_PERIOD: "${REPORT_PERIOD:-daily}"
+      REPORT_OUTPUT: "/app/reports"
+    volumes:
+      - ./reports:/app/reports
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
 volumes:
   ollama_data:
   qdrant_data:

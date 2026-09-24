@@ -124,10 +124,13 @@ else:
     class _NullMetric:
         def labels(self, **_kw):
             return self
+
         def inc(self, *_a, **_kw):
             pass
+
         def observe(self, *_a, **_kw):
             pass
+
         def set(self, *_a, **_kw):
             pass
 
@@ -148,6 +151,7 @@ else:
 # ---------------------------------------------------------------------------
 # Setup no lifespan do FastAPI
 # ---------------------------------------------------------------------------
+
 
 def setup_metrics(app: FastAPI) -> None:
     """Instrumenta o app FastAPI com Prometheus (se habilitado).

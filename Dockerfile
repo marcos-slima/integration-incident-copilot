@@ -40,7 +40,7 @@ RUN pip install --no-cache-dir uv
 # as versoes mais recentes compativeis com pyproject.toml, nao contra
 # as travadas no lockfile commitado).
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --extra reports
 
 COPY app/ app/
 COPY scripts/ scripts/

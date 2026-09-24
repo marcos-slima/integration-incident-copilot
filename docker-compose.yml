@@ -241,13 +241,14 @@ services:
       context: .
       target: app
     profiles: ["observability"]
-    command:
+    entrypoint:
       - ".venv/bin/python"
       - "scripts/generate_reports.py"
-      - "--period"
-      - "${REPORT_PERIOD:-daily}"
       - "--output-dir"
       - "/app/reports"
+    command:
+      - "--period"
+      - "${REPORT_PERIOD:-daily}"
     environment:
       DATABASE_URL: "${DATABASE_URL:-}"
       REPORT_PERIOD: "${REPORT_PERIOD:-daily}"

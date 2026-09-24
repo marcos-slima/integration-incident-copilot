@@ -92,6 +92,7 @@ dev = [
     "psutil>=7.2",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
+    "aiosqlite>=0.20",  # driver async SQLite para testes (test_incident_repository)
     "ruff>=0.16.1",
     # B4: ferramentas de qualidade exigidas pelo CI (tests.yml)
     "pytest-cov>=6.0",

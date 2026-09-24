@@ -1,6 +1,6 @@
 # Integration Incident Copilot
 
-[![tests](https://github.com/marcos-slima/sap-integration-copilot/actions/workflows/tests.yml/badge.svg)](https://github.com/marcos-slima/sap-integration-copilot/actions/workflows/tests.yml)
+[![tests](https://github.com/marcos-lima/integration-incident-copilot/actions/workflows/tests.yml/badge.svg)](https://github.com/marcos-lima/integration-incident-copilot/actions/workflows/tests.yml)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 > 📋 Veja o [processo de desenvolvimento](docs/PROCESSO_DESENVOLVIMENTO.md) seguido neste projeto, fase por fase.

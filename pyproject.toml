@@ -64,6 +64,13 @@ openai = [
     "langchain-openai>=0.3",
 ]
 
+[project.optional-dependencies]
+# Observabilidade Prometheus (Fase 2): PROMETHEUS_ENABLED=true exige este extra.
+# pip install -e ".[prometheus]"
+prometheus = [
+    "prometheus-fastapi-instrumentator>=7.0",
+]
+
 [tool.ruff]
 line-length = 100
 

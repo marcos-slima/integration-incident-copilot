@@ -312,6 +312,13 @@ class Settings(BaseSettings):
     #   alembic upgrade head
     database_url: str = ""
 
+    # Observabilidade Prometheus (Fase 2 Observabilidade Grafana)
+    # Opt-in: false (default) = sem /metrics endpoint, sem import de
+    # prometheus_client. True = expõe /metrics com métricas HTTP padrão
+    # (prometheus-fastapi-instrumentator) + métricas de negócio iic_*.
+    # Requires: pip install prometheus-fastapi-instrumentator
+    prometheus_enabled: bool = False
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

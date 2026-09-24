@@ -25,8 +25,12 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         gcc \
+        libc6-dev \
         libssl-dev \
         libffi-dev \
+        cmake \
+        libsasl2-dev \
+        libsasl2-2 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir uv

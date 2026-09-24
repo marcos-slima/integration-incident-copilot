@@ -17,21 +17,21 @@ Audiences cobertas pelos campos testados:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
 from sqlalchemy import JSON as SA_JSON
+from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.pool import StaticPool
 
-
 # ---------------------------------------------------------------------------
 # Modelo SQLite-compatível (espelho do IncidentRepository sem JSONB/UUID PG)
 # ---------------------------------------------------------------------------
+
 
 class TestBase(DeclarativeBase):
     pass
@@ -47,9 +47,7 @@ class IncidentSQLite(TestBase):
 
     __tablename__ = "incidents"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     interface_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -70,7 +68,7 @@ class IncidentSQLite(TestBase):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     diagnosis_correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
@@ -82,7 +80,7 @@ class IncidentSQLite(TestBase):
 # Repositório de teste (mesma lógica de negócio, modelo SQLite)
 # ---------------------------------------------------------------------------
 
-from sqlalchemy import select  # noqa: E402
+from sqlalchemy import select
 
 
 class IncidentRepository:
@@ -92,9 +90,7 @@ class IncidentRepository:
         self._session = session
 
     async def create(self, **kwargs: Any) -> IncidentSQLite:
-        incident = IncidentSQLite(
-            **{k: v for k, v in kwargs.items() if hasattr(IncidentSQLite, k)}
-        )
+        incident = IncidentSQLite(**{k: v for k, v in kwargs.items() if hasattr(IncidentSQLite, k)})
         self._session.add(incident)
         await self._session.flush()
         return incident
@@ -119,7 +115,7 @@ class IncidentRepository:
         incident = result.scalar_one_or_none()
         if incident is None:
             return None
-        incident.verified_at = datetime.now(timezone.utc)
+        incident.verified_at = datetime.now(UTC)
         incident.diagnosis_correct = diagnosis_correct
         incident.verified_by = verified_by
         incident.verified_root_cause = verified_root_cause
@@ -149,6 +145,7 @@ class IncidentRepository:
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest_asyncio.fixture
 async def session() -> AsyncSession:  # type: ignore[override]
     """Sessão SQLite in-memory — sem estado entre testes."""
@@ -170,6 +167,7 @@ async def session() -> AsyncSession:  # type: ignore[override]
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_kwargs(**overrides: Any) -> dict:
     return {
@@ -198,6 +196,7 @@ def _make_kwargs(**overrides: Any) -> dict:
 # Testes — criação
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_create_returns_incident_with_id(session: AsyncSession) -> None:
     repo = IncidentRepository(session)
@@ -213,13 +212,13 @@ async def test_create_returns_incident_with_id(session: AsyncSession) -> None:
 @pytest.mark.asyncio
 async def test_create_sets_created_at(session: AsyncSession) -> None:
     repo = IncidentRepository(session)
-    before = datetime.now(timezone.utc)
+    before = datetime.now(UTC)
     incident = await repo.create(**_make_kwargs())
-    after = datetime.now(timezone.utc)
+    after = datetime.now(UTC)
 
     created_at = incident.created_at
     if created_at.tzinfo is None:
-        created_at = created_at.replace(tzinfo=timezone.utc)
+        created_at = created_at.replace(tzinfo=UTC)
 
     assert before <= created_at <= after
 
@@ -253,6 +252,7 @@ async def test_create_multiple_unique_ids(session: AsyncSession) -> None:
 # ---------------------------------------------------------------------------
 # Testes — verificação humana
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_update_verification_correct(session: AsyncSession) -> None:
@@ -305,6 +305,7 @@ async def test_update_verification_invalid_uuid_returns_none(session: AsyncSessi
 # Testes — consulta
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_get_by_id_found(session: AsyncSession) -> None:
     repo = IncidentRepository(session)
@@ -350,6 +351,7 @@ async def test_list_recent_respects_limit(session: AsyncSession) -> None:
 # ---------------------------------------------------------------------------
 # Testes — campos SOC
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_create_with_pii_flags(session: AsyncSession) -> None:

@@ -21,7 +21,7 @@ a uma métrica ou filtro relevante para COI/IOC, SOC e iPaaS:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import Boolean, DateTime, Float, Index, Integer, String, Text, select
@@ -31,10 +31,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
 
-
 # ---------------------------------------------------------------------------
 # Modelo ORM
 # ---------------------------------------------------------------------------
+
 
 class Incident(Base):
     """Tabela de incidentes diagnosticados.
@@ -47,9 +47,7 @@ class Incident(Base):
     __tablename__ = "incidents"
 
     # Chave primária
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
     # Rastreabilidade — liga ao trace Langfuse
     trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
@@ -84,14 +82,12 @@ class Incident(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         index=True,
     )
 
     # Verificação humana (preenchida por /incidents/{id}/verify)
-    verified_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     diagnosis_correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     verified_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
     verified_root_cause: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -110,6 +106,7 @@ class Incident(Base):
 # ---------------------------------------------------------------------------
 # Repositório
 # ---------------------------------------------------------------------------
+
 
 class IncidentRepository:
     """CRUD assíncrono para a tabela `incidents`.
@@ -194,14 +191,12 @@ class IncidentRepository:
             except ValueError:
                 return None
 
-        result = await self._session.execute(
-            select(Incident).where(Incident.id == incident_id)
-        )
+        result = await self._session.execute(select(Incident).where(Incident.id == incident_id))
         incident = result.scalar_one_or_none()
         if incident is None:
             return None
 
-        incident.verified_at = datetime.now(timezone.utc)
+        incident.verified_at = datetime.now(UTC)
         incident.diagnosis_correct = diagnosis_correct
         incident.verified_by = verified_by
         incident.verified_root_cause = verified_root_cause
@@ -218,9 +213,7 @@ class IncidentRepository:
                 incident_id = uuid.UUID(incident_id)
             except ValueError:
                 return None
-        result = await self._session.execute(
-            select(Incident).where(Incident.id == incident_id)
-        )
+        result = await self._session.execute(select(Incident).where(Incident.id == incident_id))
         return result.scalar_one_or_none()
 
     async def list_recent(self, limit: int = 50) -> list[Incident]:

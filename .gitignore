@@ -45,3 +45,5 @@ scripts/backup-scripts/
 dev_rfc.log
 .precommit-cache-tmp/
 .precommit-cache-tmp/
+reports/
+!reports/.gitkeep

@@ -32,7 +32,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import ssl
 from typing import Any
 
 from app.config import settings
@@ -191,6 +190,7 @@ def _blocking_consume_loop(stop_flag: list[bool]) -> None:
         if not stop_flag[0]:
             logger.info("amqp | aguardando %ds antes de reconectar", delay)
             import time
+
             time.sleep(delay)
 
     logger.info("amqp | loop de consumo encerrado")

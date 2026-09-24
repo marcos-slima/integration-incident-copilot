@@ -13,11 +13,10 @@ existentes (calibrados para cosseno, nao para escala RRF).
 """
 
 import logging
+import os
 from functools import lru_cache
 
 import numpy as np
-import os
-
 from fastembed import SparseTextEmbedding, TextEmbedding
 from langchain_ollama import OllamaEmbeddings
 from qdrant_client import QdrantClient
@@ -64,13 +63,13 @@ def _get_qdrant_client() -> QdrantClient:
 # (job rag-quality no GitHub Actions nao tem Ollama disponivel). Em producao
 # EMBEDDING_BACKEND nao e definido (default='ollama') e o comportamento e
 # identico ao anterior.
-_EMBEDDING_BACKEND = os.environ.get('EMBEDDING_BACKEND', 'ollama').lower()
+_EMBEDDING_BACKEND = os.environ.get("EMBEDDING_BACKEND", "ollama").lower()
 
 
 class _FastEmbedWrapper:
     """Adaptador minimo de fastembed.TextEmbedding para a interface .embed_query()."""
 
-    def __init__(self, model_name: str = 'BAAI/bge-small-en-v1.5') -> None:
+    def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5") -> None:
         self._model = TextEmbedding(model_name=model_name)
 
     def embed_query(self, text: str) -> list[float]:
@@ -78,9 +77,9 @@ class _FastEmbedWrapper:
 
 
 @lru_cache(maxsize=1)
-def _get_embeddings() -> 'OllamaEmbeddings | _FastEmbedWrapper':
-    if _EMBEDDING_BACKEND == 'fastembed':
-        _logger.info('EMBEDDING_BACKEND=fastembed: usando TextEmbedding local (sem Ollama)')
+def _get_embeddings() -> "OllamaEmbeddings | _FastEmbedWrapper":
+    if _EMBEDDING_BACKEND == "fastembed":
+        _logger.info("EMBEDDING_BACKEND=fastembed: usando TextEmbedding local (sem Ollama)")
         return _FastEmbedWrapper()
     return OllamaEmbeddings(model=EMBEDDING_MODEL, base_url=settings.ollama_host)
 
@@ -298,7 +297,9 @@ def _evidence_admission_score(hit: dict) -> float:
     rerank_score = hit.get("rerank_score")
     scores = [hit["score"]]
     if rerank_score is not None:
-        scores.append(hit.get("rerank_score_calibrated", max(0.0, min(1.0, rerank_score))))  # DA-42: usa sigmoid calibrado
+        scores.append(
+            hit.get("rerank_score_calibrated", max(0.0, min(1.0, rerank_score)))
+        )  # DA-42: usa sigmoid calibrado
     return max(scores)
 
 

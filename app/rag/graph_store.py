@@ -192,9 +192,7 @@ def _cross_validate_grounded(
         identifier=identifier,
     )
     verified_causes = [
-        record["verified_root_cause"]
-        for record in result
-        if record["verified_root_cause"]
+        record["verified_root_cause"] for record in result if record["verified_root_cause"]
     ]
     if not verified_causes:
         # Sem historico verificado: usa threshold normal, nada para divergir

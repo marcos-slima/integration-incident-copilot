@@ -382,6 +382,7 @@ def ready() -> dict:
     degraded = [k for k, v in infra_probes.items() if v not in ("ok", "not_configured")]
     if degraded:
         from fastapi import HTTPException
+
         raise HTTPException(
             status_code=503,
             detail={"status": "not_ready", "degraded": degraded, "services": infra_probes},

@@ -19,7 +19,6 @@ import pytest
 
 from app.events.amqp_consumer import AmqpConsumerTask, _parse_envelope
 
-
 # ---------------------------------------------------------------------------
 # _parse_envelope
 # ---------------------------------------------------------------------------
@@ -126,7 +125,9 @@ def test_blocking_consume_loop_no_proton() -> None:
     from app.events.amqp_consumer import _blocking_consume_loop
 
     stop_flag = [False]
-    with patch.dict("sys.modules", {"proton": None, "proton.handlers": None, "proton.reactor": None}):
+    with patch.dict(
+        "sys.modules", {"proton": None, "proton.handlers": None, "proton.reactor": None}
+    ):
         # ImportError deve ser capturado internamente — sem exceção para o chamador
         _blocking_consume_loop(stop_flag)
 
@@ -168,10 +169,11 @@ def _make_proton_event(body_bytes: bytes, *, handler) -> MagicMock:
 )
 def test_on_message_accepted_on_valid_payload() -> None:
     """Mensagem válida → delivery ACCEPTED (ack AMQP 1.0)."""
-    from app.events.amqp_consumer import _blocking_consume_loop  # noqa: F401 — acessa _IncidentHandler via closure
-
     # Importa _IncidentHandler indiretamente instanciando o loop com Container mockado
     import app.events.amqp_consumer as mod
+    from app.events.amqp_consumer import (
+        _blocking_consume_loop,  # noqa: F401 — acessa _IncidentHandler via closure
+    )
 
     # Reconstrói o handler de dentro do loop mockando Container.run
     valid_payload = json.dumps(
@@ -190,7 +192,6 @@ def test_on_message_accepted_on_valid_payload() -> None:
         mock_handler.return_value = None
 
         # Instancia o handler diretamente para testar on_message sem subir Container
-        from proton.handlers import MessagingHandler  # type: ignore[import]
 
         # Obtemos _IncidentHandler via inspeção do módulo (closure dentro do loop)
         # Estratégia: executar o loop com Container mockado que expõe o handler
@@ -203,9 +204,11 @@ def test_on_message_accepted_on_valid_payload() -> None:
             def run(self):
                 pass  # não executa nada
 
-        with patch("app.events.amqp_consumer.Container", _FakeContainer):
-            with patch("app.events.amqp_consumer.time.sleep"):
-                mod._blocking_consume_loop(stop_flag)
+        with (
+            patch("app.events.amqp_consumer.Container", _FakeContainer),
+            patch("app.events.amqp_consumer.time.sleep"),
+        ):
+            mod._blocking_consume_loop(stop_flag)
 
         handler = captured.get("handler")
         assert handler is not None, "Container não recebeu handler"
@@ -236,9 +239,11 @@ def test_on_message_rejected_on_invalid_payload() -> None:
         def run(self):
             pass
 
-    with patch("app.events.amqp_consumer.Container", _FakeContainer):
-        with patch("app.events.amqp_consumer.time.sleep"):
-            mod._blocking_consume_loop(stop_flag)
+    with (
+        patch("app.events.amqp_consumer.Container", _FakeContainer),
+        patch("app.events.amqp_consumer.time.sleep"),
+    ):
+        mod._blocking_consume_loop(stop_flag)
 
     handler = captured["handler"]
     event = _make_proton_event(b"not-valid-json", handler=handler)
@@ -276,9 +281,11 @@ def test_on_message_modified_on_handler_error() -> None:
         }
     ).encode()
 
-    with patch("app.events.amqp_consumer.Container", _FakeContainer):
-        with patch("app.events.amqp_consumer.time.sleep"):
-            mod._blocking_consume_loop(stop_flag)
+    with (
+        patch("app.events.amqp_consumer.Container", _FakeContainer),
+        patch("app.events.amqp_consumer.time.sleep"),
+    ):
+        mod._blocking_consume_loop(stop_flag)
 
     handler = captured["handler"]
     event = _make_proton_event(valid_payload, handler=handler)

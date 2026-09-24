@@ -48,9 +48,18 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 def _sync_url(raw: str) -> str:
-    """Converte URL asyncpg → psycopg2."""
+    """Converte URL asyncpg → psycopg2 e adapta host para ambiente Docker.
+
+    Quando rodando dentro de um container Docker (reporter service), o host
+    'localhost' ou '127.0.0.1' nao resolve para o postgres — precisa ser o
+    nome do servico Docker ('postgres'). Detectamos pelo arquivo /.dockerenv.
+    """
     url = re.sub(r"^postgresql\+asyncpg://", "postgresql://", raw)
     url = re.sub(r"^postgres://", "postgresql://", url)
+    # Dentro do Docker, substitui localhost/127.0.0.1 pelo hostname do servico
+    import os
+    if os.path.exists("/.dockerenv"):
+        url = re.sub(r"@(localhost|127\.0\.0\.1)(:\d+)?/", "@postgres\\2/", url)
     return url
 
 

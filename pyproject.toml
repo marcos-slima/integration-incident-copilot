@@ -76,6 +76,10 @@ dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "ruff>=0.16.1",
+    # B4: ferramentas de qualidade exigidas pelo CI (tests.yml)
+    "pytest-cov>=6.0",
+    "bandit>=1.8",
+    "pip-audit>=2.7",
 ]
 
 [tool.pytest.ini_options]

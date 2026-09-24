@@ -209,16 +209,22 @@ class AmqpConsumerTask:
         self._task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
-        """Inicia o consumidor em background via asyncio.run_in_executor()."""
+        """Inicia o consumidor em background via asyncio.run_in_executor().
+
+        run_in_executor() retorna um asyncio.Future, nao uma coroutine.
+        create_task() exige coroutine, entao encapsulamos o Future num
+        wrapper async para que a task seja agendada corretamente.
+        """
         if not settings.amqp_enabled:
             logger.info("amqp | consumidor desabilitado (AMQP_ENABLED=false)")
             return
         self._stop_flag = [False]
-        loop = asyncio.get_event_loop()
-        self._task = asyncio.create_task(
-            loop.run_in_executor(None, _blocking_consume_loop, self._stop_flag),
-            name="amqp-consumer-amqp10",
-        )
+        loop = asyncio.get_running_loop()
+
+        async def _run() -> None:
+            await loop.run_in_executor(None, _blocking_consume_loop, self._stop_flag)
+
+        self._task = asyncio.create_task(_run(), name="amqp-consumer-amqp10")
         logger.info("amqp | background task AMQP 1.0 iniciada (python-qpid-proton)")
 
     async def stop(self) -> None:

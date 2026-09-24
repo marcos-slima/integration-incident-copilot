@@ -78,6 +78,16 @@ class _Neo4jSession(Protocol):
 # interface - o LLM nao tem como saber que era so uma hipotese (DA-16).
 GROUNDED_EVIDENCE_THRESHOLD = 0.5
 
+# A5: limiar elevado para gravar is_grounded=True quando existe historico
+# VERIFICADO na mesma interface que DIVERGE da nova hipotese. Sem essa
+# protecao, um LLM com evidence_strength razoavel (>=0.5) mas que
+# contradiz o que humanos/sistemas ja confirmaram pode contaminar o grafo
+# com uma hipotese nao corroborada que volta como "verdade historica".
+# Dois limiares distintos:
+#   - GROUNDED_EVIDENCE_THRESHOLD (0.5):  caminho sem historico verificado
+#   - GROUNDED_CROSS_VALIDATION_THRESHOLD (0.75): caminho com divergencia
+GROUNDED_CROSS_VALIDATION_THRESHOLD = 0.75
+
 
 @dataclass
 class RelatedIncident:
@@ -135,6 +145,72 @@ def ensure_constraints(session: _Neo4jSession | None = None) -> None:
         sess.run(statement)
 
 
+# A5: consulta para ler as causas raiz VERIFICADAS (via verify_incident)
+# existentes na mesma interface, usada por _cross_validate_grounded.
+# Limita a 5 registros mais recentes: o suficiente para detectar
+# divergencia sem adicionar latencia significativa ao caminho de escrita.
+_VERIFIED_HISTORY_QUERY = """
+MATCH (f:Interface {type: $interface_type, identifier: $identifier})<-[:AFFECTS]-(i:Incident)
+MATCH (i)-[:VERIFIED_AS]->(rc:RootCause)
+RETURN rc.text AS verified_root_cause
+ORDER BY i.created_at DESC
+LIMIT 5
+"""
+
+
+def _cross_validate_grounded(
+    root_cause: str,
+    interface_type: str,
+    identifier: str,
+    sess: _Neo4jSession,
+) -> bool:
+    """A5: retorna False se existe historico VERIFICADO nesta interface
+    e a nova hipotese diverge de TODAS as causas raiz confirmadas.
+
+    Logica conservadora (falha aberta = mais permissiva):
+    - Sem historico verificado -> True  (nada para comparar, threshold normal)
+    - Com historico, ALGUMA causa confirmada bate com a hipotese -> True
+    - Com historico, NENHUMA causa confirmada bate -> False (threshold elevado)
+
+    "Bate" usa heuristica de substring bidirecional: verificacoes humanas
+    geralmente usam vocabulario similar ao da hipotese original (ex:
+    "RFC_DEST invalido" bate com "RFC Destination invalido"), sem precisar
+    de embeddings extras que adicionariam latencia ao caminho de escrita.
+    Exige ao menos 4 caracteres para evitar matches espurios com siglas
+    curtas ("SAP", "RFC", etc.).
+
+    Por que nao cosine similarity aqui: este e o caminho de ESCRITA do
+    grafo, executado apos cada diagnostico. Embeddings exigiriam chamar
+    o sentence-transformer (CPU-bound ~50ms) ou o LLM (latencia de rede).
+    A heuristica O(n*m) com n<=5 e len<=500 e desprezivel. Revisao futura
+    pode substituir se a base de incidentes verificados crescer o suficiente
+    para gerar falsos negativos relevantes.
+    """
+    result = sess.run(
+        _VERIFIED_HISTORY_QUERY,
+        interface_type=interface_type,
+        identifier=identifier,
+    )
+    verified_causes = [
+        record["verified_root_cause"]
+        for record in result
+        if record["verified_root_cause"]
+    ]
+    if not verified_causes:
+        # Sem historico verificado: usa threshold normal, nada para divergir
+        return True
+
+    root_cause_lower = root_cause.lower()
+    for vc in verified_causes:
+        vc_lower = vc.lower()
+        if len(vc_lower) >= 4 and vc_lower in root_cause_lower:
+            return True
+        if len(root_cause_lower) >= 4 and root_cause_lower in vc_lower:
+            return True
+    # Nenhuma causa verificada compativel: hipotese diverge do historico
+    return False
+
+
 _UPSERT_QUERY = """
 MERGE (i:Incident {id: $incident_id})
   SET i.description = $description, i.root_cause = $root_cause,
@@ -178,6 +254,28 @@ def upsert_incident_graph(
     if not interface_type or not identifier:
         return
     sess = _get_session(session)
+
+    # A5: determinacao de is_grounded com cross-validation anti-poisoning.
+    # Passo 1 - threshold base: se a hipotese nao atinge GROUNDED_EVIDENCE_THRESHOLD
+    #   ela sera False sem precisar consultar o historico.
+    # Passo 2 - cross-validation: so executada quando a hipotese atingiria
+    #   is_grounded=True pelo threshold base. Verifica se existe historico VERIFICADO
+    #   que diverge da nova hipotese; se diverge, exige GROUNDED_CROSS_VALIDATION_THRESHOLD
+    #   (0.75) em vez de GROUNDED_EVIDENCE_THRESHOLD (0.5).
+    # Resultado: um LLM fabricando uma causa raiz com evidence_strength entre 0.5 e 0.75
+    #   que contradiz o que humanos ja confirmaram NAO contamina o historico do grafo.
+    base_grounded = evidence_strength >= GROUNDED_EVIDENCE_THRESHOLD
+    if base_grounded:
+        cross_validates = _cross_validate_grounded(
+            root_cause=root_cause,
+            interface_type=interface_type,
+            identifier=identifier,
+            sess=sess,
+        )
+        if not cross_validates:
+            # Hipotese diverge do historico verificado: exige threshold elevado
+            base_grounded = evidence_strength >= GROUNDED_CROSS_VALIDATION_THRESHOLD
+
     sess.run(
         _UPSERT_QUERY,
         incident_id=incident_id,
@@ -189,7 +287,7 @@ def upsert_incident_graph(
         confidence=confidence,
         matched_document=matched_document,
         evidence_strength=evidence_strength,
-        is_grounded=evidence_strength >= GROUNDED_EVIDENCE_THRESHOLD,
+        is_grounded=base_grounded,
     )
 
 

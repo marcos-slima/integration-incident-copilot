@@ -726,12 +726,12 @@ def _apply_confidence_guardrails(diagnosis: dict, state: CopilotState) -> dict:
 _WEB_SEARCH_EGRESS_PATTERNS = re_module.compile(
     r"""
     https?://[^\s]+                         # URLs completas
-    | \d{18}                             # numeros IDoc SAP (18 digitos)
-    | [0-9a-fA-F]{32}                   # MD5 / GUID sem hifens
-    | [0-9a-fA-F]{8}-[0-9a-fA-F]{4}-      # UUID com hifens
+    | \b\d{18}\b                            # numeros IDoc SAP (18 digitos)
+    | \b[0-9a-fA-F]{32}\b                   # MD5 / GUID sem hifens
+    | \b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-      # UUID com hifens
       [0-9a-fA-F]{4}-[0-9a-fA-F]{4}-
-      [0-9a-fA-F]{12}
-    | [A-Z]{2,3}\d{8,12}               # codigos de documento SAP (ex: SO0000012345)
+      [0-9a-fA-F]{12}\b
+    | \b[A-Z]{2,3}\d{8,12}\b               # codigos de documento SAP (ex: SO0000012345)
     | Bearer\s+\S+                          # tokens Bearer
     | Basic\s+[A-Za-z0-9+/=]+              # tokens Basic Auth
     """,
@@ -753,7 +753,7 @@ def _sanitize_web_search_query(query: str) -> str:
     # 3) Limita comprimento para evitar exfiltracao de payloads longos
     if len(sanitized) > _WEB_SEARCH_MAX_QUERY_CHARS:
         sanitized = sanitized[:_WEB_SEARCH_MAX_QUERY_CHARS]
-        _logger.debug(
+        logging.getLogger(__name__).debug(
             "[web_search] query truncada em %d chars para politica de egress.",
             _WEB_SEARCH_MAX_QUERY_CHARS,
         )

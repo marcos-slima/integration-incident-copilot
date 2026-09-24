@@ -22,6 +22,13 @@ FROM python:3.12-slim AS app
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        gcc \
+        libssl-dev \
+        libffi-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN pip install --no-cache-dir uv
 
 # DA-24: copia o uv.lock e usa --frozen - builds reproduziveis (sem

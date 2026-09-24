@@ -37,6 +37,16 @@ dependencies = [
     # configurada), mas sem exigir um "pip install" extra do operador
     # quando ele decide ligar REDIS_URL.
     "redis>=5.2",
+    # Persistencia de incidentes (Fase 1 - Observabilidade Grafana)
+    # Opcional: so ativa se DATABASE_URL estiver configurada no .env.
+    # sqlalchemy async engine + Alembic migrations + psycopg2 driver.
+    # TimescaleDB e 100% compativel com esta stack (mesmo driver,
+    # mesma API) - basta apontar DATABASE_URL para uma instancia
+    # TimescaleDB em vez de PostgreSQL puro.
+    "sqlalchemy[asyncio]>=2.0",
+    "alembic>=1.13",
+    "asyncpg>=0.29",  # driver async nativo (psycopg3 compat)
+    "psycopg2-binary>=2.9",  # alembic CLI / migrations sync
     # AMQP 1.0 puro Python para Solace Cloud / SAP AEM (DA-32)
     "python-qpid-proton>=0.39",  # DA-40: AMQP 1.0 (Solace/SAP Event Mesh); substituiu aiormq (0.9.1),
     # Fila assincrona de diagnostico (app/queue.py) - mesmo Redis do

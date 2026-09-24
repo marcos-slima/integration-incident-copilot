@@ -33,6 +33,8 @@ from app.models import (
 )
 from app.queue import AsyncQueueUnavailableError, enqueue_diagnosis, get_job_status
 from app.rag.graph_store import GRAPH_UNAVAILABLE_EXCEPTIONS, ensure_constraints, verify_incident
+from app.db import AsyncSessionLocal, is_db_enabled
+from app.services.incident_repository import IncidentRepository
 from app.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
@@ -402,7 +404,53 @@ def diagnose(request: Request, body: IncidentRequest) -> DiagnosisResponse:
     Rate limit: 10 requisicoes por minuto por IP.
     Autenticacao: X-API-Key header (se API_KEY configurado no .env).
     """
-    return run_diagnosis(body)
+    import time
+    _t0 = time.monotonic()
+    result = run_diagnosis(body)
+    _latency_ms = int((time.monotonic() - _t0) * 1000)
+
+    # Persistência opt-in (Fase 1 Observabilidade Grafana)
+    if is_db_enabled() and AsyncSessionLocal is not None:
+        import asyncio
+
+        async def _persist() -> None:
+            async with AsyncSessionLocal() as _session:
+                try:
+                    repo = IncidentRepository(_session)
+                    _evidence_list = [
+                        {"source": e.source, "content": e.content}
+                        for e in (result.evidence or [])
+                    ]
+                    await repo.create(
+                        interface_type=getattr(body, "interface_type", None),
+                        description=getattr(body, "description", None),
+                        connector_source_system=getattr(body, "connector_source_system", None),
+                        is_mock=getattr(body, "use_mock", True),
+                        sensitivity_level=getattr(body, "sensitivity_level", None),
+                        trace_id=result.trace_id,
+                        probable_root_cause=result.probable_root_cause,
+                        model_confidence=result.model_confidence,
+                        diagnosis_confidence=result.diagnosis_confidence,
+                        evidence_strength=result.evidence_strength,
+                        llm_provider_used=result.llm_provider_used,
+                        agent_domain=result.agent_domain,
+                        evidence_json=_evidence_list if _evidence_list else None,
+                        latency_ms=_latency_ms,
+                    )
+                    await _session.commit()
+                except Exception:
+                    logger.warning("Falha ao persistir incidente no PostgreSQL", exc_info=True)
+
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.ensure_future(_persist())
+            else:
+                loop.run_until_complete(_persist())
+        except Exception:
+            logger.warning("Falha ao agendar persistência assíncrona", exc_info=True)
+
+    return result
 
 
 @app.post(
@@ -569,6 +617,37 @@ def verify_incident_endpoint(
                 "foi informado para gravar feedback no Langfuse."
             ),
         )
+
+    # Persistência opt-in (Fase 1 Observabilidade Grafana)
+    if is_db_enabled() and AsyncSessionLocal is not None:
+        import asyncio
+
+        async def _update_verification() -> None:
+            async with AsyncSessionLocal() as _session:
+                try:
+                    repo = IncidentRepository(_session)
+                    await repo.update_verification(
+                        incident_id,
+                        diagnosis_correct=body.correct if body.correct is not None else True,
+                        verified_by=body.verified_by,
+                        verified_root_cause=body.root_cause,
+                    )
+                    await _session.commit()
+                except Exception:
+                    logger.warning(
+                        "Falha ao atualizar verificação no PostgreSQL (incident_id=%s)",
+                        incident_id,
+                        exc_info=True,
+                    )
+
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.ensure_future(_update_verification())
+            else:
+                loop.run_until_complete(_update_verification())
+        except Exception:
+            logger.warning("Falha ao agendar atualização de verificação", exc_info=True)
 
     return {
         "incident_id": incident_id,

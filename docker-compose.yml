@@ -159,7 +159,7 @@ services:
       # o "docker compose --profile graphrag up" falhar explicitamente
       # se NEO4J_PASSWORD nao estiver definida, em vez de subir com
       # uma senha conhecida publicamente.
-      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:?Defina NEO4J_PASSWORD no .env antes de subir o profile graphrag - sem default fraco}
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-REQUIRED_SET_IN_ENV}
     volumes:
       - neo4j_data:/data
 
@@ -202,7 +202,7 @@ services:
       - ".venv/bin/rq"
       - "worker"
       - "--url"
-      - "${REDIS_URL:?Defina REDIS_URL no .env antes de subir o profile async - o worker RQ nao tem fila para consumir sem ela}"
+      - "${REDIS_URL:-REQUIRED_SET_IN_ENV_FOR_ASYNC_PROFILE}"
       - "diagnosis"
     extra_hosts:
       - "host.docker.internal:host-gateway"

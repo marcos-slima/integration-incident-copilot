@@ -23,7 +23,6 @@ import pytest
 from app.config import Settings
 from app.llm.factory import get_chat_model
 
-
 # ---------------------------------------------------------------------------
 # OpenAI
 # ---------------------------------------------------------------------------
@@ -53,12 +52,12 @@ def test_openai_seed_is_42():
 # AzureOpenAI
 # ---------------------------------------------------------------------------
 
-_AZURE_CFG = dict(
-    llm_provider="azure_openai",
-    azure_openai_endpoint="https://example.openai.azure.com",
-    azure_openai_api_key="fake-azure-key-determinism-test",
-    azure_openai_deployment="gpt-4o-mini",
-)
+_AZURE_CFG = {
+    "llm_provider": "azure_openai",
+    "azure_openai_endpoint": "https://example.openai.azure.com",
+    "azure_openai_api_key": "fake-azure-key-determinism-test",
+    "azure_openai_deployment": "gpt-4o-mini",
+}
 
 
 def test_azure_openai_temperature_is_zero():
@@ -97,9 +96,7 @@ def test_ollama_temperature_is_zero():
     """ChatOllama deve ser inicializado com temperature=0.0."""
     cfg = Settings(llm_provider="ollama")
     llm = get_chat_model(config=cfg)
-    assert llm.temperature == 0.0, (
-        f"Ollama temperature esperado 0.0, obtido {llm.temperature!r}."
-    )
+    assert llm.temperature == 0.0, f"Ollama temperature esperado 0.0, obtido {llm.temperature!r}."
 
 
 def test_ollama_seed_is_42():

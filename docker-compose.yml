@@ -233,7 +233,9 @@ services:
   #   0 6  * * *  docker compose --profile observability run --rm reporter
   #   0 6  * * 1  docker compose --profile observability run --rm reporter --period weekly
   reporter:
-    build: .
+    build:
+      context: .
+      target: app
     profiles: ["observability"]
     command:
       - ".venv/bin/python"

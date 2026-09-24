@@ -118,24 +118,29 @@ def _ensure_api_keys_configured() -> None:
             )
     if not settings.api_key:
         settings.api_key = secrets.token_urlsafe(32)
+        # B7: nunca logue o valor da chave — logs sao frequentemente
+        # agregados em sistemas externos (Datadog, Grafana Loki) e o valor
+        # pode vazar. Para recuperar a chave gerada, use a variavel de
+        # ambiente API_KEY no .env; reiniciar o processo gera uma nova chave.
         logger.warning(
-            "API_KEY nao configurada no .env - chave gerada automaticamente "
-            "para esta execucao (header X-API-Key): %s",
-            settings.api_key,
+            "API_KEY nao configurada no .env — chave efemera gerada para "
+            "esta execucao. Configure API_KEY no .env para chave estavel, "
+            "ou REQUIRE_AUTH=true para recusar subir sem chave explicita."
         )
     if not settings.a2a_api_key:
         settings.a2a_api_key = secrets.token_urlsafe(32)
         logger.warning(
-            "A2A_API_KEY nao configurada no .env - chave gerada automaticamente "
-            "para esta execucao (header X-A2A-Api-Key): %s",
-            settings.a2a_api_key,
+            "A2A_API_KEY nao configurada no .env — chave efemera gerada para "
+            "esta execucao. Configure A2A_API_KEY no .env para chave estavel, "
+            "ou REQUIRE_AUTH=true para recusar subir sem chave explicita."
         )
     if not settings.event_mesh_api_key:
         settings.event_mesh_api_key = secrets.token_urlsafe(32)
         logger.warning(
-            "EVENT_MESH_API_KEY nao configurada no .env - chave gerada "
-            "automaticamente para esta execucao (header X-Event-Mesh-Api-Key): %s",
-            settings.event_mesh_api_key,
+            "EVENT_MESH_API_KEY nao configurada no .env — chave efemera gerada "
+            "para esta execucao. Configure EVENT_MESH_API_KEY no .env para "
+            "chave estavel, ou REQUIRE_AUTH=true para recusar subir sem chave "
+            "explicita."
         )
 
 
@@ -360,6 +365,28 @@ def health() -> dict:
         },
         "services": infra_probes,
     }
+
+
+@app.get("/ready")
+def ready() -> dict:
+    """Readiness probe — verifica se os servicos de infraestrutura estao acessiveis.
+
+    Diferente de /health (liveness, sem I/O externo), este endpoint faz probes
+    reais em Qdrant e no LLM provider. O Kubernetes so roteia trafego para o pod
+    quando este endpoint retorna 2xx.
+
+    Retorna 503 se algum servico obrigatorio estiver degradado, removendo o pod
+    do load balancer ate a recuperacao.
+    """
+    infra_probes = _probe_infra_services()
+    degraded = [k for k, v in infra_probes.items() if v not in ("ok", "not_configured")]
+    if degraded:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=503,
+            detail={"status": "not_ready", "degraded": degraded, "services": infra_probes},
+        )
+    return {"status": "ready", "services": infra_probes}
 
 
 @app.post(

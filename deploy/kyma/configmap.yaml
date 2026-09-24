@@ -41,3 +41,13 @@ data:
   # observabilidade em produção (nao precisa ser ConfigMap, mas as
   # chaves publicas/privadas do Langfuse ficam melhor no Secret).
   LANGFUSE_HOST: ""
+
+  # B6: REDIS_URL — necessario para armazenamento A2A compartilhado
+  # entre replicas (HPA define 2-6 pods). Sem ele, o task-store e
+  # por-processo: nao ha idempotencia distribuida, a fila async nao
+  # opera e o circuit breaker nao compartilha estado entre pods.
+  # Aponta para um Redis implantado no mesmo namespace; ajuste o
+  # Service name se usar Redis externo ou Upstash.
+  # O valor da senha DEVE vir de um Secret (REDIS_PASSWORD no
+  # secret.example.yaml) — nao coloque senha aqui.
+  REDIS_URL: "redis://redis:6379/0"

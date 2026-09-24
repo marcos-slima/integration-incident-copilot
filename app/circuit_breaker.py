@@ -186,7 +186,10 @@ class CircuitBreaker:
             state = self._state_memory(key)
         if state.opened_at is None:
             return False
-        return time.monotonic() - state.opened_at < cooldown_seconds
+        # A1: time.monotonic() e local ao processo e nao pode ser
+        # comparado entre pods distintos (origens diferentes).
+        # time.time() (epoch UTC) e coerente entre processos/maquinas.
+        return time.time() - state.opened_at < cooldown_seconds
 
     def record_success(self, key: str) -> None:
         # Redis: remove a chave (estado limpo)
@@ -203,7 +206,7 @@ class CircuitBreaker:
 
         state.consecutive_failures += 1
         if state.consecutive_failures >= failure_threshold:
-            state.opened_at = time.monotonic()
+            state.opened_at = time.time()  # A1: epoch UTC, comparavel entre pods
 
         if use_redis:
             # cooldown_seconds nao e conhecido aqui — usa 300s como TTL base

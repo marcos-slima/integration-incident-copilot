@@ -692,21 +692,72 @@ def _apply_confidence_guardrails(diagnosis: dict, state: CopilotState) -> dict:
 
     diagnosis["model_confidence"] = round(model_confidence, 3)
 
-    # P1.5: diagnosis_confidence — metrica CALCULADA (nao auto-relatada pelo LLM).
-    # Formula: max(evidence_strength, model_confidence * evidence_strength).
+    # A2: diagnosis_confidence — metrica CALCULADA (nao auto-relatada pelo LLM).
+    #
+    # BUG ANTERIOR: max(evidence_strength, model_confidence * evidence_strength)
+    # simplifica para evidence_strength * max(1, model_confidence) = evidence_strength
+    # porque model_confidence esta sempre em [0, 1]. A metrica ignorava
+    # completamente model_confidence, embora o campo fosse recomendado
+    # para automacao.
+    #
+    # FORMULA CORRIGIDA: produto das duas sinalizacoes independentes.
+    # diagnosis_confidence = evidence_strength * model_confidence
+    #
     # Interpreta: "quao confiavel e este diagnostico dado o que o pipeline
-    # efetivamente encontrou". E o valor recomendado para automacao.
-    # - Se evidence_strength=0 (nenhum contexto), diagnosis_confidence=0
-    #   independente do que o LLM disse.
-    # - Se evidence_strength=1 (dado real de conector), diagnosis_confidence=
-    #   max(1.0, model_confidence) = 1.0 (o pipeline observou diretamente).
-    # - Em geral: ancoreia a confianca nos sinais objetivos do pipeline,
-    #   usando model_confidence so como amplificador dentro desse teto.
-    diagnosis["diagnosis_confidence"] = round(
-        max(evidence_strength, model_confidence * evidence_strength), 3
-    )
+    # efetivamente encontrou E o que o LLM avaliou".
+    # - evidence_strength = 0 → diagnosis_confidence = 0 (sem contexto, sem confianca)
+    # - model_confidence  = 0 → diagnosis_confidence = 0 (LLM nao confia, sem confianca)
+    # - Ambos = 1.0        → diagnosis_confidence = 1.0 (maxima confianca)
+    # - Qualquer um baixo  → puxa o resultado para baixo (comportamento desejado)
+    #
+    # Nao afirma calibracao probabilistica: e uma heuristica para ranking
+    # relativo de diagnosticos, nao uma probabilidade formal.
+    diagnosis["diagnosis_confidence"] = round(evidence_strength * model_confidence, 3)
 
     return diagnosis
+
+
+# A3: politica de egress para busca web — bloqueia padroes que indicam
+# dados corporativos que o LLM pode ter incluido na query inadvertidamente.
+# redact_pii_text cobre e-mail/CPF/CNPJ/telefone (via regex). Esta
+# camada adicional cobre: URLs completas, numeros de IDoc (18 digitos),
+# client SAP (3-4 digitos isolados), GUIDs e tokens longos.
+# Limitamos tambem o tamanho da query para evitar exfiltrar payloads.
+_WEB_SEARCH_EGRESS_PATTERNS = re_module.compile(
+    r"""
+    https?://[^\s]+                         # URLs completas
+    | \d{18}                             # numeros IDoc SAP (18 digitos)
+    | [0-9a-fA-F]{32}                   # MD5 / GUID sem hifens
+    | [0-9a-fA-F]{8}-[0-9a-fA-F]{4}-      # UUID com hifens
+      [0-9a-fA-F]{4}-[0-9a-fA-F]{4}-
+      [0-9a-fA-F]{12}
+    | [A-Z]{2,3}\d{8,12}               # codigos de documento SAP (ex: SO0000012345)
+    | Bearer\s+\S+                          # tokens Bearer
+    | Basic\s+[A-Za-z0-9+/=]+              # tokens Basic Auth
+    """,
+    re_module.VERBOSE,
+)
+_WEB_SEARCH_MAX_QUERY_CHARS = 200
+
+
+def _sanitize_web_search_query(query: str) -> str:
+    """Aplica politica de egress a uma query de busca web antes de enviar
+    para DuckDuckGo. Camada de defesa em profundidade sobre redact_pii_text:
+    remove URLs, IDs numericos longos, GUIDs e tokens de autenticacao.
+    Trunca a query para evitar exfiltrar blocos de payload.
+    """
+    # 1) PII (e-mail, CPF, CNPJ, telefone)
+    sanitized = redact_pii_text(query)
+    # 2) Padroes corporativos especificos de SAP/integracao
+    sanitized = _WEB_SEARCH_EGRESS_PATTERNS.sub("[REDACTED]", sanitized)
+    # 3) Limita comprimento para evitar exfiltracao de payloads longos
+    if len(sanitized) > _WEB_SEARCH_MAX_QUERY_CHARS:
+        sanitized = sanitized[:_WEB_SEARCH_MAX_QUERY_CHARS]
+        _logger.debug(
+            "[web_search] query truncada em %d chars para politica de egress.",
+            _WEB_SEARCH_MAX_QUERY_CHARS,
+        )
+    return sanitized.strip()
 
 
 def _make_web_search_tool(state):
@@ -723,19 +774,12 @@ def _make_web_search_tool(state):
         Args:
             query: Termos tecnicos de busca (ex: 'BAPI_MATERIAL_SAVEDATA authorization error')
         """
-        # Avaliacao externa (nova revisao, P1 - "Agente ReAct pode
-        # vazar dados na web"): diferente do web_search_node (que so
-        # usa a descricao do incidente), este tool e chamado pelo
-        # proprio LLM, que MONTA a query livremente - a instrucao
-        # acima ("nunca dados sensiveis") e so uma instrucao de prompt,
-        # nao um enforcement de codigo, e o LLM tem acesso no contexto
-        # a dados de conector/logs/payload que podem conter e-mail,
-        # CPF ou numero de IDoc (exemplo citado explicitamente pela
-        # revisao). redact_pii_text (a MESMA funcao usada por
-        # sanitize_untrusted_input para o que ENTRA no prompt) roda
-        # aqui tambem para o que SAI para a rede - defesa em
-        # profundidade, nao depende so do LLM obedecer a instrucao.
-        safe_query = redact_pii_text(query)
+        # A3: politica de egress aplicada antes de qualquer chamada de rede.
+        # _sanitize_web_search_query combina redact_pii_text (e-mail/CPF/CNPJ)
+        # com remocao de URLs, IDoc/IDs numericos longos, GUIDs e tokens Bearer/Basic,
+        # mais truncamento a 200 chars. Defesa em profundidade: nao depende
+        # apenas da instrucao de prompt acima ("nunca dados sensiveis").
+        safe_query = _sanitize_web_search_query(query)
         try:
             with DDGS() as ddgs:
                 hits = list(ddgs.text(f"{safe_query} {site_filter}", max_results=5))

@@ -18,6 +18,11 @@ x-common-env: &common-env
   # por default: sem REDIS_URL, app/a2a/task_store.py cai no fallback
   # em memoria (§3.7: degradacao graciosamente).
   REDIS_URL: ${REDIS_URL:-}
+  # Persistência de incidentes (Fase 1 Observabilidade Grafana)
+  # Opt-in: vazio = sem PostgreSQL (padrão). Configure DATABASE_URL
+  # no .env para ativar. Formato:
+  #   postgresql+asyncpg://iic:iic@postgres:5432/iic
+  DATABASE_URL: ${DATABASE_URL:-}
 
 services:
   api:
@@ -77,6 +82,52 @@ services:
       - "${QDRANT_HOST_PORT:-6333}:6333"
     volumes:
       - qdrant_data:/qdrant/storage
+
+  # PostgreSQL — persistência de incidentes (Fase 1 Observabilidade).
+  # Opt-in via profile "observability": nao sobe no stack default para
+  # manter o ambiente de desenvolvimento leve. Ativar:
+  #   docker compose --profile observability up -d postgres grafana
+  # TimescaleDB (para retenção automática + hypertable):
+  #   Substituir imagem por timescale/timescaledb:latest-pg16
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["observability"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iic -d iic"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: iic
+      POSTGRES_USER: iic
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no .env antes de subir o profile observability}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # Grafana — dashboards COI/IOC, SOC, iPaaS (Fase 3 Observabilidade).
+  # Opt-in via profile "observability" (mesmo do postgres acima).
+  # Provisioning automático via ./deploy/grafana/ (Fase 3).
+  # URL default: http://localhost:3001 (3000 reservado ao Langfuse local).
+  grafana:
+    image: grafana/grafana:11.3.0
+    profiles: ["observability"]
+    restart: unless-stopped
+    ports:
+      - "${GRAFANA_HOST_PORT:-3001}:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?Defina GRAFANA_PASSWORD no .env antes de subir o profile observability}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3001}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   # GraphRAG (opt-in) - NAO sobe com "docker compose up" default, so
   # com "docker compose --profile graphrag up -d neo4j" (decisao
@@ -177,3 +228,5 @@ volumes:
   qdrant_data:
   neo4j_data:
   redis_data:
+  postgres_data:
+  grafana_data:

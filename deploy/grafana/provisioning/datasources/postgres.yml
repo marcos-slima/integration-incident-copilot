@@ -1,0 +1,28 @@
+# Grafana datasource provisioning — PostgreSQL (Integration Incident Copilot)
+# Fonte de verdade para dashboards COI/IOC, SOC, iPaaS (Fase 3).
+# TimescaleDB: se usar timescale/timescaledb como imagem, troque
+#   type: postgres → type: timescaledb (plugin nativo do Grafana).
+#
+# Documentação Grafana:
+#   https://grafana.com/docs/grafana/latest/administration/provisioning/#data-sources
+
+apiVersion: 1
+
+datasources:
+  - name: PostgreSQL - IIC
+    type: postgres
+    uid: postgres_iic
+    url: postgres:5432
+    database: iic
+    user: iic
+    secureJsonData:
+      password: "${POSTGRES_PASSWORD}"
+    jsonData:
+      sslmode: "disable"
+      maxOpenConns: 10
+      maxIdleConns: 2
+      connMaxLifetime: 14400
+      postgresVersion: 1600
+      timescaledb: false     # true se usar TimescaleDB
+    isDefault: true
+    editable: false

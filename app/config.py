@@ -302,6 +302,16 @@ class Settings(BaseSettings):
     amqp_prefetch: int = 1
     amqp_reconnect_delay: int = 5
 
+    # Persistência de incidentes (Fase 1 Observabilidade Grafana)
+    # Opt-in: vazio = sem PostgreSQL (app sobe normalmente sem DB).
+    # Formatos aceitos:
+    #   postgresql+asyncpg://user:pass@host:5432/dbname  (async, recomendado)
+    #   postgresql://user:pass@host:5432/dbname          (convertido automaticamente)
+    # TimescaleDB é 100% compatível: mesmo driver, mesma URL.
+    # Após configurar, aplique as migrations com:
+    #   alembic upgrade head
+    database_url: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

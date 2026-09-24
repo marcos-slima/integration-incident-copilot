@@ -231,4 +231,7 @@ class CircuitBreaker:
             if keys:
                 client.delete(*keys)
         except Exception:  # noqa: BLE001
-            _logger.debug("[circuit_breaker] Nao foi possivel limpar chaves Redis namespace=%s.", self._namespace)
+            _logger.debug(
+                "[circuit_breaker] Nao foi possivel limpar chaves Redis namespace=%s.",
+                self._namespace,
+            )

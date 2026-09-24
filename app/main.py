@@ -316,9 +316,7 @@ def _probe_infra_services() -> dict[str, str]:
     if provider == "ollama":
         if settings.ollama_host:
             try:
-                r = httpx.get(
-                    f"{settings.ollama_host.rstrip('/')}/api/tags", timeout=_timeout
-                )
+                r = httpx.get(f"{settings.ollama_host.rstrip('/')}/api/tags", timeout=_timeout)
                 results["ollama"] = "ok" if r.is_success else "degraded"
             except (OSError, httpx.HTTPError):
                 results["ollama"] = "degraded"
@@ -327,9 +325,7 @@ def _probe_infra_services() -> dict[str, str]:
     elif provider == "openai":
         results["openai"] = "ok" if settings.openai_api_key else "not_configured"
     elif provider == "azure_openai":
-        results["azure_openai"] = (
-            "ok" if settings.azure_openai_api_key else "not_configured"
-        )
+        results["azure_openai"] = "ok" if settings.azure_openai_api_key else "not_configured"
     else:
         results[provider] = "unknown_provider"
 

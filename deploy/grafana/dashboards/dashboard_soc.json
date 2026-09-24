@@ -1,0 +1,255 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "annotations": {"list": []},
+  "description": "SOC — Segurança e Conformidade: PII, redação, sensibilidade e rastreabilidade de incidentes",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"color": "green", "value": null},
+            {"color": "yellow", "value": 1},
+            {"color": "red", "value": 10}
+          ]},
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "auto", "textMode": "auto", "colorMode": "background"},
+      "title": "Detecções PII Hoje",
+      "type": "stat",
+      "targets": [{
+        "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+        "rawSql": "SELECT COUNT(*) FILTER (WHERE pii_detected = true) as value FROM incidents WHERE $__timeFilter(created_at)",
+        "format": "table"
+      }]
+    },
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"color": "red", "value": null},
+            {"color": "yellow", "value": 80},
+            {"color": "green", "value": 99}
+          ]},
+          "unit": "percent", "min": 0, "max": 100
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 0},
+      "id": 2,
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "auto", "textMode": "auto", "colorMode": "background"},
+      "title": "Taxa de Redação PII (%)",
+      "type": "stat",
+      "targets": [{
+        "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+        "rawSql": "SELECT ROUND(100.0 * COUNT(CASE WHEN redaction_applied THEN 1 END) / NULLIF(COUNT(CASE WHEN pii_detected THEN 1 END), 0), 1) as value FROM incidents WHERE $__timeFilter(created_at)",
+        "format": "table"
+      }]
+    },
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"color": "green", "value": null},
+            {"color": "yellow", "value": 1},
+            {"color": "red", "value": 5}
+          ]},
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 0},
+      "id": 3,
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "auto", "textMode": "auto", "colorMode": "background"},
+      "title": "Incidentes CRITICAL",
+      "type": "stat",
+      "targets": [{
+        "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+        "rawSql": "SELECT COUNT(*) as value FROM incidents WHERE $__timeFilter(created_at) AND sensitivity_level = 'critical'",
+        "format": "table"
+      }]
+    },
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]},
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 0},
+      "id": 4,
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "auto", "textMode": "auto", "colorMode": "background"},
+      "title": "Domínios Únicos Afetados",
+      "type": "stat",
+      "targets": [{
+        "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+        "rawSql": "SELECT COUNT(DISTINCT agent_domain) as value FROM incidents WHERE $__timeFilter(created_at) AND pii_detected = true",
+        "format": "table"
+      }]
+    },
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"color": "green", "value": null},
+            {"color": "yellow", "value": 1},
+            {"color": "red", "value": 5}
+          ]},
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 16, "y": 0},
+      "id": 5,
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "auto", "textMode": "auto", "colorMode": "background"},
+      "title": "PII sem Verificação Humana",
+      "type": "stat",
+      "targets": [{
+        "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+        "rawSql": "SELECT COUNT(*) as value FROM incidents WHERE $__timeFilter(created_at) AND pii_detected = true AND diagnosis_correct IS NULL",
+        "format": "table"
+      }]
+    },
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+      "fieldConfig": {
+        "defaults": {"unit": "short", "custom": {"lineWidth": 2, "fillOpacity": 10}},
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "id": 6,
+      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+      "title": "Detecções PII por Hora",
+      "type": "timeseries",
+      "targets": [{
+        "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+        "rawSql": "SELECT $__timeGroupAlias(created_at, '1h'), COUNT(*) FILTER (WHERE pii_detected = true) as \"PII Detectado\", COUNT(*) FILTER (WHERE redaction_applied = true) as \"PII Redigido\", COUNT(*) FILTER (WHERE pii_detected = true AND redaction_applied = false) as \"PII Não Redigido\" FROM incidents WHERE $__timeFilter(created_at) GROUP BY 1 ORDER BY 1",
+        "format": "time_series"
+      }]
+    },
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+      "fieldConfig": {
+        "defaults": {"unit": "short", "custom": {"lineWidth": 2, "fillOpacity": 10}},
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "id": 7,
+      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+      "title": "Incidentes por Nível de Sensibilidade",
+      "type": "timeseries",
+      "targets": [{
+        "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+        "rawSql": "SELECT $__timeGroupAlias(created_at, '1h'), sensitivity_level, COUNT(*) as value FROM incidents WHERE $__timeFilter(created_at) AND sensitivity_level IS NOT NULL AND ($sensitivity_level = 'All' OR sensitivity_level = ANY(string_to_array('$sensitivity_level', ','))) GROUP BY 1, 2 ORDER BY 1",
+        "format": "time_series"
+      }]
+    },
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 12},
+      "id": 8,
+      "options": {"pieType": "pie", "legend": {"displayMode": "list", "placement": "right"}},
+      "title": "Distribuição por Sensibilidade",
+      "type": "piechart",
+      "targets": [{
+        "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+        "rawSql": "SELECT COALESCE(sensitivity_level, 'não classificado') as metric, COUNT(*) as value FROM incidents WHERE $__timeFilter(created_at) GROUP BY 1",
+        "format": "table"
+      }]
+    },
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 16, "x": 8, "y": 12},
+      "id": 9,
+      "options": {"orientation": "horizontal", "legend": {"displayMode": "list", "placement": "bottom"}},
+      "title": "Top 10 Causas em Incidentes com PII",
+      "type": "barchart",
+      "targets": [{
+        "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+        "rawSql": "SELECT LEFT(probable_root_cause, 60) as causa, COUNT(*) as count FROM incidents WHERE $__timeFilter(created_at) AND pii_detected = true AND probable_root_cause IS NOT NULL GROUP BY 1 ORDER BY 2 DESC LIMIT 10",
+        "format": "table"
+      }]
+    },
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+      "fieldConfig": {
+        "defaults": {"unit": "short"},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "id"}, "properties": [{"id": "displayName", "value": "ID"}]},
+          {"matcher": {"id": "byName", "options": "interface_type"}, "properties": [{"id": "displayName", "value": "Interface"}]},
+          {"matcher": {"id": "byName", "options": "sensitivity_level"}, "properties": [{"id": "displayName", "value": "Sensibilidade"}]},
+          {"matcher": {"id": "byName", "options": "pii_detected"}, "properties": [{"id": "displayName", "value": "PII"}]},
+          {"matcher": {"id": "byName", "options": "redaction_applied"}, "properties": [{"id": "displayName", "value": "Redigido"}]}
+        ]
+      },
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 20},
+      "id": 10,
+      "options": {"sortBy": [{"displayName": "Criado Em", "desc": true}]},
+      "title": "Últimos 20 Incidentes com PII (sem dados sensíveis)",
+      "type": "table",
+      "targets": [{
+        "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+        "rawSql": "SELECT LEFT(id::text, 8) as id, created_at as \"Criado Em\", interface_type, agent_domain, sensitivity_level, pii_detected, redaction_applied, CASE WHEN diagnosis_correct IS NULL THEN '⏳' WHEN diagnosis_correct THEN '✅' ELSE '❌' END as status FROM incidents WHERE $__timeFilter(created_at) AND pii_detected = true ORDER BY created_at DESC LIMIT 20",
+        "format": "table"
+      }]
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 39,
+  "tags": ["iic", "soc", "security", "pii", "sap", "integration"],
+  "templating": {
+    "list": [
+      {
+        "current": {"selected": true, "text": "All", "value": "$__all"},
+        "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+        "definition": "SELECT DISTINCT sensitivity_level FROM incidents WHERE sensitivity_level IS NOT NULL ORDER BY 1",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "sensitivity_level",
+        "options": [],
+        "query": "SELECT DISTINCT sensitivity_level FROM incidents WHERE sensitivity_level IS NOT NULL ORDER BY 1",
+        "refresh": 2,
+        "type": "query",
+        "label": "Nível de Sensibilidade"
+      },
+      {
+        "current": {"selected": true, "text": "All", "value": "$__all"},
+        "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+        "definition": "SELECT DISTINCT agent_domain FROM incidents WHERE agent_domain IS NOT NULL ORDER BY 1",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "agent_domain",
+        "options": [],
+        "query": "SELECT DISTINCT agent_domain FROM incidents WHERE agent_domain IS NOT NULL ORDER BY 1",
+        "refresh": 2,
+        "type": "query",
+        "label": "Domínio do Agente"
+      }
+    ]
+  },
+  "time": {"from": "now-24h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "IIC — SOC: Segurança e Conformidade",
+  "uid": "iic-soc",
+  "version": 1
+}

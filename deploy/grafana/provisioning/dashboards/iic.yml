@@ -1,0 +1,19 @@
+# Grafana dashboard provisioning — Integration Incident Copilot
+# Carrega automaticamente os dashboards JSON de /etc/grafana/dashboards/
+# (montado via volume deploy/grafana/dashboards no docker-compose.yml).
+#
+# Documentação Grafana:
+#   https://grafana.com/docs/grafana/latest/administration/provisioning/#dashboards
+
+apiVersion: 1
+
+providers:
+  - name: IIC Observability
+    orgId: 1
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: true

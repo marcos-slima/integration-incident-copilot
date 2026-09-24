@@ -60,6 +60,7 @@ import time
 from typing import Literal
 
 from app.circuit_breaker import CircuitBreaker
+from app.metrics import CIRCUIT_BREAKER_OPEN_TOTAL, CIRCUIT_BREAKER_STATE, LLM_FALLBACK_TOTAL
 from app.config import Settings, settings
 from app.exceptions import ConfigurationError
 from app.llm.factory import TRANSPORT_FAILURE_EXCEPTIONS, get_chat_model
@@ -220,6 +221,8 @@ def invoke_via_gateway(
                 provider,
                 sensitivity,
             )
+            CIRCUIT_BREAKER_OPEN_TOTAL.labels(target=provider).inc()
+            CIRCUIT_BREAKER_STATE.labels(target=provider).set(1)
             last_error = ConfigurationError(
                 f"AI Gateway: provider '{provider}' com circuito aberto (falhas "
                 "consecutivas recentes) - aguardando cooldown."
@@ -252,6 +255,9 @@ def invoke_via_gateway(
         except TRANSPORT_FAILURE_EXCEPTIONS as exc:
             latency = time.monotonic() - started_at
             circuit_breaker.record_failure(provider, cfg.llm_gateway_circuit_failure_threshold)
+            CIRCUIT_BREAKER_STATE.labels(target=provider).set(
+                1 if circuit_breaker.is_open(provider, cfg.llm_gateway_circuit_cooldown_seconds) else 0
+            )
             # DA-30 — backoff exponencial com jitter antes de tentar o
             # proximo provider. Evita bombardear um provider degradado
             # com retentativas imediatas e reduz thundering herd em
@@ -293,6 +299,13 @@ def invoke_via_gateway(
         else:
             latency = time.monotonic() - started_at
             circuit_breaker.record_success(provider)
+            CIRCUIT_BREAKER_STATE.labels(target=provider).set(0)
+            # Registra fallback quando o provider usado não é o primário
+            if provider != cfg.llm_provider and cfg.llm_provider:
+                LLM_FALLBACK_TOTAL.labels(
+                    primary_provider=cfg.llm_provider,
+                    fallback_provider=provider,
+                ).inc()
             logger.info(
                 "AI Gateway audit: provider=%s sensitivity=%s status=success "
                 "latency_s=%.2f estimated_cost_usd=%.4f",

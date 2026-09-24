@@ -34,6 +34,19 @@ from app.models import (
 from app.queue import AsyncQueueUnavailableError, enqueue_diagnosis, get_job_status
 from app.rag.graph_store import GRAPH_UNAVAILABLE_EXCEPTIONS, ensure_constraints, verify_incident
 from app.db import AsyncSessionLocal, is_db_enabled
+from app.metrics import (
+    CIRCUIT_BREAKER_OPEN_TOTAL,
+    CIRCUIT_BREAKER_STATE,
+    DIAGNOSIS_LATENCY,
+    DIAGNOSIS_TOTAL,
+    DIAGNOSIS_VERIFIED_TOTAL,
+    LLM_FALLBACK_TOTAL,
+    PII_DETECTED_TOTAL,
+    REDACTION_APPLIED_TOTAL,
+    RULE_ENGINE_HIT_TOTAL,
+    SENSITIVE_INCIDENT_TOTAL,
+    setup_metrics,
+)
 from app.services.incident_repository import IncidentRepository
 from app.rate_limit import limiter
 
@@ -234,6 +247,9 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # ter um).
 app.add_middleware(SlowAPIMiddleware)
 
+# Fase 2 Observabilidade: Prometheus /metrics (opt-in via PROMETHEUS_ENABLED=true)
+setup_metrics(app)
+
 
 @app.exception_handler(DiagnosisTimeoutError)
 def _diagnosis_timeout_handler(request: Request, exc: DiagnosisTimeoutError):
@@ -408,6 +424,32 @@ def diagnose(request: Request, body: IncidentRequest) -> DiagnosisResponse:
     _t0 = time.monotonic()
     result = run_diagnosis(body)
     _latency_ms = int((time.monotonic() - _t0) * 1000)
+
+    # Métricas Prometheus (Fase 2 Observabilidade) — COI/IOC + SOC + iPaaS
+    _agent = result.agent_domain or "unknown"
+    _provider = result.llm_provider_used or "unknown"
+    _strength = result.evidence_strength or "unknown"
+    _sensitivity = getattr(body, "sensitivity_level", None) or "unclassified"
+    _pii = getattr(body, "pii_detected", False)
+    _redacted = getattr(body, "redaction_applied", False)
+
+    DIAGNOSIS_TOTAL.labels(
+        agent_domain=_agent,
+        llm_provider=_provider,
+        evidence_strength=_strength,
+    ).inc()
+
+    DIAGNOSIS_LATENCY.labels(
+        agent_domain=_agent,
+        llm_provider=_provider,
+    ).observe(_latency_ms / 1000.0)
+
+    if _pii:
+        PII_DETECTED_TOTAL.labels(sensitivity_level=_sensitivity).inc()
+    if _redacted:
+        REDACTION_APPLIED_TOTAL.labels(sensitivity_level=_sensitivity).inc()
+    if _sensitivity in ("confidential", "secret"):
+        SENSITIVE_INCIDENT_TOTAL.labels(sensitivity_level=_sensitivity).inc()
 
     # Persistência opt-in (Fase 1 Observabilidade Grafana)
     if is_db_enabled() and AsyncSessionLocal is not None:
@@ -648,6 +690,13 @@ def verify_incident_endpoint(
                 loop.run_until_complete(_update_verification())
         except Exception:
             logger.warning("Falha ao agendar atualização de verificação", exc_info=True)
+
+    # Métrica de verificação humana (COI/IOC)
+    _verdict = "correct" if (body.correct is True) else "incorrect"
+    DIAGNOSIS_VERIFIED_TOTAL.labels(
+        agent_domain="unknown",  # agent_domain não está no VerifyIncidentRequest
+        verdict=_verdict,
+    ).inc()
 
     return {
         "incident_id": incident_id,

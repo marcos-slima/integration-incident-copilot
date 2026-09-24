@@ -12,6 +12,7 @@ import re as re_module
 from uuid import uuid4
 
 from app.config import settings
+from app.metrics import RULE_ENGINE_HIT_TOTAL
 
 os.environ.setdefault("LANGFUSE_PUBLIC_KEY", settings.langfuse_public_key)
 os.environ.setdefault("LANGFUSE_SECRET_KEY", settings.langfuse_secret_key)
@@ -545,6 +546,7 @@ def _assemble_evidence(state: CopilotState) -> list[dict]:
     diagnosis = state.get("diagnosis") or {}
     if str(diagnosis.get("llm_provider_used", "")).startswith("rule_engine"):
         category = diagnosis.get("rule_engine_category", "unknown")
+        RULE_ENGINE_HIT_TOTAL.labels(rule_id=category).inc()
         evidence.append(
             {
                 "source_id": f"rule_engine:{category}",

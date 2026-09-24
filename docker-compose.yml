@@ -32,7 +32,9 @@ services:
     # chama ".venv/bin/uvicorn" diretamente na origem.
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    build: .
+    build:
+      context: .
+      target: final
     ports:
       - "8000:8000"
     environment:
@@ -196,7 +198,9 @@ services:
   # subir o profile, mesmo principio do NEO4J_PASSWORD acima (sem
   # default fraco/silencioso).
   worker:
-    build: .
+    build:
+      context: .
+      target: app
     profiles: ["async"]
     command:
       - ".venv/bin/rq"

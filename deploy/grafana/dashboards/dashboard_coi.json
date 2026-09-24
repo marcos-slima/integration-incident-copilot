@@ -1,0 +1,254 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "annotations": {"list": []},
+  "description": "COI/IOC — Operações de Integração SAP: volume, SLA, acuracidade e raízes de diagnóstico",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "auto", "text": {}, "textMode": "auto", "colorMode": "background"},
+      "title": "Incidentes Hoje",
+      "type": "stat",
+      "targets": [{
+        "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+        "rawSql": "SELECT COUNT(*) as value FROM incidents WHERE $__timeFilter(created_at)",
+        "format": "table"
+      }]
+    },
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 0},
+      "id": 2,
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "auto", "text": {}, "textMode": "auto", "colorMode": "background"},
+      "title": "Incidentes na Semana",
+      "type": "stat",
+      "targets": [{
+        "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+        "rawSql": "SELECT COUNT(*) as value FROM incidents WHERE created_at >= NOW() - INTERVAL '7 days'",
+        "format": "table"
+      }]
+    },
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"color": "red", "value": null},
+            {"color": "yellow", "value": 50},
+            {"color": "green", "value": 80}
+          ]},
+          "unit": "percent",
+          "min": 0, "max": 100
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 0},
+      "id": 3,
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "auto", "text": {}, "textMode": "auto", "colorMode": "background"},
+      "title": "Taxa de Verificação (%)",
+      "type": "stat",
+      "targets": [{
+        "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+        "rawSql": "SELECT ROUND(100.0 * COUNT(CASE WHEN diagnosis_correct IS NOT NULL THEN 1 END) / NULLIF(COUNT(*), 0), 1) as value FROM incidents WHERE $__timeFilter(created_at)",
+        "format": "table"
+      }]
+    },
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"color": "red", "value": null},
+            {"color": "yellow", "value": 60},
+            {"color": "green", "value": 85}
+          ]},
+          "unit": "percent",
+          "min": 0, "max": 100
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 0},
+      "id": 4,
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "auto", "text": {}, "textMode": "auto", "colorMode": "background"},
+      "title": "Acuracidade Diagnóstico (%)",
+      "type": "stat",
+      "targets": [{
+        "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+        "rawSql": "SELECT ROUND(100.0 * COUNT(CASE WHEN diagnosis_correct = true THEN 1 END) / NULLIF(COUNT(CASE WHEN diagnosis_correct IS NOT NULL THEN 1 END), 0), 1) as value FROM incidents WHERE $__timeFilter(created_at)",
+        "format": "table"
+      }]
+    },
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"color": "green", "value": null},
+            {"color": "yellow", "value": 5000},
+            {"color": "red", "value": 10000}
+          ]},
+          "unit": "ms"
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 16, "y": 0},
+      "id": 5,
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "auto", "text": {}, "textMode": "auto", "colorMode": "background"},
+      "title": "Latência Mediana (P50)",
+      "type": "stat",
+      "targets": [{
+        "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+        "rawSql": "SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY latency_ms) as value FROM incidents WHERE $__timeFilter(created_at) AND latency_ms IS NOT NULL",
+        "format": "table"
+      }]
+    },
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+      "fieldConfig": {
+        "defaults": {"unit": "short", "custom": {"lineWidth": 2, "fillOpacity": 10}},
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "id": 6,
+      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+      "title": "Volume de Incidentes por Hora",
+      "type": "timeseries",
+      "targets": [{
+        "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+        "rawSql": "SELECT $__timeGroupAlias(created_at, '1h'), COUNT(*) as \"Incidentes\" FROM incidents WHERE $__timeFilter(created_at) GROUP BY 1 ORDER BY 1",
+        "format": "time_series"
+      }]
+    },
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+      "fieldConfig": {
+        "defaults": {"unit": "short", "custom": {"lineWidth": 2, "fillOpacity": 10}},
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "id": 7,
+      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+      "title": "Incidentes por Domínio de Agente",
+      "type": "timeseries",
+      "targets": [{
+        "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+        "rawSql": "SELECT $__timeGroupAlias(created_at, '1h'), agent_domain, COUNT(*) as value FROM incidents WHERE $__timeFilter(created_at) AND ($agent_domain = 'All' OR agent_domain = ANY(string_to_array('$agent_domain', ','))) GROUP BY 1, 2 ORDER BY 1",
+        "format": "time_series"
+      }]
+    },
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+      "fieldConfig": {
+        "defaults": {"unit": "short"},
+        "overrides": [{"matcher": {"id": "byName", "options": "count"}, "properties": [{"id": "displayName", "value": "Contagem"}]}]
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "id": 8,
+      "options": {"orientation": "horizontal", "legend": {"displayMode": "list", "placement": "bottom"}},
+      "title": "Top 10 Raízes de Causa Prováveis",
+      "type": "barchart",
+      "targets": [{
+        "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+        "rawSql": "SELECT LEFT(probable_root_cause, 60) as causa, COUNT(*) as count FROM incidents WHERE $__timeFilter(created_at) AND probable_root_cause IS NOT NULL GROUP BY 1 ORDER BY 2 DESC LIMIT 10",
+        "format": "table"
+      }]
+    },
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 12},
+      "id": 9,
+      "options": {"pieType": "pie", "legend": {"displayMode": "list", "placement": "right"}},
+      "title": "Distribuição por Força da Evidência",
+      "type": "piechart",
+      "targets": [{
+        "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+        "rawSql": "SELECT evidence_strength as metric, COUNT(*) as value FROM incidents WHERE $__timeFilter(created_at) AND evidence_strength IS NOT NULL GROUP BY 1",
+        "format": "table"
+      }]
+    },
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 12},
+      "id": 10,
+      "options": {"pieType": "donut", "legend": {"displayMode": "list", "placement": "right"}},
+      "title": "LLM Provider Utilizado",
+      "type": "piechart",
+      "targets": [{
+        "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+        "rawSql": "SELECT llm_provider_used as metric, COUNT(*) as value FROM incidents WHERE $__timeFilter(created_at) AND llm_provider_used IS NOT NULL GROUP BY 1",
+        "format": "table"
+      }]
+    },
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+      "fieldConfig": {
+        "defaults": {"unit": "short"},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "status"}, "properties": [{"id": "displayName", "value": "Status"}]},
+          {"matcher": {"id": "byName", "options": "id"}, "properties": [{"id": "displayName", "value": "ID"}]},
+          {"matcher": {"id": "byName", "options": "interface_type"}, "properties": [{"id": "displayName", "value": "Interface"}]},
+          {"matcher": {"id": "byName", "options": "latency_ms"}, "properties": [{"id": "displayName", "value": "Latência (ms)"}]},
+          {"matcher": {"id": "byName", "options": "model_confidence"}, "properties": [{"id": "displayName", "value": "Conf."}]}
+        ]
+      },
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 20},
+      "id": 11,
+      "options": {"sortBy": [{"displayName": "Criado Em", "desc": true}]},
+      "title": "Últimos 20 Incidentes",
+      "type": "table",
+      "targets": [{
+        "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+        "rawSql": "SELECT LEFT(id::text, 8) as id, created_at as \"Criado Em\", interface_type, connector_source_system as sistema, LEFT(COALESCE(probable_root_cause, '-'), 80) as causa, model_confidence, latency_ms, CASE WHEN diagnosis_correct IS NULL THEN '⏳' WHEN diagnosis_correct THEN '✅' ELSE '❌' END as status FROM incidents WHERE $__timeFilter(created_at) ORDER BY created_at DESC LIMIT 20",
+        "format": "table"
+      }]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["iic", "coi", "ioc", "integration", "sap"],
+  "templating": {
+    "list": [{
+      "current": {"selected": true, "text": "All", "value": "$__all"},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
+      "definition": "SELECT DISTINCT agent_domain FROM incidents WHERE agent_domain IS NOT NULL ORDER BY 1",
+      "hide": 0,
+      "includeAll": true,
+      "multi": true,
+      "name": "agent_domain",
+      "options": [],
+      "query": "SELECT DISTINCT agent_domain FROM incidents WHERE agent_domain IS NOT NULL ORDER BY 1",
+      "refresh": 2,
+      "type": "query",
+      "label": "Domínio do Agente"
+    }]
+  },
+  "time": {"from": "now-24h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "IIC — COI/IOC: Operações de Integração",
+  "uid": "iic-coi-ioc",
+  "version": 1
+}

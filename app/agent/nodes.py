@@ -76,6 +76,15 @@ def connector_node(state: CopilotState) -> CopilotState:
 
     connector = get_connector(interface_type)
     result = connector.fetch(state.get("identifier") or "")
+
+    # A-09: incrementa metrica de chamadas a conectores externos
+    from app.metrics import CONNECTOR_REQUEST_TOTAL
+    _metric_status = "mock" if result.is_mock else ("error" if result.status == "error" else "success")
+    CONNECTOR_REQUEST_TOTAL.labels(
+        connector=result.source_system,
+        status=_metric_status,
+    ).inc()
+
     return {"connector_data": result}
 
 

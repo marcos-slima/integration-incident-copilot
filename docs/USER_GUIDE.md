@@ -350,4 +350,4 @@ Depois do diagnóstico, o agente entrega um ponto de partida. A partir daí, o f
 
 ---
 
-*Integration Incident Copilot · github.com/marcos-slima/sap-integration-copilot*
+*Integration Incident Copilot · github.com/marcos-slima/integration-incident-copilot*

@@ -130,4 +130,4 @@ docs/PROCESSO_DESENVOLVIMENTO.md.
 
 ---
 
-*Integration Incident Copilot · github.com/marcos-slima/sap-integration-copilot*
+*Integration Incident Copilot · github.com/marcos-slima/integration-incident-copilot*

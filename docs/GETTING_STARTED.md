@@ -18,8 +18,8 @@
 ## 1. Clone e configure o ambiente
 
 ```bash
-git clone https://github.com/marcos-slima/sap-integration-copilot.git
-cd sap-integration-copilot
+git clone https://github.com/marcos-slima/integration-incident-copilot.git
+cd integration-incident-copilot
 cp .env.example .env
 uv sync
 ```
@@ -217,4 +217,4 @@ uv run python -m app.rag.ingest --target incidents --reset
 
 ---
 
-*Integration Incident Copilot · github.com/marcos-slima/sap-integration-copilot*
+*Integration Incident Copilot · github.com/marcos-slima/integration-incident-copilot*

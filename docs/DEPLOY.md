@@ -20,8 +20,8 @@ Para rodar localmente sem Docker (`uv run uvicorn app.main:app --reload`), veja 
 ## 1. Clone e configure
 
 ```bash
-git clone https://github.com/marcos-slima/sap-integration-copilot.git
-cd sap-integration-copilot
+git clone https://github.com/marcos-slima/integration-incident-copilot.git
+cd integration-incident-copilot
 cp .env.example .env
 ```
 
@@ -198,4 +198,4 @@ Deve retornar o mesmo formato de `DiagnosisResponse` de `/diagnose`. Um
 
 ---
 
-*Integration Incident Copilot · github.com/marcos-slima/sap-integration-copilot*
+*Integration Incident Copilot · github.com/marcos-slima/integration-incident-copilot*

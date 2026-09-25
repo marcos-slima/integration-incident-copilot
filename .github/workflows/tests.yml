@@ -32,6 +32,13 @@ jobs:
         # Lê a versão de .python-version (3.12.13), a mesma do ambiente local
         run: uv python install
 
+
+      - name: Instalar deps de sistema (python-qpid-proton / A-07)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake gcc libssl-dev libffi-dev libsasl2-dev libsasl2-2
+
       - name: Sincronizar dependências
         run: uv sync --dev
 
@@ -67,6 +74,13 @@ jobs:
 
       - name: Instalar Python
         run: uv python install
+
+
+      - name: Instalar deps de sistema (python-qpid-proton / A-07)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake gcc libssl-dev libffi-dev libsasl2-dev libsasl2-2
 
       - name: Sincronizar dependências
         run: uv sync --dev

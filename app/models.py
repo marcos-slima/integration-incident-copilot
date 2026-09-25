@@ -119,7 +119,7 @@ class DiagnosisResponse(BaseModel):
     # - diagnosis_confidence: metrica CALCULADA pelo pipeline com base nos sinais
     #   objetivos disponiveis (evidence_strength + presenca de dado real de conector
     #   + correspondencia RAG). Nao depende de nenhuma autoavaliacao do LLM.
-    #   Formula: max(evidence_strength, model_confidence * evidence_strength).
+    #   Formula: evidence_strength * model_confidence (produto — A-13 fix: corrigido de max(...)).
     #   Leitura: "quao confiavel e este diagnostico dado o que o pipeline
     #   efetivamente encontrou" — e o numero que um consumidor deveria usar para
     #   decidir se o diagnostico e acionavel sem revisao humana.
@@ -137,7 +137,8 @@ class DiagnosisResponse(BaseModel):
         le=1.0,
         description=(
             "Confianca CALCULADA pelo pipeline (nao auto-relatada pelo LLM): "
-            "max(evidence_strength, model_confidence * evidence_strength). "
+            "evidence_strength * model_confidence — produto das duas sinalizacoes "
+            "independentes (A-13 fix: corrigido de max(...) para produto). "
             "Usa apenas sinais objetivos — evidence_strength do retrieval/conector "
             "e model_confidence pos-guardrail. E o valor recomendado para decisoes "
             "de automacao (ex: 'acionar runbook se diagnosis_confidence > 0.8'). "

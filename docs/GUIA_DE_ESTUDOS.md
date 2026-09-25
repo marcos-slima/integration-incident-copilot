@@ -38,7 +38,7 @@ so mock), camada A2A real (protocolo aberto), e um historico
 documentado de bugs reais encontrados e corrigidos com metodologia,
 nao achismo.
 
-Repositorio: github.com/marcos-slima/sap-integration-copilot
+Repositorio: github.com/marcos-slima/integration-incident-copilot
 
 ---
 

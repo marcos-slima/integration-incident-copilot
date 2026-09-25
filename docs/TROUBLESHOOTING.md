@@ -79,7 +79,7 @@ kubectl describe pod <pod-name>
 
 | Causa | Correção |
 |---|---|
-| Readiness probe aponta para `/ready` (rota inexistente) | Aponte a probe para `/health` no `deployment.yaml`. |
+| Readiness probe aponta para `/ready` | `/health` e o endpoint correto (tambem retorna 503 quando degradado). Aponte a probe para `/health` no `deployment.yaml`. |
 | `REDIS_URL` ausente no ConfigMap | Adicione `REDIS_URL: "redis://redis:6379/0"` ao `configmap.yaml`; sem Redis, o task-store é por-processo e a idempotência distribuída não opera em múltiplas réplicas. |
 | Secret com API keys não montado | Crie o Secret referenciado em `secret.example.yaml` e aplique antes do Deployment. |
 | Imagem não encontrada (ImagePullBackOff) | Verifique se o registry e a tag no `deployment.yaml` batem com o que foi publicado pelo CI. |

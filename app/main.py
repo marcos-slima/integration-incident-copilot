@@ -333,7 +333,9 @@ def health() -> dict:
     all_ok = all(v == "ok" for v in infra_probes.values() if v != "not_configured")
     overall = "ok" if all_ok else "degraded"
 
-    return {
+    # A-11 fix: retorna 503 quando degradado para que liveness probes do
+    # Kubernetes e load balancers removam o pod do pool automaticamente.
+    body = {
         "status": overall,
         "connectors": connector_status(),
         "infra": {
@@ -345,6 +347,9 @@ def health() -> dict:
         },
         "services": infra_probes,
     }
+    if overall == "degraded":
+        return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content=body)
+    return body
 
 
 @app.post(

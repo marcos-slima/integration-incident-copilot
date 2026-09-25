@@ -62,7 +62,7 @@ class Incident(Base):
     probable_root_cause: Mapped[str | None] = mapped_column(Text, nullable=True)
     model_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     diagnosis_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
-    evidence_strength: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    evidence_strength: Mapped[float | None] = mapped_column(Float, nullable=True)  # A-05 fix: era String(32)
     llm_provider_used: Mapped[str | None] = mapped_column(String(64), nullable=True)
     agent_domain: Mapped[str | None] = mapped_column(String(64), nullable=True)
 

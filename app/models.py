@@ -20,6 +20,25 @@ class IncidentRequest(BaseModel):
         | None
     ) = None
     identifier: str | None = None  # ex: nome do iFlow, RFC destination, numero de IDoc/incidente
+    # A-05: campos SOC/iPaaS — opcionais, permitem que clientes informem contexto de seguranca
+    # diretamente (ex: sistemas de monitoracao que ja classificaram o incidente).
+    # Sem esses campos, o pipeline deriva classificacao por heuristicas internas (gateway.py).
+    connector_source_system: str | None = Field(
+        default=None,
+        description="Sistema de origem do conector (ex: S/4HANA, BTP, CPI). Informativo.",
+    )
+    sensitivity_level: Literal["public", "internal", "confidential", "secret"] | None = Field(
+        default=None,
+        description="Nivel de sensibilidade declarado pelo cliente. None = classificado pelo pipeline.",
+    )
+    pii_detected: bool | None = Field(
+        default=None,
+        description="PII detectado antes do envio? None = nao informado (pipeline pode redetetar).",
+    )
+    redaction_applied: bool | None = Field(
+        default=None,
+        description="Redacao ja aplicada ao payload/logs antes do envio? None = nao informado.",
+    )
 
 
 # DA-23 (Event Mesh): formato CloudEvents, o mesmo usado pelo SAP
@@ -46,6 +65,11 @@ class IncidentEventData(BaseModel):
         | None
     ) = None
     identifier: str | None = None
+    # A-05: mesmos campos SOC/iPaaS de IncidentRequest para consistencia
+    connector_source_system: str | None = None
+    sensitivity_level: Literal["public", "internal", "confidential", "secret"] | None = None
+    pii_detected: bool | None = None
+    redaction_applied: bool | None = None
 
 
 class IncidentEventEnvelope(BaseModel):

@@ -182,10 +182,20 @@ services:
       retries: 5
       start_period: 5s
     ports:
-      - "${REDIS_HOST_PORT:-6379}:6379"
+      - "${REDIS_BIND_IP:-127.0.0.1}:${REDIS_HOST_PORT:-6379}:6379"  # A-12: bind loopback por padrao
     volumes:
       - redis_data:/data
-    command: ["redis-server", "--appendonly", "yes"]
+    # A-12: autenticacao via REDIS_PASSWORD (opt-in); se vazio, sobe sem senha
+    # (compativel com dev local sem Redis protegido). Em producao, defina
+    # REDIS_PASSWORD no .env e configure o mesmo valor em REDIS_URL.
+    command: >
+      sh -c "if [ -n "$$REDIS_PASSWORD" ]; then
+               redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD";
+             else
+               redis-server --appendonly yes;
+             fi"
+    environment:
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
 
   # Worker RQ (opt-in, mesmo profile "async" do redis acima) -
   # avaliacao externa (medio prazo, item 6): consome a fila de

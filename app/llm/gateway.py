@@ -254,7 +254,7 @@ def invoke_via_gateway(
             result = build_and_invoke(llm)
         except TRANSPORT_FAILURE_EXCEPTIONS as exc:
             latency = time.monotonic() - started_at
-            circuit_breaker.record_failure(provider, cfg.llm_gateway_circuit_failure_threshold)
+            circuit_breaker.record_failure(provider, cfg.llm_gateway_circuit_failure_threshold, cfg.llm_gateway_circuit_cooldown_seconds)
             CIRCUIT_BREAKER_STATE.labels(target=provider).set(
                 1
                 if circuit_breaker.is_open(provider, cfg.llm_gateway_circuit_cooldown_seconds)

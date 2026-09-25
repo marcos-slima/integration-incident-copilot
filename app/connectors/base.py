@@ -94,8 +94,7 @@ def circuit_breaker_guard(source_system: str) -> ConnectorResult | None:
                 ...chamada HTTP real...
             except httpx.RequestError as exc:
                 connector_circuit_breaker.record_failure(
-                    "ServiceNow", settings.connector_circuit_failure_threshold
-                )
+                    "ServiceNow", settings.connector_circuit_failure_threshold, settings.connector_circuit_cooldown_seconds)
                 ...ConnectorResult de erro, como ja acontecia antes...
             else:
                 connector_circuit_breaker.record_success("ServiceNow")

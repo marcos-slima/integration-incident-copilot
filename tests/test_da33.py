@@ -327,3 +327,36 @@ class TestKnownErrorRules:
         )
         assert rule.matches("this is a test pattern match")
         assert not rule.matches("nothing relevant here")
+
+
+def test_rule_engine_source_not_penalized_by_matched_source_guardrail():
+    """Regressao: o guardrail anti-alucinacao de matched_source (f2388b0)
+    tratava "rule_engine:<categoria>" como documento RAG inventado e
+    derrubava a confianca de TODO diagnostico do Rule Engine para 0.3."""
+    from app.agent.nodes import _apply_confidence_guardrails
+    from app.agent.rules import match_known_error
+
+    diagnosis = match_known_error(
+        "iFlow falhando com HTTP 401 Unauthorized - token OAuth expirado",
+        has_connector_data=True,
+    )
+    assert diagnosis is not None
+    state = {"retrieved_context": [{"source": "cpi_http_401.md", "score": 0.8, "text": "t"}]}
+    result = _apply_confidence_guardrails(dict(diagnosis), state)
+    assert result["matched_source"] == diagnosis["matched_source"]
+    assert not result["probable_root_cause"].startswith("[matched_source")
+
+
+def test_llm_cannot_impersonate_rule_engine_source():
+    from app.agent.nodes import _apply_confidence_guardrails
+
+    diagnosis = {
+        "matched_source": "rule_engine:auth_oauth_expired",
+        "probable_root_cause": "x",
+        "confidence": 0.9,
+        "evidence_strength": 0.9,
+    }
+    state = {"retrieved_context": [{"source": "cpi_http_401.md", "score": 0.8, "text": "t"}]}
+    result = _apply_confidence_guardrails(diagnosis, state)
+    assert result["matched_source"] is None
+    assert result["model_confidence"] <= 0.3

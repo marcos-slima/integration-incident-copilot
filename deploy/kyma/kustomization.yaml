@@ -5,6 +5,7 @@ resources:
   - namespace.yaml
   - configmap.yaml
   - deployment.yaml
+  - worker.yaml
   - service.yaml
   - hpa.yaml
   - apirule.yaml

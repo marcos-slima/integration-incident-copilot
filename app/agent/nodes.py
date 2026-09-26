@@ -79,7 +79,10 @@ def connector_node(state: CopilotState) -> CopilotState:
 
     # A-09: incrementa metrica de chamadas a conectores externos
     from app.metrics import CONNECTOR_REQUEST_TOTAL
-    _metric_status = "mock" if result.is_mock else ("error" if result.status == "error" else "success")
+
+    _metric_status = (
+        "mock" if result.is_mock else ("error" if result.status == "error" else "success")
+    )
     CONNECTOR_REQUEST_TOTAL.labels(
         connector=result.source_system,
         status=_metric_status,
@@ -165,6 +168,22 @@ def graph_write_node(state: CopilotState) -> CopilotState:
     return {}
 
 
+def _web_search_allowed(state) -> bool:
+    """P0.2: gate unico de egress para busca web - usado pelo
+    web_search_node e pelo tool do agente ReAct. Exige web_search_enabled
+    (interruptor principal) E que WEB_SEARCH_POLICY permita."""
+    from app.llm.gateway import classify_sensitivity
+
+    if not settings.web_search_enabled:
+        return False
+    policy = settings.web_search_policy
+    if policy == "disabled":
+        return False
+    if policy == "public_only":
+        return classify_sensitivity(state) == "public"
+    return True
+
+
 @observe(name="web_search")
 def web_search_node(state: CopilotState) -> CopilotState:
     """Busca web via DuckDuckGo - ativada apenas quando o RAG local
@@ -177,25 +196,16 @@ def web_search_node(state: CopilotState) -> CopilotState:
     + mensagem sanitizada do conector (sem PII) + site_filter.
 
     Politica de egress controlada por WEB_SEARCH_POLICY:
-      disabled    — nunca executa (default seguro para producao/Kyma)
-      approved    — executa com query sanitizada
+      disabled    — nunca executa
+      approved    — executa com query sanitizada (default; WEB_SEARCH_ENABLED
+                    continua sendo o interruptor principal, default off)
       public_only — so executa se classificacao de sensibilidade = 'public'
 
     So ativa quando threshold do RAG local nao foi atingido."""
-    from app.llm.gateway import classify_sensitivity
-
     hits = state.get("retrieved_context", [])
     top_score = hits[0]["score"] if hits else 0.0
 
-    # Politica de egress (P0.2): WEB_SEARCH_POLICY tem precedencia sobre
-    # web_search_enabled legado
-    policy = settings.web_search_policy
-    if policy == "disabled":
-        return {"web_search_results": []}
-    if policy == "public_only" and classify_sensitivity(state) != "public":
-        return {"web_search_results": []}
-    # policy == "approved": prossegue, mas so se habilitado E score baixo
-    if not settings.web_search_enabled or top_score >= settings.web_search_threshold:
+    if not _web_search_allowed(state) or top_score >= settings.web_search_threshold:
         return {"web_search_results": []}
 
     interface_type = state.get("interface_type", "")
@@ -878,7 +888,7 @@ def _run_diagnosis_agent(state: CopilotState, persona: str) -> dict:
     # que o LLM nao tenha o tool disponivel independente de instrucao de
     # prompt (enforcement de codigo, nao de prompt).
     web_tool = _make_web_search_tool(state)
-    react_tools = [web_tool] if settings.web_search_enabled else []
+    react_tools = [web_tool] if _web_search_allowed(state) else []
     # Instrucao adicional para forcar JSON na resposta final do agente ReAct
     json_instruction = """
 

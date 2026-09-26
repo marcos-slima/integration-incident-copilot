@@ -28,6 +28,10 @@ data:
   GRAPH_RAG_ENABLED: "false"
   WEB_SEARCH_ENABLED: "true"
   WEB_SEARCH_THRESHOLD: "0.6"
+  # P0.2: busca web so quando nao ha dado real de conector no estado
+  # (classify_sensitivity() == "public"). Nao e DLP: texto livre do
+  # usuario ainda e classificado como public.
+  WEB_SEARCH_POLICY: "public_only"
   # DA-39: politica de data sovereignty — alinhada com o provider cloud
   # configurado acima (openai/azure_openai). "cloud_with_dlp" permite
   # que o AI Gateway rotei dados confidenciais para providers cloud,

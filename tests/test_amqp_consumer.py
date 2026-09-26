@@ -186,7 +186,7 @@ def test_on_message_accepted_on_valid_payload() -> None:
         }
     ).encode()
 
-    stop_flag = [True]  # encerra imediatamente após primeira iteração
+    stop_flag = [False]  # _FakeContainer.run() encerra o loop apos a 1a iteracao
 
     with patch("app.events.amqp_consumer.handle_incident_event") as mock_handler:
         mock_handler.return_value = None
@@ -202,11 +202,11 @@ def test_on_message_accepted_on_valid_payload() -> None:
                 captured["handler"] = handler
 
             def run(self):
-                pass  # não executa nada
+                stop_flag[0] = True  # encerra o loop apos a 1a iteracao
 
         with (
-            patch("app.events.amqp_consumer.Container", _FakeContainer),
-            patch("app.events.amqp_consumer.time.sleep"),
+            patch("proton.reactor.Container", _FakeContainer),
+            patch("time.sleep"),
         ):
             mod._blocking_consume_loop(stop_flag)
 
@@ -229,7 +229,7 @@ def test_on_message_rejected_on_invalid_payload() -> None:
     """Payload inválido → delivery REJECTED (sem requeue)."""
     import app.events.amqp_consumer as mod
 
-    stop_flag = [True]
+    stop_flag = [False]
     captured = {}
 
     class _FakeContainer:
@@ -237,11 +237,11 @@ def test_on_message_rejected_on_invalid_payload() -> None:
             captured["handler"] = handler
 
         def run(self):
-            pass
+            stop_flag[0] = True
 
     with (
-        patch("app.events.amqp_consumer.Container", _FakeContainer),
-        patch("app.events.amqp_consumer.time.sleep"),
+        patch("proton.reactor.Container", _FakeContainer),
+        patch("time.sleep"),
     ):
         mod._blocking_consume_loop(stop_flag)
 
@@ -261,7 +261,7 @@ def test_on_message_modified_on_handler_error() -> None:
     """Erro no handler → delivery MODIFIED (nack com requeue AMQP 1.0)."""
     import app.events.amqp_consumer as mod
 
-    stop_flag = [True]
+    stop_flag = [False]
     captured = {}
 
     class _FakeContainer:
@@ -269,7 +269,7 @@ def test_on_message_modified_on_handler_error() -> None:
             captured["handler"] = handler
 
         def run(self):
-            pass
+            stop_flag[0] = True
 
     valid_payload = json.dumps(
         {
@@ -282,8 +282,8 @@ def test_on_message_modified_on_handler_error() -> None:
     ).encode()
 
     with (
-        patch("app.events.amqp_consumer.Container", _FakeContainer),
-        patch("app.events.amqp_consumer.time.sleep"),
+        patch("proton.reactor.Container", _FakeContainer),
+        patch("time.sleep"),
     ):
         mod._blocking_consume_loop(stop_flag)
 
@@ -295,3 +295,98 @@ def test_on_message_modified_on_handler_error() -> None:
 
     event.delivery.update.assert_called_with("MODIFIED")
     event.delivery.settle.assert_called()
+
+
+def _capture_handler():
+    import app.events.amqp_consumer as mod
+
+    stop_flag = [False]
+    captured = {}
+
+    class _FakeContainer:
+        def __init__(self, handler):
+            captured["handler"] = handler
+
+        def run(self):
+            stop_flag[0] = True
+
+    with (
+        patch("proton.reactor.Container", _FakeContainer),
+        patch("time.sleep"),
+    ):
+        mod._blocking_consume_loop(stop_flag)
+    return captured["handler"]
+
+
+@pytest.mark.skipif(
+    not __import__("importlib").util.find_spec("proton"),
+    reason="python-qpid-proton não instalado",
+)
+def test_on_start_grants_initial_credit_and_escapes_credentials(monkeypatch) -> None:
+    """create_receiver() do proton nao aceita "credit" (TypeError); com
+    prefetch=0 o credito inicial precisa vir de receiver.flow()."""
+    monkeypatch.setattr("app.events.amqp_consumer.settings.amqp_username", "user@corp")
+    monkeypatch.setattr("app.events.amqp_consumer.settings.amqp_password", "p@ss/w:rd")
+    monkeypatch.setattr("app.events.amqp_consumer.settings.amqp_prefetch", 3)
+    handler = _capture_handler()
+
+    event = MagicMock()
+    receiver = event.container.create_receiver.return_value
+    handler.on_start(event)
+
+    _, kwargs = event.container.create_receiver.call_args
+    assert "credit" not in kwargs
+    receiver.flow.assert_called_once_with(3)
+    url = event.container.connect.call_args.args[0]
+    assert "user%40corp:p%40ss%2Fw%3Ard@" in url
+
+
+@pytest.mark.skipif(
+    not __import__("importlib").util.find_spec("proton"),
+    reason="python-qpid-proton não instalado",
+)
+def test_on_message_duplicate_is_acked_without_reprocessing() -> None:
+    handler = _capture_handler()
+    payload = json.dumps(
+        {
+            "specversion": "1.0",
+            "type": "com.sap.integration.incident.detected.v1",
+            "source": "/sap/s4hana",
+            "id": "dup-001",
+            "data": {"incidentId": "INC-DUP", "priority": "LOW", "description": "dup test"},
+        }
+    ).encode()
+
+    with patch("app.events.amqp_consumer.handle_incident_event") as mock_handler:
+        handler.on_message(_make_proton_event(payload, handler=handler))
+        second = _make_proton_event(payload, handler=handler)
+        handler.on_message(second)
+
+    assert mock_handler.call_count == 1
+    second.delivery.update.assert_called_with("ACCEPTED")
+
+
+@pytest.mark.skipif(
+    not __import__("importlib").util.find_spec("proton"),
+    reason="python-qpid-proton não instalado",
+)
+def test_on_message_error_releases_id_for_redelivery() -> None:
+    handler = _capture_handler()
+    payload = json.dumps(
+        {
+            "specversion": "1.0",
+            "type": "com.sap.integration.incident.detected.v1",
+            "source": "/sap/s4hana",
+            "id": "retry-001",
+            "data": {"incidentId": "INC-RETRY", "priority": "LOW", "description": "retry"},
+        }
+    ).encode()
+
+    with patch("app.events.amqp_consumer.handle_incident_event") as mock_handler:
+        mock_handler.side_effect = [RuntimeError("boom"), None]
+        handler.on_message(_make_proton_event(payload, handler=handler))
+        redelivered = _make_proton_event(payload, handler=handler)
+        handler.on_message(redelivered)
+
+    assert mock_handler.call_count == 2
+    redelivered.delivery.update.assert_called_with("ACCEPTED")

@@ -113,13 +113,16 @@ def classify_sensitivity(state: dict) -> Sensitivity:
     Trust Layer (DA-25): dado real de conector (nao mock, nao
     fallback) e informacao de sistema de producao (status, codigo de
     erro, mensagem reais) - tratado como confidential por padrao.
-    Sem dado real de conector (so a descricao textual que o usuario ja
-    digitou pra pedir ajuda), classificado como public.
+    Sem dado real de conector (so descricao/logs/payload enviados pelo
+    usuario), vale settings.sensitivity_default - "confidential" por
+    padrao (B-04): texto livre pode conter dado empresarial que a
+    redacao por regex nao reconhece, entao nao classificado = sensivel.
+    SENSITIVITY_DEFAULT=public restaura o comportamento anterior.
     """
     data = state.get("connector_data")
     if data is not None and not data.is_mock and not data.is_fallback:
         return "confidential"
-    return "public"
+    return settings.sensitivity_default
 
 
 def _estimate_tokens(text: str) -> int:
@@ -254,7 +257,11 @@ def invoke_via_gateway(
             result = build_and_invoke(llm)
         except TRANSPORT_FAILURE_EXCEPTIONS as exc:
             latency = time.monotonic() - started_at
-            circuit_breaker.record_failure(provider, cfg.llm_gateway_circuit_failure_threshold, cfg.llm_gateway_circuit_cooldown_seconds)
+            circuit_breaker.record_failure(
+                provider,
+                cfg.llm_gateway_circuit_failure_threshold,
+                cfg.llm_gateway_circuit_cooldown_seconds,
+            )
             CIRCUIT_BREAKER_STATE.labels(target=provider).set(
                 1
                 if circuit_breaker.is_open(provider, cfg.llm_gateway_circuit_cooldown_seconds)

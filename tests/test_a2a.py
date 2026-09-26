@@ -23,7 +23,8 @@ client = TestClient(app)
 def _stub_diagnosis(request) -> DiagnosisResponse:
     return DiagnosisResponse(
         probable_root_cause="Causa raiz de teste (stub)",
-        confidence=0.75,
+        model_confidence=0.75,
+        diagnosis_confidence=0.0,
         next_steps=["Passo 1", "Passo 2"],
         report_markdown="## Diagnostico\n\nCausa raiz de teste (stub)",
         matched_source="doc_teste.md",

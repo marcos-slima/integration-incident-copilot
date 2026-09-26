@@ -178,7 +178,7 @@ def setup_metrics(app: FastAPI) -> None:
 
     Instrumentator(
         should_group_status_codes=False,
-        excluded_handlers=["/health", "/metrics"],
+        excluded_handlers=["/health", "/ready", "/metrics"],
     ).instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
 
     logger.info("Prometheus /metrics endpoint habilitado.")

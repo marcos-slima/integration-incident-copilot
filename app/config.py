@@ -93,6 +93,11 @@ class Settings(BaseSettings):
     #   chegar ao gateway (garantido por redact_pii_deep em nodes.py).
     #   Use em deploys Kyma/cloud onde Ollama local nao esta disponivel.
     data_sovereignty_mode: str = "strict"  # 'strict' | 'cloud_with_dlp'
+    # B-04: classificacao de incidentes SEM dado real de conector (so texto
+    # do usuario). 'confidential' (default conservador): em modo 'strict'
+    # nao vai para LLM cloud e, com WEB_SEARCH_POLICY=public_only, nao sai
+    # para busca web. 'public' restaura o comportamento anterior.
+    sensitivity_default: Literal["confidential", "public"] = "confidential"
 
     # DA-33: Rule Engine deterministico — avaliado ANTES do LLM para
     # incidentes conhecidos (OAuth expirado, material lock, IDoc 51, etc.).
@@ -197,6 +202,13 @@ class Settings(BaseSettings):
         False  # opt-in explícito — evita exfiltração de dados do incidente para a web
     )
     web_search_threshold: float = 0.6
+    # P0.2: politica de egress da busca web, aplicada ALEM de web_search_enabled
+    # (que continua sendo o interruptor principal, default off):
+    #   disabled    - nunca executa
+    #   approved    - executa com query sanitizada (comportamento anterior)
+    #   public_only - so executa se classify_sensitivity() == "public"
+    #                 (sem dado real de conector no estado)
+    web_search_policy: Literal["disabled", "approved", "public_only"] = "approved"
 
     # Avaliacao externa (nova revisao, P1 - "Agente ReAct pode vazar
     # dados na web"): create_react_agent (app/agent/nodes.py) nunca

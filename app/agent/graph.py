@@ -13,6 +13,7 @@ Ver docs/ARCHITECTURE.md para detalhamento por camada.
 """
 
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from uuid import uuid4
@@ -35,6 +36,7 @@ from app.agent.supervisor import supervisor_node
 from app.config import settings
 from app.exceptions import DiagnosisTimeoutError
 from app.models import DiagnosisResponse, IncidentRequest
+from app.services.incident_recorder import record_incident
 
 os.environ.setdefault("LANGFUSE_PUBLIC_KEY", settings.langfuse_public_key)
 os.environ.setdefault("LANGFUSE_SECRET_KEY", settings.langfuse_secret_key)
@@ -188,7 +190,9 @@ def run_diagnosis(
         "debug": debug,
         "incident_id": incident_id,
     }
+    started_at = time.monotonic()
     final_state = _invoke_graph_with_timeout(initial_state)
+    latency_ms = int((time.monotonic() - started_at) * 1000)
     diagnosis = final_state.get("diagnosis", {})
 
     # Avaliacao externa (medio prazo, item 5): captura o trace_id do
@@ -201,7 +205,7 @@ def run_diagnosis(
     # deste projeto.
     trace_id = get_client().get_current_trace_id()
 
-    return DiagnosisResponse(
+    response = DiagnosisResponse(
         probable_root_cause=diagnosis.get("probable_root_cause", "N/A"),
         model_confidence=float(diagnosis.get("model_confidence", diagnosis.get("confidence", 0.0))),
         diagnosis_confidence=float(diagnosis.get("diagnosis_confidence", 0.0)),
@@ -228,6 +232,16 @@ def run_diagnosis(
         else None,
         trace_id=trace_id,
     )
+    # B-01: persistencia analitica no PostgreSQL (best-effort, no-op sem
+    # DATABASE_URL) - ver app/services/incident_recorder.py.
+    record_incident(
+        incident_id=incident_id,
+        request=request,
+        response=response,
+        final_state=final_state,
+        latency_ms=latency_ms,
+    )
+    return response
 
 
 if __name__ == "__main__":

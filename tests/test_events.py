@@ -30,7 +30,8 @@ _VALID_PAYLOAD = {
 def _stub_diagnosis(request):
     return DiagnosisResponse(
         probable_root_cause=f"causa para {request.description}",
-        confidence=0.7,
+        model_confidence=0.7,
+        diagnosis_confidence=0.0,
         next_steps=["passo"],
         report_markdown="## ok",
         agent_domain="sap",
@@ -67,10 +68,8 @@ def test_incident_event_webhook_requires_api_key_when_configured(monkeypatch):
     ok = client.post(
         "/events/incident", json=_VALID_PAYLOAD, headers={"X-Event-Mesh-Api-Key": "secret-event"}
     )
-    assert ok.status_code == 200
-    body = ok.json()
-    assert body["agent_domain"] == "sap"
-    assert body["probable_root_cause"] == "causa para iFlow falhando com erro 401"
+    # §3.4: webhook responde 202 Accepted sem corpo; diagnostico roda em background.
+    assert ok.status_code == 202
 
 
 def test_incident_event_webhook_rejects_unknown_event_type(monkeypatch):
@@ -105,3 +104,100 @@ def test_ensure_api_keys_configured_generates_event_mesh_key(monkeypatch):
     monkeypatch.setattr(main_module, "settings", settings)
     main_module._ensure_api_keys_configured()
     assert settings.event_mesh_api_key != ""
+
+
+def test_failed_background_diagnosis_releases_event_id(monkeypatch):
+    """Falha no diagnostico (DLQ) libera o cloudevents.id - a reentrega
+    do mesmo evento precisa ser aceita, nao descartada como duplicata."""
+    from fastapi import BackgroundTasks
+
+    from app.events import idempotency
+
+    def _boom(request):
+        raise RuntimeError("LLM fora do ar")
+
+    monkeypatch.setattr(consumer_module, "run_diagnosis", _boom)
+    envelope = IncidentEventEnvelope(**_VALID_PAYLOAD)
+
+    tasks = BackgroundTasks()
+    consumer_module.handle_incident_event_async(envelope, tasks)
+    assert len(tasks.tasks) == 1
+    consumer_module._run_diagnosis_background(envelope)
+
+    assert idempotency.is_duplicate(envelope.id) is False
+
+
+def test_duplicate_event_is_not_scheduled_twice():
+    from fastapi import BackgroundTasks
+
+    envelope = IncidentEventEnvelope(**_VALID_PAYLOAD)
+    tasks = BackgroundTasks()
+    consumer_module.handle_incident_event_async(envelope, tasks)
+    consumer_module.handle_incident_event_async(envelope, tasks)
+    assert len(tasks.tasks) == 1
+
+
+def test_webhook_enqueues_durably_and_returns_job_id_when_redis_configured(monkeypatch):
+    """B-02: com REDIS_URL, 202 so depois do enqueue no RQ; corpo traz job_id."""
+    import app.queue as queue_module
+
+    monkeypatch.setattr("app.main.settings", Settings(event_mesh_api_key="secret-event"))
+    monkeypatch.setattr("app.config.settings.redis_url", "redis://fake:6379/0")
+    enqueued = []
+    monkeypatch.setattr(
+        queue_module, "enqueue_incident_event", lambda data: enqueued.append(data) or "job-123"
+    )
+
+    resp = client.post(
+        "/events/incident", json=_VALID_PAYLOAD, headers={"X-Event-Mesh-Api-Key": "secret-event"}
+    )
+    assert resp.status_code == 202
+    assert resp.json() == {"status": "queued", "job_id": "job-123"}
+    assert enqueued[0]["id"] == "evt-1"
+
+
+def test_webhook_returns_503_when_enqueue_fails(monkeypatch):
+    """B-02: sem enqueue durable confirmado nao ha 202 - publicador reenvia."""
+    import app.queue as queue_module
+
+    monkeypatch.setattr("app.main.settings", Settings(event_mesh_api_key="secret-event"))
+    monkeypatch.setattr("app.config.settings.redis_url", "redis://fake:6379/0")
+
+    def _redis_down(data):
+        raise ConnectionError("redis fora do ar")
+
+    monkeypatch.setattr(queue_module, "enqueue_incident_event", _redis_down)
+    resp = client.post(
+        "/events/incident", json=_VALID_PAYLOAD, headers={"X-Event-Mesh-Api-Key": "secret-event"}
+    )
+    assert resp.status_code == 503
+
+
+def test_run_event_job_dedups_completes_and_releases_on_failure(monkeypatch):
+    """B-02/B-03: worker faz claim -> done; falha libera o id para o retry do RQ."""
+    import pytest
+
+    import app.agent.graph as graph_module
+    from app.events import idempotency
+    from app.queue import run_event_job
+
+    calls = []
+
+    def _flaky(request):
+        calls.append(request.description)
+        if len(calls) == 1:
+            raise RuntimeError("LLM fora do ar")
+        return _stub_diagnosis(request)
+
+    monkeypatch.setattr(graph_module, "run_diagnosis", _flaky)
+    data = IncidentEventEnvelope(**_VALID_PAYLOAD).model_dump(mode="json")
+
+    with pytest.raises(RuntimeError):
+        run_event_job(data)
+    assert idempotency.is_duplicate("evt-1") is False  # liberado na falha
+    idempotency.release("evt-1")
+
+    result = run_event_job(data)  # retry do RQ
+    assert result["probable_root_cause"] == "causa para iFlow falhando com erro 401"
+    assert run_event_job(data) == {"status": "duplicate", "cloudevents_id": "evt-1"}
+    assert len(calls) == 2

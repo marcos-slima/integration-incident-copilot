@@ -173,7 +173,8 @@ def test_evidence_model_validates_assembled_dicts():
 def test_diagnosis_response_defaults_evidence_to_empty_list():
     response = DiagnosisResponse(
         probable_root_cause="causa",
-        confidence=0.5,
+        model_confidence=0.5,
+        diagnosis_confidence=0.0,
         next_steps=[],
         report_markdown="",
     )
@@ -183,7 +184,8 @@ def test_diagnosis_response_defaults_evidence_to_empty_list():
 def test_diagnosis_response_accepts_evidence_list():
     response = DiagnosisResponse(
         probable_root_cause="causa",
-        confidence=0.5,
+        model_confidence=0.5,
+        diagnosis_confidence=0.0,
         next_steps=[],
         report_markdown="",
         evidence=[

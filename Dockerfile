@@ -29,6 +29,7 @@ RUN apt-get update \
         libssl-dev \
         libffi-dev \
         cmake \
+        make \
         libsasl2-dev \
         libsasl2-2 \
     && rm -rf /var/lib/apt/lists/*

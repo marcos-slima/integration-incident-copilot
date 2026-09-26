@@ -37,7 +37,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
-            cmake gcc libssl-dev libffi-dev libsasl2-dev libsasl2-2
+            cmake make gcc libssl-dev libffi-dev libsasl2-dev libsasl2-2
 
       - name: Sincronizar dependências
         run: uv sync --dev
@@ -80,7 +80,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
-            cmake gcc libssl-dev libffi-dev libsasl2-dev libsasl2-2
+            cmake make gcc libssl-dev libffi-dev libsasl2-dev libsasl2-2
 
       - name: Sincronizar dependências
         run: uv sync --dev

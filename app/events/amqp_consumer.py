@@ -33,8 +33,10 @@ import asyncio
 import json
 import logging
 from typing import Any
+from urllib.parse import quote
 
 from app.config import settings
+from app.events import idempotency
 from app.events.consumer import handle_incident_event
 from app.models import IncidentEventEnvelope
 
@@ -96,8 +98,10 @@ def _blocking_consume_loop(stop_flag: list[bool]) -> None:
             ssl_domain = SSLDomain(SSLDomain.MODE_CLIENT)
             ssl_domain.set_peer_authentication(SSLDomain.VERIFY_PEER)
 
+            # quote(): credenciais com "@", ":" ou "/" quebrariam o parse da URL
             url = (
-                f"amqps://{settings.amqp_username}:{settings.amqp_password}"
+                f"amqps://{quote(settings.amqp_username, safe='')}"
+                f":{quote(settings.amqp_password, safe='')}"
                 f"@{settings.amqp_host}:{settings.amqp_port}"
             )
             conn = event.container.connect(
@@ -105,12 +109,12 @@ def _blocking_consume_loop(stop_flag: list[bool]) -> None:
                 ssl_domain=ssl_domain,
                 reconnect=False,  # reconexão gerenciada no _blocking_consume_loop
             )
-            # Receiver com credit controlado (equivalente ao prefetch AMQP 0.9.1)
-            self._receiver = event.container.create_receiver(
-                conn,
-                settings.amqp_queue,
-                credit=settings.amqp_prefetch,
-            )
+            # Receiver com credit controlado (equivalente ao prefetch AMQP 0.9.1).
+            # create_receiver() nao aceita "credit" - com prefetch=0 no handler,
+            # o credito inicial precisa ser emitido explicitamente via flow(),
+            # senao o broker nunca entrega mensagens.
+            self._receiver = event.container.create_receiver(conn, settings.amqp_queue)
+            self._receiver.flow(settings.amqp_prefetch)
             logger.info(
                 "amqp | conectado (AMQP 1.0) host=%s queue=%s",
                 settings.amqp_host,
@@ -143,14 +147,25 @@ def _blocking_consume_loop(stop_flag: list[bool]) -> None:
                 logger.warning("amqp | mensagem rejeitada (payload inválido) id=%s", msg.id)
                 return
 
+            if idempotency.is_duplicate(envelope.id):
+                # Ja processado (ou em processamento) - ack para o broker parar de reenviar
+                delivery.update(delivery.ACCEPTED)
+                delivery.settle()
+                logger.info("amqp | mensagem duplicada descartada cloudevents.id=%s", envelope.id)
+                if self._receiver:
+                    self._receiver.flow(1)
+                return
+
             try:
                 handle_incident_event(envelope)
+                idempotency.mark_completed(envelope.id)
                 # Accepted → ack (AMQP 1.0 Accepted disposition)
                 delivery.update(delivery.ACCEPTED)
                 delivery.settle()
                 logger.info("amqp | mensagem processada id=%s", msg.id)
             except Exception:
                 logger.exception("amqp | erro ao processar mensagem id=%s", msg.id)
+                idempotency.release(envelope.id)
                 # Modified → nack com requeue (AMQP 1.0 Modified disposition)
                 delivery.update(delivery.MODIFIED)
                 delivery.settle()

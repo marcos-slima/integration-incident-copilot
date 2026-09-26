@@ -134,6 +134,55 @@ def test_run_diagnosis_agent_does_not_pass_web_tool_when_web_search_disabled(mon
 
     _run_diagnosis_agent({"description": "x", "retrieved_context": []}, "persona")
 
-    assert captured_tools == [], (
-        "Quando web_search_enabled=False, o ReAct agent nao deve receber nenhum tool"
-    )
+    assert (
+        captured_tools == []
+    ), "Quando web_search_enabled=False, o ReAct agent nao deve receber nenhum tool"
+
+
+def _state_with_connector(is_mock: bool):
+    from app.connectors.base import ConnectorResult
+
+    return {
+        "connector_data": ConnectorResult(
+            source_system="ODATA",
+            status="error",
+            error_code=None,
+            message="m",
+            raw="",
+            is_mock=is_mock,
+        )
+    }
+
+
+def test_web_search_policy_gate(monkeypatch):
+    """P0.2: WEB_SEARCH_POLICY aplicada no gate unico (node + tool ReAct)."""
+    from app.agent import nodes
+
+    monkeypatch.setattr(nodes.settings, "web_search_enabled", True)
+    monkeypatch.setattr("app.llm.gateway.settings.sensitivity_default", "public")
+    public_state = _state_with_connector(is_mock=True)
+    confidential_state = _state_with_connector(is_mock=False)
+
+    monkeypatch.setattr(nodes.settings, "web_search_policy", "approved")
+    assert nodes._web_search_allowed(confidential_state) is True
+
+    monkeypatch.setattr(nodes.settings, "web_search_policy", "public_only")
+    assert nodes._web_search_allowed(public_state) is True
+    assert nodes._web_search_allowed(confidential_state) is False
+
+    monkeypatch.setattr(nodes.settings, "web_search_policy", "disabled")
+    assert nodes._web_search_allowed(public_state) is False
+
+    monkeypatch.setattr(nodes.settings, "web_search_enabled", False)
+    monkeypatch.setattr(nodes.settings, "web_search_policy", "approved")
+    assert nodes._web_search_allowed(public_state) is False
+
+
+def test_web_search_public_only_blocks_free_text_by_default(monkeypatch):
+    """B-04: com sensitivity_default=confidential (default), public_only
+    bloqueia a busca web para incidente so com texto do usuario."""
+    from app.agent import nodes
+
+    monkeypatch.setattr(nodes.settings, "web_search_enabled", True)
+    monkeypatch.setattr(nodes.settings, "web_search_policy", "public_only")
+    assert nodes._web_search_allowed({"description": "erro na interface"}) is False

@@ -12,6 +12,7 @@ import socket
 import pytest
 
 from app.connectors.base import connector_circuit_breaker
+from app.events import idempotency
 from app.rate_limit import limiter
 
 
@@ -67,3 +68,14 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         if "integration" in item.keywords:
             item.add_marker(skip_marker)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_event_idempotency(monkeypatch):
+    """P1.1: forca o fallback em memoria (nunca toca um Redis real vindo
+    do .env) e limpa os ids vistos entre testes - senao um cloudevents.id
+    reutilizado em outro teste seria descartado como duplicata."""
+    monkeypatch.setattr(idempotency, "_get_client", lambda: None)
+    idempotency._local_seen.clear()
+    yield
+    idempotency._local_seen.clear()

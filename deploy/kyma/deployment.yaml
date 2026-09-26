@@ -49,13 +49,16 @@ spec:
           # que apos DA-35 passou a fazer probe de Qdrant/Ollama, causando
           # restart-loop incorreto quando o Qdrant esta fora).
           # /health = liveness: processo FastAPI vivo? (sem IO externo)
-          # /ready  = readiness: Qdrant/Ollama acessiveis? (HTTP probe 1s)
+          # /ready  = readiness: Qdrant/Ollama/Redis acessiveis? (B-07)
           readinessProbe:
             httpGet:
               path: /ready
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10
+            # /ready faz ate 3 probes sequenciais (Qdrant/Ollama/Redis, 1s
+            # cada) - o timeout default de 1s do kubelet cortaria a resposta.
+            timeoutSeconds: 5
             failureThreshold: 3
           livenessProbe:
             httpGet:

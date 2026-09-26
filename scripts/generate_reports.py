@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Fase 4 — Relatórios Agendados de Observabilidade.
 
 Gera relatórios diários ou semanais em Excel (.xlsx) e Markdown (.md)
@@ -333,7 +332,7 @@ def _kv_sheet(ws, title: str, data: dict) -> None:
 _MD_TEMPLATE = """\
 # {{ title }}
 
-**Período:** {{ since }} → {{ until }}  
+**Período:** {{ since }} → {{ until }}
 **Gerado em:** {{ generated_at }}
 
 ---

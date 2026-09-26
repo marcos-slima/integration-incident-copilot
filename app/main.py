@@ -19,6 +19,7 @@ from app.a2a.server import router as a2a_router
 from app.agent.graph import run_diagnosis
 from app.config import settings
 from app.connectors import connector_status
+from app.events import idempotency
 from app.events.amqp_consumer import amqp_consumer  # DA-32
 from app.events.consumer import handle_incident_event_async
 from app.exceptions import DiagnosisTimeoutError
@@ -170,6 +171,8 @@ def _ensure_graph_rag_password_configured() -> None:
 async def lifespan(app: FastAPI):
     _ensure_api_keys_configured()
     _ensure_graph_rag_password_configured()
+    # P1.1: avisa quando idempotencia/A2A TaskStore ficam so em memoria
+    idempotency._warn_if_redis_missing_with_replicas()
     # DA-21: garante os constraints/indices do Neo4j no startup quando
     # GraphRAG esta habilitado, eliminando o passo manual
     # `python -m app.rag.graph_store --init`. Envolvido em try/except
@@ -284,12 +287,12 @@ def index() -> FileResponse | JSONResponse:
 
 def _probe_infra_services() -> dict[str, str]:
     """Testa conectividade real com Qdrant e Ollama (timeout curto para
-    nao tornar o /health lento). Retorna dict {servico: "ok"|"degraded"}.
+    nao tornar o /ready lento). Retorna dict {servico: "ok"|"degraded"}.
 
     DA-35: /health antes retornava status="ok" sempre, independente de
     Qdrant/Ollama estarem acessiveis — nao era um readiness probe real.
     Agora faz GET nos endpoints de health de cada servico configurado,
-    com timeout de 1s para nao impactar o tempo de resposta do /health.
+    com timeout de 1s para nao impactar o tempo de resposta do /ready.
     """
     import httpx  # import local: mantém ordenacao de imports sem quebrar isort
 
@@ -314,29 +317,37 @@ def _probe_infra_services() -> dict[str, str]:
     else:
         results["ollama"] = "not_configured"
 
+    # B-07: Redis sustenta fila de eventos, idempotencia e A2A TaskStore
+    # quando configurado - indisponivel = pod nao pronto.
+    if settings.redis_url:
+        try:
+            import redis
+
+            redis.Redis.from_url(
+                settings.redis_url, socket_connect_timeout=1, socket_timeout=1
+            ).ping()
+            results["redis"] = "ok"
+        except Exception:  # noqa: BLE001 - qualquer falha de conexao/auth = degradado
+            results["redis"] = "degraded"
+    else:
+        results["redis"] = "not_configured"
+
     return results
 
 
-@app.get("/health")
-def health() -> dict:
-    """Alem do status geral, devolve o estado real (derivado do .env
-    atual, ver app.connectors.connector_status) de cada conector e das
-    principais flags de infraestrutura - fonte que o frontend
-    (StatusView) consulta em vez de manter uma lista hardcoded que
-    nao reflete o backend de verdade.
+def _required_services() -> set[str]:
+    """B-07: dependencias obrigatorias para o modo ATIVO - "not_configured"
+    so e aceitavel para as opcionais. Qdrant sempre (RAG e o nucleo do
+    diagnostico); Ollama quando e o provider primario."""
+    required = {"qdrant"}
+    if settings.llm_provider == "ollama":
+        required.add("ollama")
+    return required
 
-    DA-35: probe real em Qdrant/Ollama via _probe_infra_services() —
-    o /health agora reflete disponibilidade real, nao so configuracao.
-    Quando algum servico esta degradado, "status" passa a "degraded"
-    (nao "ok") para que load balancers e liveness probes detectem."""
-    infra_probes = _probe_infra_services()
-    all_ok = all(v == "ok" for v in infra_probes.values() if v != "not_configured")
-    overall = "ok" if all_ok else "degraded"
 
-    # A-11 fix: retorna 503 quando degradado para que liveness probes do
-    # Kubernetes e load balancers removam o pod do pool automaticamente.
-    body = {
-        "status": overall,
+def _status_body() -> dict:
+    """Estado derivado so de configuracao (.env) - sem IO externo."""
+    return {
         "connectors": connector_status(),
         "infra": {
             "llm_provider": settings.llm_provider,
@@ -345,11 +356,43 @@ def health() -> dict:
             "async_queue_enabled": bool(settings.redis_url),
             "auth_required": bool(settings.api_key),
         },
-        "services": infra_probes,
     }
-    if overall == "degraded":
-        return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content=body)
-    return body
+
+
+@app.get("/health")
+def health() -> dict:
+    """Liveness probe - confirma apenas que o processo FastAPI esta de pe.
+    NAO faz chamadas externas (Qdrant/Ollama) e sempre retorna 200.
+
+    §4.3 (avaliacao externa §3.6): o Kubernetes usa liveness para decidir
+    se REINICIA o pod. Reiniciar nao resolve "Qdrant fora do ar", entao
+    condicionar o liveness a dependencias externas causa restart-loop.
+    Dependencias externas ficam em /ready (readiness).
+
+    Tambem devolve o estado dos conectores/infra derivado do .env, que o
+    frontend (StatusView) consulta."""
+    return {"status": "ok", **_status_body()}
+
+
+@app.get("/ready")
+def ready() -> Response:
+    """Readiness probe - probe real em Qdrant/Ollama/Redis (DA-35). Retorna
+    503 quando algum servico configurado esta degradado (A-11) ou quando
+    uma dependencia obrigatoria do modo ativo nao esta configurada
+    (B-07, ver _required_services), para que o
+    Kubernetes tire o pod do pool de roteamento ate a dependencia voltar,
+    sem reinicia-lo (ver /health)."""
+    infra_probes = _probe_infra_services()
+    required = _required_services()
+    all_ok = all(
+        v == "ok" or (v == "not_configured" and name not in required)
+        for name, v in infra_probes.items()
+    )
+    body = {"status": "ok" if all_ok else "degraded", **_status_body(), "services": infra_probes}
+    return JSONResponse(
+        status_code=status.HTTP_200_OK if all_ok else status.HTTP_503_SERVICE_UNAVAILABLE,
+        content=body,
+    )
 
 
 @app.post(
@@ -449,17 +492,27 @@ def incident_event_webhook(
     e aceito hoje; qualquer outro valor e rejeitado com 422 (ver
     IncidentEventEnvelope em app/models.py).
 
-    §3.4: responde 202 Accepted imediatamente, sem bloquear o
-    publicador enquanto o LLM raciocina. O diagnostico roda em
-    background (BackgroundTasks do FastAPI). Idempotencia por
-    cloudevents.id e DLQ de log em app/events/consumer.py.
+    §3.4 / B-02: responde 202 Accepted sem esperar o LLM. Com REDIS_URL,
+    o 202 so sai depois do evento gravado na fila RQ (durable, retry,
+    DLQ no FailedJobRegistry) e o corpo traz o job_id para consulta em
+    GET /diagnose/async/{job_id}; falha no enqueue -> 503. Sem REDIS_URL
+    (dev), usa BackgroundTasks no processo web - nao durable.
 
     Rate limit: 10 requisicoes por minuto por IP.
     Autenticacao: X-Event-Mesh-Api-Key header, chave dedicada e isolada
     de API_KEY/A2A_API_KEY.
     """
-    handle_incident_event_async(envelope, background_tasks)
-    return Response(status_code=status.HTTP_202_ACCEPTED)
+    try:
+        body = handle_incident_event_async(envelope, background_tasks)
+    except Exception as exc:
+        # B-02: sem enqueue durable confirmado nao ha 202 - o publicador
+        # (Event Mesh) recebe 503 e reenvia.
+        logger.exception("[events] Falha ao enfileirar cloudevents.id=%s", envelope.id)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Fila de eventos indisponivel - reenvie o evento.",
+        ) from exc
+    return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content=body)
 
 
 @app.post(

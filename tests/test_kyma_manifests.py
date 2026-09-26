@@ -47,14 +47,14 @@ def test_namespace_manifest_creates_the_expected_namespace():
 
 
 def test_deployment_exposes_health_probes_without_auth_dependency():
-    """Guardrail de design (ver deployment.yaml): os probes usam
-    /health, nunca /diagnose ou outro endpoint autenticado - caso
+    """Guardrail de design (ver deployment.yaml): liveness usa /health e
+    readiness usa /ready (§4.3), nunca /diagnose ou outro endpoint autenticado - caso
     contrario um rollout ficaria preso em CrashLoopBackOff so porque a
     Secret de API_KEY nao bateu com o probe."""
     doc = _load("deployment.yaml")
     container = doc["spec"]["template"]["spec"]["containers"][0]
-    for probe_name in ("readinessProbe", "livenessProbe"):
-        assert container[probe_name]["httpGet"]["path"] == "/health"
+    assert container["livenessProbe"]["httpGet"]["path"] == "/health"
+    assert container["readinessProbe"]["httpGet"]["path"] == "/ready"
 
 
 def test_deployment_runs_as_non_root():
@@ -113,3 +113,15 @@ def test_kustomization_only_references_existing_files():
     # recurso do kustomization - ver README.md e o comentario no
     # proprio kustomization.yaml.
     assert "secret.example.yaml" not in doc["resources"]
+
+
+def test_worker_consumes_diagnosis_queue_with_shared_config():
+    """B-02: com REDIS_URL, eventos vao para a fila RQ "diagnosis" - sem
+    um worker no cluster eles nunca seriam processados."""
+    doc = _load("worker.yaml")
+    container = doc["spec"]["template"]["spec"]["containers"][0]
+    assert container["command"] == [".venv/bin/rq"]
+    assert container["args"] == ["worker", "--url", "$(REDIS_URL)", "diagnosis"]
+    refs = {next(iter(ref.values()))["name"] for ref in container["envFrom"]}
+    assert refs == {"sap-integration-copilot-config", "sap-integration-copilot-secrets"}
+    assert doc["spec"]["template"]["spec"]["securityContext"]["runAsNonRoot"] is True

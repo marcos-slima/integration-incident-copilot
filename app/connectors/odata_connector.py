@@ -111,7 +111,10 @@ class ODataConnector(SAPConnector):
             )
         except httpx.HTTPStatusError as exc:
             connector_circuit_breaker.record_failure(
-                "OData", settings.connector_circuit_failure_threshold, settings.connector_circuit_cooldown_seconds)
+                "OData",
+                settings.connector_circuit_failure_threshold,
+                settings.connector_circuit_cooldown_seconds,
+            )
             return ConnectorResult(
                 source_system="OData",
                 status="error",
@@ -123,7 +126,10 @@ class ODataConnector(SAPConnector):
             )
         except httpx.RequestError as exc:
             connector_circuit_breaker.record_failure(
-                "OData", settings.connector_circuit_failure_threshold, settings.connector_circuit_cooldown_seconds)
+                "OData",
+                settings.connector_circuit_failure_threshold,
+                settings.connector_circuit_cooldown_seconds,
+            )
             return ConnectorResult(
                 source_system="OData",
                 status="error",

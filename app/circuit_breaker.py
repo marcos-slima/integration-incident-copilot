@@ -223,7 +223,9 @@ class CircuitBreaker:
         # Tambem limpa fallback em-memoria
         self._states.pop(key, None)
 
-    def record_failure(self, key: str, failure_threshold: int, cooldown_seconds: float = 300.0) -> None:
+    def record_failure(
+        self, key: str, failure_threshold: int, cooldown_seconds: float = 300.0
+    ) -> None:
         """Registra falha de forma atomica no Redis (A-08).
 
         Usa Lua script para garantir que o incremento e a abertura do circuito
@@ -238,11 +240,11 @@ class CircuitBreaker:
                 now = time.time()
                 result = client.eval(
                     _LUA_RECORD_FAILURE,
-                    1,                        # numero de KEYS
-                    rkey,                     # KEYS[1]
-                    str(failure_threshold),   # ARGV[1]
-                    str(ttl),                 # ARGV[2]
-                    str(now),                 # ARGV[3]
+                    1,  # numero de KEYS
+                    rkey,  # KEYS[1]
+                    str(failure_threshold),  # ARGV[1]
+                    str(ttl),  # ARGV[2]
+                    str(now),  # ARGV[3]
                 )
                 # result = [failures_bytes, opened_at_bytes]
                 _logger.debug(

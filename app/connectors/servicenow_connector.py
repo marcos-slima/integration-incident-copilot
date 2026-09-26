@@ -98,7 +98,10 @@ class ServiceNowConnector(ExternalSystemConnector):
             )
         except httpx.RequestError as exc:
             connector_circuit_breaker.record_failure(
-                "ServiceNow", settings.connector_circuit_failure_threshold, settings.connector_circuit_cooldown_seconds)
+                "ServiceNow",
+                settings.connector_circuit_failure_threshold,
+                settings.connector_circuit_cooldown_seconds,
+            )
             return ConnectorResult(
                 source_system="ServiceNow",
                 status="error",

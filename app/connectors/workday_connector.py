@@ -97,7 +97,10 @@ class WorkdayConnector(ExternalSystemConnector):
             )
         except httpx.HTTPStatusError as exc:
             connector_circuit_breaker.record_failure(
-                "Workday", settings.connector_circuit_failure_threshold, settings.connector_circuit_cooldown_seconds)
+                "Workday",
+                settings.connector_circuit_failure_threshold,
+                settings.connector_circuit_cooldown_seconds,
+            )
             return ConnectorResult(
                 source_system="Workday",
                 status="error",
@@ -109,7 +112,10 @@ class WorkdayConnector(ExternalSystemConnector):
             )
         except httpx.RequestError as exc:
             connector_circuit_breaker.record_failure(
-                "Workday", settings.connector_circuit_failure_threshold, settings.connector_circuit_cooldown_seconds)
+                "Workday",
+                settings.connector_circuit_failure_threshold,
+                settings.connector_circuit_cooldown_seconds,
+            )
             return ConnectorResult(
                 source_system="Workday",
                 status="error",

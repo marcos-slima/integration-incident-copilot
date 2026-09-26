@@ -431,16 +431,22 @@ def _build_diagnosis_prompt(state: CopilotState, persona: str) -> str:
 
     connector_block = ""
     data = state.get("connector_data")
-    if data:
-        fallback_warning = (
-            "\n  ATENCAO: este e um dado GENERICO DE FALLBACK - o identificador "
-            "informado nao foi reconhecido pelo sistema. NAO trate isso como um "
-            "erro especifico conhecido. A menos que a descricao textual do "
-            "incidente, por si so, bata claramente com o documento de contexto, "
-            "use confidence baixa (< 0.4) e considere matched_source como null."
-            if data.is_fallback
-            else ""
-        )
+    if data and data.is_fallback:
+        # Identificador nao reconhecido: o conector devolve um resultado
+        # GENERICO (em alguns mocks, ex. OData/RFC, com status=error e
+        # codigo 500 fabricados). Esses campos NAO vao para o prompt -
+        # em teste real o modelo construiu a causa raiz em cima do "500"
+        # simulado, mesmo com o aviso de fallback. Sem o dado inventado,
+        # o modelo so pode se apoiar na descricao, nos logs e no RAG.
+        connector_block = f"""
+Dados do sistema (conector {data.source_system}): NENHUM DADO DISPONIVEL - o
+identificador informado nao foi reconhecido pelo sistema. Nao existe status
+nem codigo de erro observado; nao presuma nenhum. Baseie o diagnostico apenas
+na descricao, nos logs e no documento de contexto, use confidence baixa
+(< 0.4) e considere matched_source como null se o documento nao corresponder
+claramente ao incidente.
+"""
+    elif data:
         safe_error_code = sanitize_untrusted_input(
             str(data.error_code) if data.error_code else "", "connector_error_code"
         )
@@ -451,7 +457,7 @@ Dados coletados diretamente do sistema SAP (via conector {data.source_system}{" 
   status: {data.status}
   codigo de erro: {safe_error_code}
   mensagem: {safe_message}
-  detalhe bruto: {safe_raw}{fallback_warning}
+  detalhe bruto: {safe_raw}
 """
 
     _raw_graph_block = format_graph_context_for_prompt(state.get("graph_history", []))
@@ -991,6 +997,17 @@ um JSON valido com exatamente esta estrutura (sem texto adicional antes ou depoi
         diagnosis = (
             structured.model_dump() if hasattr(structured, "model_dump") else dict(structured)
         )
+        # Regressao observada em 26/09/2026 com qwen3-coder-next via Ollama:
+        # o texto final do agente trazia "matched_source": "cpi_http_401.md",
+        # mas a chamada ADICIONAL de structured output devolvia o campo nulo
+        # (4 de 13 casos do promptfoo, todos com diagnostico correto). Quando
+        # isso acontece, recupera o valor do texto cru. Nao e uma porta para
+        # alucinacao: _apply_confidence_guardrails abaixo ainda valida o nome
+        # contra as fontes realmente recuperadas.
+        if not diagnosis.get("matched_source"):
+            recovered = _recover_matched_source_from_raw(raw)
+            if recovered:
+                diagnosis["matched_source"] = recovered
     else:
         # Extrai JSON estruturado da resposta final do agente
         json_match = re_module.search(
@@ -1014,6 +1031,19 @@ um JSON valido com exatamente esta estrutura (sem texto adicional antes ou depoi
     diagnosis = _apply_confidence_guardrails(diagnosis, state)
     diagnosis["llm_provider_used"] = llm_provider_used
     return diagnosis
+
+
+def _recover_matched_source_from_raw(raw: str) -> str | None:
+    """Extrai "matched_source" do texto cru da resposta do agente.
+
+    Usado quando o structured output vem com matched_source nulo mas o
+    modelo escreveu o nome do documento no texto. Devolve None para
+    ausencia, null literal ou string vazia."""
+    match = re_module.search(r'"matched_source"\s*:\s*"([^"]+)"', raw or "")
+    if not match:
+        return None
+    value = match.group(1).strip()
+    return value or None
 
 
 @observe(name="sap_specialist")
@@ -1104,7 +1134,12 @@ def report_node(state: CopilotState) -> CopilotState:
 
     connector_line = ""
     data = state.get("connector_data")
-    if data:
+    if data and data.is_fallback:
+        connector_line = (
+            f"\n**Dados do sistema ({data.source_system}):** "
+            f"identificador nao reconhecido - nenhum dado do sistema disponivel\n"
+        )
+    elif data:
         connector_line = (
             f"\n**Dados do sistema ({data.source_system}"
             f"{' - simulado' if data.is_mock else ''}):** "

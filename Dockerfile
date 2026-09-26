@@ -64,7 +64,7 @@ FROM app AS final
 
 # DA-24-fix: copia o frontend buildado no estagio anterior em vez de
 # exigir que static/dist/ ja exista no contexto de build.
-COPY --from=frontend-build /frontend/dist static/dist
+COPY --from=frontend-build /static/dist static/dist
 
 EXPOSE 8000
 

@@ -194,6 +194,12 @@ Deve retornar o mesmo formato de `DiagnosisResponse` de `/diagnose`. Um
 | `307 Temporary Redirect` em `POST /mcp` | Faltou a barra final - `app.mount()` do Starlette redireciona `/mcp` → `/mcp/` antes de checar autenticação (comportamento padrão, não é bug do MCP) | Chame `/mcp/` (com barra final) diretamente, ou configure o cliente MCP para seguir redirects |
 | `RuntimeError: Directory 'static/dist/assets' does not exist` | Frontend não buildado / não copiado para a imagem | Ver seção 2 |
 | `Collection 'sap_incident_docs' doesn't exist` | Qdrant do compose está vazio (esperado em ambiente novo) | Ver seção 6 |
+| `Collection 'sap_reference_library' doesn't exist` (500 em `/diagnose`) | Até esta correção, o fallback de `_retrieve_unified` não capturava o 404 (`UnexpectedResponse`) do Qdrant | Corrigido em `app/rag/retriever.py` (fallback é ignorado com WARNING). Em imagens antigas: criar a collection vazia — `curl -X PUT localhost:${QDRANT_HOST_PORT:-6333}/collections/sap_reference_library -H 'Content-Type: application/json' -d '{"vectors":{"size":768,"distance":"Cosine"}}'` |
+| `container qdrant/ollama is unhealthy`, log com `exec: "curl": executable file not found` | As imagens oficiais do Qdrant e do Ollama não incluem `curl`/`wget` | Healthchecks usam `/dev/tcp` (Qdrant) e `ollama list` (Ollama) no `docker-compose.yml` |
+| `dependency failed to start: container ...-ollama-1 is unhealthy` | Stack antigo com `api`/`worker` dependendo do Ollama em container | O Ollama do host é o padrão; o container `ollama` só sobe com `--profile container-ollama` |
+| `401` mesmo com `API_KEY` no `.env` | A variável não chega ao container (precisa estar em `x-common-env`), ou há linhas `API_KEY=` duplicadas/vazias no `.env`, ou a chave foi colada na linha anterior (`.env` sem quebra de linha final) | `docker compose exec api env \| grep ^API_KEY` deve mostrar a chave; `grep -n ^API_KEY= .env` deve mostrar uma única linha |
+| `"/frontend/dist": not found` no build | O Vite gera em `../static/dist` (`outDir`), ou seja, `/static/dist` no estágio `frontend-build` | Dockerfile usa `COPY --from=frontend-build /static/dist static/dist` |
+| `DATABASE_URL` com `@localhost` falha dentro do container | `localhost` é o próprio container | Usar `@postgres:5432` com `--profile observability`, ou deixar `DATABASE_URL` vazio |
 | Variável de `.env` com `$` interpretada como interpolação do Compose (warning `variable is not set`) | `$` literal em segredo (ex: `CAP_CLIENT_SECRET`) | Escapar como `$$` no `.env` |
 
 ---

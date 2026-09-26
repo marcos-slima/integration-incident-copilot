@@ -20,6 +20,7 @@ import numpy as np
 from fastembed import SparseTextEmbedding, TextEmbedding
 from langchain_ollama import OllamaEmbeddings
 from qdrant_client import QdrantClient
+from qdrant_client.http.exceptions import UnexpectedResponse
 from qdrant_client.models import Fusion, FusionQuery, Prefetch, SparseVector
 from sentence_transformers import CrossEncoder
 
@@ -365,9 +366,13 @@ def _retrieve_unified(
                         REFERENCE_FALLBACK_THRESHOLD,
                     )
                 )
-        except (ValueError, RuntimeError) as _ref_err:
+        except (ValueError, RuntimeError, UnexpectedResponse) as _ref_err:
             # Distingue falha de infra (Qdrant inacessivel) de colecao vazia:
             # sem log, o diagnóstico parece correto quando na verdade o retrieval falhou.
+            # UnexpectedResponse cobre o 404 do Qdrant quando a collection
+            # sap_reference_library nao existe (ambiente novo, biblioteca
+            # nao indexada) - antes escapava do except e derrubava o
+            # /diagnose com 500 em vez de degradar sem o fallback.
             _logger.warning(
                 "[retriever] sap_reference_library indisponivel — "
                 "continuando sem contexto de referencia: %s",

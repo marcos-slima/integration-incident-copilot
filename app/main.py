@@ -37,9 +37,11 @@ from app.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
 
-# ─── API Key (opcional) ────────────────────────────────────────────────────
-# Se API_KEY nao estiver configurado no .env, autenticacao e desabilitada.
-# Para habilitar: API_KEY=sua-chave-secreta no .env
+# ─── API Key (sempre exigida - DA-18) ──────────────────────────────────────
+# Se API_KEY nao estiver configurado, _ensure_api_keys_configured gera uma
+# chave aleatoria no startup (avisada em WARNING no log) - a autenticacao
+# NUNCA fica desabilitada. Para uma chave fixa: API_KEY=... no .env
+# (e repassada ao container via x-common-env no docker-compose.yml).
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 event_mesh_api_key_header = APIKeyHeader(name="X-Event-Mesh-Api-Key", auto_error=False)
 

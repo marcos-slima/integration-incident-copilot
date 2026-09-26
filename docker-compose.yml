@@ -23,6 +23,10 @@ x-common-env: &common-env
   # no .env para ativar. Formato:
   #   postgresql+asyncpg://iic:iic@postgres:5432/iic
   DATABASE_URL: ${DATABASE_URL:-}
+  # Autenticacao da API (header X-API-Key) e do servidor A2A.
+  # Vazio = o app gera uma chave aleatoria no startup (DA-18).
+  API_KEY: ${API_KEY:-}
+  A2A_API_KEY: ${A2A_API_KEY:-}
 
 services:
   api:
@@ -44,22 +48,29 @@ services:
     # manualmente ("docker compose stop"). Evita interrupco de servico
     # por falhas transitórias (OOM, excecao nao tratada, etc.).
     restart: unless-stopped
-    # DA-34: condition: service_healthy garante que Qdrant e Ollama
-    # estejam prontos antes da API comecar a servir requisicoes.
+    # DA-34: condition: service_healthy garante que o Qdrant esteja
+    # pronto antes da API comecar a servir requisicoes. O Ollama roda
+    # no host (host.docker.internal:11434), fora do compose - ver o
+    # servico "ollama" (opt-in) abaixo.
     depends_on:
-      ollama:
-        condition: service_healthy
       qdrant:
         condition: service_healthy
     volumes:
       - ./data/sample_docs:/app/data/sample_docs:ro
 
+  # Ollama em container (opt-in) - NAO sobe com "docker compose up"
+  # default. Por padrao o projeto usa o Ollama do host, via
+  # host.docker.internal:11434 (OLLAMA_HOST em x-common-env). Ativar
+  # somente em maquinas sem Ollama local:
+  #   docker compose --profile container-ollama up -d ollama
+  # Atencao: conflita com a porta 11434 se o Ollama do host estiver ativo.
   ollama:
     image: ollama/ollama:0.34.1
-    # DA-34: healthcheck — garante que Ollama esta pronto para servir
-    # requisicoes antes da API comecar (condition: service_healthy abaixo).
+    profiles: ["container-ollama"]
+    # DA-34: healthcheck — a imagem oficial nao inclui curl/wget; o
+    # proprio CLI do Ollama testa se o servidor responde.
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      test: ["CMD", "ollama", "list"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -72,9 +83,10 @@ services:
 
   qdrant:
     image: qdrant/qdrant:v1.19.0
-    # DA-34: healthcheck — Qdrant expoe /healthz desde v1.3.0.
+    # DA-34: healthcheck — a imagem oficial não inclui curl/wget;
+    # verifica a porta 6333 via /dev/tcp do bash.
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -229,8 +241,6 @@ services:
     # inicializando, falhando silenciosamente.
     depends_on:
       redis:
-        condition: service_healthy
-      ollama:
         condition: service_healthy
       qdrant:
         condition: service_healthy

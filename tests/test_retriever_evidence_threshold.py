@@ -155,3 +155,31 @@ def test_reference_library_fallback_triggered_when_incidents_has_no_strong_match
 
     sources = {r["source"] for r in results}
     assert "Manual_Basis_SAP.pdf" in sources
+
+
+def test_reference_library_missing_collection_degrades_gracefully(monkeypatch):
+    """Ambiente novo sem a biblioteca indexada: o Qdrant responde 404
+    (UnexpectedResponse) ao consultar sap_reference_library. O fallback
+    deve ser ignorado com log, sem derrubar o diagnostico com 500."""
+    from qdrant_client.http.exceptions import UnexpectedResponse
+
+    weak_hit = _hit("incidents_weak.md", score=0.2)
+    monkeypatch.setattr(retriever_module, "_retrieve_hybrid", lambda *a, **k: [weak_hit])
+    monkeypatch.setattr(retriever_module, "rerank", lambda query, hits, top_k: hits[:top_k])
+
+    class _MissingCollectionClient:
+        def get_collection(self, *_args, **_kwargs):
+            raise UnexpectedResponse(
+                status_code=404,
+                reason_phrase="Not Found",
+                content=b'{"status":{"error":"Not found: Collection `sap_reference_library` doesn\'t exist!"}}',
+                headers={},
+            )
+
+    monkeypatch.setattr(retriever_module, "_get_qdrant_client", lambda: _MissingCollectionClient())
+
+    # Nao deve levantar excecao; o hit fraco de incidents segue para o
+    # filtro de admissao normal (e aqui e descartado por ser fraco).
+    results = _retrieve_unified("query sem match forte", top_k=3, score_threshold=0.5)
+
+    assert isinstance(results, list)

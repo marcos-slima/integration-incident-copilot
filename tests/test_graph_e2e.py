@@ -15,6 +15,12 @@ from app.agent.graph import run_diagnosis
 from app.models import IncidentRequest
 
 
+_RULE_ENGINE_EQUIVALENTS = {
+    "idoc_status_51.md": ("rule_engine:sap_idoc_status_51",),
+    "rfc_connection_refused.md": ("rule_engine:network_connection_refused",),
+}
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     "description,interface_type,identifier,expected_source,min_confidence",
@@ -38,7 +44,11 @@ def test_diagnosis_matches_expected_source(
     )
     result = run_diagnosis(request)
 
-    assert result.matched_source == expected_source, (
+    # DA-33: para erros conhecidos o Rule Engine responde antes do LLM,
+    # com matched_source = "rule_engine:<categoria>" - aceito como
+    # equivalente ao documento RAG da mesma causa.
+    accepted_sources = {expected_source, *_RULE_ENGINE_EQUIVALENTS.get(expected_source, ())}
+    assert result.matched_source in accepted_sources, (
         f"Esperado fonte '{expected_source}' para '{description}' "
         f"(interface={interface_type}, id={identifier}), "
         f"veio '{result.matched_source}'"

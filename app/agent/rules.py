@@ -216,6 +216,12 @@ KNOWN_ERROR_RULES: list[ErrorRule] = [
     ErrorRule(
         patterns=[
             r"connection.*refused",
+            # Relatos em portugues ("SM59 dando erro de conexao recusada")
+            # e a mensagem classica do SAP para destino RFC inacessivel.
+            # Sem estes padroes, o caso caia no LLM, que confundia com
+            # rfc_gateway_pool_timeout.md (eval de 26/09/2026).
+            r"conex[aã]o.{0,20}recusad",
+            r"partner.{0,20}not.{0,20}reached",
             r"ECONNREFUSED",
             r"unable.*connect",
             r"host.*unreachable",

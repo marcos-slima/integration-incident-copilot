@@ -33,7 +33,14 @@ def main() -> None:
         json.dumps(
             {
                 "matched_source": result.matched_source,
-                "confidence": result.confidence,
+                # P1.5 (23/09/2026): DiagnosisResponse.confidence foi dividido
+                # em model_confidence e diagnosis_confidence. "confidence"
+                # continua como alias de diagnosis_confidence (a metrica
+                # recomendada para automacao) para manter os asserts do
+                # promptfooconfig.yaml validos.
+                "confidence": result.diagnosis_confidence,
+                "diagnosis_confidence": result.diagnosis_confidence,
+                "model_confidence": result.model_confidence,
                 "probable_root_cause": result.probable_root_cause,
             },
             ensure_ascii=False,

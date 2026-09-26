@@ -7,13 +7,25 @@ sem o ambiente de IA local rodando, e evita que o CI quebre por falta
 de infraestrutura que so existe localmente.
 """
 
+import os
 import socket
 
-import pytest
+# Isolamento do .env local: os testes de tests/test_api.py usam um
+# TestClient sem header X-API-Key e dependem de API_KEY/A2A_API_KEY
+# vazias no import do app (os testes de autenticacao configuram a chave
+# explicitamente via monkeypatch). Com uma chave real no .env do
+# desenvolvedor, 15 testes passavam a falhar com 401. Variaveis de
+# ambiente tem precedencia sobre o .env no pydantic-settings, entao
+# fixar vazio aqui (antes de importar app.*) torna a suite independente
+# do .env de cada maquina.
+os.environ["API_KEY"] = ""
+os.environ["A2A_API_KEY"] = ""
 
-from app.connectors.base import connector_circuit_breaker
-from app.events import idempotency
-from app.rate_limit import limiter
+import pytest  # noqa: E402
+
+from app.connectors.base import connector_circuit_breaker  # noqa: E402
+from app.events import idempotency  # noqa: E402
+from app.rate_limit import limiter  # noqa: E402
 
 
 def _port_open(host: str, port: int, timeout: float = 1.0) -> bool:

@@ -47,3 +47,8 @@ dev_rfc.log
 .precommit-cache-tmp/
 reports/
 !reports/.gitkeep
+
+# Artefatos locais de ambiente (IA local / backups manuais)
+*.bak-*
+Modelfile
+.continue/

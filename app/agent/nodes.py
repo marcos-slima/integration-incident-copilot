@@ -698,11 +698,23 @@ def _apply_confidence_guardrails(diagnosis: dict, state: CopilotState) -> dict:
             )
 
     # Valida matched_source contra as fontes realmente recuperadas
-    # Impede que o LLM invente ou alucine um nome de documento
+    # Impede que o LLM invente ou alucine um nome de documento.
+    # Excecao: diagnostico do Rule Engine (DA-33) - "rule_engine:<categoria>"
+    # nao e documento RAG, e sim a regra deterministica que casou. So
+    # rules.py define rule_engine_category (a saida do LLM nao tem esse
+    # campo), entao o LLM nao consegue se passar pelo rule engine.
     retrieved = state.get("retrieved_context") or []
     valid_sources = {h["source"] for h in retrieved if h.get("source")}
     claimed_source = diagnosis.get("matched_source")
-    if claimed_source and valid_sources and claimed_source not in valid_sources:
+    is_rule_engine = bool(diagnosis.get("rule_engine_category")) and claimed_source == (
+        f"rule_engine:{diagnosis.get('rule_engine_category')}"
+    )
+    if (
+        claimed_source
+        and valid_sources
+        and claimed_source not in valid_sources
+        and not is_rule_engine
+    ):
         diagnosis["matched_source"] = None
         model_confidence = min(model_confidence, 0.3)
         diagnosis["probable_root_cause"] = (

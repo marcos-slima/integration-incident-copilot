@@ -16,6 +16,9 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.a2a.agent_card import get_agent_card
 from app.a2a.server import router as a2a_router
+from app.admin.routes import router as admin_router  # DA-46/47/48
+from app.admin.security import ensure_admin_key_configured
+from app.admin.ui import ui_router as admin_ui_router
 from app.agent.graph import run_diagnosis
 from app.config import settings
 from app.connectors import connector_status
@@ -23,6 +26,7 @@ from app.events import idempotency
 from app.events.amqp_consumer import amqp_consumer  # DA-32
 from app.events.consumer import handle_incident_event_async
 from app.exceptions import DiagnosisTimeoutError
+from app.llm.gateway import describe_effective_policy
 from app.mcp.server import build_mcp_asgi_app
 from app.mcp.server import mcp as mcp_server
 from app.models import (
@@ -139,6 +143,9 @@ def _ensure_api_keys_configured() -> None:
             "automaticamente para esta execucao (header X-Event-Mesh-Api-Key): %s",
             settings.event_mesh_api_key,
         )
+    # DA-46/47/48: superficie admin (registro de modelos/credenciais/metering)
+    # com chave DEDICADA. Mesmo contrato DA-18: nunca auth desabilitada.
+    ensure_admin_key_configured()
 
 
 class MissingGraphRagCredentialsError(RuntimeError):
@@ -208,7 +215,8 @@ async def lifespan(app: FastAPI):
             yield
         finally:
             await amqp_consumer.stop()  # DA-32: graceful shutdown
-    get_client().flush()
+    if settings.langfuse_configured:
+        get_client().flush()
 
 
 app = FastAPI(
@@ -354,7 +362,7 @@ def _status_body() -> dict:
         "infra": {
             "llm_provider": settings.llm_provider,
             "graph_rag_enabled": settings.graph_rag_enabled,
-            "langfuse_enabled": bool(settings.langfuse_public_key and settings.langfuse_secret_key),
+            "langfuse_enabled": settings.langfuse_configured,
             "async_queue_enabled": bool(settings.redis_url),
             "auth_required": bool(settings.api_key),
         },
@@ -564,7 +572,7 @@ def verify_incident_endpoint(
             )
 
     langfuse_scored = False
-    if body.trace_id and body.correct is not None:
+    if settings.langfuse_configured and body.trace_id and body.correct is not None:
         try:
             get_client().create_score(
                 trace_id=body.trace_id,
@@ -599,12 +607,30 @@ def verify_incident_endpoint(
     }
 
 
+@app.get("/llm/policy", dependencies=[Depends(verify_api_key)])
+def llm_policy() -> dict:
+    """DA-43: policy de soberanca de dados do AI Gateway, em vigor agora.
+
+    Superficie de auditoria para questionario de seguranca de cliente:
+    mostra, por provider, a ORIGIN real resolvida, se pode receber dado
+    'public' e 'confidential', e o motivo de cada decisao. Nao inclui
+    nenhuma credencial (ver normalize_origin, que descarta userinfo).
+
+    Leitura de config, sem efeito colateral: nao abre circuito, nao chama
+    LLM, nao cobra. Autenticacao: X-API-Key (mesma dependency de
+    /diagnose).
+    """
+    return describe_effective_policy()
+
+
 @app.get("/.well-known/agent-card.json")
 def agent_card() -> dict:
     return get_agent_card()
 
 
 app.include_router(a2a_router)
+app.include_router(admin_router)  # DA-46/47/48: /admin/api/* (ADMIN_API_KEY)
+app.include_router(admin_ui_router)  # /admin pages (shell Jinja2, dados via API)
 
 # DA-19: servidor MCP montado em /mcp - ver app/mcp/server.py para o
 # contrato de ferramentas (diagnose_incident, list_connectors) e a

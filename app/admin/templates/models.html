@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Modelos · Admin{% endblock %}
+{% block content %}
+<h2>Modelos registrados (por origem)</h2>
+<button onclick="loadModels()">Recarregar</button>
+<table id="models">
+  <thead><tr>
+    <th>Origem</th><th>Modelo</th><th>base_url</th><th>$ in/1M</th><th>$ out/1M</th>
+    <th>limite/mês</th><th>%</th><th>default</th><th>on</th><th>Ações</th>
+  </tr></thead>
+  <tbody id="models-body"><tr><td colspan="10">carregando…</td></tr></tbody>
+</table>
+
+<h3>Novo modelo</h3>
+<form id="newmodel" onsubmit="return addModel(event)">
+  <input name="provider_origin" placeholder="origin (ex: api.groq.com)" required>
+  <input name="model_id" placeholder="model_id (ex: openai/gpt-oss-120b)" required>
+  <input name="base_url" placeholder="base_url (vazio = padrão do provider)">
+  <input name="price_in_per_1m" type="number" placeholder="$ in/1M">
+  <input name="price_out_per_1m" type="number" placeholder="$ out/1M">
+  <input name="monthly_limit_tokens" type="number" placeholder="limite tokens/mês">
+  <label><input name="is_default" type="checkbox"> default</label>
+  <button type="submit">Adicionar</button>
+</form>
+
+<p class="warn" id="msg"></p>
+
+<script>
+function loadModels() {
+  adminFetch('/admin/api/models').then(r => {
+    if (r.status === 401) throw new Error('chave admin inválida — insira em cima');
+    if (r.status === 503) throw new Error('DB não configurado (DATABASE_URL ausente)');
+    return r.json();
+  }).then(rows => {
+    const tb = document.getElementById('models-body');
+    tb.innerHTML = '';
+    if (!rows.length) { tb.innerHTML = '<tr><td colspan="10">nenhum modelo registrado</td></tr>'; return; }
+    for (const m of rows) {
+      const pct = m.usage.percent == null ? '—' : m.usage.percent + '%';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${escapeHtml(m.provider_origin)}</td>
+        <td>${escapeHtml(m.model_id)}${credBadge(m.provider_origin)}</td>
+        <td>${escapeHtml(m.base_url || '—')}</td>
+        <td>${m.price_in_per_1m ?? '—'}</td>
+        <td>${m.price_out_per_1m ?? '—'}</td>
+        <td>${m.monthly_limit_tokens ?? '—'}</td>
+        <td>${pct}</td>
+        <td>${m.is_default ? 'sim' : ''}</td>
+        <td>${m.enabled ? 'sim' : 'off'}</td>
+        <td>
+          <button onclick="setCredential('${m.provider_origin}')">chave</button>
+          <button onclick="toggleModel('${m.id}', ${!m.enabled})">${m.enabled ? 'desativar' : 'ativar'}</button>
+          <button onclick="delModel('${m.id}')">remover</button>
+        </td>`;
+      tb.appendChild(tr);
+    }
+  }).catch(e => document.getElementById('msg').textContent = e.message);
+}
+function credBadge(origin) {
+  return ' <span class="pill" style="opacity:.6" title="ver detalhes da chave em /admin/api/credentials">🔑</span>';
+}
+function setCredential(origin) {
+  const key = prompt('Chave de API para ' + origin + ' (grava CIFRADA, DA-47):');
+  if (!key) return;
+  adminFetch('/admin/api/credentials/' + encodeURIComponent(origin), {method:'PUT', body: JSON.stringify({key})})
+    .then(r => r.json())
+    .then(() => loadModels())
+    .catch(e => document.getElementById('msg').textContent = 'erro na chave: ' + e.message);
+}
+function toggleModel(id, target) {
+  adminFetch('/admin/api/models/' + id, {method:'PATCH', body: JSON.stringify({enabled: target})})
+    .then(() => loadModels()).catch(e => document.getElementById('msg').textContent = e.message);
+}
+function delModel(id) {
+  if (!confirm('Remover este modelo?')) return;
+  adminFetch('/admin/api/models/' + id, {method:'DELETE'})
+    .then(() => loadModels()).catch(e => document.getElementById('msg').textContent = e.message);
+}
+function addModel(e) {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const body = Object.fromEntries([...f.entries()].map(([k,v]) => [
+    k, (k === 'is_default') ? !!v : (v === '' ? null : v)
+  ]));
+  adminFetch('/admin/api/models', {method:'POST', body: JSON.stringify(body)})
+    .then(r => r.ok ? loadModels() : r.json().then(j => { throw new Error(j.detail); }))
+    .then(() => e.target.reset())
+    .catch(err => document.getElementById('msg').textContent = err.message);
+  return false;
+}
+function escapeHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = s == null ? '' : String(s);
+  return div.innerHTML;
+}
+loadModels();
+</script>
+{% endblock %}

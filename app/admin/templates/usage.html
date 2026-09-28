@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Metering · Admin{% endblock %}
+{% block content %}
+<h2>Consumo real de tokens (período aberto)</h2>
+<button onclick="loadUsage()">Recarregar</button>
+<table id="usage">
+  <thead><tr>
+    <th>Origem</th><th>Modelo</th><th>tokens in</th><th>tokens out</th><th>total</th>
+    <th>requests</th><th>falhas</th><th>custo USD</th><th>limite/mês</th><th>consumido</th><th></th>
+  </tr></thead>
+  <tbody id="usage-body"><tr><td colspan="11">carregando…</td></tr></tbody>
+</table>
+<p class="warn" id="msg"></p>
+<p>Percentual = (tokens in+out) / limite mensal cadastrado em <em>Modelos</em>.
+  Sem limite cadastrado, o percentual fica em branco.</p>
+
+<script>
+function loadUsage() {
+  adminFetch('/admin/api/usage').then(r => {
+    if (r.status === 401) throw new Error('chave admin inválida — insira em cima');
+    if (r.status === 503) throw new Error('DB não configurado (DATABASE_URL ausente)');
+    return r.json();
+  }).then(rows => {
+    const tb = document.getElementById('usage-body');
+    tb.innerHTML = '';
+    if (!rows.length) { tb.innerHTML = '<tr><td colspan="11">sem modelos registrados</td></tr>'; return; }
+    for (const u of rows) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${esc(u.provider_origin)}</td><td>${esc(u.model_id)}</td>
+        <td>${u.tokens_in}</td><td>${u.tokens_out}</td><td><strong>${u.tokens_total}</strong></td>
+        <td>${u.requests}</td><td>${u.failures}</td><td>${u.cost_usd}</td>
+        <td>${u.monthly_limit_tokens ?? '—'}</td>
+        <td>${u.percent == null ? '—' : `<span class="pill ${u.percent >= 80 ? 'warn' : 'ok'}">${u.percent}%</span>`}</td>
+        <td><button onclick="resetUsage('${u.provider_origin}','${u.model_id}')">reset</button></td>`;
+      tb.appendChild(tr);
+    }
+  }).catch(e => document.getElementById('msg').textContent = e.message);
+}
+function resetUsage(origin, model) {
+  if (!confirm('Fechar o período atual e zerar o contador de ' + esc(model) + '?')) return;
+  adminFetch('/admin/api/usage/' + encodeURIComponent(origin) + '/' + encodeURIComponent(model) + '/reset',
+    {method:'POST'}).then(() => loadUsage()).catch(e => document.getElementById('msg').textContent = e.message);
+}
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : String(s);
+  return d.innerHTML;
+}
+loadUsage();
+</script>
+{% endblock %}

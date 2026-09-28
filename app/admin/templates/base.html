@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Admin · Integration Copilot{% endblock %}</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 1.5rem auto; padding: 0 1rem; }
+  nav a { margin-right: 1rem; }
+  table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+  th, td { border: 1px solid #555; padding: .35rem .5rem; text-align: left; font-size: .9rem; }
+  th { background: rgba(128,128,128,.15); }
+  .pill { border: 1px solid currentColor; border-radius: 999px; padding: 0 .5rem; font-size: .75rem; }
+  .ok { color: #2e9e4f; } .warn { color: #d08c00; } .err { color: #cf2f2f; }
+  #keyrow { background: rgba(128,128,128,.12); padding: .5rem; border-radius: 6px; margin-bottom: 1rem; }
+  code { background: rgba(128,128,128,.18); padding: 0 .25rem; }
+</style>
+</head>
+<body>
+<header>
+  <strong>Integration Copilot · Superfície admin</strong>
+  <nav>
+    <a href="/admin">Início</a>
+    <a href="/admin/models">Modelos</a>
+    <a href="/admin/usage">Metering</a>
+    <a href="/admin/systems">Sistemas</a>
+    <a href="/diagnose" target="_blank">Diagnosticar</a>
+  </nav>
+</header>
+
+{% if not db_configured %}
+<p class="warn"><strong>Persistência não configurada</strong> — DATABASE_URL ausente no .env.
+  As operações de dados retornarão 503. A API de diagnóstico continua funcionando.</p>
+{% endif %}
+
+<div id="keyrow">
+  <label>ADMIN_API_KEY (salvo no sessionStorage, enviado como
+    <code>X-API-Admin-Key</code>):</label>
+  <input id="adminkey" type="password" size="40" placeholder="cole a chave admin" autocomplete="off">
+  <button onclick="saveKey()">Salvar</button>
+</div>
+
+<main>
+{% block content %}{% endblock %}
+</main>
+
+<script>
+  // Chave admin local: nunca cookie, nunca URL; morre ao fechar a aba.
+  console.log('admin ui ready');
+</script>
+<script>
+function saveKey() {
+  const v = document.getElementById('adminkey').value.trim();
+  if (!v) { sessionStorage.removeItem('adminKey'); return; }
+  sessionStorage.setItem('adminKey', v);
+  location.reload();
+}
+function adminFetch(path, opts) {
+  opts = opts || {};
+  opts.headers = Object.assign({}, opts.headers || {});
+  const k = sessionStorage.getItem('adminKey');
+  if (k) opts.headers['X-API-Admin-Key'] = k;
+  opts.headers['Content-Type'] = 'application/json';
+  return fetch(path, opts);
+}
+function restoreKeyLabel() {
+  const k = sessionStorage.getItem('adminKey');
+  const el = document.getElementById('adminkey');
+  if (el && k) el.value = k;
+}
+restoreKeyLabel();
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

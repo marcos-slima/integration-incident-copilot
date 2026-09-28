@@ -136,9 +136,13 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-REQUIRED_SET_IN_ENV}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3001}
+      # A mesma senha do postgres (provisioning do datasource usa
+      # ${POSTGRES_PASSWORD} em deploy/grafana/provisioning/datasources/).
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-REQUIRED_SET_IN_ENV}
     volumes:
       - grafana_data:/var/lib/grafana
       - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/etc/grafana/dashboards:ro
     depends_on:
       postgres:
         condition: service_healthy

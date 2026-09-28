@@ -121,7 +121,7 @@
       "type": "stat",
       "targets": [{
         "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
-        "rawSql": "SELECT COUNT(*) as value FROM incidents WHERE $__timeFilter(created_at) AND evidence_strength IN ('high', 'critical')",
+        "rawSql": "SELECT COUNT(*) as value FROM incidents WHERE $__timeFilter(created_at) AND evidence_strength >= 0.7",
         "format": "table"
       }]
     },

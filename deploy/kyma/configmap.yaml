@@ -40,6 +40,21 @@ data:
   # Altere para "strict" se implantar um Ollama local no cluster.
   DATA_SOVEREIGNTY_MODE: "cloud_with_dlp"
 
+  # DA-43: quais ORIGINS (scheme://host[:port]) estao LIBERADAS a receber
+  # dado confidencial. NECESSARIO com DATA_SOVEREIGNTY_MODE=cloud_with_dlp:
+  # o modo sozinho libera nada, e fail-closed — allowlist vazia significa
+  # "so providers locais", e todo cloud vai com PolicyViolationError.
+  #
+  # A unidade de governanca e a ORIGIN, nao o rotulo do provider: 'openai'
+  # pode apontar para api.openai.com ou (via OPENAI_BASE_URL) para vLLM,
+  # Groq, Gemini, LiteLLM. Um questionario de seguranca de cliente pergunta
+  # "para onde vai meu dado?" — a resposta e uma URL. Troque pelo endpoint
+  # que voce CONTRATOU (Azure OpenAI: https://<recurso>.openai.azure.com).
+  #
+  # Sem o valor abaixo, este deploy so pode diagnosticar incidents SEM
+  # dado real de conector. Confira a policy efetiva em GET /llm/policy.
+  CONFIDENTIAL_ALLOWED_ORIGINS: "https://<recurso>.openai.azure.com"
+
   # Langfuse (observabilidade) e opcional - vazio aqui, sem tracing.
   # Aponte para um Langfuse self-hosted ou cloud via Secret se quiser
   # observabilidade em produção (nao precisa ser ConfigMap, mas as

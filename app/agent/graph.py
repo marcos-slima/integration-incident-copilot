@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from uuid import uuid4
 
-from langfuse import get_client, observe
+from langfuse import get_client
 
 from app.agent.nodes import (
     _assemble_evidence,
@@ -26,6 +26,7 @@ from app.agent.nodes import (
     generic_diagnosis_node,
     graph_enrich_node,
     graph_write_node,
+    observe_span,
     report_node,
     retrieve_node,
     saas_diagnosis_node,
@@ -38,10 +39,15 @@ from app.exceptions import DiagnosisTimeoutError
 from app.models import DiagnosisResponse, IncidentRequest
 from app.services.incident_recorder import record_incident
 
-os.environ.setdefault("LANGFUSE_PUBLIC_KEY", settings.langfuse_public_key)
-os.environ.setdefault("LANGFUSE_SECRET_KEY", settings.langfuse_secret_key)
-os.environ.setdefault("LANGFUSE_HOST", settings.langfuse_host)
-os.environ.setdefault("LANGFUSE_BASE_URL", settings.langfuse_host)
+if settings.langfuse_configured:
+    os.environ.setdefault("LANGFUSE_PUBLIC_KEY", settings.langfuse_public_key)
+    os.environ.setdefault("LANGFUSE_SECRET_KEY", settings.langfuse_secret_key)
+    os.environ.setdefault("LANGFUSE_HOST", settings.langfuse_host)
+    os.environ.setdefault("LANGFUSE_BASE_URL", settings.langfuse_host)
+else:
+    # ver app/agent/nodes.py: sem as duas chaves, desligar o tracing
+    # explicitamente evita o warning por span da SDK
+    os.environ["LANGFUSE_TRACING_ENABLED"] = "false"
 
 from langgraph.graph import END, StateGraph
 
@@ -163,7 +169,7 @@ def _invoke_graph_with_timeout(initial_state: CopilotState) -> CopilotState:
         ) from exc
 
 
-@observe(name="sap_copilot_diagnosis")
+@observe_span(name="sap_copilot_diagnosis")
 def run_diagnosis(
     request: IncidentRequest,
     debug: bool = False,
@@ -203,7 +209,10 @@ def run_diagnosis(
     # Langfuse nao estiver configurado/ativo (tracing desabilitado) -
     # graceful, mesmo padrao de qualquer outra integracao opcional
     # deste projeto.
-    trace_id = get_client().get_current_trace_id()
+    # Guard: get_client() CRIA um client mesmo com tracing desabilitado, e
+    # o SDK v4 loga "initialized without public_key" + "No active span"
+    # nesse caminho. So chamamos quando ha chave configurada.
+    trace_id = get_client().get_current_trace_id() if settings.langfuse_configured else None
 
     response = DiagnosisResponse(
         probable_root_cause=diagnosis.get("probable_root_cause", "N/A"),
@@ -270,4 +279,5 @@ if __name__ == "__main__":
     result = run_diagnosis(request, debug=args.debug, llm_model=args.llm_model)
     print(result.report_markdown)
 
-    get_client().flush()
+    if settings.langfuse_configured:
+        get_client().flush()

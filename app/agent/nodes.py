@@ -14,10 +14,19 @@ from uuid import uuid4
 from app.config import settings
 from app.metrics import RULE_ENGINE_HIT_TOTAL
 
-os.environ.setdefault("LANGFUSE_PUBLIC_KEY", settings.langfuse_public_key)
-os.environ.setdefault("LANGFUSE_SECRET_KEY", settings.langfuse_secret_key)
-os.environ.setdefault("LANGFUSE_HOST", settings.langfuse_host)
-os.environ.setdefault("LANGFUSE_BASE_URL", settings.langfuse_host)
+if settings.langfuse_configured:
+    os.environ.setdefault("LANGFUSE_PUBLIC_KEY", settings.langfuse_public_key)
+    os.environ.setdefault("LANGFUSE_SECRET_KEY", settings.langfuse_secret_key)
+    os.environ.setdefault("LANGFUSE_HOST", settings.langfuse_host)
+    os.environ.setdefault("LANGFUSE_BASE_URL", settings.langfuse_host)
+else:
+    # Sem as DUAS chaves o @observe AINDA assim cria um client default e
+    # tenta exportar a cada span, logando "Authentication error: Langfuse
+    # client / LANGFUSE_PUBLIC_KEY environment" a cada node (6+ por
+    # diagnostico). A SDK v4 le este flag em client.py:365, entao e o
+    # desligamento suportado - e precisa vir AQUI, antes de qualquer
+    # client/span ser criado.
+    os.environ["LANGFUSE_TRACING_ENABLED"] = "false"
 
 from ddgs import DDGS
 from langchain_core.tools import tool as lc_tool
@@ -62,8 +71,39 @@ _WEB_SEARCH_SITE_MAP_DEFAULT = "site:community.sap.com OR site:github.com/SAP OR
 # input/output que @observe capturar automaticamente (o CopilotState
 # inteiro, nao so o texto que sanitize_untrusted_input ja sanitizava
 # manualmente para o prompt).
-Langfuse(mask=redact_pii_deep)
-_langfuse_handler = CallbackHandler()
+#
+# Guard: sem as DUAS chaves, nao criamos client nenhum. Criar client com
+# chave vazia faz o SDK tentar exportar em background e logarithm
+# "401 Unauthorized" a cada run (o @observe acima vira no-op, o que e
+# desejado). A mascara de PII nao e perdida: ela so importa quando existe
+# client exportando span, e sem chave nao exporta span nenhum.
+if settings.langfuse_configured:
+    Langfuse(mask=redact_pii_deep)
+    _langfuse_handler = CallbackHandler()
+    observe_span = observe
+else:
+
+    def observe_span(*_args, **_kwargs):
+        """No-op stand-in para @observe quando o Langfuse nao esta
+        configurado.
+
+        Nao basta desligar `LANGFUSE_TRACING_ENABLED`: o SDK v4 loga
+        "client initialized without public_key" no __init__ do client, e
+        o proprio @observe chama get_client() para pegar o tracer - ou
+        seja, o aviso sai mesmo com tracing desligado. O unico jeito de
+        nao instanciar client e nao decorating as funcoes. Como o grafo
+        nao depende de span para funcionar, o no-op e semanticamente
+        identico, so que silencioso.
+
+        Usado pelos nodes daqui e por app/agent/graph.py.
+        """
+
+        def _decorator(fn):
+            return fn
+
+        return _decorator
+
+    _langfuse_handler = None
 
 MAX_LOGS_IN_PROMPT = 3_000
 MAX_PAYLOAD_IN_PROMPT = 3_000
@@ -99,13 +139,13 @@ def _effective_query(state: CopilotState) -> str:
     return base
 
 
-@observe(name="retrieve")
+@observe_span(name="retrieve")
 def retrieve_node(state: CopilotState) -> CopilotState:
     hits = retrieve(_effective_query(state), target="incidents", top_k=3)
     return {"retrieved_context": hits}
 
 
-@observe(name="graph_enrich")
+@observe_span(name="graph_enrich")
 def graph_enrich_node(state: CopilotState) -> CopilotState:
     """So entra no grafo quando GRAPH_RAG_ENABLED=true (ver
     build_graph()) - consulta o Neo4j por incidentes anteriores na
@@ -127,7 +167,7 @@ def graph_enrich_node(state: CopilotState) -> CopilotState:
     return {"graph_history": related}
 
 
-@observe(name="graph_write")
+@observe_span(name="graph_write")
 def graph_write_node(state: CopilotState) -> CopilotState:
     """So entra no grafo quando GRAPH_RAG_ENABLED=true - grava o
     diagnostico concluido no Neo4j para alimentar consultas futuras de
@@ -184,7 +224,7 @@ def _web_search_allowed(state) -> bool:
     return True
 
 
-@observe(name="web_search")
+@observe_span(name="web_search")
 def web_search_node(state: CopilotState) -> CopilotState:
     """Busca web via DuckDuckGo - ativada apenas quando o RAG local
     nao encontrou contexto suficiente (todos os hits com score baixo
@@ -932,10 +972,9 @@ um JSON valido com exatamente esta estrutura (sem texto adicional antes ou depoi
         # usado quando structured_response nao vem preenchido.
         react_agent = create_react_agent(llm, tools=react_tools, response_format=DiagnosisModel)
         messages = {"messages": [{"role": "user", "content": prompt + json_instruction}]}
-        config = {
-            "callbacks": [_langfuse_handler],
-            "recursion_limit": settings.react_agent_recursion_limit,
-        }
+        config = {"recursion_limit": settings.react_agent_recursion_limit}
+        if _langfuse_handler is not None:
+            config["callbacks"] = [_langfuse_handler]
         try:
             return react_agent.invoke(messages, config=config)
         except TRANSPORT_FAILURE_EXCEPTIONS:
@@ -1046,21 +1085,21 @@ def _recover_matched_source_from_raw(raw: str) -> str | None:
     return value or None
 
 
-@observe(name="sap_specialist")
+@observe_span(name="sap_specialist")
 def sap_diagnosis_node(state: CopilotState) -> CopilotState:
     """Sub-agente especialista SAP - roteado pelo supervisor quando
     `agent_domain == "sap"` (ver app/agent/supervisor.py)."""
     return {"diagnosis": _run_diagnosis_agent(state, _SAP_SPECIALIST_PERSONA)}
 
 
-@observe(name="saas_specialist")
+@observe_span(name="saas_specialist")
 def saas_diagnosis_node(state: CopilotState) -> CopilotState:
     """Sub-agente especialista multi-fornecedor (SaaS empresarial) -
     roteado pelo supervisor quando `agent_domain == "saas"`."""
     return {"diagnosis": _run_diagnosis_agent(state, _ENTERPRISE_SPECIALIST_PERSONA)}
 
 
-@observe(name="generic_specialist")
+@observe_span(name="generic_specialist")
 def generic_diagnosis_node(state: CopilotState) -> CopilotState:
     """Sub-agente generalista de integracao - roteado pelo supervisor
     quando `agent_domain == "generic"` (nenhum dominio identificado).
@@ -1088,7 +1127,15 @@ def _record_quality_metrics(state: CopilotState, diagnosis: dict) -> None:
     - has_matched_source: 1 se encontrou documento, 0 se nao (proxy de hallucination)
     - rerank_top_score: score do reranker no top resultado (qualidade do retrieval)
     - web_search_used: 1 se a busca web foi ativada nesta execucao
+
+    Sem as duas chaves do Langfuse nao faz NADA: get_client() criaria um
+    client sem chave e o SDK v4 logaria "initialized without public_key" +
+    "No active span" a cada diagnostico. Tratar isso como no-op e o
+    comportamento correto - metricas de observabilidade nao podem custar
+    ruido em quem nao pediu observabilidade.
     """
+    if not settings.langfuse_configured:
+        return
     try:
         client = get_client()
         confidence = float(diagnosis.get("model_confidence", diagnosis.get("confidence", 0.0)))
@@ -1116,7 +1163,7 @@ def _record_quality_metrics(state: CopilotState, diagnosis: dict) -> None:
         logging.getLogger(__name__).debug("Langfuse metrics error", exc_info=True)
 
 
-@observe(name="report")
+@observe_span(name="report")
 def report_node(state: CopilotState) -> CopilotState:
     """P1.5 + P1.6 (revisao arquitetural externa, 23/09/2026):
     - P1.5: exibe model_confidence e diagnosis_confidence separados no report.

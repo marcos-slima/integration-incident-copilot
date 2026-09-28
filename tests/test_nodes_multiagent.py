@@ -233,7 +233,17 @@ def test_run_diagnosis_populates_trace_id_from_langfuse_current_trace(monkeypatc
     from app.models import IncidentRequest
 
     monkeypatch.setattr(graph_module, "get_graph", lambda: _StubGraphBare())
-    monkeypatch.setattr(graph_module, "settings", Settings(graph_rag_enabled=False))
+    monkeypatch.setattr(
+        graph_module,
+        "settings",
+        # langfuse_configured=True e obrigatorio: sem as duas chaves o
+        # guard em graph.py::run_diagnosis nem chama get_client()
+        Settings(
+            graph_rag_enabled=False,
+            langfuse_public_key="pk-lf-fake-for-test",
+            langfuse_secret_key="sk-lf-fake-for-test",
+        ),
+    )
     monkeypatch.setattr(graph_module, "get_client", lambda: _FakeLangfuseClient("trace-xyz"))
 
     result = graph_module.run_diagnosis(IncidentRequest(description="IDoc travado"))
@@ -247,7 +257,17 @@ def test_run_diagnosis_trace_id_is_none_when_langfuse_has_no_active_trace(monkey
     from app.models import IncidentRequest
 
     monkeypatch.setattr(graph_module, "get_graph", lambda: _StubGraphBare())
-    monkeypatch.setattr(graph_module, "settings", Settings(graph_rag_enabled=False))
+    monkeypatch.setattr(
+        graph_module,
+        "settings",
+        # "configurado mas sem trace ativo" so e observavel com as chaves
+        # setadas - senao o guard curto-circuita antes do get_client()
+        Settings(
+            graph_rag_enabled=False,
+            langfuse_public_key="pk-lf-fake-for-test",
+            langfuse_secret_key="sk-lf-fake-for-test",
+        ),
+    )
     monkeypatch.setattr(graph_module, "get_client", lambda: _FakeLangfuseClient(None))
 
     result = graph_module.run_diagnosis(IncidentRequest(description="IDoc travado"))

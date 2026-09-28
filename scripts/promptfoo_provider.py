@@ -33,6 +33,16 @@ def main() -> None:
         json.dumps(
             {
                 "matched_source": result.matched_source,
+                # O promptfoo NAO expande ${VAR} no campo `label` de um
+                # provider, so a versao anterior do comparativo aparecia
+                # como "${GEMINI_MODEL}" no relatorio. Emitir o modelo
+                # aqui resolve pelo caminho certo: o relatorio passa a
+                # dizer qual modelo RESPONDEU de fato, e nao qual o
+                # operador torcia que estivesse rodando. Tambem pega a
+                # classe de bug mais chata desta suite - o rotulo say
+                # "cloud" e a chamada vai para o Ollama (404 model not
+                # found), que foi como o primeiro comparativo falhou.
+                "model_used": model,
                 # P1.5 (23/09/2026): DiagnosisResponse.confidence foi dividido
                 # em model_confidence e diagnosis_confidence. "confidence"
                 # continua como alias de diagnosis_confidence (a metrica

@@ -47,6 +47,13 @@ dependencies = [
     "alembic>=1.13",
     "asyncpg>=0.29",  # driver async nativo (psycopg3 compat)
     "psycopg2-binary>=2.9",  # alembic CLI / migrations sync
+    # DA-47: cifra Fernet p/ credenciais de provedores em repouso no
+    # registro (/admin). Manager via MASTER_KEY em .env (único segredo
+    # restante depois que as chaves dos provedores migram pro banco).
+    "cryptography>=42",
+    # UI admin (/admin - DA-46/48): a interface de manutencao (substitui
+    # edicao manual do .env) e servida pelas proprias paginas Jinja2.
+    "jinja2>=3.1",
     # AMQP 1.0 puro Python para Solace Cloud / SAP AEM (DA-32)
     "python-qpid-proton>=0.39",  # DA-40: AMQP 1.0 (Solace/SAP Event Mesh); substituiu aiormq (0.9.1),
     # Fila assincrona de diagnostico (app/queue.py) - mesmo Redis do

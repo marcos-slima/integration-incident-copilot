@@ -1041,3 +1041,300 @@ Com isso, **todos os 7 itens do médio prazo da segunda revisão
 arquitetural externa estão fechados** (rate limit global, persistência
 A2A, circuit breaker, redaction de PII, métricas/feedback, fila
 assíncrona e este). Resta só o longo prazo, ainda não autorizado.
+
+### 29. Governança de soberania de dados por origin real (DA-43)
+
+O AI Gateway (DA-26) roteia por *nome* de provider, mas "confidencial"
+é uma propriedade do **endpoint de destino**, não do rótulo. Um
+`OPENAI_BASE_URL` apontando para um gateway interno continua sendo um
+terceiro; o mesmo nome `openai` pode ser OpenAI pública ou um LLM
+corporativo. A política anterior confiava no rótulo, e o modo
+desconhecido caía em **fail-open** — a configuração mais perigosa
+possível numa governança de dado.
+
+**Solução:** `data_sovereignty_mode` passou a ser `Literal` estrito
+(`strict` | `cloud_with_dlp`), com `confidential_allowed_origins`
+explicitamente listado e **fail-closed** (allowlist vazia ou modo
+desconhecido negam). `resolve_provider_origin()` normaliza a origin
+real da rota efetiva e decide por ela; `describe_effective_policy()`
+expõe a decisão e o motivo. Novo endpoint autenticado
+`GET /llm/policy` (mesmo `X-API-Key` de `/diagnose`, via
+`RequireApiKeyMiddleware`) permite auditar a política efetiva sem
+expor credencial.
+
+**Validação:** `tests/test_llm_governance.py` — 43 testes cobrindo
+normalização de origin, allowlist, fail-closed, modo inválido, **o LLM
+não ser construído quando a decisão é deny** (o ponto que realmente
+importa: negar antes de instanciar cliente), o contrapositivo
+permitido e o endpoint HTTP. Suíte completa: 620 testes
+(`-m "not integration"`).
+
+**Limitações:** `llm_fallback_provider` não aceita `ollama`, então
+"cloud primário + fallback local" é hoje inexpressável na
+configuração. E `verify_api_key` compara string vazia com string
+vazia: com `settings.api_key == ""` a comparação passa, e a proteção
+depende do lifespan gerar uma chave no startup. Em produção
+funciona; em teste que não rode o lifespan, não.
+
+### 30. Sinal determinístico de escalonamento em três tiers (DA-44)
+
+Preparo para um tier 3 (modelo pago: GPT/Claude/Gemini): o pipeline
+precisa decidir *quando* escalar, e o sinal disponível — `evidence_strength`
+(DA-15) — **não serve**, por três motivos verificados no código:
+
+1. **Piso que satura.** `nodes.py::_compute_evidence_strength()` faz
+   `strength = max(rag_score, 0.75)` quando o conector é real. Com dado
+   real de conector, qualquer limiar acima de 0.75 **nunca dispara** —
+   e conector real é o caminho de produção.
+2. **Não sabe de que tier veio a evidência.** `sap_incident_docs`
+   (40 pts curados) e `sap_reference_library` (28.962 chunks de
+   manuais genéricos) passam pelo mesmo reranker e pela mesma escala,
+   mas não têm o mesmo peso probatório. Um limiar único não está bem
+   definido.
+3. **Satura e não discrimina.** Mede "quanto contexto existe", não "o
+   modelo acertou": um modelo que alucina confiante recebe o mesmo
+   número que um que acerta.
+
+**Solução:** `app/agent/escalation.py` entrega um sinal **novo e
+aditivo** — `compute_escalation_signal()` devolve um
+`EscalationDecision` imutável, derivado apenas de fatos já decididos em
+código: `is_mock`/`is_fallback`, `hit["collection"]`,
+`rerank_score_calibrated` e `matched_source is None`. **Não altera
+`evidence_strength`** — mexer nele para acomodar cascata enfraqueceria
+DA-16, e o módulo declara isso explicitamente. O módulo também não
+conhece nenhum provider: `escalate_to` devolve o rótulo abstrato
+`cloud_premium` e quem invoca passa pelo AI Gateway (DA-26), que aplica
+a política de DA-43. Um teste garante que o módulo não cita `openai`,
+`anthropic` ou `gemini`, para que a política não possa ser contornada
+por ele.
+
+**Validação empírica (não só unitária — contra o pipeline real):**
+- O caso que motivou a DA ("algo estranho aconteceu", identifier
+  desconhecido) produziu `top_evidence=0.383` e sinal
+  `curated_tier_weak` → escala. **A regra de abstenção não disparou**:
+  o guardrail só anula `matched_source` quando o documento *não* está
+  entre os recuperados, e aqui ele estava, apenas com evidência
+  semântica fraca. Se a DA tivesse implementado só a abstenção, a
+  falha real teria passado — o que valida ter regras múltiplas e
+  contradiz a hipótese de que abstenção seria "o sinal mais forte".
+- Controle (IDoc status 51, resolvido pelo rule engine):
+  `top_evidence=1.000`, sinal `grounded`, sem escalonamento. Correto.
+- 17 testes unitários em `tests/test_escalation.py`, incluindo
+  determinismo, imutabilidade, ausência de vazamento de conteúdo no
+  log e o contrapositivo central (escala com conector real, onde
+  `evidence_strength` é cego).
+
+**Limitações (deliberadamente registradas):**
+- `FLOOR_TIER_MIN_EVIDENCE = 0.62` e `CURATED_TIER_MIN_EVIDENCE = 0.45`
+  **não foram calibrados** contra o corpus de 28.962 chunks. São pontos
+  de partida escolhidos pela escala de sigmoid (DA-42), a serem
+  substituídos por medição no re-baseline. Hipótese, não constante
+  validada.
+- O caminho em que `evidence_strength` fica cego **não é reproduzível
+  neste lab**: nenhum conector produz `is_mock=False` —
+  `rfc_connector.py` se declara simulador e devolve `is_mock=True`
+  mesmo para identifier reconhecido. A cegueira do piso de 0.75 foi
+  verificada por **leitura de código**, não por execução.
+- `REFERENCE_FALLBACK_THRESHOLD = 0.85` (`retriever.py`) é justificado
+  num comentário que citava "766k+ chunks" — corpus que nunca existiu
+  aqui; o real tem 28.962, 26× menor. O limiar precisa de
+  re-calibração. (Corrigido o comentário; o valor fica pendente.)
+- O tier 3 **não faz parte desta DA**: esta decide se há caso para
+  escalar, não quem escala.
+
+### 31. Universalidade de provider: rota auditada, capacidades por origin, identidade de embedding (DA-45)
+
+**O problema.** "Qualquer modelo que o cliente quiser, é só informar" era
+meia verdade. `ChatOpenAI(base_url=...)` fala `/chat/completions`, então
+qualquer endpoint OpenAI-compatible (Groq, Cerebras, Together, Fireworks,
+OpenRouter, DeepSeek, Mistral, xAI, vLLM, llama.cpp) já era mudança de
+`.env`, e o modelo já era texto livre. O que travava o cliente eram duas
+coisas:
+
+1. `llm_provider` era um `Literal` de três valores — e `llm_fallback_provider`
+   tinha só dois, o que tornava **inexpressível** o pedido mais comum de
+   cliente: cloud primário com local no fallback.
+2. O que sabia sobre o destino era um `bool` global (`llm_send_seed`) mais um
+   `Literal`. "Este destino aceita `seed`?" é uma pergunta **por destino**,
+   respondida globalmente.
+
+O segundo ponto não era teórico. `seed` não faz parte do contrato mínimo da
+API OpenAI: o endpoint OpenAI-compatible do **Gemini** devolve
+`400 "Unknown name \"seed\""` e não há fallback — a request inteira é
+recusada. A resposta óbvia (desligar o `seed`) desligava a invariante de
+determinismo do projeto inteiro, e foi o que obrigou o comparativo Promptfoo
+a rodar com `LLM_SEND_SEED=0` no processo: um problema local resolvido com
+uma perda global.
+
+**A solução: a fronteira é a rota, não o rótulo.**
+
+| Camada | Onde vive | Quem muda |
+|---|---|---|
+| rota (provider + origin + capacidades) | código (`llm/routes.py`) | só por DA |
+| **modelo** | `.env`, texto livre | o cliente, o tempo todo |
+
+O cliente informa `LLM_MODEL=...` e funciona. O que exige PR é **adicionar um
+fornecedor**, e isso é deliberado, não limitação: é a diferença entre
+"provider agnostic" e "config sem governança".
+
+**Três peças:**
+
+- **`llm/origins.py`** — `normalize_origin()` e `resolve_provider_origin()`.
+  Módulo neutro porque `gateway.py` importa `factory.py`: o factory precisa
+  da origin e não pode importar o gateway. `gateway.py` re-exporta os dois
+  nomes, então `from app.llm.gateway import normalize_origin` (usado pelos
+  testes de DA-43) continua funcionando.
+- **`llm/capabilities.py`** — perfil por **origin**, pelo mesmo motivo de
+  DA-43: `openai` apontando para Gemini e para `api.openai.com` não são o
+  mesmo destino. `llm_send_seed` passa a tri-state — `None` (default)
+  consulta a tabela, `True`/`False` são override explícito que **sempre**
+  vence. O default é deliberadamente **não conservador**: destino
+  desconhecido continua recebendo `seed`, porque a tabela remove casos
+  *conhecidos*, não adivinha sobre destinos que já funcionam hoje.
+- **`llm/routes.py`** — a tabela auditada. `LLM_ROUTE` no `.env` seleciona a
+  rota; nome desconhecido, `llm_provider` em conflito, ou origin real
+  incoerente com a classe declarada **falham no boot** (via
+  `model_validator` em `config.py`), não em produção.
+
+O guard de coerência funciona nas duas direções: `local_lab` exige loopback
+(declarar rota local apontando para a internet mentiria na auditoria) e
+`enterprise_azure` exige origin remota (o inverso). A expressão é
+`is_loopback_origin(actual) == route.require_loopback`.
+
+**Identidade de embedding (`rag/embedding_guard.py`).** A cambio conexo,
+porque "trocar de provider" traz junto a tentação de trocar de embedding, e
+isso **não é** uma mudança de uma linha. A checagem que existia em
+`ingest.py` comparava só a **dimensão** — e `nomic-embed-text` (768) e
+`mxbai-embed-large` (768) têm a mesma dimensão e espaços vetoriais
+incomparáveis. A busca não degrada: ela passa a devolver resposta plausível e
+errada, que é pior que indisponibilidade (DA-3: guardrail em código, não na
+confiança do LLM). Como 768 é a dimensão mais comum do ecossistema, a
+colisão não é exótica.
+
+O guard grava a identidade no **metadata da collection** (`update_collection`,
+não `set_payload` — payload é de ponto, identidade é da collection inteira) e
+verifica em escrita e leitura, uma vez por processo (`verify_once`, para não
+virar latência por query). Três estados, e o terceiro é o honesto: bate →
+segue; diverge → **falha**; ausente (collection anterior à DA-45) → **avisa**,
+sem derrubar um corpus de 22 GB por metadado ausente. Um guard que tratasse
+"desconhecido" como "ok" seria o próprio bug; um que tratasse como "erro"
+seria impraticável. O próximo ingest grava a identidade e a partir dali a
+verificação passa a ser definitiva.
+
+**Validação:** 42 testes em `tests/test_llm_routes.py` (capacidades por
+origin, precedência do override, guard de coerência nos dois sentidos, boot
+fail-closed, `ollama` como fallback) e 20 em `tests/test_embedding_guard.py`
+(incluindo `test_dimensao_igual_nao_significa_embedding_igual`, que
+reproduz exatamente a colisão que a checagem de dimensão não pega). Suíte
+total: 682 testes, sem regressão.
+
+**Limitações (deliberadamente registradas):**
+- `self_hosted_openai` é a rota mais permissiva (qualquer origin não-loopback)
+  porque vLLM/LM Studio/gateways corporativos não têm origin fixa. É a que
+  mais merece revisão em auditoria.
+- A separação origem→capacidades é uma **tabela versionada com o código**.
+  Um destino novo que recuse `seed` continua recebendo `seed` até alguém
+  registrar a origin; o override explícito é o caminho curto, e é por isso
+  que ele existe.
+- Mudar `embedding_model` ainda exige reindexar 22 GB. O guard transforma
+  isso de *silêncio* em *erro na hora certa*; não elimina o custo.
+- Bedrock e APIs não OpenAI-compatible **não** são "só configuração": exigem
+  adapter/rota nova. "Qualquer modelo" vale para qualquer modelo atrás de um
+  contrato OpenAI-compatible.
+
+### 32. Registro gerenciado de modelos, credenciais cifradas e metering real (DA-46/47/48)
+
+**O problema.** DA-45 tornou o `.env` "fonte da verdade" para modelos e
+credenciais. Mas todo o conhecimento de custo e consumo vivia em lugar nenhum:
+o teto de budget do gateway era uma **estimativa** (`_estimate_cost_usd`,
+heurística) e nenhum `token_usage` real era persistido — o operador descobria
+gasto de provisão cloud num relatório do provedor, não no produto. Credenciais
+em plano-texto no `.env` e no historico do VCS tampouco eram administráveis por
+origen com rotacao controlada.
+
+**A solução: três peças opt-in, dirigidas por banco, todas fail-closed.**
+
+| DA | O que muda | Onde vive |
+|---|---|---|
+| DA-46 | `LLM_REGISTRY_DB=true` faz `get_chat_model` ler o **registro** (`llm_models`/`llm_credentials` por ORIGIN) em vez do `.env`; registry vazio/indisponível = `ConfigurationError`, nunca fallback silencioso | `app/admin/` (models, repository, runtime) + `llm/factory.py` |
+| DA-47 | Credencial por origin cifrada em repouso com **Fernet**; master key (`LLM_CREDENTIALS_MASTER_KEY`) vive no `.env`, nunca em runtime; rotação incrementa `key_version` e grava novo ciphertext | `app/admin/crypto.py` |
+| DA-48 | Metering de **tokens reais** (`usage_metadata`) via callback `on_llm_end` no AI Gateway; persistencia **síncrona best-effort** (psycopg2) no periodo aberto de `(origin, model)`; percentual consumido vs `monthly_limit_tokens` | `llm/gateway.py` + `app/admin/metering.py` |
+
+Detalhes de desenho relevantes:
+
+- **Superficie admin** (`/admin` Jinja2 + `/admin/api/*` JSON): as páginas são
+  **shell sem dado sensível** — os dados só chegam via API protegida por
+  `X-API-Admin-Key` (chave dedicada `ADMIN_API_KEY`, sem reuso da `API_KEY`).
+  Sem `DATABASE_URL` as rotas de dados respondem `503 "Persistencia nao
+  configurada"` (a UI não finge sucesso sem banco atrás).
+- **Identidade**: a chave do registro continua sendo a **origin
+  real** (DA-45), nunca o rótulo do provider. Modelo continua fora de tabela de
+  rotas (invariante 8).
+- **Metering nunca quebra o diagnóstico**: o escritor é sincrono best-effort
+  (mesma filosofia de `record_incident`); DB fora do ar → linha vazada, não
+  exceção.
+- **Custo por provider**: preço em `price_{in,out}_per_1m` usado para `cost_usd`;
+  Ollama = 0 (local). A captura cobre OpenAI-compatible (`token_usage`) e Ollama
+  (`prompt_eval_count`/`eval_count`).
+- **Opção default OFF**: testes unitários continuam com `DATABASE_URL=""` e o
+  `.env` mandando (sem regressão de execução); a superfície admin responde 503.
+
+**Validação:** 42 testes em `tests/test_admin_{crypto,security,runtime,routes}.py`,
+`tests/test_admin_repository.py` e `tests/test_metering.py` (roundtrip Fernet,
+rotação, fail-closed sem banco, auth por chave, acumulo multi-chamada, no-op
+best-effort). Migracao validada contra PostgreSQL real (UUID nativo, indice
+parcial `uq_llm_usage_open` com `WHERE period_end IS NULL`). Suíte total: 724
+testes, sem regressão.
+
+**Limitações (deliberadamente registradas):**
+- Sem Postgres/`DATABASE_URL` não há metering nem registro; é o preço do design
+  opt-in — ligar a flag sem banco por trás é erro de configuração (fail-closed),
+  e o próprio `/admin/api/registry/status` expõe `db_configured` para depurar.
+- O callback de metering captura `usage_metadata` dos models **gerenciados
+  pelo AI Gateway** (DA-26); chamadas diretas a `factory` fora do gateway não
+  são contabilizadas (e não devem existir — invariante 3).
+- Um provider com resposta sem `usage` (não-OpenAI-não-Ollama) não incrementa
+  metering; o modelo continua com orçamento estimado.
+
+### 33. Catálogo de sistemas integrados gerenciados pela superfície admin (DA-49)
+
+**O problema.** O mapa do que o copiloto observa (SAP OData, SAP RFC,
+ServiceNow, Salesforce, Workday, Ariba, CAP, APIM) vivia espalhado em runbooks
+e `.env`: não havia um registro operacional único de *quais* sistemas existem,
+em que ambiente (prod/stage/dev), com que conector e status — o tipo de tabela
+que um operador de iPaaS mantém por Excel.
+
+**A solução.** Fase B da superfície admin: `integration_systems`, um catálogo
+fechado e auditável, no mesmo regime da Fase A (DA-46/47/48):
+
+- `system_key` (slug único, ex. `sap_odata_prod`) é o identificador estável do
+  sistema; `connector_type` usa **o mesmo Literal fechado do pipeline**
+  (`odata/rfc/servicenow/salesforce/workday/ariba/cap/apim` — `app/models.py`),
+  a ponte natural para correlacionar o registro ao `interface_type` de um
+  incidente.
+- `environment` (`prod/stage/dev/test`) e `status` (`active/degraded/offline/
+  trial`) são enums fechados validados na API (`422` com a lista de aceitos),
+  `vendor`/`base_url`/`notes` livres.
+- Endpoints `/admin/api/systems` (GET/POST) e `/admin/api/systems/{id}`
+  (GET/PATCH/DELETE), criados no mesmo router FAIL-CLOSED de `/admin/api/models`
+  (`ADMIN_API_KEY` dedicada; sem `DATABASE_URL` → `503`). A página
+  `/admin/systems` (Jinja2, shell sem dado sensível) lista o catálogo com
+  marcação visual `active/degraded/offline` e toggle rápido de status.
+- `/admin/api/registry/status` ganhou `systems_count` — a UI/opsDashboard
+  consegue ver o tamanho do catálogo junto do registro de modelos.
+
+**Validação:** 10 testes novos em `tests/test_admin_systems.py` (CRUD do
+repository sobre aiosqlite com modelos reais + rotas HTTP completas com DB vivo
+monkeypatchado em `app.db.AsyncSessionLocal`: 201/404/409/422/200, allowlist do
+PATCH e contagem). Migration `004` validada contra PostgreSQL real do compose
+(UUID nativo, `UNIQUE(system_key)`, índices por `connector_type`/`status`).
+Smoke E2E com uvicorn real + asyncpg confirmou a criação/validação/remoção no
+banco. Suíte total: 734 testes, sem regressão.
+
+**Limitações (deliberadamente registradas):**
+- O catálogo ainda não **vincula** sistemas a incidentes (a correlação por
+  `connector_type`/`connector_source_system` fica para a Fase C, junto da
+  observabilidade Grafana); hoje é um registro operacional, não um gráfico.
+- `integration_systems` é servido junto às demais tabelas admin: Fase A e B
+  compartilham o mesmo `DATABASE_URL` — sem banco, a página `/admin/systems`
+  fica navegável mas sem dado (mesmo comportamento de `/admin/models`).

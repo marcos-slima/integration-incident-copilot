@@ -56,6 +56,31 @@ uv run python -m app.rag.ingest --target incidents --reset
 - Langfuse → `localhost:3000`
 - Ollama → `localhost:11434`
 
+### MCP para agentes de IA (DA-19)
+
+O servidor MCP é **Streamable HTTP**, montado em `/mcp` dentro do app
+FastAPI — não é um processo stdio separado. Ele exige o mesmo `X-API-Key`
+de `/diagnose` (DA-18) via `RequireApiKeyMiddleware`.
+
+Consequência prática: `settings.api_key` é **gerada aleatoriamente no
+startup** quando está vazia (`app/main.py::_ensure_api_keys_configured`).
+Para um cliente MCP conseguir autenticar, `API_KEY` precisa estar
+**fixada no `.env`** (ver `.env.example:120`).
+
+Configuração por ferramenta:
+
+| Ferramenta | Arquivo | Dialeto |
+|---|---|---|
+| Claude Code | `.mcp.json` | `type: http` + `${API_KEY}` |
+| OpenCode | `opencode.json` | `type: remote` + `{env:API_KEY}` |
+| Codex | `~/.codex/config.toml` | `[mcp_servers.copilot-mcp]` (global) |
+
+Depois de editar qualquer um desses, **reinicie** a ferramenta — config MCP
+não é hot-reload.
+
+Requisito: `uv run uvicorn app.main:app` no ar, senão o cliente falha ao
+conectar.
+
 ---
 
 ## Regras de commit (OBRIGATÓRIO)
@@ -82,6 +107,7 @@ app/
     nodes.py        # Todos os nodes: connector, retrieve, diagnose, report
                     # + _assemble_evidence(), _apply_confidence_guardrails()
     rules.py        # DA-33: Rule Engine determinístico (14 regras SAP/integração)
+    escalation.py   # DA-44: sinal determinístico de escalonamento (3 tiers)
     supervisor.py   # DA-22: classifica domínio (sap/saas/generic) sem LLM
     state.py        # CopilotState (TypedDict)
   connectors/       # 8 conectores: odata, rfc, servicenow, salesforce,
@@ -89,6 +115,10 @@ app/
   llm/
     factory.py      # DA-20: Hybrid Inference (Ollama → cloud fallback)
     gateway.py      # DA-26: AI Gateway (policy + circuit breaker + budget)
+  admin/            # DA-46/47/48/49: registro de modelos + credenciais Fernet
+                    # + metering real + catálogo de sistemas integrados
+                    # (Fase B, DA-49); UI Jinja2 em /admin + API /admin/api/*
+                    # (models, repository, routes, ui, crypto, metering, runtime)
   mcp/
     server.py       # DA-19: servidor MCP
     policy.py       # DA-27: Capability Registry (FAIL-CLOSED por default)
@@ -102,7 +132,7 @@ app/
   config.py         # Pydantic Settings — fonte única de verdade para config
   main.py           # FastAPI app, rotas, lifespan
 
-tests/              # 384 testes (unitários + integração)
+tests/              # 734 testes (719 unitários + 15 integração)
 data/
   sample_docs/      # Base de conhecimento RAG (arquivos .md)
   eval/             # Dataset de avaliação RAG + resultados benchmark
@@ -142,6 +172,13 @@ docs/               # ARCHITECTURE.md, GETTING_STARTED.md, TUTORIAL_ARQUITETURA_
 | DA-29 | Benchmark rerankers → mmarco-mMiniLMv2 vence (+7pp Hit@1) | `retriever.py::RERANKER_MODEL` |
 | DA-30 | PII redaction ampliado + smart log truncation + backoff exponencial | `redaction.py` |
 | DA-33 | Rule Engine determinístico (pré-filtro LLM, 14 regras SAP) | `agent/rules.py` |
+| DA-43 | Soberania de dados por origin real, fail-closed | `llm/gateway.py` + `GET /llm/policy` |
+| DA-44 | Sinal determinístico de escalonamento em 3 tiers (prep. tier 3) | `agent/escalation.py` |
+| DA-45 | Universalidade de provider: rota auditada + capacidades por origin + identidade de embedding | `llm/routes.py`, `llm/capabilities.py`, `llm/origins.py`, `rag/embedding_guard.py` |
+| DA-46 | Registro gerenciado de modelos/credenciais por ORIGEM (LLM_REGISTRY_DB, fail-closed) | `app/admin/` (models, repository, runtime, routes, ui) |
+| DA-47 | Credenciais cifradas em repouso com Fernet (master key no .env, nunca em runtime) | `app/admin/crypto.py` |
+| DA-48 | Metering de tokens REAIS (usage_metadata, não estimativa) persistido best-effort | `app/llm/gateway.py` + `app/admin/metering.py` |
+| DA-49 | Catálogo de sistemas integrados (`integration_systems`) na superfície admin, `connector_type` = Literal do pipeline | `app/admin/` (models, repository, routes, ui) + `alembic/004` |
 
 **DAs candidatas (sem implementação ainda — aguardam Kyma):**
 - DA-31: SAP AI Agent Hub registration (MCP + A2A)
@@ -158,6 +195,10 @@ docs/               # ARCHITECTURE.md, GETTING_STARTED.md, TUTORIAL_ARQUITETURA_
 5. Capability Registry (`mcp/policy.py`) é FAIL-CLOSED — tool sem entrada no registry é negada
 6. `classify_domain()` em `supervisor.py` é 100% determinístico (sem LLM)
 7. `generic_diagnosis_node` existe para `agent_domain="generic"` — não reutilizar `saas_diagnosis_node`
+8. **Modelo NUNCA entra na tabela de rotas** — `llm_model` é texto livre; `llm/routes.py` declara só ONDE o dado sai e O QUE o destino aceita (DA-45). Há teste que falha se um nome de modelo entrar como chave de rota
+9. **Capacidade é por ORIGIN, não por rótulo** — `openai` apontando para Gemini e para api.openai.com não são o mesmo destino. Mesma razão de DA-43 (DA-45)
+10. `llm_send_seed=None` (default) = DA-2 ativa (seed=42). `None` NÃO pode ser lido como "não enviar" — destino desconhecido recebe seed; só origens registradas como incompatíveis não recebem
+11. Rota `require_loopback` e `require_loopback=False` são mutuamente exclusivos — `local_lab` apontando para a internet, e `enterprise_azure` apontando para loopback, falham no boot
 
 ---
 

@@ -38,6 +38,7 @@ from qdrant_client.models import (
 )
 
 from app.config import settings
+from app.rag.embedding_guard import stamp_collection, verify_collection_embedding
 
 # §4.5 (avaliacao externa §3.5): pymupdf4llm.use_layout(False) desativa
 # o motor de layout ONNX (BoxRFDGNN) que detecta colunas/tabelas em PDFs.
@@ -232,6 +233,7 @@ def ensure_collection(
     collection_name: str,
     vector_size: int,
     hybrid: bool,
+    embedding_model: str,
     allow_recreate: bool = False,
 ) -> None:
     """Cria a collection se nao existir. Se existir com schema
@@ -242,6 +244,21 @@ def ensure_collection(
     needs_recreate = False
     if collection_name in existing:
         info = client.get_collection(collection_name)
+        # DA-45: a checagem de dimensao ABAXO nao basta. Dois modelos
+        # de embedding diferentes podem ter a mesma dimensao (768 e' a
+        # mais comum do ecossistema) e produzem espacos vetoriais
+        # incomparaveis - a busca passaria a devolver respostas
+        # plausiveis e erradas em vez de erro. Aqui a identidade do
+        # modelo e' conferida contra o metadata da collection.
+        aviso_embedding = verify_collection_embedding(
+            info,
+            collection_name,
+            expected_model=embedding_model,
+            expected_size=vector_size,
+        )
+        if aviso_embedding:
+            print(f"AVISO: {aviso_embedding}")
+
         vectors = info.config.params.vectors
         sparse_vectors = getattr(info.config.params, "sparse_vectors", None)
         has_named_dense = isinstance(vectors, dict) and "dense" in vectors
@@ -284,6 +301,11 @@ def ensure_collection(
                 vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
             )
         print(f"Collection '{collection_name}' criada ({'hybrid' if hybrid else 'dense-only'}).")
+        # DA-45: grava AGORA a identidade do embedding, nao no fim do run.
+        # Um ingest interrompido no meio deixa a collection com metadado,
+        # e o proximo run sabe o que espera; gravar so no fim deixaria
+        # uma collection meio-ingestada indistinguivel de uma vergine.
+        stamp_collection(client, collection_name, embedding_model)
         # Payload indexes para campos usados em filtros — melhora performance
         # à medida que a collection cresce (Qdrant docs: payload indexes).
         for field_name, field_schema in [
@@ -423,7 +445,12 @@ def run_ingest(
     )
     vector_size = probe_vector_size(embeddings)
     ensure_collection(
-        client, cfg["collection"], vector_size, cfg["hybrid"], allow_recreate=reset_collection
+        client,
+        cfg["collection"],
+        vector_size,
+        cfg["hybrid"],
+        embedding_model=EMBEDDING_MODEL,
+        allow_recreate=reset_collection,
     )
 
     # Carrega o BM25 antes do paralelismo; o acesso posterior e somente para

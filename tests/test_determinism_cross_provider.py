@@ -64,9 +64,9 @@ def test_azure_openai_temperature_is_zero():
     """AzureChatOpenAI deve ser inicializado com temperature=0.0."""
     cfg = Settings(**_AZURE_CFG)
     llm = get_chat_model(config=cfg)
-    assert (
-        llm.temperature == 0.0
-    ), f"AzureOpenAI temperature esperado 0.0, obtido {llm.temperature!r}."
+    assert llm.temperature == 0.0, (
+        f"AzureOpenAI temperature esperado 0.0, obtido {llm.temperature!r}."
+    )
 
 
 def test_azure_openai_seed_is_42():

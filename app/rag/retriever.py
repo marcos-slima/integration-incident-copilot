@@ -25,6 +25,7 @@ from qdrant_client.models import Fusion, FusionQuery, Prefetch, SparseVector
 from sentence_transformers import CrossEncoder
 
 from app.config import settings
+from app.rag.embedding_guard import verify_once
 
 _logger = logging.getLogger(__name__)
 
@@ -105,6 +106,11 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
 
 def _retrieve_hybrid(query: str, collection_name: str, top_k: int) -> list[dict]:
     client = _get_qdrant_client()
+    # DA-45: um vetor de consulta de um modelo comparado com pontos de
+    # outro devolve resposta plausivel e ERRADA, nao erro. Verificado uma
+    # vez por processo (verify_once) para nao custar uma ida ao Qdrant por
+    # query.
+    verify_once(client, collection_name, EMBEDDING_MODEL)
     dense_query = _get_embeddings().embed_query(query)
     sparse_query = _sparse_query_vector(query)
 
@@ -194,6 +200,8 @@ def _retrieve_dense_only(
     query: str, collection_name: str, top_k: int, score_threshold: float
 ) -> list[dict]:
     client = _get_qdrant_client()
+    # DA-45: mesma verificacao da perna hibrida - ver _retrieve_hybrid.
+    verify_once(client, collection_name, EMBEDDING_MODEL)
     query_vector = _get_embeddings().embed_query(query)
     results = client.query_points(
         collection_name=collection_name,
@@ -330,14 +338,21 @@ def _retrieve_unified(
     # reavalia o texto e pode preferir o manual de qualquer forma. A
     # regra objetiva e mais forte: so consulta reference_library quando
     # incidents NAO retornou nada acima do score_threshold.
-    # A reference_library nao e curada por incidente (766k+ chunks de
-    # manuais tecnicos genericos) - qualquer query relacionada a SAP
+    # A reference_library nao e curada por incidente (28.962 chunks de
+    # manuais tecnicos genericos, medido em 2026-09-28) - qualquer query
+    # relacionada a SAP
     # tende a achar ALGO semanticamente proximo nela, mesmo quando o
     # incidente reportado nao tem relacao real com nenhum documento
     # conhecido (caso out-of-scope). Por isso o fallback exige um
     # score bem mais alto que o usado em incidents (documentos feitos
     # sob medida): 0.85 filtra "vagamente parecido" e so deixa passar
     # match forte o suficiente para ser confiavel como fallback.
+    #
+    # ATENCAO: o comentario original dizia "766k+ chunks", cifra que
+    # NUNCA correspondeu a este corpus (o real e' 28.962, 26x menor).
+    # O 0.85 foi portanto justificado contra um volume que nao existe e
+    # precisa ser re-calibrado contra os 28.962 reais antes de ser
+    # tratado como definitivo. Ver DA-44 "Limitacoes".
     REFERENCE_FALLBACK_THRESHOLD = 0.85
 
     incidents_hits = _retrieve_hybrid(query, COLLECTIONS["incidents"], top_k)

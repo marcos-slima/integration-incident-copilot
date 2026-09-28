@@ -20,12 +20,13 @@ import socket
 # do .env de cada maquina.
 os.environ["API_KEY"] = ""
 os.environ["A2A_API_KEY"] = ""
+os.environ["ADMIN_API_KEY"] = ""  # DA-46/47/48: superficie admin no mesmo regime de isolamento
 
-import pytest  # noqa: E402
+import pytest
 
-from app.connectors.base import connector_circuit_breaker  # noqa: E402
-from app.events import idempotency  # noqa: E402
-from app.rate_limit import limiter  # noqa: E402
+from app.connectors.base import connector_circuit_breaker
+from app.events import idempotency
+from app.rate_limit import limiter
 
 
 def _port_open(host: str, port: int, timeout: float = 1.0) -> bool:

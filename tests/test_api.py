@@ -356,7 +356,19 @@ def test_verify_incident_scores_langfuse_even_with_graph_rag_disabled(monkeypatc
     """O segundo efeito (score no Langfuse) e independente do primeiro
     (grafo) - um cliente que so tem trace_id (GraphRAG desligado) ainda
     consegue registrar feedback."""
-    monkeypatch.setattr(main_module, "settings", Settings(graph_rag_enabled=False))
+    monkeypatch.setattr(
+        main_module,
+        "settings",
+        # chaves de Langfuse PRECISAM estar setadas: o endpoint so grava
+        # score se settings.langfuse_configured for True (guard em
+        # main.py::verify_incident). Este teste cobre o caminho
+        # "observabilidade ligada", nao o default desligado.
+        Settings(
+            graph_rag_enabled=False,
+            langfuse_public_key="pk-lf-fake-for-test",
+            langfuse_secret_key="sk-lf-fake-for-test",
+        ),
+    )
     captured = {}
 
     class _FakeLangfuseClient:

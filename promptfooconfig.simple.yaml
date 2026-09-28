@@ -1,0 +1,14 @@
+# Configuração simplificada para testes diretos
+description: 'Teste simples com modelos locais e remotos'
+prompts:
+- file://prompts/case.txt
+concurrency: 1
+providers:
+- id: "exec:.venv/bin/python3 scripts/promptfoo_provider.py qwen3-coder-next:latest"
+  label: 'local: qwen3-coder-next (Ollama)'
+tests:
+  - description: "401 sem conector"
+    vars: { description: "iFlow falhando com erro 401", interface_type: "none", identifier: "none" }
+    assert:
+      - type: javascript
+        value: "JSON.parse(output).matched_source === 'cpi_http_401.md'"

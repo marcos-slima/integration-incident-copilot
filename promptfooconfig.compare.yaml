@@ -1,0 +1,252 @@
+# Comparativo local x modelos grandes em camada gratuita (26/09/2026).
+# Os provedores rodam o MESMO pipeline (RAG + conectores + guardrails); so o LLM muda.
+# Credenciais e nomes de modelo vem do ambiente - nunca deste arquivo:
+#   GEMINI_API_KEY, GEMINI_MODEL  (chave em https://aistudio.google.com)
+#   GROQ_API_KEY,   GROQ_MODEL    (chave em https://console.groq.com)
+#   OLLAMA_MODEL                   (default em scripts/promptfoo_remote.sh)
+# Uso:
+#   uv sync --extra openai
+#   npx promptfoo eval -c promptfooconfig.compare.yaml --no-cache -j 1 --delay 12000
+#   npx promptfoo view
+#
+# SEMPRE use -j 1 (ver comentário de concorrência abaixo: não existe chave
+# de config para isso). Confira no log: "up to 1 at a time".
+# --delay <ms> espaca casos e reduz o risko de 429 por RPM (10/min no free
+# tier do Gemini, ~30/min no Groq). Resolve RAJADA, nao resolvera o teto
+# de RPD - ver comentario de COTA abaixo.
+#
+# Rodar UM provider por vez — útil quando um deles tem cota apertada:
+#   npx promptfoo eval -c promptfooconfig.compare.yaml --no-cache -j 1 \
+#     --filter-providers "Ollama|Groq"
+# (--filter-providers é regex sobre o LABEL do provider.)
+#
+# COTA — leia antes de rodar:
+#   O Gemini no free tier tem 20 requests/dia por model
+#   (generate_content_free_tier_requests). Um unico caso deste suite
+#   pode gastar VARIAS chamadas, porque o pipeline e' ReAct (diagnostico +
+#   relatorio), nao uma chamada so. 7 casos x 3 providers estoura 20/dia
+#   com folga. Sintoma: 429 RESOURCE_EXHAUSTED com
+#   "Quota exceeded for metric: ...limit: 20".
+#   Opcoes: chave com billing ativo, um model de free tier com cota
+#   maior, ou rodar so um provider por vez (--filter-providers). Nao
+#   aumentar -j para "acelerar" - piora o 429.
+#
+# SHELL — cuidado com export encadeado:
+#   export GEMINI_API_KEY=... GEMINI_MODEL=gemini-3.8-flash GROQ_API_KEY=...
+#   funciona, mas um '=' faltante cola o valor na variavel ANTERIOR em vez
+#   de falhar. Ja aconteceu aqui duas vezes: GEMINI_MODEL terminou como
+#   "gemini-3.8-flashexport" e a API respondeu
+#   404 models/gemini-3.8-flashexport is not found. Prefira UM export por
+#   linha, ou sempre com aspas e conferindo o valor.
+#
+# LLM_SEND_SEED — NAO exporte mais. DA-45 moveu a decisao para a tabela
+# de capacidades por ORIGIN (app/llm/capabilities.py): a origin bloqueada
+# (generativelanguage.googleapis.com) ja e' resolvida no factory, e um
+# export manual aqui mascararia a DA (teste a DA, nao o override). Se o
+# OLLAMA ou o GROQ reclamarem de `seed`, e' caso de acrescentar a origin
+# na tabela, nao de repor o export.
+#
+# DIFERENCA CRITICA entre os 3 provedores (2026-09-28, medido):
+#   OLLAMA 7/7 rodam (o local e' o unico sem cota).
+#   GROQ   7/7 PASS - camada gratuita, cota folgada.
+#   GEMINI free tier estoura cota; precisa de chave com billing.
+#
+# Os 2 casos com interface_type=rfc passam nos 3 provedores SEM chamar
+# nenhum LLM: o rule engine (DA-33) resolve antes. Eles medem o pipeline
+# deterministico, nao a qualidade do modelo - o que e' correto, mas
+# significa que 2 dos 7 casos nao discriminam provider. Ao reportar,
+# separe: "5 casos que discriminam provider" e "2 casos deterministicos
+# (iguais por construcao)". Juntos, 7/7 vira 7/7 e a amostra engana.
+#
+# PISO DE COTA PARA PIPELINE AGENTICO (medido 2026-09-28):
+#   O Gemini free tier tem 20 requests/dia por model e o loop ReAct gasta
+#   varias chamadas por diagnostico. Conclusao metodologica: free tier
+#   abaixo de ~100 req/dia NAO da para rodar pipeline agentico - o
+#   provider estoura cota antes de terminar a suite. Isso nao e bug do
+#   provedor, e' uma propriedade do workload.
+#   Consequencia para quem publica este resultado: a conclusao "local
+#   vs cloud" aqui se sustenta em QUALIDADE de resposta, NAO em economia.
+#   Custo so fecha com credito real - ver docs/TCO_SAP_AI_CORE_VS_
+#   SELF_HOSTED.md. Nao apresentar free tier como evidencia de TCO.
+#
+# INTEGRIDADE DA SUITE:
+#   tests/test_eval_suite_integrity.py recusa, em todos os
+#   promptfooconfig*.yaml: (a) assert `contains` cujo termo esta no
+#   input (tautologico - mede eco), (b) assert `not-contains` cujo termo
+#   esta no input (auto-confirmante - o provider que copia o contexto
+#   passa), (c) assert com `confidence` como UNICA afirmacao, (d) caso
+#   sem assert. Rode esse arquivo antes de confiar em qualquer numero
+#   desta suite.
+description: 'Comparativo de provedores: local (Ollama) vs cloud - mesmo pipeline, mesmos casos'
+prompts:
+- file://prompts/case.txt
+# CONCURRENCIA: passe -j 1 NA LINHA DE COMANDO. Nao existe chave de config
+# para isto - medido empiricamente em 2026-09-28 com um config de probe:
+#   maxConcurrency: 1 no YAML  -> "up to 4 at a time" (IGNORADO, sem aviso)
+#   -j 1 na CLI                -> "up to 1 at a time"  (funciona)
+# A versão anterior deste arquivo tinha `concurrency: 1`, que tambem nao
+# existia. Duas chaves mortas seguidas: o sintoma e "rodei 1 e nao foi".
+# Se voce injetar -j no CI, confira o header "up to N at a time" do log.
+#
+# Por que importa aqui: alem de o Ollama disputar com ele mesmo, 4 em
+# paralelo estoura a cota de free tier do Gemini (429 RESOURCE_EXHAUSTED
+# depois de ~20 requests/dia, e um diagnostico gasta varias chamadas por
+# causa do loop ReAct).
+providers:
+# Caminho RELATIVO de proposito: o config roda em CI/container tambem.
+#
+# Label SEM interpolacao de ambiente de proposito: o promptfoo nao
+# expande ${VAR} em `label` (so em `providers[].config` e em `env`), e
+# a versao anterior exibia a string literal "${GEMINI_MODEL}" no
+# relatorio, o que e pior que nao mostrar nada - parece configuracao
+# quebrada. O modelo real que rodou esta no campo model_used da
+# resposta JSON de cada provider.
+- id: "exec:scripts/promptfoo_remote.sh OLLAMA"
+  label: "local: Ollama (qwen via scripts/promptfoo_remote.sh)"
+- id: "exec:scripts/promptfoo_remote.sh GEMINI"
+  label: "cloud: Gemini (scripts/promptfoo_remote.sh)"
+- id: "exec:scripts/promptfoo_remote.sh GROQ"
+  label: "cloud: Groq (scripts/promptfoo_remote.sh)"
+# Provider enterprise (LiteLLM / SAP AI Core) NAO entra aqui ainda: nao ha
+# gateway LiteLLM configurado neste repo (ver app/config.py) nem
+# scripts/promptfoo_enterprise.sh. Quando existir, adicionar o bloco de
+# provenance abaixo - o valor precisa vir do ambiente, nunca literal:
+#
+#   - id: "exec:scripts/promptfoo_enterprise.sh"
+#     label: "enterprise: ${ENTERPRISE_MODEL} (LiteLLM)"
+#
+tests:
+  - description: "401 sem conector"
+    vars: { description: "iFlow falhando com erro 401", interface_type: "none", identifier: "none" }
+    assert:
+      - type: javascript
+        value: "JSON.parse(output).matched_source === 'cpi_http_401.md'"
+
+  - description: "IDoc 51 com conector RFC"
+    vars: { description: "IDoc travado", interface_type: "rfc", identifier: "RFC-IDOC-51-DEMO" }
+    assert:
+      - type: javascript
+        value: "['idoc_status_51.md','rule_engine:sap_idoc_status_51'].includes(JSON.parse(output).matched_source) && JSON.parse(output).confidence >= 0.6"
+
+  - description: "RFC connection refused com conector"
+    vars: { description: "SM59 não conecta", interface_type: "rfc", identifier: "RFC-CONN-REFUSED-DEMO" }
+    assert:
+      - type: javascript
+        value: "['rfc_connection_refused.md','rule_engine:network_connection_refused'].includes(JSON.parse(output).matched_source) && JSON.parse(output).confidence >= 0.6"
+
+  - description: "OData timeout sem conector"
+    vars: { description: "iFlow travando ao consumir OData sem retorno", interface_type: "none", identifier: "none" }
+    assert:
+      - type: javascript
+        value: "JSON.parse(output).matched_source === 'odata_timeout_cpi.md'"
+
+  - description: "Identificador desconhecido - guardrail de seguranca"
+    vars: { description: "algo estranho aconteceu", interface_type: "odata", identifier: "XPTO-999-NAO-EXISTE" }
+    # DA: este caso exige ABSTENCAO, nao "confianca baixa".
+    #
+    # A versao anterior era so `confidence < 0.6`, que e um assert fraco de
+    # um jeito especifico: ele passa quando o sistema erra de forma
+    # confiante mas com numero baixo. O caso que ele deveria pegar - citar
+    # o documento ERRADO (salesforce_case_sap_sync_failure.md) com
+    # confidence 0.001 - passaria. Ou seja, o assert mede "o numero e
+    # pequeno", nao "o sistema se recusou a inventar uma fonte".
+    #
+    # O que distingue as duas situacoes e' matched_source: quando o
+    # guardrail funciona, ele devolve null em vez de anexar um documento
+    # qualquer. Medido nos 3 providers em 2026-09-28: matched_source=null
+    # e' o comportamento real e consistente, entao fixar aqui nao mede
+    # sorte - mede o contrato do guardrail.
+    #
+    # ACHADO MEDIDO que este assert endurecido REVELOU:
+    #
+    #   Groq gpt-oss-120b       matched_source=null              conf 0.077  PASSA
+    #   Groq qwen3.8-27b        matched_source=null              conf 0.0    PASSA
+    #   Local qwen3-coder-next  matched_source='odata_timeout_cpi.md'  0.134  FALHA
+    #
+    # O local CITA um runbook para o incidente "algo estranho aconteceu",
+    # que nao tem dado de conector nenhum. O assert antigo (so confidence
+    # < 0.6) dava PASS nisso - por isso o teste anterior nao media nada
+    # nesta dimensao. A diferenca NAO e' de pipeline (RAG, guardrails e
+    # rule engine identicos), nem de temperatura: e' do modelo. E tem
+    # consequencia pratica - engenheiro de suporte orientando-se por um
+    # runbook citado erramente sai pior do que um que recebeu "dados
+    # insuficientes".
+    #
+    # Este caso REPROVA o provider local. Isso e' resultado, nao bug: nao
+    # afrouxe o assert para a tabela ficar bonita.
+    assert:
+      - type: javascript
+        # ATENCAO (verificado no source do promptfoo, handleJavascript):
+        # assert multi-linha entra como CORPO da funcao
+        # `new Function("output","context","process", body)` sem return
+        # implicito. Sem o `return` o resultado e undefined e o caso SEMPRE
+        # falha com "Custom function must return a boolean, number, or
+        # GradingResult object. Got type undefined". So multi-linha => return
+        # explicito; so bloco de linha unica e que recebe wrap automatico.
+        value: |
+          const o = JSON.parse(output);
+          // 1) o guardrail de seguranca DEVE abster
+          return o.matched_source === null
+          // 2) e a confianca tem de ficar abaixo do limiar
+          && o.confidence < 0.6
+          // 3) nunca citar o documento que o caso do broker mostra ser
+          //    a recuperacao errada mais provavel
+          && o.matched_source !== 'salesforce_case_sap_sync_failure.md';
+
+  - description: "OData timeout com CPI-TIMEOUT-DEMO"
+    vars: { description: "Chamada OData do CPI para o S/4HANA excede o tempo limite", interface_type: "odata", identifier: "CPI-TIMEOUT-DEMO" }
+    assert:
+      - type: javascript
+        value: "const o = JSON.parse(output); o.matched_source === 'odata_timeout_cpi.md' && o.confidence >= 0.8"
+
+  # Generalizacao de terminologia: o modelo NAO deve inventar ou importar o
+  # nome de um produto especifico de queue manager a partir do contexto
+  # recuperado.
+  #
+  # O QUE ESTE CASO MEDE (e o que nao mede):
+  #   MEDE: dado um sintoma descrito em termos genericos, o modelo se abstem
+  #   de citar "WebSphere", "ActiveMQ", "inter-tenant" ou "Event Mesh" -
+  #   nomes que so aparecem se ele os tiver copiado do documento que a RAG
+  #   trouxe. Este sinal TEM discriminacao comprovada: na 1a execucao o
+  #   provider local devolveu "WebSphere Queue Manager" e reprovou, enquanto
+  #   os outros passaram. Nao e assert decorativo.
+  #
+  #   NAO MEDE: que o modelo "usa a palavra broker". Esse assert foi REMOVIDO
+  #   (2026-09-28) e o motivo importa para a leitura do resultado:
+  #   a) era TAUTOLOGICO - "broker" esta no texto da entrada
+  #      ("trocar por broker SAP") e no identifier. Um provider que so
+  #      devolvesse o input ecoado passava. Media eco, nao raciocinio.
+  #   b) seria fragil mesmo sem eco: exigir uma palavra especifica pune
+  #      respostas corretas que dizem "fila de mensagens" ou "middleware de
+  #      mensageria". Um bom assert nao reprova sinonimo legitimo.
+  #   c) o identifier tambem continua o termo, entao trocar so a descricao
+  #      nao resolveria - o termo vazaria pelo identifier.
+  #
+  # interface_type = "apim" (API Management), e nao "jms": o campo e um
+  # Literal fechado em app/models.py:19 - "odata" | "rfc" | "servicenow" |
+  # "salesforce" | "workday" | "ariba" | "cap" | "apim". Um "jms" levanta
+  # ValidationError ANTES de qualquer modelo ser chamado, o que fazia este
+  # caso - o que sustenta a tese da DA - falhar por erro de infra, e nao por
+  # qualidade de resposta.
+  #
+  # LIMITACAO DECLARADA: o conector APIM responde is_mock=True e
+  # is_fallback=True para este identifier (proxy inexistente em modo demo).
+  # Ou seja, este caso NAO tem dado real de conector - mede reacao a
+  # descricao textual com um 404 mock, nao o pipeline de conector real.
+  # Para medir dado de conector de verdade, use os casos interface_type=rfc
+  # ou interface_type=odata, que chamam o conector de verdade.
+  #
+  # tests/test_eval_suite_integrity.py trava a invariante que o assert
+  # removido violava: nenhum valor de `contains`/`not-contains` pode
+  # aparecer nas vars de entrada do mesmo caso.
+  - description: "queue manager - nao inventar produto especifico"
+    vars: { description: "Mensagem não sai do queue manager, trocar por broker SAP", interface_type: "apim", identifier: "APIM-BROKER-001" }
+    assert:
+      - type: not-contains
+        value: "WebSphere"
+      - type: not-contains
+        value: "ActiveMQ"
+      - type: not-contains
+        value: "inter-tenant"
+      - type: not-contains
+        value: "Event Mesh"

@@ -16,8 +16,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.agent.graph import _invoke_graph_with_timeout  # noqa: E402
-from app.config import settings  # noqa: E402
+from app.agent.graph import _invoke_graph_with_timeout
+from app.config import settings
 
 args = [a for a in sys.argv[1:] if a != "--debug"]
 description = args[0] if args else "iFlow falhando com erro 401"

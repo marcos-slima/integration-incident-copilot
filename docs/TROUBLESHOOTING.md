@@ -151,8 +151,10 @@ print('vectors:', info.vectors_count)
 |---|---|
 | Chave de API ausente ou expirada | Atualize `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `AZURE_OPENAI_API_KEY` no `.env`. |
 | Endpoint Azure incorreto | `AZURE_OPENAI_ENDPOINT` deve terminar sem barra: `https://<resource>.openai.azure.com`. |
-| `LLM_PROVIDER` não configurado | Valores válidos: `openai`, `azure`, `anthropic`, `mock`. |
-| Modo `DATA_SOVEREIGNTY_MODE=local_only` com chave cloud | Neste modo apenas modelos locais (Ollama) são usados; configure `OLLAMA_BASE_URL`. |
+| `LLM_PROVIDER` não configurado | Valores válidos: `ollama` (default), `openai`, `azure_openai`. `azure` e `anthropic` não existem neste projeto. |
+| `PolicyViolationError: nenhum provider permitido` (DA-43) | Dado `confidential` não tem destino cloud autorizado. Confira a policy efetiva em `GET /llm/policy`. Para liberar cloud, são necessários **os dois**: `DATA_SOVEREIGNTY_MODE=cloud_with_dlp` **e** a origem em `CONFIDENTIAL_ALLOWED_ORIGINS`. Sem o segundo, a configuração é fail-closed. |
+| Modo de sovereignty inválido | Valores válidos: `strict` (default, só providers locais) e `cloud_with_dlp`. Qualquer outro valor **falha no boot** — não é interpretado como permissivo. |
+| `local_only` / `OLLAMA_BASE_URL` | Valores que aparecem em documentação antiga e **não existem**. Use `DATA_SOVEREIGNTY_MODE=strict` e `OLLAMA_HOST` (ex.: `http://127.0.0.1:11434`). |
 
 ---
 

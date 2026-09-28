@@ -14,7 +14,6 @@ import pytest
 from app.agent.graph import run_diagnosis
 from app.models import IncidentRequest
 
-
 _RULE_ENGINE_EQUIVALENTS = {
     "idoc_status_51.md": ("rule_engine:sap_idoc_status_51",),
     "rfc_connection_refused.md": ("rule_engine:network_connection_refused",),

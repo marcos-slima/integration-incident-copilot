@@ -69,9 +69,23 @@ tests:
 
   - description: "Identificador desconhecido - guardrail de seguranca (nao deve ter alta confianca)"
     vars: { description: "algo estranho aconteceu", interface_type: "odata", identifier: "XPTO-999-NAO-EXISTE" }
+    # DA: exige ABSTENCAO, nao "confianca baixa".
+    #
+    # A versao anterior era so `confidence < 0.6`, que passa tanto quando o
+    # guardrail funciona quanto quando o sistema acerta o documento ERRADO
+    # com numero baixo - o caso do broker mostra exatamente esse numero
+    # (salesforce_case_sap_sync_failure.md com confidence 0.001) e ele
+    # passaria. O que separa as duas situacoes e' matched_source: o
+    # guardrail correto devolve null em vez de anexar um documento qualquer.
+    # Medido nos 3 providers em 2026-09-28: matched_source=null e' o
+    # comportamento real e consistente.
+    # Trapped por tests/test_eval_suite_integrity.py, que recusa assert
+    # com `confidence` como unica afirmacao.
     assert:
       - type: javascript
-        value: "JSON.parse(output).confidence < 0.6"
+        value: |
+          const o = JSON.parse(output);
+          o.matched_source === null && o.confidence < 0.6
 
   # --- Casos da validacao manual de 26/09/2026 (ambiente Docker + Ollama do host) ---
   # Resultado manual: 33% com causa raiz errada, construida sobre o "500"

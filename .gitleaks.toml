@@ -1,0 +1,30 @@
+# Politica de segredos do Integration Incident Copilot.
+#
+# ate aqui o hook usava apenas as regras default do gitleaks, o que tornava
+# impossivel revisar em diff quais regras rodavam e o que estava
+# deliberadamente permitido. Este arquivo explicita a politica sem
+# relaxar nada.
+
+[extend]
+# Mantem TODAS as regras default do gitleaks. Este arquivo existe para
+# auditoria, nao para afrouxar seguranca.
+useDefault = true
+
+[title]
+name = "Integration Incident Copilot - politica de segredos"
+
+# Deliberadamente NAO existe allowlist de conteudo aqui.
+#
+# Os placeholders dos testes foram trocados de `sk-fake*` para
+# `fake-openai-key-*` / `fake-azure-key-*` - padrao que ja existia no repo
+# (tests/test_determinism_cross_provider.py:58) - em vez de receberem uma
+# excecao. Consequencia: a regra "nunca usar valores com prefixo sk- em
+# testes" (CLAUDE.md) passa a ser GARANTIDA pelo gitleaks, e nao apenas por
+# convencao.
+#
+# Se algum dia surgir um falso positivo legitimo, prefira renomear o valor a
+# abrir excecao aqui. Uma allowlist que aceita `sk-` em qualquer path
+# reintroduz exatamente a janela que a auditoria fechou.
+#
+# Qualquer allowlist futura deve ser path-scoped (regex de path), nunca um
+# regex de segredo global.

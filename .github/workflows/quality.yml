@@ -1,0 +1,149 @@
+name: Quality gate
+
+# DA-51: o que a suite nao cobre.
+#   deterministico          — sempre. Sem LLM, sem infra, segundos.
+#   migrations + dashboards — Postgres efemero; valida alembic E as 45 queries.
+#   llm_eval                — agendado/manual; exige provider (ver docs/QUALITY_GATES.md).
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  schedule:
+    # 03:17 UTC — fora do horario pico dos runners hospedados.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deterministic:
+    name: quality gate — deterministico
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Instalar Python
+        run: uv python install
+
+      - name: Sincronizar dependências
+        run: uv sync --dev
+
+      - name: Quality gate (dataset, corpus, invariante DA-29, configs, docs)
+        run: |
+          set -o pipefail
+          uv run python scripts/quality_gate.py --json quality-gate.json | tee quality-gate.log
+          {
+            echo "## Quality gate (DA-51)"
+            echo
+            echo '```json'
+            cat quality-gate.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quality-gate-report
+          path: quality-gate.json
+          if-no-files-found: warn
+
+  migrations_and_dashboards:
+    name: migrations + 45 queries dos dashboards
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: iic
+          POSTGRES_PASSWORD: iic
+          POSTGRES_DB: iic
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://iic:iic@localhost:5432/iic
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Instalar Python
+        run: uv python install
+
+      - name: Sincronizar dependências
+        run: uv sync --dev
+
+      # Alembic so foi validado a mao (DA-49 migration 004). Aqui ele roda
+      # contra banco limpo: migration que so funciona na sua base local
+      # quebra o primeiro deploy de outra pessoa.
+      - name: Alembic upgrade head (banco limpo)
+        run: uv run alembic upgrade head
+
+      - name: Validar as queries dos dashboards no Postgres real
+        run: uv run python scripts/validate_dashboards.py --dsn "$DATABASE_URL"
+
+  llm_eval:
+    name: promptfoo — gate de LLM
+    # So no agendado/manual: no runner hospedado nao ha Ollama nem o modelo de
+    # 51 GB, e o provider padrao dos configs e local (exec:).
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Verificar provider de LLM
+        id: provider
+        run: |
+          if [ -n "${{ secrets.OPENAI_API_KEY }}" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "## promptfoo — NAO EXECUTADO"
+              echo
+              echo "Sem \`OPENAI_API_KEY\` no repo. Este job **nao** e um verde:"
+              echo "o gate de LLM segue sem verificacao automatica."
+              echo
+              echo "Opcoes: (1) configure o secret, (2) rode localmente e versione o"
+              echo "baseline: \`npx promptfoo eval -c promptfooconfig.yaml -o resultados.json\`"
+              echo "e depois \`uv run python scripts/quality_gate.py --write-promptfoo-baseline resultados.json\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: promptfoo eval
+        if: steps.provider.outputs.configured == 'true'
+        run: npx --yes promptfoo@latest eval -c promptfooconfig.yaml -o resultados.json
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: Comparar com o baseline versionado
+        if: steps.provider.outputs.configured == 'true'
+        run: uv run python scripts/quality_gate.py --compare-promptfoo resultados.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: promptfoo-results
+          path: resultados.json
+          if-no-files-found: ignore

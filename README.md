@@ -1338,3 +1338,92 @@ banco. Suíte total: 734 testes, sem regressão.
 - `integration_systems` é servido junto às demais tabelas admin: Fase A e B
   compartilham o mesmo `DATABASE_URL` — sem banco, a página `/admin/systems`
   fica navegável mas sem dado (mesmo comportamento de `/admin/models`).
+
+### 34. Correlação de incidentes com o catálogo de sistemas + verificação persistida (DA-50)
+
+**O problema.** A DA-49 criou o catálogo de sistemas integrados, mas ele era um
+registro morto: ninguém conseguia responder *quais sistemas estão gerando
+incidente* nem *de qual sistema veio este incidente*. Três falhas concretas:
+
+1. `IncidentRequest.connector_source_system` existia no contrato e **nunca
+   chegava ao pipeline** — o `graph.run_diagnosis` montava o `initial_state`
+   sem ele, e `build_incident_row()` gravava sempre o rótulo genérico do
+   conector (`"OData"`, `"SAP CAP"`), que não é chave de catálogo.
+2. `POST /incidents/{id}/verify` só escrevia no Neo4j e no Langfuse. A tabela
+   `incidents` — origem de todos os dashboards Grafana — tinha
+   `verified_at`/`diagnosis_correct` **sempre NULL**: a taxa de verificação e a
+   acurácia eram permanentemente zero, independentemente de quantas
+   verificações o operador fizesse.
+3. A verificação respondia "nada a registrar" (400) quando o SQL estava
+   disponível e o incidente existia na tabela, porque o SQL nem era um efeito
+   do endpoint.
+
+**A solução.** Fase C, em três partes:
+
+- **Propagação.** `CopilotState.connector_source_system` +
+  `initial_state` em `app/agent/graph.py`; `build_incident_row()` prefere o
+  valor informado pelo cliente e só cai para o rótulo do conector quando ele
+  não veio.
+- **Correlação determinística** (`app/admin/correlation.py`, funções puras sem
+  I/O, para testar e auditar sem banco):
+  1. `connector_source_system` casa exatamente com um `system_key` → match
+     exato (o cliente disse qual sistema é);
+  2. senão, `interface_type == connector_type` do catálogo → se houver
+     **exatamente um** sistema daquele tipo, resolve; se houver mais de um
+     (mesmo conector em `prod` e `stage`), devolve **ambíguo** com os
+     candidatos, sem escolher — fail-closed, mesmo princípio da Capability
+     Registry (DA-27);
+  3. sem candidato, `none`.
+  Sem `FK` e sem migration: a ponte é o valor que o cliente já envia.
+- **Superfície de leitura.** `GET /admin/api/incidents` (filtros por
+  `system_key`/`interface_type`/`verified`, cada linha com o sistema
+  resolvido), `GET /admin/api/incidents/{id}` (com `description` e evidências),
+  `GET /admin/api/systems/{id}/incidents` (drill-down que reaplica a **mesma**
+  regra sobre o catálogo inteiro), `incidents_count`/`unverified_count` em
+  `/admin/api/registry/status`, a tela `/admin/incidents` (filtros, detalhe
+  sob demanda, drill-down a partir de `/admin/systems?system_key=`) e o dashboard
+  Grafana `iic-systems` (12 painéis). O `POST /incidents/{id}/verify` passou a
+  gravar no SQL como **terceiro efeito independente** e best-effort: roda antes
+  do 404 do grafo (um incidente presente na tabela e ausente no Neo4j não
+  perde o veredito — o GraphRAG é opcional) e `correct` ausente grava
+  `verified_at` deixando `diagnosis_correct` NULL, em vez de coagir para `True`
+  e inflar a acurácia dos dashboards.
+
+**Validação.** 38 testes novos em `tests/test_da50_incidents.py` (correlação
+pura: precedência do match exato, ambiguidade, fail-closed; `IncidentRepository`
+de **produção** com filtros; rotas HTTP com SQLite em arquivo — a mesma
+estratégia de `tests/test_admin_systems.py`; `record_verification` com
+`diagnosis_correct=None` preservado; wiring do endpoint com `sql_updated`);
+`scripts/validate_dashboards.py` novo. Suíte: **772 testes, sem regressão** (era
+734). O validador executa **45 queries** dos 4 dashboards contra o PostgreSQL
+real do compose — 45/45 OK.
+
+**Bugs encontrados e corrigidos no caminho** (ambos derrubavam painéis inteiros
+sem erro visível fora do Grafana):
+- `scripts/generate_reports.py`: `evidence_strength IN ('high','critical')`
+  numa coluna **FLOAT** (migration 002) → `invalid input syntax for type double
+  precision`. Agora `>= 0.7`.
+- `deploy/grafana/dashboards/dashboard_ipaas.json`: `ROUND(<double>, 1)` não
+  existe no Postgres (`round(double precision, integer)`) → `::numeric`.
+- `scripts/validate_dashboards.py` (novo): ao reproduzir as macros do Grafana
+  para rodar a query no `psql`, o primeiro rascunho gerava
+  `date_trunc(INTERVAL '1 hour', ...)` e `date_trunc('30 ms', ...)` para o
+  shorthand `'30m'` — `date_trunc` exige o argumento **textual**, e o mapa de
+  unidades agora cobre `s/m/h/d/w` explicitamente.
+
+**Limitações (deliberadamente registradas):**
+- A correlação por `connector_type` é **ambígua por definição** quando o mesmo
+  conector atende mais de um ambiente: o operador resolve na tela filtrando por
+  `system_key` depois de informar o valor no request. O sistema não escolhe.
+- `system_key` não é validado contra o catálogo no `/diagnose` (o request é
+  aceito mesmo sem correspondência no catálogo) — a não correspondência aparece
+  como `none`/`ambiguous` na leitura, não como erro no diagnóstico. Validar no
+  `/diagnose` transformaria um registro analítico opcional em precondição de
+  negócio.
+- Sem `DATABASE_URL`, `/admin/incidents` e a API de incidentes respondem `503`
+  (fail-closed) e o dashboard fica vazio — a verificação no SQL só existe
+  quando há Postgres, como todo o resto da superfície admin.
+- `scripts/validate_dashboards.py` valida sintaxe e execução de `SELECT`, não
+  o resultado visual dos painéis; ele também substitui as variáveis de template
+  por `TRUE` (equivalente a "All"), então um erro que só aparece com um filtro
+  específico selecionado ainda pode escapar.

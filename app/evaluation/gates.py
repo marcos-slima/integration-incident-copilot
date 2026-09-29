@@ -321,6 +321,34 @@ def check_candidate_das(root: Path = REPO_ROOT) -> list[Finding]:
     return _ok(check)
 
 
+def check_preflight_delegates(root: Path = REPO_ROOT) -> list[Finding]:
+    """O preflight de RAM do harness tem que viver no modulo, nao no script.
+
+    Sem este gate, a aritmetica pode voltar para dentro do
+    scripts/promptfoo_remote.sh e a suite continua verde: os testes
+    passariam para `app/evaluation/ram_preflight.py`, que ninguem mais
+    chamaria. E' a mesma razao de `reranker_invariant`: o teste precisa
+    vigiar o caminho de codigo que realmente executa.
+    """
+    check = "preflight_delegates"
+    script = root / "scripts/promptfoo_remote.sh"
+    if not script.is_file():
+        return _fail(check, f"{script} nao encontrado")
+
+    source = script.read_text(encoding="utf-8")
+    if "PYEOF" in source or "import json" in source:
+        return _fail(
+            check,
+            "o preflight voltou a ser python inline no script; a aritmetica "
+            "precisa ficar em app/evaluation/ram_preflight.py para ter cobertura",
+        )
+    if "app.evaluation.ram_preflight" not in source:
+        return _fail(check, "o script nao invoca app/evaluation/ram_preflight")
+    if not (root / "app/evaluation/ram_preflight.py").is_file():
+        return _fail(check, "app/evaluation/ram_preflight.py nao encontrado")
+    return _ok(check)
+
+
 GATES = {
     "rag_dataset_schema": check_rag_dataset,
     "corpus_coverage": check_corpus_coverage,
@@ -329,6 +357,7 @@ GATES = {
     "promptfoo_configs": check_promptfoo_configs,
     "llm_baseline": check_llm_baseline,
     "candidate_das_fresh": check_candidate_das,
+    "preflight_delegates": check_preflight_delegates,
 }
 
 _THRESHOLD_AWARE = frozenset({"rag_dataset_schema", "reranker_invariant"})

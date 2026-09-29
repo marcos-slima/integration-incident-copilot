@@ -213,7 +213,10 @@ class IntegrationSystem(Base):
     `system_key` e o slug unico (ex: "sap_odata_prod") usado para
     referenciar o sistema de forma estavel. `connector_type` usa o
     Literal fechado do pipeline (odata/rfc/servicenow/salesforce/workday/
-    ariba/cap/apim) — a ponte natural para correlacionar incidentes.
+    ariba/successfactors/cap/apim) — a ponte natural para correlacionar
+    incidentes. O gate `connector_reachable` (DA-51) amarra esta lista ao
+    registro real de `app/connectors/__init__.py`, para o docstring nao
+    deriva do Literal sem ninguem perceber.
     """
 
     __tablename__ = "integration_systems"

@@ -615,7 +615,7 @@ dado mock/fallback.) A lista e montada de forma inteiramente
 DETERMINISTICA em `app/agent/nodes.py::_assemble_evidence(state)` - o
 LLM nunca declara/cita suas proprias fontes, mesmo principio ja usado
 em `evidence_strength` (DA-15) e nos demais guardrails deste projeto
-("guardrails em codigo, nao em prompt"; ver `learnings.md` do projeto).
+("guardrails em codigo, nao em prompt", DA-3 do README.md).
 `_assemble_evidence` e chamada tanto em `report_node` (para a nova
 secao "Evidencias" do `report_markdown`) quanto em
 `graph.py::run_diagnosis` (para popular `DiagnosisResponse.evidence`)
@@ -695,8 +695,7 @@ sem nunca invocar o provider.
 decisao (`status=success|failure|circuit_open|budget_rejected`),
 latencia e custo estimado.
 
-**Nao-objetivos explicitos desta v1** (backlog em aberto, ver
-`learnings.md` do projeto): IAM/auth (ja resolvido na borda HTTP, nao
+**Nao-objetivos explicitos desta v1** (backlog em aberto): IAM/auth (ja resolvido na borda HTTP, nao
 duplicado aqui); PII/DLP de verdade (um scanner de dados sensiveis no
 CONTEUDO do prompt - `sanitize_untrusted_input` protege contra prompt
 injection, nao e a mesma coisa que um scanner de PII); tenant
@@ -751,8 +750,7 @@ terreno: qualquer tool de escrita futura (ex: `restart_iflow`,
 `PolicyDeniedError` em runtime, nao em uma tool silenciosamente
 liberada.
 
-**Nao-objetivos explicitos desta v1** (backlog em aberto, ver
-`learnings.md` do projeto): granularidade de scope POR CHAVE de API
+**Nao-objetivos explicitos desta v1** (backlog em aberto): granularidade de scope POR CHAVE de API
 (hoje ha uma unica `X-API-Key` compartilhada por todo o servidor MCP -
 multiplas chaves com scopes diferentes exigiria um esquema de
 credenciais mais rico, ex: OAuth2/TokenVerifier, que `app/mcp/server.py`

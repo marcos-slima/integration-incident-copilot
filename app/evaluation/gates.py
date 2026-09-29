@@ -644,9 +644,11 @@ _CODE_REF = re.compile(
     r"`((?:app|tests|scripts)/[A-Za-z0-9_/]+\.py)(?:::([A-Za-z_][A-Za-z0-9_]*)|:(\d+))`"
 )
 
+_MD_CITACAO = re.compile(r"`([\w./-]+\.md)`")
+
 
 def check_docs_code_references(root: Path = REPO_ROOT) -> list[Finding]:
-    """Referencias `app/x.py::simbolo` e `app/x.py:N` tem de resolver.
+    """Referencias `app/x.py::simbolo`, `app/x.py:N` e `arquivo.md` tem de resolver.
 
     Cobre a forma precisa de citar codigo, que e a que a documentacao de
     debug usa para mandar o leitor abrir um breakpoint. Um tutorial que
@@ -654,16 +656,26 @@ def check_docs_code_references(root: Path = REPO_ROOT) -> list[Finding]:
     para um simbolo que foi deletado, manda o leitor procurar algo que nao
     existe — e nenhum teste de Python falha por causa disso.
 
+    Citacao de arquivo `.md` em backticks tambem tem de resolver em algum
+    lugar real (raiz do repo, `docs/`, `data/sample_docs/` ou ao lado do
+    doc que cita). O caso real: DEZ citacoes, em tres docs e em docstrings
+    de codigo, apontavam para um `learnings.md` que NUNCA existiu no
+    historico do git — backlog prometido, arquivo fantasma.
+
     Deliberadamente NAO checa identificadores em prosa solta (`ANTHROPIC_API_KEY`,
     `RFC_SYSTEM_INFO`, `QDRANT_HOST_PORT`): varios desses sao nomes de
     funcao ABAP, variavel de shell ou provider nao suportado, e um gate
-    que accuse falso positivo vira gate que ninguem ouve.
+    que accuse falso positivo vira gate que ninguem ouve. Citacoes COMPOSTAS
+    (`` `a.md, b.md` `` num backtick so) tambem ficam de fora — o regex de
+    caminho nao casa com virgula, e e' exatamente isso que impede o falso
+    positivo.
     """
     check = "docs_code_references"
     problemas: list[str] = []
 
     for doc in _markdown_docs(root):
-        for caminho, simbolo, linha in _CODE_REF.findall(doc.read_text(encoding="utf-8")):
+        texto = doc.read_text(encoding="utf-8")
+        for caminho, simbolo, linha in _CODE_REF.findall(texto):
             alvo = root / caminho
             if not alvo.is_file():
                 problemas.append(f"{doc.relative_to(root)}: {caminho} nao existe")
@@ -685,6 +697,13 @@ def check_docs_code_references(root: Path = REPO_ROOT) -> list[Finding]:
                     problemas.append(
                         f"{doc.relative_to(root)}: {caminho} tem {total} linhas, doc cita a {linha}"
                     )
+
+        for citacao in set(_MD_CITACAO.findall(texto)):
+            bases = (root, root / "docs", root / "data" / "sample_docs", doc.parent)
+            if not any((base / citacao).exists() for base in bases):
+                problemas.append(
+                    f"{doc.relative_to(root)}: cita {citacao} que nao existe em lugar nenhum"
+                )
 
     if problemas:
         return _fail(check, "; ".join(sorted(problemas)[:8]))

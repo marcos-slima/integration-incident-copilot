@@ -257,10 +257,10 @@ docs/               # índice em README.md; ARCHITECTURE.md, GETTING_STARTED.md,
 ## Limitações conhecidas (aceitas, não regredir)
 
 - Testes de integração (`-m integration`) requerem Qdrant/Ollama locais; são pulados automaticamente sem eles
-- `StreamableHTTPSessionManager.run()` — só pode ser chamado UMA vez por processo (ver `learnings.md`)
+- `StreamableHTTPSessionManager.run()` — só pode ser chamado UMA vez por processo
 - GraphRAG (Neo4j) é opt-in; desligado por default — não ativar em testes unitários
 - Backend `device_bash` cloud não alcança `localhost` da máquina do usuário — usar Claude Code CLI local para testes de integração reais
-- `starlette.Mount()` não propaga lifespan ASGI para sub-apps (ver `learnings.md` sobre MCP)
+- `starlette.Mount()` não propaga lifespan ASGI para sub-apps
 
 ---
 

@@ -17,6 +17,8 @@ verificadas à mão, uma vez, e nunca mais.
 | `promptfoo_configs` | configs do promptfoo são YAML válido, têm `prompts`/`tests`/`providers`, e os scripts `exec:` referenciados existem | instantâneo | todo push/PR |
 | `llm_baseline` | existe baseline versionado do promptfoo (comparação de regressão de LLM) | instantâneo | todo push/PR |
 | `candidate_das_fresh` | nenhuma DA marcada como "candidata" no `CLAUDE.md` já entregue em `docs/ARCHITECTURE.md` | instantâneo | todo push/PR |
+| `implemented_das_documented` | toda DA registrada no `CLAUDE.md` tem prosa localizável (seção `### N. ... (DA-N)` no `README.md`, ou `docs/ARCHITECTURE.md` como local alternativo declarado) — e, no sentido inverso, nenhuma seção `(DA-N)` órfã | instantâneo | todo push/PR |
+| `das_index_current` | o índice de DAs do `README.md` lista exatamente o mesmo conjunto do registro do `CLAUDE.md`, e cada linha aponta para seção que existe | instantâneo | todo push/PR |
 | `preflight_delegates` | o preflight de RAM do harness é `app/evaluation/ram_preflight.py`, não python inline no `scripts/promptfoo_remote.sh` | instantâneo | todo push/PR |
 | `prompt_digest_measured` | o prompt em produção (`app/agent/prompts.py`) tem o mesmo digest do prompt **medido** no `data/eval/prompt_baseline.json` | instantâneo | todo push/PR |
 | `migrations_and_dashboards` (job) | `alembic upgrade head` em banco limpo + as 45 queries dos 4 dashboards | ~1 min | todo push/PR |
@@ -94,6 +96,18 @@ recusado com exit 1 — nunca interpretado como "zero regressões".
   RAG e dados do conector entram a cada incidente. Dois incidentes com o
   mesmo digest usaram o mesmo *template*, não necessariamente o mesmo
   contexto.
+- **A prosa em si.** `implemented_das_documented` verifica que a seção
+  *existe* e que a DA está amarrada a ela. Ele não avalia se o texto explica o
+  problema, a solução e as limitações — um gate de estilo documental reprovar
+  por redação seria o primeiro a ser desligado, e desligar um gate é
+  exatamente o que ele existe para evitar.
+- **Seções marcadas como `(nota informal — sem DA)`.** São decisões reais que
+  nunca receberam numeração e por isso escapam da conferência. O marcador é
+  explícito para que a omissão seja visível no diff, mas nada cobra que
+  permaneçam informais.
+- **A legitimidade do local alternativo.** `implemented_das_documented` aceita
+  `docs/ARCHITECTURE.md` para DA-32/33/34/35 sem perguntar se o texto de lá
+  está atualizado. Ele confere presença, não atualidade.
 
 ## Lições do processo
 
@@ -123,3 +137,18 @@ recusado com exit 1 — nunca interpretado como "zero regressões".
    `preflight_delegates` passou a vigiar que o script continua delegando —
    sem ele, a matemática poderia voltar para dentro do shell com a suite
    ainda verde, testando um módulo que ninguém chama.
+6. **Gate que só checa um sentido passa pelo buraco.** `candidate_das_fresh`
+   pergunta "esta DA marcada como candidata já foi entregue?". Nunca fez a
+   pergunta inversa — "a DA entregue tem a prosa localizável?" — e por isso
+   15 seções de decisão do `README.md` sobreviveram sem rótulo `(DA-N)`,
+   invisíveis para qualquer `grep "DA-15"`, e a DA-30 ficou sem seção
+   própria em lugar nenhum. A prosa existia; a amarração não. Um gate
+   unidirecional não é metade da verificação, é uma verificação que dá
+   sensação de cobertura.
+7. **Contar errado é pior que não contar.** Auditando a documentação da
+   DA-52, o texto dizia "cinco estados" e o invariante 15 do `CLAUDE.md`
+   repetia o número, enquanto o enum `ObservationStatus` tinha quatro e a
+   seção de limitações do próprio README afirmava que os dois estados extras
+   nem existiam. Três artefatos, três afirmações, uma falsa. Por isso
+   `TestEstadosDocumentados` compara a tabela e a contagem do README com o
+   enum em vez de fixar um literal — o número é consequência, não constante.

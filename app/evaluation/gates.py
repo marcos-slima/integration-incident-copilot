@@ -408,6 +408,130 @@ def check_preflight_delegates(root: Path = REPO_ROOT) -> list[Finding]:
     return _ok(check)
 
 
+def _das(lista: list[int] | set[int] | tuple) -> str:
+    return "[" + ", ".join(f"DA-{d}" for d in sorted(lista)) + "]"
+
+
+def _documented_das(root: Path) -> tuple[dict[int, int], set[int]]:
+    """DAs com secao de prosa no README, e DAs so no ARCHITECTURE.md.
+
+    O README e' a fonte canonica da prosa de decisao (CLAUDE.md, passo 3 do
+    registro de DA). O ARCHITECTURE.md e' aceite como local ALTERNATIVO
+    declarado: ele tem 4 DAs (32-35) cujo design vive la e mover o texto
+    so' custaria churn. O que o gate proibe e' o silencio.
+
+    Reconhece os dois formatos de rotulo: `(DA-30)` e o agrupado
+    `(DA-46/47/48)` / `(DA-15/16/17)`, que o proprio projeto ja usa para
+    DAs entregues na mesma mudanca.
+    """
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    area = readme[readme.index("## Decisões de Arquitetura") :]
+    in_readme: dict[int, int] = {}
+    for num, titulo in re.findall(r"^### (\d+)\.\s*(.+?)\s*$", area, re.MULTILINE):
+        for grupo in re.findall(r"\(DA-([\d/]+)\)\s*$", titulo):
+            for n in grupo.split("/"):
+                in_readme[int(n)] = int(num)
+
+    architecture = (root / ARCHITECTURE_DOC).read_text(encoding="utf-8")
+    in_arch = {
+        int(d) for d in re.findall(r"^#{1,6}\s.+?\(DA-(\d+)\)\s*$", architecture, re.MULTILINE)
+    }
+    return in_readme, in_arch
+
+
+def _registered_das(root: Path) -> set[int]:
+    """DAs na tabela de registro do CLAUDE.md, expandindo `DA-4/8`."""
+    text = (root / CLAUDE_DOC).read_text(encoding="utf-8")
+    registradas: set[int] = set()
+    for linha in re.findall(r"^\|\s*(DA-[\d/]+)\s*\|", text, re.MULTILINE):
+        for n in linha.replace("DA-", "").split("/"):
+            registradas.add(int(n))
+    return registradas
+
+
+def check_documented_das(root: Path = REPO_ROOT) -> list[Finding]:
+    """Toda DA registrada tem prosa localizavel — nas DUAS direcoes.
+
+    O `candidate_das_fresh` (DA-51) checa uma direcao so: que uma DA
+    marcada como candidata NAO esteja entregue. O inverso nunca foi
+    verificado, e o resultado foi 15 secoes de decisao no README sem
+    rotulo `(DA-N)` — invisiveis para qualquer `grep "DA-15"` — e 1 DA
+    (DA-30) sem seção propria em lugar nenhum. A prosa existia; a
+    amarração nao. Este gate e' a amarração.
+
+    Reprova tambem o caminho inverso: secao `(DA-N)` no README que nao
+    esta no registro do CLAUDE.md e' prosa orfa, que o proximo
+    registrador nao vai encontrar.
+    """
+    check = "implemented_das_documented"
+    registradas = _registered_das(root)
+    if not registradas:
+        return _warn(check, "nenhuma DA encontrada na tabela de registro do CLAUDE.md")
+
+    in_readme, in_arch = _documented_das(root)
+    sem_prosa = sorted(registradas - set(in_readme) - in_arch)
+    if sem_prosa:
+        return _fail(
+            check,
+            f"DA registrada sem prosa: {_das(sem_prosa)} "
+            "(sem secao no README nem em docs/ARCHITECTURE.md)",
+        )
+
+    orfas = sorted(set(in_readme) - registradas)
+    if orfas:
+        return _fail(
+            check,
+            f"secao (DA-N) no README fora do registro do CLAUDE.md: {_das(orfas)}",
+        )
+    return _ok(check)
+
+
+def check_index_current(root: Path = REPO_ROOT) -> list[Finding]:
+    """O indice de DAs do README tem que refletir os headings de verdade.
+
+    O indice e' gerado a mao (nao ha build step), entao ele proprio
+    apodrece: sem esta checagem, o indice continua "verde" apontando para
+    numeros de secao que mudaram, que e' pior do que nao ter indice —
+    porque parece navegavel e nao e.
+    """
+    check = "das_index_current"
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    bloco = re.search(
+        r"^\| DA \| Seção \| O que é \|\n\|---\|---\|---\|\n(?P<corpo>.*?)(?:\n\n|\Z)",
+        readme,
+        re.MULTILINE | re.DOTALL,
+    )
+    if not bloco:
+        return _fail(check, "tabela de indice de DAs nao encontrada no README.md")
+
+    declarados = {
+        int(n) for n in re.findall(r"^\|\s*(\d+)\s*\|", bloco.group("corpo"), re.MULTILINE)
+    }
+    registradas = _registered_das(root)
+    if declarados != registradas:
+        faltando = sorted(registradas - declarados)
+        sobrando = sorted(declarados - registradas)
+        detalhe = []
+        if faltando:
+            detalhe.append(f"faltando {_das(faltando)}")
+        if sobrando:
+            detalhe.append(f"sem registro no CLAUDE.md {_das(sobrando)}")
+        return _fail(check, f"indice de DAs dessincronizado: {'; '.join(detalhe)}")
+
+    # Toda linha do indice tem que apontar para uma secao que existe.
+    in_readme, in_arch = _documented_das(root)
+    quebradas = [
+        n
+        for n in declarados
+        if f"| {n} | **—** |" not in bloco.group("corpo")
+        and n not in in_readme
+        and n not in in_arch
+    ]
+    if quebradas:
+        return _fail(check, f"indice aponta para secao inexistente: {_das(quebradas)}")
+    return _ok(check)
+
+
 GATES = {
     "rag_dataset_schema": check_rag_dataset,
     "corpus_coverage": check_corpus_coverage,
@@ -416,6 +540,8 @@ GATES = {
     "promptfoo_configs": check_promptfoo_configs,
     "llm_baseline": check_llm_baseline,
     "candidate_das_fresh": check_candidate_das,
+    "implemented_das_documented": check_documented_das,
+    "das_index_current": check_index_current,
     "preflight_delegates": check_preflight_delegates,
     "prompt_digest_measured": check_prompt_digest,
 }

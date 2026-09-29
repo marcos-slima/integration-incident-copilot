@@ -112,8 +112,8 @@ app/
     escalation.py   # DA-44: sinal determinístico de escalonamento (3 tiers)
     supervisor.py   # DA-22: classifica domínio (sap/saas/generic) sem LLM
     state.py        # CopilotState (TypedDict)
-  connectors/       # 8 conectores: odata, rfc, servicenow, salesforce,
-                    # workday, ariba, cap, apimanagement
+  connectors/       # 9 conectores: odata, rfc, servicenow, salesforce,
+                    # workday, ariba, successfactors, cap, apimanagement
   llm/
     factory.py      # DA-20: Hybrid Inference (Ollama → cloud fallback)
     gateway.py      # DA-26: AI Gateway (policy + circuit breaker + budget)
@@ -156,7 +156,9 @@ data/
 scripts/            # benchmark_rerankers.py, generate_reports.py,
                     # validate_dashboards.py (45 queries Grafana vs Postgres real),
                     # quality_gate.py (DA-51)
-docs/               # ARCHITECTURE.md, GETTING_STARTED.md, TUTORIAL_ARQUITETURA_DEBUG.md
+docs/               # índice em README.md; ARCHITECTURE.md, GETTING_STARTED.md,
+                    # TUTORIAL_ARQUITETURA_DEBUG.md, TROUBLESHOOTING.md,
+                    # QUALITY_GATES.md, e o resto (17 .md no total)
 .vscode/
   launch.json       # 13 configurações de debug prontas (graph, pytest, uvicorn)
 ```

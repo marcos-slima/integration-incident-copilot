@@ -30,10 +30,10 @@ dos erros e lições. Reflete o estado real do código na data indicada.
 - Checagem de entendimento (2–3 perguntas) do conceito 1.
 
 **Erros e discrepâncias encontrados (docs vs. código)**
-- `GUIA_DE_ESTUDOS.md` §3 mostra `DiagnosisModel` em `graph.py`; hoje está em `app/agent/state.py`.
-- `TUTORIAL_ARQUITETURA_DEBUG.md` cita breakpoints em `graph.py` para funções que hoje estão em `app/agent/nodes.py`, e descreve um grafo de 4 nodes; o código atual tem `web_search` e, opcionalmente, `graph_enrich`/`graph_write`.
-- `ARCHITECTURE.md` (diagrama) não mostra o node `web_search`, que existe em `graph.py`.
-- `diagnose_node` usa `create_react_agent` com parsing manual de JSON; o tutorial e o README descrevem `with_structured_output`. O código é a fonte de verdade.
+- `GUIA_DE_ESTUDOS.md` §3 mostra `DiagnosisModel` em `graph.py`; hoje está em `app/agent/state.py`. [resolvido em 2026-09-29: bloco corrigido para `app/agent/state.py`]
+- `TUTORIAL_ARQUITETURA_DEBUG.md` cita breakpoints em `graph.py` para funções que hoje estão em `app/agent/nodes.py`, e descreve um grafo de 4 nodes; o código atual tem `web_search` e, opcionalmente, `graph_enrich`/`graph_write`. [parcialmente resolvido em 2026-09-29: as contagens foram corrigidas para 9 conectores e 9 nodes. A parte de `web_search` estava errada aqui — `web_search` **não é um node** do grafo, é uma tool que o LLM chama dentro do node de diagnóstico (`app/agent/graph.py`: "nao e um node separado no grafo"). As BREAKPOINTS por função de `graph.py` vs. `nodes.py` seguem para revisão]
+- `ARCHITECTURE.md` (diagrama) não mostra o node `web_search`, que existe em `graph.py`. [INVALIDADO em 2026-09-29: `web_search` não é um node — mesma premissa errada do item acima]
+- `diagnose_node` usa `create_react_agent` com parsing manual de JSON; o tutorial e o README descrevem `with_structured_output`. O código é a fonte de verdade. [pendente: o código faz **os dois** — `create_react_agent` para o loop ReAct e uma chamada adicional via `with_structured_output` (`app/agent/nodes.py`). Falta reconciliar a prosa]
 - `README.md` (Decisões 4 e 8) cita `qwen2.5-coder:32b` como modelo de produção; `app/config.py` define `qwen3-coder-next:latest`. [resolvido: docs alinhados ao código; as Decisões 4 e 8 foram mantidas como registro histórico, marcadas como superadas pela Fase 12]
 - `ailab.sh` não existe em `~/ai-stack` nem no PATH.
 - Working tree com alterações não commitadas de outra sessão: `app/models.py` (adiciona `cap`/`apim` ao `Literal`), `app/rag/ingest.py` (lock de extração de PDF), `frontend/src/App.tsx`.

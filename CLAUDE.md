@@ -20,7 +20,7 @@ Portfólio da trilha SAP Architect → AI Architect (Marcos Lima).
 | API | FastAPI + Pydantic |
 | Orquestração | LangGraph (`app/agent/graph.py`) |
 | LLM | Ollama local (default) → OpenAI / Azure como fallback (DA-20/26) |
-| Modelo canônico | `qwen2.5-coder:32b` (avaliado via promptfoo; `qwen3-coder-next` descartado por OOM) |
+| Modelo canônico | `qwen3-coder-next:latest` (MoE 80B/3B ativo, 262K ctx; 10/10 no promptfoo na Fase 12 — substituiu `qwen2.5-coder:32b`, ver DA-4/8 + Fase 12) |
 | RAG | LangChain + Qdrant (hybrid dense+sparse BM25, fusão RRF) |
 | Reranker | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` (benchmark DA-29; não usar ms-marco-L6) |
 | GraphRAG | Neo4j (`app/rag/graph_store.py`), opt-in via `USE_GRAPH_RAG=true` |
@@ -127,18 +127,22 @@ app/
     retriever.py    # RAG híbrido + reranker
     graph_store.py  # GraphRAG (Neo4j)
     ingest.py       # Indexação de documentos
+  evaluation/
+    gates.py        # DA-51: checks determinísticos de qualidade (sem LLM/infra)
   events/
     consumer.py     # DA-23: webhook CloudEvents → run_diagnosis()
   a2a/              # DA-14: Agent2Agent (JSON-RPC 2.0)
   config.py         # Pydantic Settings — fonte única de verdade para config
   main.py           # FastAPI app, rotas, lifespan
 
-tests/              # 772 testes (757 unitários + 15 integração)
+tests/              # 806 testes (791 unitários + 15 integração)
 data/
   sample_docs/      # Base de conhecimento RAG (arquivos .md)
   eval/             # Dataset de avaliação RAG + resultados benchmark
+                    # + baseline do promptfoo (DA-51), versionado quando existir
 scripts/            # benchmark_rerankers.py, generate_reports.py,
-                    # validate_dashboards.py (45 queries Grafana vs Postgres real)
+                    # validate_dashboards.py (45 queries Grafana vs Postgres real),
+                    # quality_gate.py (DA-51)
 docs/               # ARCHITECTURE.md, GETTING_STARTED.md, TUTORIAL_ARQUITETURA_DEBUG.md
 .vscode/
   launch.json       # 13 configurações de debug prontas (graph, pytest, uvicorn)
@@ -155,7 +159,7 @@ docs/               # ARCHITECTURE.md, GETTING_STARTED.md, TUTORIAL_ARQUITETURA_
 | DA-1 | RAG top-1 (evita mistura de contexto) | `retriever.py` |
 | DA-2 | `seed=42` obrigatório para determinismo Ollama | `factory.py` |
 | DA-3 | Guardrails em código, não em prompt | `nodes.py::_apply_confidence_guardrails()` |
-| DA-4/8 | Modelo escolhido via promptfoo: `qwen2.5-coder:32b` | `config.py::llm_model` |
+| DA-4/8 | Comparações de modelo via promptfoo: `qwen2.5-coder:32b` ganhou do `qwen3:30b-a3b` (DA-4) e do `qwen3.6:35b-a3b` (DA-8); trocado por `qwen3-coder-next:latest` na Fase 12 (paridade 10/10) | `config.py::llm_model` |
 | DA-14 | Camada A2A (Agent2Agent) JSON-RPC 2.0 | `app/a2a/` |
 | DA-15 | Evidence/Trust Layer determinística | `nodes.py::_assemble_evidence()` |
 | DA-16 | `is_grounded` via evidence_strength (nunca autoavaliação LLM) | `nodes.py` |
@@ -182,10 +186,15 @@ docs/               # ARCHITECTURE.md, GETTING_STARTED.md, TUTORIAL_ARQUITETURA_
 | DA-48 | Metering de tokens REAIS (usage_metadata, não estimativa) persistido best-effort | `app/llm/gateway.py` + `app/admin/metering.py` |
 | DA-49 | Catálogo de sistemas integrados (`integration_systems`) na superfície admin, `connector_type` = Literal do pipeline | `app/admin/` (models, repository, routes, ui) + `alembic/004` |
 | DA-50 | Correlação `incidents` ↔ catálogo por `system_key` (exato, vindo de `IncidentRequest.connector_source_system`) com fallback por `connector_type` e ambiguidade fail-closed; verificação persistida no SQL; tela `/admin/incidents` + dashboard `iic-systems` | `app/admin/correlation.py`, `app/agent/graph.py`, `app/services/incident_recorder.py::record_verification`, `app/admin/routes.py`, `scripts/validate_dashboards.py` |
+| DA-51 | Quality gates: invariantes de avaliação verificadas por máquina (dataset/corpus, invariante DA-29, configs promptfoo, freshness das DAs candidatas) + migrações e 45 queries no CI | `app/evaluation/gates.py`, `scripts/quality_gate.py`, `.github/workflows/quality.yml`, `docs/QUALITY_GATES.md` |
 
-**DAs candidatas (sem implementação ainda — aguardam Kyma):**
-- DA-31: SAP AI Agent Hub registration (MCP + A2A)
-- DA-32: AMQP async consumer (Event Mesh fila real)
+**DAs candidatas (sem implementação ainda):**
+- DA-31: SAP AI Agent Hub registration (MCP + A2A) — bloqueada: exige tenant Kyma
+
+> A DA-32 (AMQP 1.0 via Solace Cloud) **já foi entregue** (`app/events/amqp_consumer.py`,
+> commit `67b78e8`). Ela ficou nesta lista até a DA-51 criar o gate
+> `candidate_das_fresh`, que falha o build quando uma DA marcada como candidata
+> já tem seção em `docs/ARCHITECTURE.md`.
 
 ---
 
@@ -204,7 +213,8 @@ docs/               # ARCHITECTURE.md, GETTING_STARTED.md, TUTORIAL_ARQUITETURA_
 11. Rota `require_loopback` e `require_loopback=False` são mutuamente exclusivos — `local_lab` apontando para a internet, e `enterprise_azure` apontando para loopback, falham no boot
 12. **Correlação incidente↔sistema é fail-closed** — `app/admin/correlation.py` só resolve por `connector_type` quando há UM único candidato; com 2+ devolve `ambiguous` com a lista. Nenhuma superfície (UI, API, dashboard) escolhe um sistema por conta própria (DA-50)
 13. `verified` ≠ `verified_at` — `POST /incidents/{id}/verify` grava `verified_at` sempre, mas `diagnosis_correct=None` fica NULL. Coagir para `True` infla a acurácia nos dashboards (DA-50)
-14. `evidence_strength` é FLOAT (migration 002) — nunca usar predicado textual (`IN ('high','critical')`) em query de dashboard/relatório. `scripts/validate_dashboards.py` roda as 45 queries contra o Postgres real antes de dar o dashboard como bom
+14. **Gate de qualidade roda junto com a suite** — `uv run python scripts/quality_gate.py` (DA-51) valida dataset de avaliação, corpus, invariante do reranker, configs do promptfoo e a lista de DAs candidatas. `docs/QUALITY_GATES.md` documenta o que eles NÃO cobrem
+15. `evidence_strength` é FLOAT (migration 002) — nunca usar predicado textual (`IN ('high','critical')`) em query de dashboard/relatório. `scripts/validate_dashboards.py` roda as 45 queries contra o Postgres real antes de dar o dashboard como bom
 
 ---
 

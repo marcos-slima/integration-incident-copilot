@@ -197,7 +197,10 @@ SELECT
     ROUND(AVG(model_confidence)::numeric, 3)                          AS avg_confidence,
     ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency_ms))  AS p95_latency_ms,
     COUNT(*) FILTER (WHERE llm_provider_used LIKE '%%fallback%%')    AS fallbacks_llm,
-    COUNT(*) FILTER (WHERE evidence_strength IN ('high','critical'))  AS high_critical_evidence
+    -- DA-50 fix: evidence_strength e FLOAT desde a migration 002 - o
+    -- predicado textual IN ('high','critical') quebrava a query com
+    -- "invalid input syntax for type double precision".
+    COUNT(*) FILTER (WHERE evidence_strength >= 0.7)                  AS high_critical_evidence
 FROM incidents
 WHERE created_at BETWEEN %(since)s AND %(until)s;
 """

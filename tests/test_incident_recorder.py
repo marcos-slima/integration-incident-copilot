@@ -115,8 +115,28 @@ def test_record_incident_adds_and_commits(monkeypatch):
 
 
 def test_sync_url_uses_psycopg2_driver():
-    assert (
-        incident_recorder._sync_url("postgresql+asyncpg://u:p@h/db")
-        == "postgresql+psycopg2://u:p@h/db"
-    )
-    assert incident_recorder._sync_url("postgres://u:p@h/db") == "postgresql+psycopg2://u:p@h/db"
+    # DA-52: a traducao de URL foi movida para app/db.py, que passou a ser a
+    # fonte unica. Antes havia uma copia identica aqui e outra em
+    # admin/repository.py.
+    from app.db import _sync_url
+
+    assert _sync_url("postgresql+asyncpg://u:p@h/db") == "postgresql+psycopg2://u:p@h/db"
+    assert _sync_url("postgres://u:p@h/db") == "postgresql+psycopg2://u:p@h/db"
+
+
+def test_session_factory_delega_para_a_fonte_unica():
+    """Trava a consolidacao da DA-52.
+
+    `_get_session_factory` aqui e a equivalente em admin/repository.py
+    existem so como alias de `app.db.get_sync_session_factory`. Um teste que
+    verifica o RESULTADO pega a proxima pessoa que reintroduz uma copia
+    local -- que e' exatamente como o drift de dialeto comecaria de novo.
+    A comparacao e' de valor (`==` sobre o factory devolvido), nao de
+    identidade: o alias e' um wrapper, nao a propria funcao.
+    """
+    from app.admin import repository as admin_repository
+    from app.db import get_sync_session_factory
+
+    shared = get_sync_session_factory()
+    assert incident_recorder._get_session_factory() == shared
+    assert admin_repository._get_sync_session_factory() == shared

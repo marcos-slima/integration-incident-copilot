@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -49,6 +50,69 @@ def _async_url(raw: str) -> str:
     if raw.startswith("postgres://"):
         return raw.replace("postgres://", "postgresql+asyncpg://", 1)
     return raw
+
+
+def _sync_url(raw: str) -> str:
+    """Dialeto sync (psycopg2) a partir da mesma URL configurada no .env.
+
+    O pipeline e' async (asyncpg), mas o incident_recorder, o admin e o
+    detector de drift (DA-52) rodam em caminho SINCRONO por construcao:
+    sao chamado de dentro de `run_diagnosis`, que e' sync e roda em
+    threadpool. Traduzir a URL num lugar so evita que cada um invente o
+    proprio `_sync_url` e um deles esqueça um prefixo.
+    """
+    for prefix in ("postgresql+asyncpg://", "postgresql://", "postgres://"):
+        if raw.startswith(prefix):
+            return "postgresql+psycopg2://" + raw[len(prefix) :]
+    return raw
+
+
+#: Cache do sessionmaker sync: `(url_configurada, sessionmaker)`. Tupla em
+#: vez de `lru_cache` de zero argumentos porque o resultado depende de
+#: `settings.database_url`, que e' mutavel. Um `lru_cache()` sem chave
+#: guardaria o primeiro resultado para sempre: uma chamada com a URL vazia
+#: devolveria `None` e o `None` ficaria em cache mesmo depois da URL ser
+#: configurada -- falha silenciosa, sem excecao, sem log.
+_sync_factory: tuple[str, Any] | None = None
+
+
+def get_sync_session_factory():
+    """Sessionmaker sync compartilhado, ou `None` sem `DATABASE_URL`.
+
+    Reconstrói quando a `DATABASE_URL` muda, e NÃO cacheia o `None`: sem
+    banco configurado não há pool a preservar, e devolver `None` sempre
+    permite que a configuracao apareca depois (import tardio de settings,
+    teste, reconfiguracao em runtime).
+    """
+    global _sync_factory
+
+    url = getattr(settings, "database_url", "")
+    if not url:
+        return None
+    if _sync_factory is not None and _sync_factory[0] == url:
+        return _sync_factory[1]
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    engine = create_engine(
+        _sync_url(url),
+        pool_pre_ping=True,
+        pool_size=2,
+        max_overflow=3,
+        connect_args={"connect_timeout": 3},
+    )
+    factory = sessionmaker(engine, expire_on_commit=False)
+    _sync_factory = (url, factory)
+    return factory
+
+
+def reset_sync_session_factory() -> None:
+    """Esquece o engine em cache (usado por testes que trocam a URL)."""
+    global _sync_factory
+    if _sync_factory is not None:
+        _sync_factory[1].kw["bind"].dispose()
+        _sync_factory = None
 
 
 def is_db_enabled() -> bool:

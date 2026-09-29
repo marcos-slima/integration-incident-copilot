@@ -1507,3 +1507,112 @@ simulado localmente contra um banco descartável: `001 → 004` e 45/45 queries.
   mudança de formato do promptfoo exige tocar no normalizador.
 - Detalhe completo, incluindo o que estes gates **não** cobrem:
   `docs/QUALITY_GATES.md`.
+
+### 36. Detecção de drift de contrato SAP: baseline, severidade e incidente (DA-52)
+
+**O problema.** O `ODataConnector` lia campos **hardcoded**
+(`MessageId`, `StatusText`, `MessageType`, `RetryCount` — `odata_connector.py:177`)
+e nunca perguntava ao SAP qual era o contrato publicado. Quando alguém
+removesse um desses campos no backend, o sintoma era um `AttributeError`
+dentro do conector — ou pior, um `None` silencioso — horas depois, com o
+diagnóstico blaming no CPIs em vez do SAP. A falha estava no *contrato* e
+ninguém media contrato. Pior ainda: o modo de falha mais comum
+(field removido) é indistinguível, no log, de SAP fora do ar.
+
+Duas armadilhas específicas de um detector de drift:
+
+1. **Ausência de dado não é "sem mudança".** Um SAP inacessível, um
+   conector mock e um sistema sem introspecção produzem a mesma coisa que
+   uma ausência real de drift. Tratar qualquer um dos três como `clean` é
+   a forma mais fácil de construir um detector que nunca alarma.
+2. **O SAP republica o serviço o tempo todo** e cada publicação troca
+   namespace, versão de `Annotation` e ordem de `Property`. Um detector
+   que compare o XML bruto gera ruído todo dia e é desligado na primeira
+   semana.
+
+**A solução.** Cinco estados, porque a distinção entre *não verificável* e
+*verificado e igual* é justamente o que o detector precisa expressar:
+
+| Estado | Significado | Abre incidente? |
+|---|---|---|
+| `first_observation` | não há baseline ainda | não (grava baseline) |
+| `clean` | comparado com baseline, idêntico | não |
+| `drift` | comparado, mudou | só se `breaking` |
+| `unverified` | **não** deu para comparar | nunca |
+
+O fluxo é `probe → normalizar → hashear → diff → baseline → sinal`:
+
+- **Probe** (`fetch_contract()` na interface `SAPConnector`, interface
+  segregada: os outros 7 conectores herdam `None` em vez de devolver um
+  contrato vazio). O `ODataConnector` lê `$metadata` **reusando o OAuth
+  existente**. Falha de leitura nunca vira `None` genérico sem motivo: o
+  motivo vai para `unverified.reason`.
+- **Normalizar antes de hashear** (`app/contracts/model.py`): Properties,
+  Entities e Annotations viram `tuple` ordenada; namespace, versão e
+  `max_length` de anotação volátil ficam de fora do fingerprint. Como o
+  XML volta a ser canônico, o fingerprint é comparável entre dias.
+- **Severidade** (`app/contracts/diff.py`), fechada e testada: campo ou
+  entidade removida, tipo trocado, `nullability` estreitada, `MaxLength`
+  reduzido, chave alterada, `abstract` → breaking. Campo novo, tipo
+  alargado, `MaxLength` maior → additive. Reordenação, whitespace,
+  doc, namespace → cosmetic. Rename provável (mesmo tipo, mesmo índice,
+  um dos lados `Nullable` só) é **cosmetic**, não breaking: errar para
+  breaking transforma o detector em alarme falso.
+- **Baseline** (`app/contracts/baseline.py`, migration `005`): append-only
+  em `system_contracts`, sem FK para `integration_systems` — é histórico
+  de observação, não registro de cadastro, e a FK só criaria ordem de
+  escrita e orphan na migração. Baseline é a observação mais recente por
+  `system_key`.
+- **Sinal** (`app/contracts/observe.py`): só `breaking` vira
+  `IncidentEventEnvelope` → `handle_incident_event` → `run_diagnosis`
+  (DA-23), com `source="schema-drift-detector"`. O `connector_source_system`
+  recebe o **`system_key` exato** do catálogo (DA-50), não um rótulo
+  livre: com 2+ candidatos, a correlação por `connector_type` é
+  `ambiguous` e fail-closed por invariante 12.
+
+**O que apareceu na implementação.** Três coisas que só aparecem quando o
+caminho inteiro roda, não nas unidades:
+
+1. `app/db.py::get_sync_session_factory` usava `@lru_cache` de **zero
+   argumentos** sobre `settings.database_url`, que é mutável. A primeira
+   chamada sem `DATABASE_URL` cacheava `None` para sempre — sem exceção,
+   sem log. O próprio docstring admitia que o cache "precisa ser
+   invalidado", mas nada expunha isso. Trocado por cache **chaveado pela
+   URL**, que reconstrói quando a config muda e nunca cacheia o `None`.
+   Bug real, encontrado pelo teste e2e, não por leitura.
+2. `POST /incidents/{id}/verify` grava `verified_at` mas deixa
+   `diagnosis_correct` NULL por decisão (invariante 13). Isso torna
+   `verified` **incontável** como métrica de acerto — mais uma razão para
+   a DA-52 não tentar medir qualidade por esse campo.
+3. Uma migration validada em `001 → 005` e de volta não prova que o
+   *mapper* do ORM bate com o schema. Divergência de coluna, índice ou
+   nome só aparece quando o SELECT real roda.
+
+**Validação.** 79 testes novos: 21 do parser/fingerprint, 35 da matriz de
+severidade, 23 de orquestração e **10 end-to-end** atravessando conector →
+HTTP → parser → **PostgreSQL real** → diff → CloudEvent, no job
+`migrations_and_dashboards` do CI (Postgres efêmero, `alembic upgrade
+head` já aplicado). O e2e inclui os casos que só quebram em produção:
+republicação sem mudança, SAP fora do ar não zerando o baseline, drift
+vindo depois de queda de leitura, dois sistemas sem compartilhar baseline,
+e o CLI devolvendo exit ≠ 0 para breaking. Suíte: **903 testes**.
+
+**Limitações (deliberadamente registradas):**
+- Só **OData** tem introspecção. RFC e os 6 SaaS herdam
+  `fetch_contract() → None` e ficam em `unverified` até ganharem probe
+  próprio; a interface já está pronta, o parseador é que não.
+- `unverified` **sai com código 0** no CLI (`scripts/check_contract_drift.py`).
+  SAP fora do ar não é motivo para marcar build vermelho: o detector não
+  tem opinião, e saída de erro transformaria "não deu para checar" em
+  "deu errado" — a confusão que o preflight de RAM resolveu no sentido
+  oposto. Quem precisa dos três estados lê `--json`.
+- **Baseline persistido antes da emissão do evento**: se o SAP quebrar
+  entre os dois passos, o incidente se perde sem retry. O recorte atual é
+  12 mudanças por evento; o corte do histórico é append-only e o
+  fingerprint do baseline só avança quando houve publicação real.
+- Detecção é **reativa por polling**, não por webhook: quem agenda é
+  operação externa. Não há scheduler no repo.
+- `unavailable`/`not_introspectable` não são estados separados: hoje
+  `unverified` carrega o motivo em `reason`. Separar exigiria distinguir
+  "o SAP disse que não tem contrato" de "o SAP não respondeu", e o
+  detector hoje não sabe a diferença.

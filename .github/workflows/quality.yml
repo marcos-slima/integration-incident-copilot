@@ -98,6 +98,16 @@ jobs:
       - name: Validar as queries dos dashboards no Postgres real
         run: uv run python scripts/validate_dashboards.py --dsn "$DATABASE_URL"
 
+      # DA-52: o detector de drift so se prova atravessando o caminho
+      # completo -- $metadata servido por HTTP -> parser -> baseline no
+      # Postgres -> diff -> CloudEvent. Teste unitario com base em memoria
+      # passaria mesmo com migration, coluna ou mapping divergentes.
+      # Usa o MESMO Postgres efemero acima (ja aplicou a 005).
+      - name: DA-52 end-to-end (contrato -> baseline -> incidente)
+        env:
+          IIC_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: uv run pytest tests/test_contracts_e2e.py -v
+
   llm_eval:
     name: promptfoo — gate de LLM
     # So no agendado/manual: no runner hospedado nao ha Ollama nem o modelo de

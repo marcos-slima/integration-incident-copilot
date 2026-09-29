@@ -123,6 +123,12 @@ app/
   mcp/
     server.py       # DA-19: servidor MCP
     policy.py       # DA-27: Capability Registry (FAIL-CLOSED por default)
+  contracts/        # DA-52: drift de contrato SAP
+    model.py        # Contrato normalizado + fingerprint canônico
+    odata.py        # Parser EDMX ($metadata) → contrato
+    diff.py         # Severidade fechada: breaking/additive/cosmetic
+    baseline.py     # ORM SystemContract (append-only, sem FK)
+    observe.py      # probe → diff → baseline → CloudEvent
   rag/
     retriever.py    # RAG híbrido + reranker
     graph_store.py  # GraphRAG (Neo4j)
@@ -135,7 +141,10 @@ app/
   config.py         # Pydantic Settings — fonte única de verdade para config
   main.py           # FastAPI app, rotas, lifespan
 
-tests/              # 806 testes (791 unitários + 15 integração)
+tests/              # 903 testes unitários (14 skipped) + 15 integração.
+                    # 10 deles são e2e da DA-52 e só rodam com
+                    # IIC_TEST_DATABASE_URL + Postgres (job CI
+                    # migrations_and_dashboards)
 data/
   sample_docs/      # Base de conhecimento RAG (arquivos .md)
   eval/             # Dataset de avaliação RAG + resultados benchmark
@@ -187,6 +196,7 @@ docs/               # ARCHITECTURE.md, GETTING_STARTED.md, TUTORIAL_ARQUITETURA_
 | DA-49 | Catálogo de sistemas integrados (`integration_systems`) na superfície admin, `connector_type` = Literal do pipeline | `app/admin/` (models, repository, routes, ui) + `alembic/004` |
 | DA-50 | Correlação `incidents` ↔ catálogo por `system_key` (exato, vindo de `IncidentRequest.connector_source_system`) com fallback por `connector_type` e ambiguidade fail-closed; verificação persistida no SQL; tela `/admin/incidents` + dashboard `iic-systems` | `app/admin/correlation.py`, `app/agent/graph.py`, `app/services/incident_recorder.py::record_verification`, `app/admin/routes.py`, `scripts/validate_dashboards.py` |
 | DA-51 | Quality gates: invariantes de avaliação verificadas por máquina (dataset/corpus, invariante DA-29, configs promptfoo, freshness das DAs candidatas) + migrações e 45 queries no CI | `app/evaluation/gates.py`, `scripts/quality_gate.py`, `.github/workflows/quality.yml`, `docs/QUALITY_GATES.md` |
+| DA-52 | Detecção de drift de contrato SAP: probe `$metadata` (interface segregada `fetch_contract`), normalização+hash canônico, severidade fechada (breaking/additive/cosmetic), baseline append-only `system_contracts` (migration 005) e sinal via event mesh só em breaking | `app/contracts/` (`model`, `odata`, `diff`, `baseline`, `observe`), `app/connectors/odata_connector.py::fetch_contract`, `scripts/check_contract_drift.py` |
 
 **DAs candidatas (sem implementação ainda):**
 - DA-31: SAP AI Agent Hub registration (MCP + A2A) — bloqueada: exige tenant Kyma
@@ -214,7 +224,12 @@ docs/               # ARCHITECTURE.md, GETTING_STARTED.md, TUTORIAL_ARQUITETURA_
 12. **Correlação incidente↔sistema é fail-closed** — `app/admin/correlation.py` só resolve por `connector_type` quando há UM único candidato; com 2+ devolve `ambiguous` com a lista. Nenhuma superfície (UI, API, dashboard) escolhe um sistema por conta própria (DA-50)
 13. `verified` ≠ `verified_at` — `POST /incidents/{id}/verify` grava `verified_at` sempre, mas `diagnosis_correct=None` fica NULL. Coagir para `True` infla a acurácia nos dashboards (DA-50)
 14. **Gate de qualidade roda junto com a suite** — `uv run python scripts/quality_gate.py` (DA-51) valida dataset de avaliação, corpus, invariante do reranker, configs do promptfoo e a lista de DAs candidatas. `docs/QUALITY_GATES.md` documenta o que eles NÃO cobrem
-15. `evidence_strength` é FLOAT (migration 002) — nunca usar predicado textual (`IN ('high','critical')`) em query de dashboard/relatório. `scripts/validate_dashboards.py` roda as 45 queries contra o Postgres real antes de dar o dashboard como bom
+15. **Ausência de evidência nunca é "sem drift"** — a DA-52 tem 5 estados e `unverified` é um deles. `first_observation` (sem baseline) e `unverified` (sem leitura) são distintos de `clean`, e `unverified` nunca abre incidente nem grava/apaga baseline
+16. **`system_contracts` é append-only e sem FK** para `integration_systems` — histórico de observação, não cadastro. Migration 005
+17. **So `breaking` abre incidente** de drift; additive e cosmetic não. Rename provável é *cosmetic*: errar para breaking gera alarme falso e o detector é desligado
+18. **Fingerprint nunca é do XML bruto** — Properties/Entities/Annotations são `tuple` ordenadas e namespace/versão volátil ficam de fora. Sem isso o SAP republicando o serviço gera drift todo dia
+19. `get_sync_session_factory()` é cacheado **chaveado pela URL** e nunca cacheia `None` — `lru_cache` de zero args sobre `settings` mutável travava `None` em cache sem erro (achado pelo e2e da DA-52)
+20. `evidence_strength` é FLOAT (migration 002) — nunca usar predicado textual (`IN ('high','critical')`) em query de dashboard/relatório. `scripts/validate_dashboards.py` roda as 45 queries contra o Postgres real antes de dar o dashboard como bom
 
 ---
 

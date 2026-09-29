@@ -218,8 +218,38 @@ class IncidentRepository:
         result = await self._session.execute(select(Incident).where(Incident.id == incident_id))
         return result.scalar_one_or_none()
 
-    async def list_recent(self, limit: int = 50) -> list[Incident]:
-        result = await self._session.execute(
-            select(Incident).order_by(Incident.created_at.desc()).limit(limit)
-        )
+    async def list_recent(
+        self,
+        limit: int = 50,
+        *,
+        interface_type: str | None = None,
+        source_system: str | None = None,
+        verified: bool | None = None,
+    ) -> list[Incident]:
+        """Incidentes mais recentes, com filtros opcionais (DA-50).
+
+        verified=None -> todos; True -> so verificados; False -> so os que
+        ainda nao tem veredito humano (diagnosis_correct IS NULL).
+        """
+        stmt = select(Incident)
+        if interface_type:
+            stmt = stmt.where(Incident.interface_type == interface_type)
+        if source_system:
+            stmt = stmt.where(Incident.connector_source_system == source_system.strip())
+        if verified is True:
+            stmt = stmt.where(Incident.diagnosis_correct.is_not(None))
+        elif verified is False:
+            stmt = stmt.where(Incident.diagnosis_correct.is_(None))
+        stmt = stmt.order_by(Incident.created_at.desc()).limit(limit)
+        result = await self._session.execute(stmt)
         return list(result.scalars())
+
+    async def count(self, verified: bool | None = None) -> int:
+        from sqlalchemy import func
+
+        stmt = select(func.count()).select_from(Incident)
+        if verified is True:
+            stmt = stmt.where(Incident.diagnosis_correct.is_not(None))
+        elif verified is False:
+            stmt = stmt.where(Incident.diagnosis_correct.is_(None))
+        return int((await self._session.execute(stmt)).scalar_one())

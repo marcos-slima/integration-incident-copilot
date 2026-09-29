@@ -71,12 +71,25 @@ def build_incident_row(
 
     connector = final_state.get("connector_data")
     redacted_description = redact_pii_text(request.description)
+    # DA-50: connector_source_system tem DUAS fontes em ordem de prioridade:
+    # 1. o que o cliente informou (IncidentRequest.connector_source_system,
+    #    propagado no CopilotState por graph.py::run_diagnosis) - esse e o
+    #    system_key do catalogo (integration_systems, DA-49), e e o que
+    #    permite correlacionar incidente <-> sistema na superficie admin;
+    # 2. o rotulo generico do conector ("OData", "SAP CAP", ...) - fallback
+    #    para quando o cliente nao informou nada.
+    # Prioridade invertida causaria perda da correlacao: sem o valor do
+    # cliente, connector_source_system seria sempre um rotulo de marketing
+    # e a correlacao por system_key seria sempre NULL.
+    connector_source_system = final_state.get("connector_source_system") or getattr(
+        connector, "source_system", None
+    )
     return {
         "id": uuid.UUID(incident_id),
         "trace_id": response.trace_id,
         "interface_type": request.interface_type,
         "description": redacted_description,
-        "connector_source_system": getattr(connector, "source_system", None),
+        "connector_source_system": connector_source_system,
         "is_mock": bool(getattr(connector, "is_mock", False)),
         "sensitivity_level": classify_sensitivity(final_state),
         "pii_detected": redacted_description != (request.description or ""),
@@ -110,3 +123,67 @@ def record_incident(**kwargs: Any) -> None:
             "[incidents] Falha ao gravar incidente %s no PostgreSQL (diagnostico nao afetado)",
             kwargs.get("incident_id"),
         )
+
+
+def record_verification(
+    incident_id: str,
+    *,
+    diagnosis_correct: bool | None,
+    verified_by: str | None = None,
+    verified_root_cause: str | None = None,
+) -> bool:
+    """DA-50: grava a verificacao humana na tabela `incidents` (best-effort).
+
+    Antes desta mudanca, POST /incidents/{id}/verify so escrevia no grafo
+    Neo4j e no score do Langfuse - os dashboards Grafana e a tela
+    /admin/incidents liam `verified_at`/`diagnosis_correct` de uma tabela
+    que NUNCA era atualizada (a taxa de verificacao ficava sempre em zero).
+    A verificacao e o unico sinal de feedback do operador sobre a qualidade
+    do diagnostico; perder isso no banco analitico e perder o dado na
+    principal fonte de leitura.
+
+    `diagnosis_correct=None` significa "verificado sem veredito" e grava
+    `verified_at` deixando `diagnosis_correct` NULL - coerente com
+    VerifyIncidentRequest e com o que a UI/dashboard mostram como
+    "verificado (sem veredito)". Coagir None para True inflaria a taxa de
+    acuracia dos dashboards com casos que o operador nao julizou.
+
+    Retorna True se gravou, False se nao havia banco, id invalido ou falha -
+    nunca levanta: um veredito no grafo/Langfuse nao pode ser perdido
+    porque o SQL estava fora do ar.
+    """
+    if not settings.database_url:
+        return False
+    try:
+        parsed_id = uuid.UUID(incident_id)
+    except ValueError:
+        return False
+    try:
+        from datetime import UTC, datetime
+
+        from sqlalchemy import update
+
+        from app.services.incident_repository import Incident
+
+        with _get_session_factory()() as session:
+            result = session.execute(
+                update(Incident)
+                .where(Incident.id == parsed_id)
+                .values(
+                    verified_at=datetime.now(UTC),
+                    diagnosis_correct=diagnosis_correct,
+                    verified_by=verified_by,
+                    verified_root_cause=verified_root_cause,
+                )
+            )
+            session.commit()
+        # rowcount 0 = o id nao existe na tabela (ex: incidente so gravado
+        # no grafo, sem DATABASE_URL na epoca do diagnostico) - trata como
+        # "nao gravado" para o endpoint poder avisar o operador.
+        return result.rowcount > 0
+    except Exception:
+        _logger.exception(
+            "[incidents] Falha ao gravar verificacao do incidente %s no PostgreSQL",
+            incident_id,
+        )
+        return False

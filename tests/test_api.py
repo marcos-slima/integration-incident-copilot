@@ -470,11 +470,14 @@ def test_verify_incident_returns_200_on_success(monkeypatch):
         json={"root_cause": "causa confirmada por Basis", "verified_by": "human"},
     )
     assert response.status_code == 200
+    # sql_updated=False: sem DATABASE_URL nao ha onde persistir a verificacao
+    # (DA-50) - o efeito SQL e best-effort e independente dos outros dois.
     assert response.json() == {
         "incident_id": "i1",
         "status": "verified",
         "graph_updated": True,
         "langfuse_scored": False,
+        "sql_updated": False,
     }
     assert captured["incident_id"] == "i1"
     assert captured["verified_root_cause"] == "causa confirmada por Basis"

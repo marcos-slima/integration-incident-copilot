@@ -55,3 +55,8 @@ async def admin_usage(request: Request):
 @ui_router.get("/systems", include_in_schema=False)
 async def admin_systems(request: Request):
     return _render(request, "systems.html")
+
+
+@ui_router.get("/incidents", include_in_schema=False)
+async def admin_incidents(request: Request):
+    return _render(request, "incidents.html")

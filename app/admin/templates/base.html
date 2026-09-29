@@ -13,6 +13,9 @@
   th { background: rgba(128,128,128,.15); }
   .pill { border: 1px solid currentColor; border-radius: 999px; padding: 0 .5rem; font-size: .75rem; }
   .ok { color: #2e9e4f; } .warn { color: #d08c00; } .err { color: #cf2f2f; }
+  .muted { opacity: .7; font-size: .8rem; }
+  pre { white-space: pre-wrap; word-break: break-word; background: rgba(128,128,128,.12); padding: .5rem; border-radius: 6px; }
+  input, select { margin-right: .4rem; }
   #keyrow { background: rgba(128,128,128,.12); padding: .5rem; border-radius: 6px; margin-bottom: 1rem; }
   code { background: rgba(128,128,128,.18); padding: 0 .25rem; }
 </style>
@@ -25,7 +28,8 @@
     <a href="/admin/models">Modelos</a>
     <a href="/admin/usage">Metering</a>
     <a href="/admin/systems">Sistemas</a>
-    <a href="/diagnose" target="_blank">Diagnosticar</a>
+    <a href="/admin/incidents">Incidentes</a>
+    <a href="/docs" target="_blank">API (docs)</a>
   </nav>
 </header>
 
@@ -68,6 +72,17 @@ function restoreKeyLabel() {
   const k = sessionStorage.getItem('adminKey');
   const el = document.getElementById('adminkey');
   if (el && k) el.value = k;
+}
+// Helpers compartilhados por todas as paginas (antes duplicados em cada
+// template): escapeHtml para interpolacao segura e pill para badges.
+function escapeHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = s == null ? '' : String(s);
+  return div.innerHTML;
+}
+function pill(status) {
+  const cls = status === 'active' ? 'ok' : (status === 'degraded' ? 'warn' : 'err');
+  return `<span class="pill ${cls}">${escapeHtml(status)}</span>`;
 }
 restoreKeyLabel();
 </script>

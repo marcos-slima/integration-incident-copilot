@@ -1,16 +1,22 @@
 {% extends "base.html" %}
 {% block title %}Início · Admin{% endblock %}
 {% block content %}
-<h2>Registro de modelos e metering</h2>
+<h2>Registro, catálogo de sistemas e incidentes</h2>
 <p>Substitui a edição manual do <code>.env</code> para a lista de modelos por
-  origem (DA-45), suas chaves (cifradas, DA-47) e o consumo real de tokens
-  (DA-48).</p>
+  origem (DA-45), suas chaves (cifradas, DA-47), o consumo real de tokens
+  (DA-48), o catálogo de sistemas integrados (DA-49) e a leitura dos
+  incidentes diagnosticados correlacionados a esses sistemas (DA-50).</p>
 
 <ul>
   <li><strong>Modelos</strong> — <a href="/admin/models">cadastrar/editar</a> modelo
     por origem com preços por 1M tokens e limite mensal (gera o percentual).</li>
   <li><strong>Metering</strong> — <a href="/admin/usage">consumo</a> real por modelo:
     tokens in/out, requests, falhas, custo USD e % do limite.</li>
+  <li><strong>Sistemas</strong> — <a href="/admin/systems">catálogo</a> dos sistemas
+    integrados (system_key, conector, ambiente, status).</li>
+  <li><strong>Incidentes</strong> — <a href="/admin/incidents">incidentes</a>
+    diagnosticados, com o sistema correlacionado e a situação da verificação
+    humana.</li>
 </ul>
 
 <p>Modo gerenciado (<code>LLM_REGISTRY_DB</code>):

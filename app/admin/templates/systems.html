@@ -65,6 +65,7 @@ function loadSystems() {
         <td>${pill(s.status)}</td>
         <td>${escapeHtml(s.base_url || '—')}</td>
         <td>
+          <a href="/admin/incidents?system_key=${encodeURIComponent(s.system_key)}">incidentes</a>
           <button onclick="toggleStatus('${s.id}', '${s.status === 'active' ? 'degraded' : 'active'}')">
             ${s.status === 'active' ? 'marcar degradado' : 'marcar ativo'}</button>
           <button onclick="delSystem('${s.id}')">remover</button>
@@ -72,10 +73,6 @@ function loadSystems() {
       tb.appendChild(tr);
     }
   }).catch(e => document.getElementById('msg').textContent = e.message);
-}
-function pill(status) {
-  const cls = status === 'active' ? 'ok' : (status === 'degraded' ? 'warn' : 'err');
-  return `<span class="pill ${cls}">${escapeHtml(status)}</span>`;
 }
 function toggleStatus(id, target) {
   adminFetch('/admin/api/systems/' + id, {method:'PATCH', body: JSON.stringify({status: target})})
@@ -95,11 +92,6 @@ function addSystem(e) {
     .then(() => e.target.reset())
     .catch(err => document.getElementById('msg').textContent = err.message);
   return false;
-}
-function escapeHtml(s) {
-  const div = document.createElement('div');
-  div.textContent = s == null ? '' : String(s);
-  return div.innerHTML;
 }
 loadSystems();
 </script>

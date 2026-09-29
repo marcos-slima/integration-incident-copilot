@@ -526,6 +526,99 @@ típica.
 
 ---
 
+## Onde ficam os logs — por camada da arquitetura
+
+Quando algo falha, cada camada registra em um lugar diferente. Esta seção
+diz onde olhar, na ordem em que um incidente atravessa a solução.
+
+### 1. API e agente — um processo, um stdout
+
+Toda a orquestração (`/diagnose`, o grafo LangGraph, a rule engine, o MCP
+em `/mcp` e o A2A em `/a2a`) roda em **um único processo** e loga no stdout
+dele — MCP e A2A são montados dentro do app FastAPI, não são processos
+separados.
+
+- **Desenvolvimento local:** o terminal onde o `uv run uvicorn` roda
+  (ou o arquivo para o qual você redirecionou).
+- **Homologação/container:** `docker compose logs api`, ou
+  `docker logs integration-incident-copilot-api-1`.
+
+O que aparece ali:
+
+- **Access log HTTP com status.** Uma linha
+  `"POST /diagnose HTTP/1.1" 401 Unauthorized` é chave ausente ou errada
+  (DA-18); `422` é corpo rejeitado pela validação (ex.:
+  `interface_type` inválido); `429` é rate limit (10/min por IP).
+- **WARNING de chave gerada no startup.** Se `API_KEY` está vazia no `.env`,
+  o log de startup imprime a chave aleatória gerada para o processo:
+  `docker logs integration-incident-copilot-api-1 2>&1 | grep API_KEY`.
+  Ela vale até o restart seguinte — fixe no `.env` para estabilizar.
+- **Decisões do LLM Gateway:** rota por sensibilidade do dado (DA-43),
+  circuit breaker abrindo/fechando e orçamento (DA-26) — em nível
+  `INFO`/`WARNING`.
+- **Fallbacks do Hybrid Inference:** quando o Ollama local falha e a
+  chamada cai no fallback cloud (DA-20).
+
+**Higiene do que entra em log e prompt (DA-30):** logs e payload do
+incidente são sanitizados e truncados em **3.000 caracteres** antes de
+entrar no prompt (smart truncation) — o log nunca carrega o payload inteiro;
+PII é redigida antes de chegar ao gateway.
+
+### 2. Tracing do LLM — Langfuse
+
+Cada diagnóstico tem `trace_id` na resposta. Com `LANGFUSE_*` configurado,
+o pipeline inteiro aparece na UI do Langfuse em `http://localhost:3000` —
+busque pelo `trace_id` da resposta: spans por node, prompt enviado, tokens
+e custo. Sem `LANGFUSE_*` configurado, não há tracing (os spans não são
+enviados a lugar nenhum) — o stdout da seção 1 é tudo que existe.
+
+### 3. Dados de operação — Postgres + dashboards Grafana
+
+Não é log bruto: é o histórico **consultável** de cada diagnóstico.
+
+- **`incidents`** — diagnóstico + verificação + correlação com o sistema
+  integrado (DA-50). Tela: `/admin/incidents`.
+- **Metering de tokens reais** por origem/modelo (DA-46/48, sem estimativa).
+  Tela: `/admin/usage`.
+- **`system_contracts`** — baseline de contrato SAP e drift (DA-52).
+- **Grafana** (profile `observability`): `http://localhost:3001` — 4
+  dashboards (SOC, iPaaS, COI, Systems); as 45 queries são validadas
+  contra o Postgres real no CI.
+
+### 4. Processos assíncronos — containers separados
+
+- **Worker RQ** (profile `async`, executa os `/diagnose/async`):
+  `docker compose logs worker`.
+- **Consumidor AMQP 1.0** (Solace, `app/events/amqp_consumer.py`): stdout
+  do processo dele.
+- **Reporter:** além do log, escreve relatórios prontos em `reports/`
+  (Markdown/Excel diários).
+
+### 5. Infra local — containers do host
+
+- **Qdrant:** log do container Qdrant — erros de índice/embedding aparecem
+  aqui (RAG degradado, não erro de API).
+- **Ollama:** o serviço do **host** responde na `11434` (o container
+  `ollama` do compose só sobe com `--profile container-ollama`) — erros de
+  modelo/memória aparecem no log do serviço, não no log da API.
+- **Neo4j** (opt-in, GraphRAG): `docker compose --profile graphrag logs
+  neo4j` — desligado por default; sem ele o copilot só perde o histórico
+  em grafo, não o diagnóstico.
+
+### 6. Homologação/produção no Kyma (DA-24)
+
+Padrão Kubernetes — o access log é o mesmo da seção 1, só muda onde ele vive:
+
+```bash
+kubectl logs -n sap-integration-copilot deployment/api
+kubectl logs -n sap-integration-copilot deployment/worker
+```
+
+O namespace e os deployments (`api`, `worker`) estão nos manifestos de
+`deploy/kyma/`.
+
+---
+
 ## Limitações conhecidas
 
 **O agente diagnostica, não corrige** — os próximos passos são recomendações;

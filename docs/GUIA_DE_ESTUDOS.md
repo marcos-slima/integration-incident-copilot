@@ -135,7 +135,7 @@ settings = Settings()
 ### Saída estruturada com guardrails em camadas
 
 ```python
-# app/agent/graph.py
+# app/agent/state.py
 class DiagnosisModel(BaseModel):
     matched_source: str | None = Field(default=None, description="...")
     probable_root_cause: str = Field(description="...")

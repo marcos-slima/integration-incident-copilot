@@ -4,6 +4,8 @@
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 > 📋 Veja o [processo de desenvolvimento](docs/PROCESSO_DESENVOLVIMENTO.md) seguido neste projeto, fase por fase.
+>
+> 📚 Índice de toda a documentação: **[docs/README.md](docs/README.md)** — por onde começar, o que é referência atual e o que é registro histórico.
 
 Assistente de IA para diagnóstico de incidentes de integrações.
 Recebe a descrição de um incidente, lê logs/payloads, consulta um
@@ -1711,7 +1713,7 @@ Duas armadilhas específicas de um detector de drift:
 O fluxo é `probe → normalizar → hashear → diff → baseline → sinal`:
 
 - **Probe** (`fetch_contract()` na interface `SAPConnector`, interface
-  segregada: os outros 7 conectores herdam `None` em vez de devolver um
+  segregada: os outros 8 conectores herdam `None` em vez de devolver um
   contrato vazio). O `ODataConnector` lê `$metadata` **reusando o OAuth
   existente**. Falha de leitura nunca vira `None` genérico sem motivo: o
   motivo vai para `unverified.reason`.

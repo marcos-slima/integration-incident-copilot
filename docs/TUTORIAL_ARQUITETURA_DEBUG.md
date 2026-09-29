@@ -12,9 +12,11 @@
 
 > **Nota de atualização:** este tutorial foi escrito quando o projeto
 > tinha só 2 conectores (OData/RFC, ambos mock) e 4 nodes no grafo. Hoje
-> sao 8 conectores (a maioria real quando configurado) e o grafo pode
-> ter ate 6 nodes com GraphRAG habilitado
-> (`connector → retrieve → [graph_enrich] → diagnose → [graph_write] → report`).
+> sao 9 conectores (a maioria real quando configurado) e o grafo tem
+> 9 nodes — `supervisor`, `connector`, `retrieve`, `sap_diagnose`,
+> `saas_diagnose`, `generic_diagnose`, `report` e, com GraphRAG, os
+> condicionais `graph_enrich`/`graph_write`. O fluxo de diagnostico e
+> `supervisor → connector → retrieve → <domain>_diagnose → report`;
 > O roteiro de debug abaixo continua correto para o caso RFC guiado na
 > Seção 5, mas nao cobre os nodes/conectores novos — ver
 > `docs/ARCHITECTURE.md` para o estado completo e atual.
@@ -79,8 +81,8 @@ OData/RFC)        + embeddings              │
 | Entrada HTTP + validação | `app/main.py` | Define `POST /diagnose`, delega pro grafo |
 | Contratos de dados | `app/models.py` | `IncidentRequest` (entrada), `DiagnosisResponse` (saída) |
 | Configuração central | `app/config.py` | Única fonte de verdade — URLs, modelo, credenciais, lida do `.env` |
-| Orquestração (o "workflow") | `app/agent/graph.py` | Define os 4 nodes e as arestas entre eles |
-| Busca de dados no sistema SAP + multi-vendor | `app/connectors/` | `base.py` (contrato comum), 8 conectores (OData, RFC, ServiceNow, Salesforce, Workday, Ariba, CAP, APIManagement) - maioria real quando configurado |
+| Orquestração (o "workflow") | `app/agent/graph.py` | Define os 9 nodes e as arestas entre eles |
+| Busca de dados no sistema SAP + multi-vendor | `app/connectors/` | `base.py` (contrato comum), 9 conectores (OData, RFC, ServiceNow, Salesforce, Workday, Ariba, SuccessFactors, CAP, APIManagement) - maioria real quando configurado |
 | Busca de conhecimento (RAG) | `app/rag/ingest.py`, `app/rag/retriever.py` | Indexação e consulta no Qdrant |
 | Testes | `tests/` | Regressão automatizada de tudo acima |
 

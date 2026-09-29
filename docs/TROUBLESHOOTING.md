@@ -30,7 +30,7 @@ Para instalação e configuração inicial veja [GETTING_STARTED.md](GETTING_STA
 | Causa | Correção |
 |---|---|
 | `.env` ausente ou incompleto | Copie `.env.example` para `.env` e preencha as variáveis obrigatórias (`OPENAI_API_KEY` ou equivalente, `QDRANT_URL`). |
-| Variável tipada incorretamente | `GRAPH_RAG_ENABLED` e `WEB_SEARCH_ENABLED` esperam `true`/`false` (sem aspas). Inteiros devem ser inteiros (`QDRANT_PORT=6333`, sem aspas). |
+| Variável tipada incorretamente | `GRAPH_RAG_ENABLED` e `WEB_SEARCH_ENABLED` esperam `true`/`false` (sem aspas). Inteiros devem ser inteiros (`OLLAMA_GATEWAY_TIMEOUT=60`, sem aspas). A conexao com o Qdrant e' por `QDRANT_URL` (URL completa, ex.: `http://localhost:6333`) — nao existe `QDRANT_PORT`. |
 | `.env` com BOM ou CRLF | Converta para UTF-8 sem BOM e quebra de linha LF: `sed -i 's/\r//' .env`. |
 
 ```bash
@@ -58,7 +58,7 @@ git log --oneline | head -5
 
 | Causa | Correção |
 |---|---|
-| `SOLACE_HOST` / `SOLACE_PORT` incorretos | Verifique credenciais no `.env`; nunca comite o `.env`. |
+| `AMQP_HOST` / `AMQP_PORT` incorretos | O broker pode ser Solace Cloud, mas as variaveis de configuracao usam o prefixo `AMQP_` (ver `app/config.py`: `amqp_host`, `amqp_port`). `SOLACE_HOST`/`SOLACE_PORT` nao existem e sao silenciosamente ignoradas pelo Pydantic Settings. | Verifique credenciais no `.env`; nunca comite o `.env`. |
 | `python-qpid-proton` não instalado | Ver item [10](#10-docker-build-falha--python-qpid-proton-no-linux). |
 | Firewall bloqueando porta AMQP (5671/5672) | Libere a porta ou use o modo mock (`AMQP_ENABLED=false`). |
 
@@ -137,7 +137,7 @@ print('vectors:', info.vectors_count)
 | Coleção vazia (nenhum documento ingerido) | Execute `uv run python -m app.rag.ingest` ou siga [INGEST_REFERENCE.md](INGEST_REFERENCE.md). |
 | `QDRANT_URL` incorreto | Verifique `.env`; padrão local: `http://localhost:6333`. |
 | Modelo de embedding diferente do usado na ingestão | O modelo é fixado na coleção; reingerir com o modelo correto ou recriar a coleção. |
-| `QDRANT_COLLECTION_NAME` diverge entre ingestão e runtime | Certifique-se de que a variável é a mesma nos dois contextos. |
+| Colecao ingerida diferente da que o runtime espera | Nao ha variavel de ambiente para o nome da colecao: os nomes sao constantes em `app/rag/retriever.py::COLLECTIONS` (`sap_incident_docs`, `sap_reference_library`), escolhidas pelo `--target` da ingestão (`incidents`/`reference`/`all`). O sintoma e' ter ingerido so `--target incidents` e o runtime cair no fallback de `reference`. Reingira com `--target all`. |
 
 ---
 
@@ -149,7 +149,7 @@ print('vectors:', info.vectors_count)
 
 | Causa | Correção |
 |---|---|
-| Chave de API ausente ou expirada | Atualize `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `AZURE_OPENAI_API_KEY` no `.env`. |
+| Chave de API ausente ou expirada | Atualize `OPENAI_API_KEY` / `AZURE_OPENAI_API_KEY` no `.env`. Nao existe `ANTHROPIC_API_KEY`: `anthropic` nao e' um `LLM_PROVIDER` valido neste projeto (ver a linha seguinte). |
 | Endpoint Azure incorreto | `AZURE_OPENAI_ENDPOINT` deve terminar sem barra: `https://<resource>.openai.azure.com`. |
 | `LLM_PROVIDER` não configurado | Valores válidos: `ollama` (default), `openai`, `azure_openai`. `azure` e `anthropic` não existem neste projeto. |
 | `PolicyViolationError: nenhum provider permitido` (DA-43) | Dado `confidential` não tem destino cloud autorizado. Confira a policy efetiva em `GET /llm/policy`. Para liberar cloud, são necessários **os dois**: `DATA_SOVEREIGNTY_MODE=cloud_with_dlp` **e** a origem em `CONFIDENTIAL_ALLOWED_ORIGINS`. Sem o segundo, a configuração é fail-closed. |

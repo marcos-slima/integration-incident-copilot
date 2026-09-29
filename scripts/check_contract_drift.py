@@ -102,7 +102,18 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  baseline: {report.fingerprint_before[:16]}")
         print(f"  atual:    {(report.fingerprint_after or '-')[:16]}")
         if report.is_breaking:
-            print("  incidente: emitido" if emitted else "  incidente: NAO emitido (--no-emit?)")
+            if emitted:
+                print("  incidente: emitido")
+            elif args.no_emit:
+                print("  incidente: nao emitido (--no-emit, esperado)")
+            else:
+                # Aqui NAO e' "nao havia nada a emitir": o CLI so' chama
+                # `emit_incident` quando `is_breaking`, o que ja descarta o
+                # caminho "nada a fazer". `False` neste ponto significa
+                # falha na entrega — e dizer "--no-emit?" mandaria o
+                # operador olhar para a flag errada, com a excecao real
+                # no log (observe.py::_logger.exception).
+                print("  incidente: NAO emitido — a entrega do evento falhou (ver log)")
         if report.status is ObservationStatus.UNVERIFIED:
             print("  (sem opiniao: o contrato nao pode ser verificado)")
 

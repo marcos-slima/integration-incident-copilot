@@ -8,6 +8,10 @@ desativa o detector).
 
 from __future__ import annotations
 
+import pathlib
+import re
+from typing import ClassVar
+
 from app.contracts.diff import (
     SEVERITY_ADDITIVE,
     SEVERITY_BREAKING,
@@ -350,3 +354,64 @@ class TestReportSurface:
         assert SEVERITY_COSMETIC not in {
             c.severity for c in diff_contracts(contract(), contract()).changes
         }
+
+
+class TestEstadosDocumentados:
+    """A tabela de estados da DA-52 no README e' a mesma informacao que o
+    enum `ObservationStatus`, e as duas andaram fora de sync: o texto dizia
+    "cinco estados" enquanto o enum tinha quatro e a propria secao de
+    limitacoes dizia que os dois estados extras nem existem. Um leitor que
+    confiasse no numero montava dashboard com uma categoria vazia.
+
+    Este teste e' bidirecional de proposito: se um estado novo entrar no
+    enum sem documentar, OU a tabela documentar algo que o enum nao tem,
+    reprova. Nao fixa a contagem -- fixa a COERENCIA.
+    """
+
+    _NUMEROS: ClassVar[dict[str, int]] = {
+        "dois": 2,
+        "tres": 3,
+        "quatro": 4,
+        "cinco": 5,
+        "seis": 6,
+        "sete": 7,
+        "oito": 8,
+        "nove": 9,
+        "dez": 10,
+    }
+
+    def _secao_da52(self) -> str:
+        readme = pathlib.Path("README.md").read_text(encoding="utf-8")
+        inicio = readme.index("### 36.")
+        fim = readme.index("\n### ", inicio + 1)
+        return readme[inicio:fim]
+
+    def test_tabela_da52_lista_exatamente_o_enum(self):
+        esperado = {s.value for s in ObservationStatus}
+        # primeira coluna das linhas da tabela de estados
+        linhas = [
+            linha
+            for linha in self._secao_da52().splitlines()
+            if linha.startswith("| `") and linha.count("|") >= 3
+        ]
+        documentado = {linha.split("`")[1] for linha in linhas}
+        assert documentado == esperado, (
+            f"tabela da DA-52 ({sorted(documentado)}) != enum ({sorted(esperado)})"
+        )
+
+    def test_contagem_no_texto_bate_com_o_enum(self):
+        m = re.search(r"\*\*A solu..o\.\*\* (\w+) estados", self._secao_da52())
+        assert m, "o texto da solucao precisa declarar a contagem de estados"
+        declarado = self._NUMEROS.get(m.group(1).lower())
+        assert declarado == len(ObservationStatus), (
+            f"README diz '{m.group(1)} estados', enum tem {len(ObservationStatus)}"
+        )
+
+    def test_invariante_do_claude_md_bate_com_o_enum(self):
+        claude = pathlib.Path("CLAUDE.md").read_text(encoding="utf-8")
+        m = re.search(r"a DA-52 tem \*{0,2}(\w+)\*{0,2} estados", claude)
+        assert m, "o invariante 15 do CLAUDE.md precisa declarar a contagem"
+        declarado = self._NUMEROS.get(m.group(1).lower()) or int(m.group(1))
+        assert declarado == len(ObservationStatus), (
+            f"CLAUDE.md diz '{m.group(1)} estados', enum tem {len(ObservationStatus)}"
+        )

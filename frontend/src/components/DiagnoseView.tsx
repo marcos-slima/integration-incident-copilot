@@ -6,9 +6,10 @@
 // - useState<T | null>: estado que pode ser null
 // - FileReader API com TypeScript
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { callDiagnose, ApiError, getApiKey, setApiKey } from '../api/diagnose';
+import { callDiagnose, ApiError } from '../api/diagnose';
+import { getSession, login, logout, type SessionState } from '../api/auth';
 import type {
   DiagnosisResponse,
   HistoryItem,
@@ -70,11 +71,41 @@ export function DiagnoseView({ onResult }: DiagnoseViewProps) {
   const [payload, setPayload] = useState('');
   const [showAdv, setShowAdv] = useState(false);
 
-  // API key (DA-18): lida do sessionStorage no mount — quem preenche é o
-  // usuário em runtime, nunca o código-fonte (frontend/src/api/diagnose.ts).
-  // Sem este campo o usuário não tem como autenticar: o backend responde
-  // 401 para TODO diagnóstico e a UI não oferece onde digitar a chave.
-  const [apiKey, setApiKeyState] = useState(() => getApiKey());
+  // Login de sessão (DA-54): usuário+senha em /auth/login → cookie HttpOnly
+  // que o browser envia sozinho. O campo de API Key saiu da camada do
+  // usuário — X-API-Key é credencial de máquina (curl/MCP/A2A).
+  const [session, setSession] = useState<SessionState>({ authenticated: false });
+  const [loginUser, setLoginUser] = useState('');
+  const [loginPass, setLoginPass] = useState('');
+  const [loginMsg, setLoginMsg] = useState('');
+
+  useEffect(() => {
+    getSession()
+      .then(setSession)
+      .catch(() => {}); // sessão inacessível = não autenticado, formulário aparece
+  }, []);
+
+  async function doLogin() {
+    if (!loginUser.trim() || !loginPass) {
+      setLoginMsg('Preencha usuário e senha.');
+      return;
+    }
+    setLoginMsg('');
+    try {
+      const s = await login(loginUser.trim(), loginPass);
+      setSession(s);
+      setLoginPass('');
+      setError('');
+    } catch (e) {
+      if (e instanceof ApiError) setLoginMsg(`Erro ${e.status}: ${e.message}`);
+      else setLoginMsg('Falha na comunicação com o servidor.');
+    }
+  }
+
+  async function doLogout() {
+    await logout().catch(() => {});
+    setSession({ authenticated: false });
+  }
 
   // Estado do upload
   const [uploadFile, setUploadFile]     = useState<UploadedFile | null>(null);
@@ -115,9 +146,8 @@ export function DiagnoseView({ onResult }: DiagnoseViewProps) {
       if (e instanceof ApiError) {
         if (e.status === 401) {
           setError(
-            'X-API-Key inválida ou ausente (401). Preencha o campo "API Key" ' +
-              'acima com o valor de API_KEY do servidor — todo /diagnose ' +
-              'exige a chave (DA-18).',
+            'Sem autenticação (401). Faça login no formulário acima — ' +
+              'ou, se for uma integração, envie o header X-API-Key.',
           );
         } else {
           // Erro HTTP do backend (422, 429, 500)
@@ -184,22 +214,64 @@ export function DiagnoseView({ onResult }: DiagnoseViewProps) {
       </p>
 
       <div className="form-card">
-        {/* Autenticação (DA-18) */}
+        {/* Autenticação (DA-54): login de sessão — o cookie HttpOnly flui
+            sozinho; o usuário nunca manipula a X-API-Key da camada de máquina */}
         <div className="field-row">
-          <label className="field-label">API Key (X-API-Key) *</label>
-          <input
-            className="field-input mono-input"
-            type="password"
-            autoComplete="off"
-            placeholder="A chave fixada em API_KEY no .env do servidor"
-            value={apiKey}
-            onChange={(e) => setApiKeyState(e.target.value)}
-            onBlur={() => setApiKey(apiKey.trim())}
-          />
-          <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>
-            O backend exige X-API-Key em todo /diagnose. A chave fica no
-            sessionStorage desta aba — nunca no código-fonte.
-          </div>
+          {session.authenticated ? (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                width: '100%',
+              }}
+            >
+              <span style={{ fontSize: 12, color: '#475569' }}>
+                Autenticado como <strong>{session.username}</strong> — sessão
+                válida por {session.ttl_hours ?? 8}h
+              </span>
+              <button className="upload-target-btn" onClick={doLogout}>
+                Sair
+              </button>
+            </div>
+          ) : (
+            <>
+              <label className="field-label">Login *</label>
+              <div className="grid-2" style={{ display: 'grid', gap: 10 }}>
+                <input
+                  className="field-input mono-input"
+                  type="text"
+                  autoComplete="username"
+                  placeholder="usuário"
+                  value={loginUser}
+                  onChange={(e) => setLoginUser(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && doLogin()}
+                />
+                <input
+                  className="field-input mono-input"
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="senha"
+                  value={loginPass}
+                  onChange={(e) => setLoginPass(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && doLogin()}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: 10, marginTop: 8, alignItems: 'center' }}>
+                <button className="upload-target-btn active" onClick={doLogin}>
+                  Entrar
+                </button>
+                {loginMsg && (
+                  <span style={{ fontSize: 11, color: '#B91C1C' }}>{loginMsg}</span>
+                )}
+              </div>
+              <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>
+                O login cria um cookie de sessão HttpOnly, assinado e com prazo
+                — o navegador o envia sozinho; você não digita chave nenhuma.
+              </div>
+            </>
+          )}
         </div>
 
         {/* Descrição */}

@@ -20,6 +20,8 @@ from app.admin.routes import router as admin_router  # DA-46/47/48
 from app.admin.security import ensure_admin_key_configured
 from app.admin.ui import ui_router as admin_ui_router
 from app.agent.graph import run_diagnosis
+from app.auth import ensure_session_secret_configured, verify_session_cookie
+from app.auth import router as auth_router
 from app.config import settings
 from app.connectors import connector_status
 from app.events import idempotency
@@ -62,6 +64,35 @@ def verify_api_key(api_key: str | None = Security(api_key_header)) -> None:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="X-API-Key invalida ou ausente",
         )
+
+
+def verify_session_or_api_key(
+    request: Request, api_key: str | None = Security(api_key_header)
+) -> None:
+    """DA-54 sobre DA-18, sem quebra: duas vias em /diagnose.
+
+    - maquina: header X-API-Key, exatamente como antes (le o settings
+      DESTE modulo — o que os testes monkeypatcham, mesmo padrao de
+      verify_api_key);
+    - humano: cookie de sessao HttpOnly (DA-54), validado em
+      app/auth.py::verify_session_cookie.
+
+    Aceitar o cookie NAO enfraquece o header: os dois exigem um segredo
+    que o servidor emitiu/valida. MCP/A2A/Event Mesh/admin nao usam esta
+    dependency — chaves dedicadas (DA-19/27/46)."""
+    configured_key = settings.api_key
+    # MESMA semantica de verify_api_key (DA-18), inclusive o vazio==vazio
+    # confiar no startup: _ensure_api_keys_configured garante que o app
+    # real nunca sobe com settings.api_key vazio — o guard e do lifespan,
+    # nao da dependency (13 testes de test_api.py documentam isso).
+    if secrets.compare_digest(api_key or "", configured_key):
+        return
+    if verify_session_cookie(request) is not None:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="X-API-Key invalida/ausente e sem sessao valida (faca login em /auth/login)",
+    )
 
 
 def verify_event_mesh_api_key(api_key: str | None = Security(event_mesh_api_key_header)) -> None:
@@ -180,6 +211,9 @@ def _ensure_graph_rag_password_configured() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _ensure_api_keys_configured()
+    # DA-54: segredo HMAC dos cookies de sessao — vazio gera efemero
+    # com WARNING, mesmo padrao DA-18 (nunca cookie sem assinatura)
+    ensure_session_secret_configured()
     _ensure_graph_rag_password_configured()
     # P1.1: avisa quando idempotencia/A2A TaskStore ficam so em memoria
     idempotency._warn_if_redis_missing_with_replicas()
@@ -409,7 +443,7 @@ def ready() -> Response:
 @app.post(
     "/diagnose",
     response_model=DiagnosisResponse,
-    dependencies=[Depends(verify_api_key)],
+    dependencies=[Depends(verify_session_or_api_key)],
 )
 @limiter.limit("10/minute")
 def diagnose(request: Request, body: IncidentRequest) -> DiagnosisResponse:
@@ -424,7 +458,7 @@ def diagnose(request: Request, body: IncidentRequest) -> DiagnosisResponse:
 @app.post(
     "/diagnose/async",
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(verify_api_key)],
+    dependencies=[Depends(verify_session_or_api_key)],
 )
 @limiter.limit("10/minute")
 def diagnose_async(request: Request, body: IncidentRequest) -> dict[str, str]:
@@ -456,7 +490,7 @@ def diagnose_async(request: Request, body: IncidentRequest) -> dict[str, str]:
 
 @app.get(
     "/diagnose/async/{job_id}",
-    dependencies=[Depends(verify_api_key)],
+    dependencies=[Depends(verify_session_or_api_key)],
 )
 def diagnose_async_status(job_id: str) -> dict[str, object]:
     """Consulta (polling) o status/resultado de um diagnostico
@@ -528,7 +562,7 @@ def incident_event_webhook(
 
 @app.post(
     "/incidents/{incident_id}/verify",
-    dependencies=[Depends(verify_api_key)],
+    dependencies=[Depends(verify_session_or_api_key)],
 )
 @limiter.limit("10/minute")
 def verify_incident_endpoint(
@@ -628,7 +662,7 @@ def verify_incident_endpoint(
     }
 
 
-@app.get("/llm/policy", dependencies=[Depends(verify_api_key)])
+@app.get("/llm/policy", dependencies=[Depends(verify_session_or_api_key)])
 def llm_policy() -> dict:
     """DA-43: policy de soberanca de dados do AI Gateway, em vigor agora.
 
@@ -649,6 +683,7 @@ def agent_card() -> dict:
     return get_agent_card()
 
 
+app.include_router(auth_router)  # DA-54: /auth/login, /auth/logout, /auth/session
 app.include_router(a2a_router)
 app.include_router(admin_router)  # DA-46/47/48: /admin/api/* (ADMIN_API_KEY)
 app.include_router(admin_ui_router)  # /admin pages (shell Jinja2, dados via API)

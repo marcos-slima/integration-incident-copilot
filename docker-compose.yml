@@ -27,6 +27,13 @@ x-common-env: &common-env
   # Vazio = o app gera uma chave aleatoria no startup (DA-18).
   API_KEY: ${API_KEY:-}
   A2A_API_KEY: ${A2A_API_KEY:-}
+  # DA-54: login de sessao da UI web. WEB_UI_USERS vazio = login
+  # FECHADO (fail-closed); SESSION_SECRET vazio = sessoes efemeras por
+  # restart (WARNING no log). Credenciais de MAQUINA ficam acima; o
+  # cookie de sessao NAO vale em /mcp, /a2a, /events ou /admin.
+  WEB_UI_USERS: ${WEB_UI_USERS:-}
+  SESSION_SECRET: ${SESSION_SECRET:-}
+  SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-8}
 
 services:
   api:

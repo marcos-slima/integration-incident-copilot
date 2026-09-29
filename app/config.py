@@ -293,6 +293,21 @@ class Settings(BaseSettings):
     # de warning - adequado pra dev local, nao pra um deploy que um
     # operador espera acessar de forma estavel/documentada.
     require_auth: bool = False
+
+    # DA-54 — login de sessao para a UI web (POST /auth/login).
+    # Formato de web_ui_users (uma ou mais entradas separadas por
+    # virgula): "usuario:pbkdf2_sha256$iteracoes$salt_hex$hash_hex".
+    # Vazio (default) = login FECHADO: /auth/login sempre responde 401
+    # e a UI nao consegue autenticar por sessao — fail-closed, no
+    # mesmo espirito de DA-18 (nunca "modo aberto" silencioso).
+    web_ui_users: str = ""
+    # Segredo HMAC dos cookies de sessao. Vazio = gerado no startup
+    # com WARNING no log (padrao DA-18): valido ate o restart seguinte.
+    session_secret: str = ""
+    session_ttl_hours: int = 8
+    # True em producao atras de TLS (Kyma, DA-24): marca o cookie como
+    # Secure. Local em HTTP puro deixa False, senao o browser descarta.
+    session_cookie_secure: bool = False
     apim_oauth_token_url: str = ""
     apim_client_id: str = ""
     apim_client_secret: str = ""

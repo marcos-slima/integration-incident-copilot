@@ -63,7 +63,7 @@ conectores).
 - **API**: FastAPI + Pydantic
 - **A2A**: Agent Card + servidor JSON-RPC 2.0 (`app/a2a/`), em paralelo
   ao REST, mesma orquestração por trás — ver
-  [proposta original](docs/proposals/a2a-interoperability-layer.md)
+  [proposta original](docs/a2a-interoperability-layer.md)
 - **Orquestração**: LangGraph
 - **LLM Gateway**: plugável — Ollama (default, local-first), OpenAI ou
   Azure OpenAI (`app/llm/factory.py`), sem trocar código do grafo
@@ -482,7 +482,7 @@ ressalva já aplicada ao `RFCConnector._fetch_real`.
 ### 14. Camada A2A (Agent2Agent) implementada, com a ressalva de GA preservada (DA-14)
 
 **Contexto:** a proposta em
-[docs/proposals/a2a-interoperability-layer.md](docs/proposals/a2a-interoperability-layer.md)
+[docs/a2a-interoperability-layer.md](docs/a2a-interoperability-layer.md)
 estava arquivada desde antes da Fase 8, com dois pré-requisitos
 explícitos para sair do papel: conectores SAP fechados e suíte de
 testes automatizada madura. As Fases 7/8 (e a seção 12 acima)

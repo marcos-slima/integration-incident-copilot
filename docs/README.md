@@ -57,7 +57,7 @@ atual está no código e no `README.md` da raiz.
 | [`TUTORIAL_FASE9_MULTIVENDOR_GRAPHRAG_A2A.md`](TUTORIAL_FASE9_MULTIVENDOR_GRAPHRAG_A2A.md) | Complementar ao anterior: GraphRAG e A2A (Fase 9) |
 | [`TCO_SAP_AI_CORE_VS_SELF_HOSTED.md`](TCO_SAP_AI_CORE_VS_SELF_HOSTED.md) | SAP AI Core vs. IA local sob medida — comparação de custo para conversa com cliente |
 | [`ferramentas-sustentacao-ecossistema.md`](ferramentas-sustentacao-ecossistema.md) | Ferramentas para sustentação e evolução do ecossistema |
-| [`proposals/a2a-interoperability-layer.md`](proposals/a2a-interoperability-layer.md) | Proposta da camada A2A — **já implementada** em `app/a2a/`; mantida como registro do desenho |
+| [`a2a-interoperability-layer.md`](a2a-interoperability-layer.md) | Proposta da camada A2A — **já implementada** em `app/a2a/`; mantida como registro do desenho |
 
 ---
 

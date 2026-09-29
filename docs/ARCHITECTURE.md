@@ -340,7 +340,7 @@ so sem tracing.
 ## A2A (Agent2Agent) - interoperabilidade externa
 
 `app/a2a/` implementa a proposta arquivada em
-[docs/proposals/a2a-interoperability-layer.md](proposals/a2a-interoperability-layer.md)
+[docs/a2a-interoperability-layer.md](a2a-interoperability-layer.md)
 (ler esse documento para o contexto de negocio completo e a ressalva
 sobre a GA inbound do Joule, prevista para Q4/2026 e ainda nao
 disponivel). Em resumo tecnico:

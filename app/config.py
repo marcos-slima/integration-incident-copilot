@@ -354,7 +354,7 @@ class Settings(BaseSettings):
     servicenow_password: str = ""
 
     # A2A (Agent2Agent) - camada de interoperabilidade externa,
-    # ver app/a2a/ e docs/proposals/a2a-interoperability-layer.md.
+    # ver app/a2a/ e docs/a2a-interoperability-layer.md.
     # a2a_api_key vazio aqui (default) NAO significa autenticacao
     # desabilitada (DA-18): app.main._ensure_api_keys_configured gera
     # uma chave aleatoria no startup se esta continuar vazia. Vazio so

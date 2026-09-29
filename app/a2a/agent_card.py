@@ -1,6 +1,6 @@
 """Agent Card do SAP Integration Copilot - protocolo A2A (Agent2Agent).
 
-Ver docs/proposals/a2a-interoperability-layer.md para o contexto de
+Ver docs/a2a-interoperability-layer.md para o contexto de
 negocio completo (por que A2A, e a ressalva importante sobre a GA
 inbound do Joule ainda nao ter chegado - Q4/2026 previsto).
 

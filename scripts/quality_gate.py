@@ -22,6 +22,7 @@ if str(REPO_ROOT) not in sys.path:
 from app.evaluation.gates import (
     DEFAULT_THRESHOLDS,
     GATES,
+    PROMPT_BASELINE,
     PROMPTFOO_BASELINE,
     Thresholds,
     compare_promptfoo,
@@ -55,6 +56,42 @@ def _write_baseline(results_path: Path, destination: Path) -> int:
     return 0
 
 
+def _write_prompt_baseline(root: Path) -> int:
+    """Grava o digest corrente em `data/eval/prompt_baseline.json` (DA-53).
+
+    Deliberadamente sem argumentos: nao existe "gravar digest de outra
+    revisao" e nao existe digest的选择. O arquivo e' a declaracao do que
+    roda AGORA, e quem decide se isso esta medido e' a medicao -- nao este
+    comando. Por isso ele nao aceita um digest digitado a mao: um digest
+    escrito a mao e' exatamente o artefato que o gate existe para nao
+    confiar.
+    """
+    from app.agent.prompts import PROMPT_VERSION, compute_digest
+
+    target = root / PROMPT_BASELINE
+    existing: dict[str, object] = {}
+    if target.exists():
+        try:
+            loaded = json.loads(target.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                existing = loaded
+        except json.JSONDecodeError:
+            existing = {}
+    existing.update(
+        {
+            "prompt_name": "diagnosis",
+            "prompt_version": PROMPT_VERSION,
+            "prompt_digest": compute_digest(),
+        }
+    )
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        json.dumps(existing, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    print(f"[OK] {PROMPT_BASELINE} gravado com digest {existing['prompt_digest'][:16]}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Quality gate deterministico (DA-51)")
     parser.add_argument("--root", type=Path, default=REPO_ROOT, help="raiz do repositorio")
@@ -76,9 +113,20 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         help="grava o baseline de LLM a partir de um resultado do promptfoo",
     )
+    parser.add_argument(
+        "--write-prompt-baseline",
+        action="store_true",
+        help=(
+            "DA-53: grava data/eval/prompt_baseline.json com o digest ATUAL do "
+            "prompt de producao. So rode depois de medir com o promptfoo: "
+            "o arquivo e' a declaracao de 'este texto foi o medido'."
+        ),
+    )
     args = parser.parse_args(argv)
 
     root: Path = args.root.resolve()
+    if args.write_prompt_baseline:
+        return _write_prompt_baseline(root)
     if args.write_promptfoo_baseline:
         return _write_baseline(args.write_promptfoo_baseline, root / PROMPTFOO_BASELINE)
 

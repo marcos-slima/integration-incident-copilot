@@ -34,6 +34,7 @@ from langfuse import Langfuse, get_client, observe
 from langfuse.langchain import CallbackHandler
 from langgraph.prebuilt import create_react_agent
 
+from app.agent import prompts
 from app.agent.rules import match_known_error
 from app.agent.state import CopilotState, DiagnosisModel
 from app.connectors import get_connector
@@ -525,31 +526,20 @@ Resultado de busca web (SAP Community / GitHub SAP) como contexto adicional:
 
     safe_description = sanitize_untrusted_input(state["description"], "description")
 
-    return f"""{persona}
-
-Incidente reportado:
-{safe_description}
-{extras}{connector_block}
-Contexto recuperado da base de conhecimento de incidentes:
-{context_block}
-{others_note}{graph_block}{web_block}
-Regra importante: baseie sua resposta EXCLUSIVAMENTE no documento de
-contexto acima e, se disponivel, nos dados reais do conector (que tem
-prioridade sobre a descricao textual do usuario, pois vem diretamente
-do sistema). Nao combine informacoes de outros documentos. Se o
-documento acima nao corresponder ao sintoma descrito, diga isso e use
-confidence baixa em vez de inventar uma causa raiz combinando temas
-diferentes.
-
-No campo matched_source, copie EXATAMENTE o nome do arquivo indicado
-apos "fonte=" no cabecalho do documento mais relevante mostrado acima
-(exemplo: se o cabecalho diz "fonte=cpi_http_401.md", o valor de
-matched_source deve ser exatamente "cpi_http_401.md", sem alteracoes).
-Se nenhum documento corresponder ao incidente, use null nesse campo.
-
-"confidence" deve ser um numero entre 0.0 e 1.0. Se houver dados reais
-do conector confirmando o diagnostico, a confidence pode ser mais alta
-(o dado do sistema e mais confiavel que so a descricao textual)."""
+    # DA-53: o template e' dado (app/agent/prompts.py), nao f-string local.
+    # `safe_description` ja vem sanitizado acima; `render` exige todos os
+    # slots e falha alto, para que um bloco de contexto nunca desapareca
+    # do prompt em silencio.
+    return prompts.render(
+        persona=persona,
+        description=safe_description,
+        extras=extras,
+        connector_block=connector_block,
+        context_block=context_block,
+        others_note=others_note,
+        graph_block=graph_block,
+        web_block=web_block,
+    )
 
 
 # Margem de tolerancia entre confidence auto-relatada pelo LLM e a
@@ -882,29 +872,12 @@ def _make_web_search_tool(state):
 # com personas diferentes. O supervisor (app/agent/supervisor.py) decide
 # QUAL dos dois roda, via roteamento condicional em app/agent/graph.py -
 # nunca os dois no mesmo incidente (custo de LLM nao duplica).
-_SAP_SPECIALIST_PERSONA = (
-    "Voce e um especialista em integracao SAP (OData, IDoc, RFC, CPI/Integration Suite, BTP)."
-)
-_ENTERPRISE_SPECIALIST_PERSONA = (
-    "Voce e um especialista em integracoes empresariais multi-fornecedor "
-    "(ServiceNow, Salesforce, Workday, Ariba e APIs corporativas em geral) - "
-    "conhece padroes tipicos de falha em REST/OAuth2, webhooks, rate limits "
-    "e sincronizacao de dados entre sistemas terceiros. Quando o fornecedor "
-    "especifico do incidente nao estiver identificado, aplique o mesmo "
-    "raciocinio generalista de troubleshooting de integracao de sistemas."
-)
-# DA-22: persona propria para incidentes sem dominio identificado (agent_domain="generic").
-# Usa linguagem agnosta de fornecedor — foco em protocolo, transporte e middleware —
-# sem assumir vocabulario SAP nem SaaS especifico.
-_GENERIC_INTEGRATION_PERSONA = (
-    "Voce e um especialista em integracao de sistemas e middleware, com dominio "
-    "amplo em padroes de comunicacao (REST, SOAP, gRPC, mensageria), protocolos "
-    "de autenticacao (OAuth2, SAML, mTLS), formatos de dados (JSON, XML, CSV) "
-    "e ferramentas de integracao (ESB, iPaaS, API gateways). Nao assuma "
-    "nenhum fornecedor especifico — analise o incidente com base nos sinais "
-    "tecnicos observados (erros HTTP, timeouts, falhas de autenticacao, "
-    "problemas de mapeamento) e recomende acoes pragmaticas de troubleshooting."
-)
+# DA-53: personas e template do prompt vivem em app/agent/prompts.py, com
+# versao e digest. Aqui ficam so os aliases, porque varios testes e o
+# proprio grafo referenciam os nomes com prefixo `_`.
+_SAP_SPECIALIST_PERSONA = prompts.SAP_SPECIALIST_PERSONA
+_ENTERPRISE_SPECIALIST_PERSONA = prompts.ENTERPRISE_SPECIALIST_PERSONA
+_GENERIC_INTEGRATION_PERSONA = prompts.GENERIC_INTEGRATION_PERSONA
 
 
 def _run_diagnosis_agent(state: CopilotState, persona: str) -> dict:
@@ -948,16 +921,7 @@ def _run_diagnosis_agent(state: CopilotState, persona: str) -> dict:
     web_tool = _make_web_search_tool(state)
     react_tools = [web_tool] if _web_search_allowed(state) else []
     # Instrucao adicional para forcar JSON na resposta final do agente ReAct
-    json_instruction = """
-
-Apos sua analise (usando o tool de busca se necessario), retorne OBRIGATORIAMENTE
-um JSON valido com exatamente esta estrutura (sem texto adicional antes ou depois):
-{
-  "matched_source": "nome_do_arquivo.md ou null",
-  "probable_root_cause": "causa raiz em uma ou duas frases",
-  "confidence": 0.0,
-  "next_steps": ["passo 1", "passo 2"]
-}"""
+    json_instruction = prompts.JSON_INSTRUCTION
 
     def _build_and_invoke(llm):
         # Avaliacao externa (curto prazo, item 5): "structured output de
@@ -1069,6 +1033,13 @@ um JSON valido com exatamente esta estrutura (sem texto adicional antes ou depoi
 
     diagnosis = _apply_confidence_guardrails(diagnosis, state)
     diagnosis["llm_provider_used"] = llm_provider_used
+    # DA-53: proveniencia do prompt, gravada AQUI e nao no `run_diagnosis`.
+    # O return antecipado do rule engine (acima) nao passa por esta linha, e
+    # isso e' o correto: um diagnostico que saiu sem chamar o LLM nao foi
+    # produzido por prompt nenhum. Registrar o digest nesse caminho seria
+    # afirmar uma origem falsa -- e foi exatamente por isso que a coluna
+    # `incidents.prompt_digest` e' anulavel em vez de ter default.
+    diagnosis.update(prompts.get_spec().provenance())
     return diagnosis
 
 
@@ -1235,7 +1206,7 @@ def report_node(state: CopilotState) -> CopilotState:
 - `diagnosis_confidence` (pipeline): {diag_conf:.0%} — use este para automacao
 - `model_confidence` (LLM pos-guardrail): {model_conf:.0%}
 - `evidence_strength` (retrieval/conector): {evidence_str:.0%}
-- Provider: {diagnosis.get("llm_provider_used", "N/A")} | Agente: {state.get("agent_domain", "N/A")}
+- Provider: {diagnosis.get("llm_provider_used", "N/A")} | Agente: {state.get("agent_domain", "N/A")} | Modelo: {state.get("llm_model", "N/A")} | Prompt: {diagnosis.get("prompt_version", "nenhum")}
 
 **Documento usado como base:** {matched}
 

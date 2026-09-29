@@ -17,6 +17,7 @@ REQUIRED_CASE_FIELDS = ("query", "expected_sources", "difficulty")
 RAG_DATASET = Path("data/eval/rag_eval_dataset.json")
 RERANKER_BENCHMARK = Path("data/eval/reranker_benchmark_results.json")
 PROMPTFOO_BASELINE = Path("data/eval/promptfoo_baseline.json")
+PROMPT_BASELINE = Path("data/eval/prompt_baseline.json")
 CORPUS_DIR = Path("data/sample_docs")
 RERANKER_SOURCE = Path("app/rag/retriever.py")
 ARCHITECTURE_DOC = Path("docs/ARCHITECTURE.md")
@@ -221,6 +222,64 @@ def check_reranker_invariant(
     return findings or _ok(check)
 
 
+def check_prompt_digest(root: Path = REPO_ROOT) -> list[Finding]:
+    """DA-53: o prompt em producao tem que ser o prompt MEDIDO.
+
+    Moldado no `reranker_invariant` (DA-29), que faz a mesma coisa para o
+    cross-encoder: o winner do benchmark tem que ser o que roda. Aqui o
+    papel do winner e' o digest do prompt em producao e o do benchmark e' o
+    digest gravado em `data/eval/prompt_baseline.json`, no momento em que
+    o promptfoo mediu 10/10.
+
+    **Por que isso e' verificavel quando o promptfoo roda o pipeline real.**
+    `scripts/promptfoo_provider.py` chama `run_diagnosis`, entao a medicao
+    NAO mede uma copia do prompt: mede exatamente o texto de
+    `app/agent/prompts.py`. Divergir os dois digests significa que o texto
+    mudou depois da medicao -- e o 10/10 passou a descrever outra coisa.
+
+    O digest cobre tambem as `description=` do `DiagnosisModel`, que o
+    LangChain injeta no schema de tool-calling: editar um Field sem tocar
+    no modulo de prompt tambem reprova este gate, que e' exatamente o
+    ponto (o bug ja aconteceu uma vez, ver state.py:18-24).
+    """
+    check = "prompt_digest_measured"
+    try:
+        from app.agent.prompts import compute_digest
+
+        production = compute_digest()
+    except Exception as exc:  # noqa: BLE001 - o gate nao pode quebrar o build
+        return _fail(check, f"nao foi possivel calcular o digest de producao: {exc}")
+
+    try:
+        baseline = _load_json(root / PROMPT_BASELINE, check)
+    except ValueError as exc:
+        # Ausente = ainda nao medido. Nao reprova: assim como o
+        # `llm_baseline`, o primeiro registro e' trabalho humano.
+        return _warn(check, f"{PROMPT_BASELINE} ausente ({exc}); grave o digest medido")
+
+    if not isinstance(baseline, dict):
+        return _fail(check, f"{PROMPT_BASELINE} deveria ser um objeto JSON")
+
+    measured = baseline.get("prompt_digest")
+    if not isinstance(measured, str) or len(measured) != 64:
+        return _fail(check, f"{PROMPT_BASELINE} sem 'prompt_digest' de 64 chars (sha256)")
+
+    if production != measured:
+        return _fail(
+            check,
+            f"prompt em producao diverge do medido: producao={production[:16]} "
+            f"medido={measured[:16]} (v{baseline.get('prompt_version', '?')}). "
+            "O prompt foi alterado depois da medicao - reexecute o promptfoo e "
+            "regrave com --write-prompt-baseline, ou reverta o texto.",
+        )
+
+    # Nao ha check separado de `prompt_version`: `PROMPT_VERSION` faz parte
+    # do payload canonico do digest, entao divergir a versao ja divergiu o
+    # digest e o check acima ja reprovou. Um segundo check aqui seria um
+    # branch que nunca pode disparar.
+    return _ok(check)
+
+
 def check_promptfoo_configs(root: Path = REPO_ROOT) -> list[Finding]:
     check = "promptfoo_configs"
     configs = sorted(root.glob("promptfooconfig*.yaml"))
@@ -358,6 +417,7 @@ GATES = {
     "llm_baseline": check_llm_baseline,
     "candidate_das_fresh": check_candidate_das,
     "preflight_delegates": check_preflight_delegates,
+    "prompt_digest_measured": check_prompt_digest,
 }
 
 _THRESHOLD_AWARE = frozenset({"rag_dataset_schema", "reranker_invariant"})

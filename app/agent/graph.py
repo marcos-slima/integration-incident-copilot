@@ -230,6 +230,17 @@ def run_diagnosis(
         evidence_strength=diagnosis.get("evidence_strength"),
         llm_provider_used=diagnosis.get("llm_provider_used"),
         agent_domain=final_state.get("agent_domain"),
+        # DA-53: proveniencia do prompt. Sai do `diagnosis` (e nao do
+        # `final_state`) porque quem grava e' `_run_diagnosis_agent`, e so'
+        # depois de passar pelo rule engine. O return antecipado do rule
+        # engine nao escreve estas chaves -> None, que e' a resposta correta
+        # ("nenhum prompt produziu isto") em vez de um default inventado.
+        prompt_version=diagnosis.get("prompt_version"),
+        prompt_digest=diagnosis.get("prompt_digest"),
+        # O modelo e' lido do state e nao do `diagnosis`: `llm_model` e'
+        # definido no state inicial e nao muda durante o grafo, e fica
+        # gravado mesmo quando o rule engine encerra.
+        llm_model=final_state.get("llm_model"),
         # DA-25: mesma montagem deterministica usada no report_markdown
         # (ver report_node) - chamada de novo aqui sobre final_state
         # (nao guardada no state) porque e uma funcao pura e barata, e

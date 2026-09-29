@@ -16,7 +16,7 @@ until curl -s -o /dev/null localhost:8765/health; do sleep 1; done
 ## Flows worth driving
 - `GET /health` — liveness only: always 200, no Qdrant/Ollama probes (returns connectors/infra from .env).
 - `GET /ready` — readiness: probes Qdrant/Ollama; 503 when a configured service is degraded. Simulate with `OLLAMA_HOST=http://127.0.0.1:1`.
-- `POST /diagnose` (header `X-API-Key`) — full LLM run with `qwen2.5-coder:32b` takes ~80s.
+- `POST /diagnose` (header `X-API-Key`) — full LLM run with `qwen3-coder-next:latest` takes ~80s.
   `interface_type` must be one of odata/rfc/servicenow/salesforce/workday/ariba/cap/apim (not `idoc`).
 - `POST /events/incident` (header `X-Event-Mesh-Api-Key`), body `{"type":"com.sap.integration.incident.detected.v1","id":"...","data":{...}}`.
 - Circuit breaker: isolated Redis (`docker run -d --rm -p 127.0.0.1:6390:6379 redis:7-alpine`), then

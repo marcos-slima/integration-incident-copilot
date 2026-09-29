@@ -34,7 +34,7 @@ dos erros e lições. Reflete o estado real do código na data indicada.
 - `TUTORIAL_ARQUITETURA_DEBUG.md` cita breakpoints em `graph.py` para funções que hoje estão em `app/agent/nodes.py`, e descreve um grafo de 4 nodes; o código atual tem `web_search` e, opcionalmente, `graph_enrich`/`graph_write`.
 - `ARCHITECTURE.md` (diagrama) não mostra o node `web_search`, que existe em `graph.py`.
 - `diagnose_node` usa `create_react_agent` com parsing manual de JSON; o tutorial e o README descrevem `with_structured_output`. O código é a fonte de verdade.
-- `README.md` (Decisões 4 e 8) cita `qwen2.5-coder:32b` como modelo de produção; `app/config.py` define `qwen3-coder-next:latest`.
+- `README.md` (Decisões 4 e 8) cita `qwen2.5-coder:32b` como modelo de produção; `app/config.py` define `qwen3-coder-next:latest`. [resolvido: docs alinhados ao código; as Decisões 4 e 8 foram mantidas como registro histórico, marcadas como superadas pela Fase 12]
 - `ailab.sh` não existe em `~/ai-stack` nem no PATH.
 - Working tree com alterações não commitadas de outra sessão: `app/models.py` (adiciona `cap`/`apim` ao `Literal`), `app/rag/ingest.py` (lock de extração de PDF), `frontend/src/App.tsx`.
 

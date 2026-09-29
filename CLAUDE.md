@@ -115,10 +115,11 @@ app/
   llm/
     factory.py      # DA-20: Hybrid Inference (Ollama → cloud fallback)
     gateway.py      # DA-26: AI Gateway (policy + circuit breaker + budget)
-  admin/            # DA-46/47/48/49: registro de modelos + credenciais Fernet
-                    # + metering real + catálogo de sistemas integrados
-                    # (Fase B, DA-49); UI Jinja2 em /admin + API /admin/api/*
-                    # (models, repository, routes, ui, crypto, metering, runtime)
+  admin/            # DA-46/47/48/49/50: registro de modelos + credenciais
+                    # Fernet + metering real + catálogo de sistemas
+                    # integrados (DA-49) + correlação de incidentes
+                    # (correlation.py, DA-50); UI Jinja2 em /admin
+                    # (models, usage, systems, incidents) + API /admin/api/*
   mcp/
     server.py       # DA-19: servidor MCP
     policy.py       # DA-27: Capability Registry (FAIL-CLOSED por default)
@@ -132,11 +133,12 @@ app/
   config.py         # Pydantic Settings — fonte única de verdade para config
   main.py           # FastAPI app, rotas, lifespan
 
-tests/              # 734 testes (719 unitários + 15 integração)
+tests/              # 772 testes (757 unitários + 15 integração)
 data/
   sample_docs/      # Base de conhecimento RAG (arquivos .md)
   eval/             # Dataset de avaliação RAG + resultados benchmark
-scripts/            # benchmark_rerankers.py, etc.
+scripts/            # benchmark_rerankers.py, generate_reports.py,
+                    # validate_dashboards.py (45 queries Grafana vs Postgres real)
 docs/               # ARCHITECTURE.md, GETTING_STARTED.md, TUTORIAL_ARQUITETURA_DEBUG.md
 .vscode/
   launch.json       # 13 configurações de debug prontas (graph, pytest, uvicorn)
@@ -179,6 +181,7 @@ docs/               # ARCHITECTURE.md, GETTING_STARTED.md, TUTORIAL_ARQUITETURA_
 | DA-47 | Credenciais cifradas em repouso com Fernet (master key no .env, nunca em runtime) | `app/admin/crypto.py` |
 | DA-48 | Metering de tokens REAIS (usage_metadata, não estimativa) persistido best-effort | `app/llm/gateway.py` + `app/admin/metering.py` |
 | DA-49 | Catálogo de sistemas integrados (`integration_systems`) na superfície admin, `connector_type` = Literal do pipeline | `app/admin/` (models, repository, routes, ui) + `alembic/004` |
+| DA-50 | Correlação `incidents` ↔ catálogo por `system_key` (exato, vindo de `IncidentRequest.connector_source_system`) com fallback por `connector_type` e ambiguidade fail-closed; verificação persistida no SQL; tela `/admin/incidents` + dashboard `iic-systems` | `app/admin/correlation.py`, `app/agent/graph.py`, `app/services/incident_recorder.py::record_verification`, `app/admin/routes.py`, `scripts/validate_dashboards.py` |
 
 **DAs candidatas (sem implementação ainda — aguardam Kyma):**
 - DA-31: SAP AI Agent Hub registration (MCP + A2A)
@@ -199,6 +202,9 @@ docs/               # ARCHITECTURE.md, GETTING_STARTED.md, TUTORIAL_ARQUITETURA_
 9. **Capacidade é por ORIGIN, não por rótulo** — `openai` apontando para Gemini e para api.openai.com não são o mesmo destino. Mesma razão de DA-43 (DA-45)
 10. `llm_send_seed=None` (default) = DA-2 ativa (seed=42). `None` NÃO pode ser lido como "não enviar" — destino desconhecido recebe seed; só origens registradas como incompatíveis não recebem
 11. Rota `require_loopback` e `require_loopback=False` são mutuamente exclusivos — `local_lab` apontando para a internet, e `enterprise_azure` apontando para loopback, falham no boot
+12. **Correlação incidente↔sistema é fail-closed** — `app/admin/correlation.py` só resolve por `connector_type` quando há UM único candidato; com 2+ devolve `ambiguous` com a lista. Nenhuma superfície (UI, API, dashboard) escolhe um sistema por conta própria (DA-50)
+13. `verified` ≠ `verified_at` — `POST /incidents/{id}/verify` grava `verified_at` sempre, mas `diagnosis_correct=None` fica NULL. Coagir para `True` infla a acurácia nos dashboards (DA-50)
+14. `evidence_strength` é FLOAT (migration 002) — nunca usar predicado textual (`IN ('high','critical')`) em query de dashboard/relatório. `scripts/validate_dashboards.py` roda as 45 queries contra o Postgres real antes de dar o dashboard como bom
 
 ---
 

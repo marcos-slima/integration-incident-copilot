@@ -1044,8 +1044,7 @@ de avaliação ficam fora de `-m "not integration"`, que cobre só a
 suíte de testes automatizada).
 
 Com isso, **todos os itens do backlog da segunda revisão arquitetural
-externa estão fechados** (P0/P1/P2 — ver `learnings.md` do projeto
-para o histórico completo item a item).
+externa estão fechados** (P0/P1/P2).
 
 **Atualização (avaliação externa, médio prazo item 6 — "Fila
 assíncrona"):** novo `POST /diagnose/async` enfileira o diagnóstico via

@@ -11,9 +11,10 @@ com persona/expertise apropriada ao dominio - ver
 `app/agent/nodes.py::sap_diagnosis_node` / `saas_diagnosis_node`.
 
 Classificacao e DETERMINISTICA (mapeamento de interface_type + poucas
-palavras-chave), nao uma chamada de LLM: mesmo principio ja registrado
-em `learnings.md` de que guardrails/decisoes estruturais pertencem a
-codigo, nao a autoavaliacao de um modelo - o roteamento e barato,
+palavras-chave), nao uma chamada de LLM: mesmo principio da DA-3 do
+README.md (guardrails em codigo, nao em prompt), de que decisoes
+estruturais pertencem a codigo e nao a autoavaliacao de um modelo -
+o roteamento e barato,
 explicavel e 100% testavel sem depender de LLM real.
 """
 

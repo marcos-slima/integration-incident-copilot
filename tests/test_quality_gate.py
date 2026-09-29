@@ -641,6 +641,42 @@ def test_docs_code_references_aceita_ponto_de_debug_valido(tmp_path: Path) -> No
     assert not [f for f in check_docs_code_references(root) if f.is_failure]
 
 
+def test_docs_code_references_acusa_md_fantasma(tmp_path: Path) -> None:
+    """O caso real: dez citacoes, em tres docs e em docstrings de codigo,
+    apontavam para um `learnings.md` que NUNCA existiu no historico."""
+    root = _docs_root(tmp_path)
+    (root / "docs/T.md").write_text("ver `learnings.md` do projeto\n", encoding="utf-8")
+
+    falha = next(f for f in check_docs_code_references(root) if f.is_failure)
+    assert "learnings.md" in falha.message
+    assert "nao existe em lugar nenhum" in falha.message
+
+
+def test_docs_code_references_aceita_corpus_citado_cru(tmp_path: Path) -> None:
+    """Nome cru de doc do corpus RAG (`odata_timeout_cpi.md`) resolve em
+    data/sample_docs/ — citar pelo nome crus e' o costume dos tutoriais,
+    e o gate tem de aceitar sem exigir o caminho cheio."""
+    root = _docs_root(tmp_path)
+    (root / "data" / "sample_docs").mkdir(parents=True)
+    (root / "data" / "sample_docs" / "odata_timeout_cpi.md").write_text("# doc\n", encoding="utf-8")
+    (root / "docs/T.md").write_text("base: `odata_timeout_cpi.md`\n", encoding="utf-8")
+
+    assert not [f for f in check_docs_code_references(root) if f.is_failure]
+
+
+def test_docs_code_references_ignora_citacao_composta(tmp_path: Path) -> None:
+    """`a.md, b.md` num backtick so e' prosa, nao um caminho — o regex
+    nao casa com virgula, e e' isso que impede o falso positivo."""
+    root = _docs_root(tmp_path)
+    (root / "data" / "sample_docs").mkdir(parents=True)
+    (root / "data" / "sample_docs" / "cpi_http_401.md").write_text("# doc\n", encoding="utf-8")
+    (root / "docs/T.md").write_text(
+        "bases: `cpi_http_401.md, idoc_status_51.md`\n", encoding="utf-8"
+    )
+
+    assert not [f for f in check_docs_code_references(root) if f.is_failure]
+
+
 def test_docs_code_references_nao_acusa_identificadores_em_prosa(tmp_path: Path) -> None:
     """Regressao do falso positivo: `ANTHROPIC_API_KEY`, `RFC_SYSTEM_INFO` e
     `QDRANT_HOST_PORT` nao sao simbolos de Python (o primeiro nem existe, o

@@ -36,8 +36,7 @@ em outra camada (auth continua na borda HTTP via API key, DA-18/23):
    (provider, sensibilidade, decisao, latencia, custo estimado,
    sucesso/falha).
 
-Nao-objetivos explicitos desta v1 (backlog em aberto, ver learnings.md
-do projeto):
+Nao-objetivos explicitos desta v1 (backlog em aberto):
 - IAM/auth: ja resolvido na borda HTTP (X-API-Key por endpoint,
   DA-18/DA-23) - nao duplicado aqui.
 - PII/DLP de verdade: um scanner de dados sensiveis (NER/classificador)

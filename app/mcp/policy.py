@@ -32,8 +32,7 @@ Este modulo cria a base para isso, mesmo as duas tools atuais sendo
   (a tool simplesmente seria negada em runtime, nao silenciosamente
   permitida).
 
-Nao-objetivos explicitos desta v1 (backlog em aberto, ver
-learnings.md do projeto):
+Nao-objetivos explicitos desta v1 (backlog em aberto):
 - Granularidade de scope por CHAVE de API: hoje ha uma unica
   X-API-Key (settings.api_key) compartilhada por todo o servidor MCP -
   DEFAULT_EXECUTION_CONTEXT reflete isso (todo caller autenticado

@@ -17,6 +17,7 @@ verificadas à mão, uma vez, e nunca mais.
 | `promptfoo_configs` | configs do promptfoo são YAML válido, têm `prompts`/`tests`/`providers`, e os scripts `exec:` referenciados existem | instantâneo | todo push/PR |
 | `llm_baseline` | existe baseline versionado do promptfoo (comparação de regressão de LLM) | instantâneo | todo push/PR |
 | `candidate_das_fresh` | nenhuma DA marcada como "candidata" no `CLAUDE.md` já entregue em `docs/ARCHITECTURE.md` | instantâneo | todo push/PR |
+| `preflight_delegates` | o preflight de RAM do harness é `app/evaluation/ram_preflight.py`, não python inline no `scripts/promptfoo_remote.sh` | instantâneo | todo push/PR |
 | `migrations_and_dashboards` (job) | `alembic upgrade head` em banco limpo + as 45 queries dos 4 dashboards | ~1 min | todo push/PR |
 | `llm_eval` (job) | promptfoo contra o baseline; falha em regressão de caso | depende do provider | agendado 03:17 UTC + manual |
 
@@ -94,3 +95,18 @@ recusado com exit 1 — nunca interpretado como "zero regressões".
 3. **O primeiro `candidate_das_fresh` acusou a DA-32** — listada como
    "candidata, aguardam Kyma" no `CLAUDE.md` embora entregue em `67b78e8`. Era
    um bug de documentação real que nenhuma suite pegava.
+4. **O próprio gate se quebrou com a própria documentação.** Depois que a
+   linha da DA-51 na tabela de DAs passou a citar "das DAs candidatas" numa
+   célula, a busca pela *primeira ocorrência* da frase casava ali, recortava
+   um bloco sem nenhum `DA-N` e devolvia lista vazia: o gate virava aviso e a
+   lista de candidatas deixava de ser verificada sem ninguém perceber. O
+   regex passou a ancorar no título, no início da linha, com teste de
+   regressão que reproduz o caso real.
+5. **Teste verde não prova que o código roda.** O preflight de RAM era um
+   heredoc de 92 linhas dentro de `scripts/promptfoo_remote.sh`, sem
+   cobertura: a aritmética que decide se a suite carrega 48 G só podia ser
+   verificada carregando 48 G. Movido para
+   `app/evaluation/ram_preflight.py` (núcleo puro, 15 testes) e
+   `preflight_delegates` passou a vigiar que o script continua delegando —
+   sem ele, a matemática poderia voltar para dentro do shell com a suite
+   ainda verde, testando um módulo que ninguém chama.

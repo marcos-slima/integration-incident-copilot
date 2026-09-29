@@ -103,98 +103,12 @@ case "$PROVIDER" in
         if [ "${EVAL_RAM_PREFLIGHT_ONLY:-0}" = "1" ]; then
             PREFLIGHT_MODE=(preflight-only)
         fi
-        "$REPO_ROOT_RAM/.venv/bin/python" - \
-            "$LLM_MODEL" "${EVAL_KV_RESERVE_GIB:-8}" "${PREFLIGHT_MODE[@]}" <<'PYEOF' || RAM_RC=$?
-import json
-import os
-import sys
-import urllib.request
-
-target, reserve_gib = sys.argv[1], float(sys.argv[2])
-preflight_only = len(sys.argv) > 3 and sys.argv[3] == "preflight-only"
-host = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
-if "://" not in host:
-    host = "http://" + host
-
-
-def get(path):
-    with urllib.request.urlopen(f"{host}{path}", timeout=3) as response:
-        return json.load(response)
-
-
-def say(msg):
-    print(f"[ram] {msg}", file=sys.stderr)
-
-
-try:
-    resident = get("/api/ps").get("models", [])
-    tags = {m["name"]: m for m in get("/api/tags").get("models", [])}
-    with open("/proc/meminfo") as fh:
-        available = next(
-            int(line.split()[1]) * 1024 for line in fh if line.startswith("MemAvailable:")
-        )
-except Exception:
-    # Nao mediu, entao nao tem opiniao: deixa a suite rodar.
-    sys.exit(0)
-
-need = tags.get(target, {}).get("size")
-if need is None:
-    say(f"'{target}' nao esta instalado neste Ollama - o provider vai 404")
-    sys.exit(4)
-
-# Para quem JA esta resident, vale o size do /api/ps, nao o do /api/tags:
-# medido 2026-09-28, /api/ps = 49.6G contra /api/tags = 48.2G para o mesmo
-# qwen3-strict. A diferenca e' o buffer de compute, que so existe em RAM
-# quando o modelo esta de pe - contar o arquivo subestima o occupant real.
-resident_by_name = {m["name"]: (m.get("size") or 0) for m in resident}
-loaded = sum(size or tags.get(name, {}).get("size", 0) for name, size in resident_by_name.items())
-reserve = int(reserve_gib * 2**30)
-if resident:
-    names = ", ".join(sorted(resident_by_name))
-    say(f"ja resident: {names} ({loaded / 2**30:.1f}G)")
-
-# O alvo ja resident NAO e um peso a adicionar: ele esta em `loaded`. Sem
-# esta correcao, um segundo run do MESMO provider (por exemplo o retake de
-# um caso, ou o resume de uma suite interrompida) somava os 48.2G duas vezes,
-# o preflight reprovava por conta propria e a dica mandava
-# 'ollama stop' do modelo que o caller esta pedindo para usar.
-if target in resident_by_name:
-    need = 0
-    need_note = f"{target} ja resident, conta dentro dos {loaded / 2**30:.1f}G acima"
-else:
-    need = need
-    need_note = f"{target} = {need / 2**30:.1f}G"
-
-total = loaded + need + reserve
-say(f"disponivel {available / 2**30:.1f}G | precisa {total / 2**30:.1f}G ({need_note} + {reserve_gib:.0f}G de reserva p/ KV cache)")
-
-if preflight_only:
-    say("PREFLIGHT ONLY: nada foi carregado, nenhuma chamada de LLM feita")
-    # 5 = aprovado em modo preflight-only. Precisa ser distinto de 0: o shell
-    # so aborta em 4, entao um 0 aqui voltaria a script e dispararia a
-    # chamada de LLM - que e' o carregamento de 48G que o modo quer evitar.
-    sys.exit(4 if total > available else 5)
-
-if total > available:
-    # Aponta o MAIOR resident, nao o primeiro alfabeticamente: sugerir
-    # 'ollama stop nomic-embed-text' (0.3G) quando o culpado tem 49.6G e'
-    # uma dica que nao libera RAM nenhuma - o usuario obedece e o OOM
-    # acontece do mesmo jeito, agora com a culpa no preflight.
-    by_size = sorted(resident, key=lambda m: m.get("size") or 0, reverse=True)
-    if target in resident_by_name:
-        # Descartar o alvo da lista: e' o unico que o caller nao pode
-        # descarregar sem matar o que ele esta tentando rodar.
-        by_size = [m for m in by_size if m["name"] != target]
-    if by_size:
-        hint = f"ollama stop {by_size[0]['name']}"
-    else:
-        hint = (
-            f"o alvo ({target}) ja esta resident e ainda assim nao cabe: "
-            "reduza OLLAMA_CONTEXT_LENGTH ou reduza EVAL_KV_RESERVE_GIB"
-        )
-    say(f"PREFLIGHT FAIL: nao cabe em {available / 2**30:.1f}G. Descarregue antes: {hint}")
-    sys.exit(4)
-PYEOF
+        # A aritmetica mora em app/evaluation/ram_preflight.py: o nucleo e'
+        # funcao pura, coberta por tests/test_ram_preflight.py. Inline aqui
+        # ela so podia ser verificada carregando 48G de verdade.
+        PYTHONPATH="$REPO_ROOT_RAM" "$REPO_ROOT_RAM/.venv/bin/python" \
+            -m app.evaluation.ram_preflight \
+            "$LLM_MODEL" "${EVAL_KV_RESERVE_GIB:-8}" "${PREFLIGHT_MODE[@]}" || RAM_RC=$?
         # `|| RAM_RC=$?` em vez de `|| true`: o `|| true` mantem o script
         # vivo mas TAMBEM descarta o status 4, e o preflight voltaria a ser
         # um aviso que nao impede nada. A forma com atribuicao captura o

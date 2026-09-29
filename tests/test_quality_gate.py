@@ -304,6 +304,33 @@ class TestCandidateDas:
         (tmp_path / "docs/ARCHITECTURE.md").write_text("# doc\n", encoding="utf-8")
         assert "warn" in _severities(check_candidate_das(tmp_path))
 
+    def test_frase_em_celula_de_tabela_nao_e_o_titulo(self, tmp_path):
+        # Regressao real: a linha da DA-51 na tabela do CLAUDE.md citava
+        # "das DAs candidatas" numa celula, e a busca pela primeira
+        # ocorrencia casava ali e devolvia lista vazia (gate virava aviso).
+        (tmp_path / "docs").mkdir(exist_ok=True)
+        (tmp_path / "CLAUDE.md").write_text(
+            "| DA-51 | valida a lista das DAs candidatas |\n"
+            "\n"
+            "**DAs candidatas (sem implementacao ainda):**\n"
+            "- DA-31: algo\n"
+            "\n"
+            "---\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "docs/ARCHITECTURE.md").write_text("# doc\n", encoding="utf-8")
+        findings = check_candidate_das(tmp_path)
+        assert "warn" not in _severities(findings)
+        assert not [f for f in findings if f.is_failure]
+
+    def test_titulo_com_hash_e_reconhecido(self, tmp_path):
+        self._write(tmp_path, "- DA-31: algo\n", "# doc\n")
+        text = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
+        (tmp_path / "CLAUDE.md").write_text(
+            text.replace("**DAs candidatas", "### DAs candidatas"), encoding="utf-8"
+        )
+        assert "warn" not in _severities(check_candidate_das(tmp_path))
+
 
 class TestPromptfooComparison:
     def test_normaliza_envelope_do_promptfoo(self):

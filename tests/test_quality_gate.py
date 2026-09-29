@@ -6,8 +6,11 @@ import pytest
 from app.evaluation.gates import (
     Thresholds,
     check_candidate_das,
+    check_connector_reachable,
     check_corpus_coverage,
     check_difficulty_mix,
+    check_docs_code_references,
+    check_docs_markup_integrity,
     check_documented_das,
     check_index_current,
     check_promptfoo_configs,
@@ -469,3 +472,230 @@ class TestDocumentedDas:
         falhas = [f for f in check_documented_das(tmp_path) if f.is_failure]
         assert len(falhas) == 1
         assert "DA-2" in falhas[0].message
+
+
+# ---------------------------------------------------------------------------
+# Gates de integridade da documentacao e de alcancabilidade dos conectores.
+#
+# O ponto destes testes nao e so o caminho feliz: e provar que cada gate
+# FALHA diante do defeito que ele existe para pegar. Um gate que so passa
+# nao tem teste que o sustente.
+# ---------------------------------------------------------------------------
+
+
+def _docs_root(tmp_path: Path) -> Path:
+    (tmp_path / "docs").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "docs").joinpath("OK.md").write_text("# ok\n", encoding="utf-8")
+    return tmp_path
+
+
+def test_docs_markup_integrity_pass_em_repo_saudavel(tmp_path: Path) -> None:
+    root = _docs_root(tmp_path)
+    assert not [f for f in check_docs_markup_integrity(root) if f.is_failure]
+
+
+def test_docs_markup_integrity_acusa_fence_impar(tmp_path: Path) -> None:
+    """O defeito real em INGEST_REFERENCE.md: arquivo truncado no meio de
+    um heredoc, que engole o resto da renderizacao sem erro visivel."""
+    root = _docs_root(tmp_path)
+    (root / "docs/TRUNCADO.md").write_text(
+        "# t\n\n```bash\npython3 - << 'EOF'\nprint(1)\n", encoding="utf-8"
+    )
+
+    falhas = [f for f in check_docs_markup_integrity(root) if f.is_failure]
+    assert len(falhas) == 1
+    assert "impar" in falhas[0].message
+    assert "TRUNCADO.md" in falhas[0].message
+
+
+def test_docs_markup_integrity_acusa_link_quebrado(tmp_path: Path) -> None:
+    root = _docs_root(tmp_path)
+    (root / "docs/A.md").write_text("veja [B](B.md)\n", encoding="utf-8")
+
+    falhas = [f for f in check_docs_markup_integrity(root) if f.is_failure]
+    assert "link quebrado" in falhas[0].message
+
+
+def test_docs_markup_integrity_ignora_link_externo(tmp_path: Path) -> None:
+    root = _docs_root(tmp_path)
+    (root / "docs/A.md").write_text(
+        "[x](https://exemplo.com/b.md) [y](./OK.md)\n", encoding="utf-8"
+    )
+
+    assert not [f for f in check_docs_markup_integrity(root) if f.is_failure]
+
+
+def test_docs_code_references_acusa_simbolo_inexistente(tmp_path: Path) -> None:
+    """O defeito real do tutorial: breakpoint em `structured_llm`, que
+    nao existe em lugar nenhum do codigo."""
+    root = _docs_root(tmp_path)
+    (root / "app").mkdir()
+    (root / "app/x.py").write_text("def real():\n    pass\n", encoding="utf-8")
+    (root / "docs/T.md").write_text("ponha em `app/x.py::fantasma`\n", encoding="utf-8")
+
+    falhas = [f for f in check_docs_code_references(root) if f.is_failure]
+    assert "fantasma nao definido" in falhas[0].message
+
+
+def test_docs_code_references_acusa_arquivo_que_nao_existe(tmp_path: Path) -> None:
+    root = _docs_root(tmp_path)
+    (root / "docs/T.md").write_text("ponha em `app/sumiu.py::x`\n", encoding="utf-8")
+
+    falha = next(f for f in check_docs_code_references(root) if f.is_failure)
+    assert "nao existe" in falha.message
+
+
+def test_docs_code_references_acusa_arquivo_errado(tmp_path: Path) -> None:
+    """`report_node` citado em graph.py, mas implementado em nodes.py."""
+    root = _docs_root(tmp_path)
+    (root / "app").mkdir()
+    (root / "app/graph.py").write_text("def outra_coisa():\n    pass\n", encoding="utf-8")
+    (root / "docs/T.md").write_text("`app/graph.py::report_node`\n", encoding="utf-8")
+
+    falha = next(f for f in check_docs_code_references(root) if f.is_failure)
+    assert "report_node nao definido" in falha.message
+
+
+def test_docs_code_references_acusa_linha_fora_do_arquivo(tmp_path: Path) -> None:
+    root = _docs_root(tmp_path)
+    (root / "app").mkdir()
+    (root / "app/x.py").write_text("a = 1\nb = 2\n", encoding="utf-8")
+    (root / "docs/T.md").write_text("`app/x.py:691`\n", encoding="utf-8")
+
+    falha = next(f for f in check_docs_code_references(root) if f.is_failure)
+    assert "691" in falha.message
+
+
+def test_docs_code_references_aceita_ponto_de_debug_valido(tmp_path: Path) -> None:
+    root = _docs_root(tmp_path)
+    (root / "app").mkdir()
+    (root / "app/x.py").write_text(
+        "CONST = 0.25\n\n\ndef f():\n    return CONST\n", encoding="utf-8"
+    )
+    (root / "docs/T.md").write_text(
+        "`app/x.py:1` e `app/x.py::CONST` e `app/x.py::f`\n", encoding="utf-8"
+    )
+
+    assert not [f for f in check_docs_code_references(root) if f.is_failure]
+
+
+def test_docs_code_references_nao_acusa_identificadores_em_prosa(tmp_path: Path) -> None:
+    """Regressao do falso positivo: `ANTHROPIC_API_KEY`, `RFC_SYSTEM_INFO` e
+    `QDRANT_HOST_PORT` nao sao simbolos de Python (o primeiro nem existe, o
+    segundo e Function Module ABAP, o terceiro e variavel de shell). Um gate
+    que accuse isso vira gate que ninguem ouve."""
+    root = _docs_root(tmp_path)
+    (root / "app").mkdir()
+    (root / "app/x.py").write_text("a = 1\n", encoding="utf-8")
+    (root / "docs/T.md").write_text(
+        "Use `ANTHROPIC_API_KEY`, `RFC_SYSTEM_INFO` via pyrfc e `${QDRANT_HOST_PORT:-6333}`.\n",
+        encoding="utf-8",
+    )
+
+    assert not [f for f in check_docs_code_references(root) if f.is_failure]
+
+
+def _literal_fiel() -> str:
+    """Literal gerado a partir da constante real: um fixture de 3 conectores
+    dispararia o check de espelhamento e nao estaria mais testando a regra
+    que dice ser."""
+    from app.evaluation.gates import PIPELINE_INTERFACE_TYPES
+
+    valores = "".join(f'\n            "{v}",' for v in sorted(PIPELINE_INTERFACE_TYPES))
+    return f"    interface_type: (Literal[{valores}\n        ] | None) = None\n"
+
+
+def _connector_root(tmp_path: Path, registry: str, literal: str, supervisor: str) -> Path:
+    (tmp_path / "app/connectors").mkdir(parents=True)
+    (tmp_path / "app/agent").mkdir(parents=True)
+    (tmp_path / "app/admin").mkdir(parents=True)
+    (tmp_path / "app/connectors/__init__.py").write_text(registry, encoding="utf-8")
+    (tmp_path / "app/models.py").write_text(literal, encoding="utf-8")
+    (tmp_path / "app/admin/models.py").write_text(literal, encoding="utf-8")
+    (tmp_path / "app/agent/supervisor.py").write_text(supervisor, encoding="utf-8")
+    return tmp_path
+
+
+_SANE_REGISTRY = (
+    "_REGISTRY = {\n    'odata': ODataConnector,\n    'successfactors': SFSFConnector,\n"
+    "    'apim': APIManagementConnector,\n}\n\n"
+    "_REAL_MODE_SETTING = {\n    'odata': 'odata_service_url',\n"
+    "    'successfactors': 'sfsf_base_url',\n    'apim': 'apim_analytics_url',\n}\n"
+)
+# O gate ancora no nome do campo (`interface_type:`) de proposito: app/models.py
+# tem outros Literals (sensitivity_level, trust_level) e ancorar no Literal
+# "qualquer um" trazia sensitivity_level junto.
+
+_SANE_SUPERVISOR = "_SAP_INTERFACE_TYPES = {'odata'}\n_SAAS_INTERFACE_TYPES = {'successfactors'}\n"
+
+
+def test_connector_reachable_pass_quando_tem_camada(tmp_path: Path) -> None:
+    root = _connector_root(tmp_path, _SANE_REGISTRY, _literal_fiel(), _SANE_SUPERVISOR)
+    assert not [f for f in check_connector_reachable(root) if f.is_failure]
+
+
+def test_connector_reachable_acusa_conector_inalcancavel(tmp_path: Path) -> None:
+    """O defeito real: successfactors registrado e com credencial no
+    .env.example, mas o Literal do pipeline devolvia 422."""
+    sem_sfsf = _literal_fiel().replace('"successfactors",', "")
+    root = _connector_root(tmp_path, _SANE_REGISTRY, sem_sfsf, _SANE_SUPERVISOR)
+    falhas = [f for f in check_connector_reachable(root) if f.is_failure]
+    assert "successfactors" in falhas[0].message
+    assert "422" in falhas[0].message
+
+
+def test_connector_reachable_acusa_conector_que_cai_em_generic(tmp_path: Path) -> None:
+    root = _connector_root(
+        tmp_path,
+        _SANE_REGISTRY,
+        _literal_fiel(),
+        "_SAP_INTERFACE_TYPES = {'odata'}\n_SAAS_INTERFACE_TYPES = set()\n",
+    )
+    falhas = [f for f in check_connector_reachable(root) if f.is_failure]
+    assert "generic" in falhas[0].message
+
+
+def test_connector_reachable_permite_apim_em_generic(tmp_path: Path) -> None:
+    """apim e cross-vendor de proposito: ficar em generic e decisao, nao bug."""
+    root = _connector_root(
+        tmp_path,
+        _SANE_REGISTRY,
+        _literal_fiel(),
+        "_SAP_INTERFACE_TYPES = {'odata'}\n_SAAS_INTERFACE_TYPES = {'successfactors'}\n",
+    )
+    assert not [f for f in check_connector_reachable(root) if f.is_failure]
+
+
+def test_connector_reachable_acusa_registry_e_settings_divergentes(tmp_path: Path) -> None:
+    root = _connector_root(
+        tmp_path,
+        _SANE_REGISTRY.replace("'apim': 'apim_analytics_url',\n", ""),
+        _literal_fiel(),
+        _SANE_SUPERVISOR,
+    )
+    falhas = [f for f in check_connector_reachable(root) if f.is_failure]
+    assert "divergem" in falhas[0].message
+
+
+def test_repositorio_real_tem_todo_conector_alcancavel() -> None:
+    """Trava a regressao: se alguem remover successfactors do Literal de
+    novo, este teste falha — e o gate tambem."""
+    from app.connectors import get_connector
+    from app.models import IncidentRequest
+
+    for nome in (
+        "odata",
+        "rfc",
+        "servicenow",
+        "salesforce",
+        "workday",
+        "ariba",
+        "successfactors",
+        "cap",
+        "apim",
+    ):
+        req = IncidentRequest(description="d", interface_type=nome)
+        assert req.interface_type == nome
+        assert get_connector(nome) is not None
+
+    assert not [f for f in check_connector_reachable() if f.is_failure]

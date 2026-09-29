@@ -21,6 +21,9 @@ verificadas à mão, uma vez, e nunca mais.
 | `das_index_current` | o índice de DAs do `README.md` lista exatamente o mesmo conjunto do registro do `CLAUDE.md`, e cada linha aponta para seção que existe | instantâneo | todo push/PR |
 | `preflight_delegates` | o preflight de RAM do harness é `app/evaluation/ram_preflight.py`, não python inline no `scripts/promptfoo_remote.sh` | instantâneo | todo push/PR |
 | `prompt_digest_measured` | o prompt em produção (`app/agent/prompts.py`) tem o mesmo digest do prompt **medido** no `data/eval/prompt_baseline.json` | instantâneo | todo push/PR |
+| `docs_markup_integrity` | fences de código balanceados e links relativos `.md` resolvendo, em `docs/`, `README.md` e `CLAUDE.md` | instantâneo | todo push/PR |
+| `docs_code_references` | referências `app/x.py::símbolo` e `app/x.py:N` citadas na documentação existem no código e na linha | instantâneo | todo push/PR |
+| `connector_reachable` | todo conector registrado em `app/connectors/__init__.py` é aceito pelo Literal de `interface_type`, é documentado em `app/models.py`/`app/admin/models.py`, e é coberto por `_SAP_INTERFACE_TYPES` ou `_SAAS_INTERFACE_TYPES` (exceto `apim`, cross-vendor por decisão) | instantâneo | todo push/PR |
 | `migrations_and_dashboards` (job) | `alembic upgrade head` em banco limpo + as 45 queries dos 4 dashboards | ~1 min | todo push/PR |
 | `llm_eval` (job) | promptfoo contra o baseline; falha em regressão de caso | depende do provider | agendado 03:17 UTC + manual |
 
@@ -108,6 +111,29 @@ recusado com exit 1 — nunca interpretado como "zero regressões".
 - **A legitimidade do local alternativo.** `implemented_das_documented` aceita
   `docs/ARCHITECTURE.md` para DA-32/33/34/35 sem perguntar se o texto de lá
   está atualizado. Ele confere presença, não atualidade.
+- **A prosa fora de `app/x.py::símbolo`.** `docs_code_references` só verifica a
+  forma precisa de citar código, que é a que a documentação de debug usa para
+  mandar abrir um breakpoint. Identificadores em prosa solta
+  (`ANTHROPIC_API_KEY`, `RFC_SYSTEM_INFO`, `${QDRANT_HOST_PORT:-6333}`) são
+  deliberadamente ignorados: o primeiro não existe, o segundo é Function
+  Module ABAP, o terceiro é variável de shell. Um gate que acuse esses três é
+  um gate que alguém desliga.
+- **Se a documentação está *certa*, apenas está desatualizada.**
+  `docs_code_references` prova que `report_node` é definido em
+  `app/agent/nodes.py`; não prova que o tutorial manda abrir o arquivo
+  certo, nem que o texto em volta do link está correto. Ele pega referência
+  quebrada, não equivalente errada.
+- **Fences balanceados não significam markdown válido.** `docs_markup_integrity`
+  conta abre/fecha de bloco de código. Tabelas malformadas, listas aninhadas
+  erradas e âncoras `#link` que não existem passam.
+- **Identificadores citados dentro de bloco de código.** O gate procura
+  `app/…py::símbolo` em qualquer lugar do markdown, inclusive dentro de
+  blocos ``` ; um exemplo ilustrativo num fence pode ser acusado.
+- **A semântica da descrição de um conector.** `connector_reachable` confere
+  que `successfactors` está no Literal e que o supervisor o cobre. Ele não
+  confere se o conector funciona contra um tenant real — SuccessFactors nunca
+  foi validado ponta a ponta contra um sistema de verdade, como nenhum dos
+  outros.
 
 ## Lições do processo
 

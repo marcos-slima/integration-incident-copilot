@@ -1655,6 +1655,37 @@ visível para a suite:
    a forma e errado sobre o significado. Hoje `out_of_scope` *exige* lista
    vazia, e lista preenchida nesse caso falha, porque o caso se contradiz.
 
+**Três gates de integridade documental, e um conector morto.** A revisão de
+`docs/` encontrou uma classe de bug que nenhum teste Python pega: a
+documentação afirmar coisas que o código contradiz. O caso mais caro era um
+tutorial de debug que mandava o leitor colocar breakpoint em
+`structured_llm`, `result["raw"]` e `diagnosis["confidence"]` — **nenhum dos
+três existe em qualquer lugar do código** —, e em `app/agent/graph.py` para
+funções que moram em `nodes.py`. Seguir o tutorial ao pé da letra não levava a
+nenhum breakpoint. Um `.md` truncado no meio de um heredoc (fence ímpar) era o
+único sintoma, e ele engole o resto da renderização sem erro visível.
+
+Os três gates são `docs_markup_integrity` (fences e links), `docs_code_references`
+(`app/x.py::símbolo` e `app/x.py:N` precisam resolver) e `connector_reachable`
+(todo conector registrado é aceito pelo Literal de `interface_type`).
+
+O terceiro encontrou um **conector morto**: `SuccessFactors` estava registrado
+em `app/connectors/__init__.py`, tinha os quatro settings em `app/config.py`, e
+`/diagnose` respondia **422** para ele — o `Literal` fechado de `interface_type`
+aceitava 8 valores e o conector era o nono. O gate `rag_dataset_schema` espelhava
+o mesmo `Literal`, então os dois concordavam e o bug passava. Pior: mesmo se a
+API aceitasse, `classify_domain` não tinha `successfactors` em nenhum dos dois
+conjuntos, então o incidente cairia no generalista em vez do especialista SaaS.
+Corrigido nos três níveis (Literal, supervisor, docstring do catálogo admin), sem
+migration: `connector_type` é `String(32)`, não enum de banco.
+
+O que torna `docs_code_references` útil é a decisão de **não** varrer prosa
+solta. `ANTHROPIC_API_KEY`, `RFC_SYSTEM_INFO` e `${QDRANT_HOST_PORT:-6333}`
+foram sinalizados na revisão e são, respectivamente, um provider inexistente,
+uma Function Module ABAP e uma variável de shell. Um gate que acuse os três é um
+gate que alguém desliga na primeira semana — e desligar gate é exatamente o que
+a DA-51 existe para evitar.
+
 **Validação.** 34 testes novos em `tests/test_quality_gate.py` — a maioria
 testando que o gate **falha** quando deve (dataset encolhido, `hard` removido,
 modelo divergente do vencedor, margem insuficiente, YAML quebrado, script de

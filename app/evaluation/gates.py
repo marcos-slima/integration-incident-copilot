@@ -9,7 +9,17 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 PIPELINE_INTERFACE_TYPES = frozenset(
-    {"odata", "rfc", "servicenow", "salesforce", "workday", "ariba", "cap", "apim"}
+    {
+        "odata",
+        "rfc",
+        "servicenow",
+        "salesforce",
+        "workday",
+        "ariba",
+        "successfactors",
+        "cap",
+        "apim",
+    }
 )
 DIFFICULTIES = frozenset({"easy", "medium", "hard", "out_of_scope"})
 REQUIRED_CASE_FIELDS = ("query", "expected_sources", "difficulty")
@@ -532,6 +542,221 @@ def check_index_current(root: Path = REPO_ROOT) -> list[Finding]:
     return _ok(check)
 
 
+# ---------------------------------------------------------------------------
+# Integridade da documentacao (DA-51)
+#
+# Os tres gates abaixo cobrem a classe de bug que a suite de testes nao ve:
+# a documentacao afirmar coisas que o codigo contradiz. Nenhum deles chama
+# LLM nem infra — sao verificacoes de texto, entao rodam em qualquer CI.
+# ---------------------------------------------------------------------------
+
+DOCS_DIR = Path("docs")
+PIPELINE_MODEL_SOURCE = Path("app/models.py")
+CONNECTORS_SOURCE = Path("app/connectors/__init__.py")
+SUPERVISOR_SOURCE = Path("app/agent/supervisor.py")
+ADMIN_SYSTEMS_SOURCE = Path("app/admin/models.py")
+
+
+def _iter_docs(root: Path) -> list[Path]:
+    docs = root / DOCS_DIR
+    if not docs.is_dir():
+        return []
+    return sorted(docs.rglob("*.md"))
+
+
+def _markdown_docs(root: Path) -> list[Path]:
+    """docs/ mais os dois markdown da raiz que fazem indice do conjunto."""
+    docs = _iter_docs(root)
+    for extra in (Path("README.md"), Path("CLAUDE.md")):
+        if (root / extra).is_file():
+            docs.append(root / extra)
+    return docs
+
+
+def check_docs_markup_integrity(root: Path = REPO_ROOT) -> list[Finding]:
+    """Fences de codigo balanceadas e links relativos para .md resolvendo.
+
+    Um arquivo truncado no meio de um heredoc deixa o par de fences impar e
+    engole todo o resto da renderizacao. Nao ha teste que pegue isso: o
+    arquivo .md nao e importado por ninguem.
+    """
+    check = "docs_markup_integrity"
+    problemas: list[str] = []
+
+    for doc in _markdown_docs(root):
+        texto = doc.read_text(encoding="utf-8")
+        fences = len(re.findall(r"^```", texto, flags=re.MULTILINE))
+        if fences % 2:
+            problemas.append(
+                f"{doc.relative_to(root)}: {fences} fences (impar) — bloco de codigo nao fecha"
+            )
+
+        for alvo in re.findall(r"\]\(([^)#\s]+\.md)\)", texto):
+            if alvo.startswith(("http://", "https://")):
+                continue
+            if not (doc.parent / alvo).resolve().exists():
+                problemas.append(f"{doc.relative_to(root)}: link quebrado -> {alvo}")
+
+    if problemas:
+        return _fail(check, "; ".join(sorted(problemas)[:8]))
+    return _ok(check)
+
+
+_CODE_REF = re.compile(
+    r"`((?:app|tests|scripts)/[A-Za-z0-9_/]+\.py)(?:::([A-Za-z_][A-Za-z0-9_]*)|:(\d+))`"
+)
+
+
+def check_docs_code_references(root: Path = REPO_ROOT) -> list[Finding]:
+    """Referencias `app/x.py::simbolo` e `app/x.py:N` tem de resolver.
+
+    Cobre a forma precisa de citar codigo, que e a que a documentacao de
+    debug usa para mandar o leitor abrir um breakpoint. Um tutorial que
+    aponta `app/agent/graph.py` para uma funcao que mora em nodes.py, ou
+    para um simbolo que foi deletado, manda o leitor procurar algo que nao
+    existe — e nenhum teste de Python falha por causa disso.
+
+    Deliberadamente NAO checa identificadores em prosa solta (`ANTHROPIC_API_KEY`,
+    `RFC_SYSTEM_INFO`, `QDRANT_HOST_PORT`): varios desses sao nomes de
+    funcao ABAP, variavel de shell ou provider nao suportado, e um gate
+    que accuse falso positivo vira gate que ninguem ouve.
+    """
+    check = "docs_code_references"
+    problemas: list[str] = []
+
+    for doc in _markdown_docs(root):
+        for caminho, simbolo, linha in _CODE_REF.findall(doc.read_text(encoding="utf-8")):
+            alvo = root / caminho
+            if not alvo.is_file():
+                problemas.append(f"{doc.relative_to(root)}: {caminho} nao existe")
+                continue
+            if simbolo:
+                fonte = alvo.read_text(encoding="utf-8")
+                padroes = (
+                    rf"^\s*(?:async\s+)?def\s+{re.escape(simbolo)}\b",
+                    rf"^\s*{re.escape(simbolo)}\s*(?::[^=\n]+)?=",
+                    rf"^\s*(?:class|{re.escape(simbolo)})\b",
+                )
+                if not any(re.search(p, fonte, flags=re.MULTILINE) for p in padroes):
+                    problemas.append(
+                        f"{doc.relative_to(root)}: {simbolo} nao definido em {caminho}"
+                    )
+            elif linha:
+                total = len(alvo.read_text(encoding="utf-8").splitlines())
+                if int(linha) > total:
+                    problemas.append(
+                        f"{doc.relative_to(root)}: {caminho} tem {total} linhas, doc cita a {linha}"
+                    )
+
+    if problemas:
+        return _fail(check, "; ".join(sorted(problemas)[:8]))
+    return _ok(check)
+
+
+def _dict_keys(bloco: str, nome: str) -> set[str]:
+    """Chaves de um literal de dict nomeado no fonte. Ancorar no nome do
+    dict evita varrer qualquer string solta do arquivo — sem isso o gate
+    acusou 'note' e 'status', que sao chaves do return de
+    connector_status(), nao conectores."""
+    match = re.search(
+        rf"^{re.escape(nome)}[^=\n]*=\s*\{{(.*?)^\s*\}}", bloco, flags=re.MULTILINE | re.DOTALL
+    )
+    if match is None:
+        raise ValueError(f"{nome} nao encontrado em {CONNECTORS_SOURCE}")
+    return set(re.findall(r"""['"]([a-z_]+)['"]\s*:""", match.group(1)))
+
+
+def _registered_connectors(root: Path) -> set[str]:
+    fonte = (root / CONNECTORS_SOURCE).read_text(encoding="utf-8")
+    conectores = _dict_keys(fonte, "_REGISTRY")
+    settings = _dict_keys(fonte, "_REAL_MODE_SETTING")
+    if conectores != settings:
+        raise ValueError(
+            f"_REGISTRY e _REAL_MODE_SETTING divergem: "
+            f"so no registry {sorted(conectores - settings)}, so nos settings {sorted(settings - conectores)}"
+        )
+    return conectores
+
+
+def check_connector_reachable(root: Path = REPO_ROOT) -> list[Finding]:
+    """Todo conector registrado precisa ser aceito pelo Literal do pipeline.
+
+    `app/connectors/__init__.py` registra SuccessFactors, mas o Literal
+    fechado de `IncidentRequest.interface_type` aceitava so 8 valores: o
+    conector existia, tinha credencial no `.env.example`, e mesmo assim
+    `/diagnose` respondia 422 se alguém pedisse. O gate `rag_dataset_schema`
+    espelhava o Literal, entao os dois concordavam — e o bug passava. Aqui a
+    fonte da verdade e o registro de conectores, nao o Literal.
+    """
+    check = "connector_reachable"
+    try:
+        conectores = _registered_connectors(root)
+    except FileNotFoundError:
+        return _fail(check, f"{CONNECTORS_SOURCE} nao existe")
+    except ValueError as exc:
+        return _fail(check, str(exc))
+    if not conectores:
+        return _fail(check, f"nao consegui ler os conectores registrados de {CONNECTORS_SOURCE}")
+
+    problemas: list[str] = []
+
+    # O Literal do pipeline e lido do ARQUIVO, nao da constante deste
+    # modulo: se os dois viessem da mesma fonte, o gate passaria junto com o
+    # defeito em vez de accusationa-lo. A constante so precisa espelhar o
+    # arquivo, e isso tambem e verificado.
+    fonte_models = (root / PIPELINE_MODEL_SOURCE).read_text(encoding="utf-8")
+    literais: set[str] = set()
+    for corpo in re.findall(
+        r"^\s*interface_type:?\s*(?:\(\s*)?Literal\[([^\]]*)\]", fonte_models, re.MULTILINE
+    ):
+        literais |= set(re.findall(r"""['"]([a-z_]+)['"]""", corpo))
+    if not literais:
+        problemas.append(f"{PIPELINE_MODEL_SOURCE}: nenhum Literal de interface_type encontrado")
+
+    faltando = sorted(conectores - literais)
+    if faltando:
+        problemas.append(
+            f"conectores registrados que o Literal do pipeline rejeita: {faltando}"
+            " (/diagnose responde 422 para eles)"
+        )
+
+    if literais and literais != PIPELINE_INTERFACE_TYPES:
+        problemas.append(
+            f"PIPELINE_INTERFACE_TYPES {sorted(PIPELINE_INTERFACE_TYPES)} nao espelha o Literal de "
+            f"{PIPELINE_MODEL_SOURCE} {sorted(literais)}"
+        )
+
+    for doc in (PIPELINE_MODEL_SOURCE, ADMIN_SYSTEMS_SOURCE):
+        fonte = (root / doc).read_text(encoding="utf-8")
+        for conector in sorted(conectores):
+            # match por palavra, nao pela forma `"x"`: o docstring do catalogo
+            # admin lista os valores separados por "/" e em prosa.
+            if not re.search(rf"\b{re.escape(conector)}\b", fonte):
+                problemas.append(f"{doc} nao menciona o conector {conector}")
+
+    # O supervisor deriva os conjuntos dele do Literal: um Literal com 9
+    # valores e um supervisor que so conhece 8 roteia um deles para generic.
+    supervisor = (root / SUPERVISOR_SOURCE).read_text(encoding="utf-8")
+    cobertos: set[str] = set()
+    for nome in ("_SAP_INTERFACE_TYPES", "_SAAS_INTERFACE_TYPES"):
+        bloco = re.search(rf"{re.escape(nome)}\s*=\s*\{{([^}}]*)\}}", supervisor)
+        if bloco is None:
+            problemas.append(f"{SUPERVISOR_SOURCE}: {nome} nao encontrado")
+            continue
+        cobertos |= set(re.findall(r"""['"]([a-z_]+)['"]""", bloco.group(1)))
+    # apim e cross-vendor de proposito: cai em generic por design.
+    orphans = sorted(conectores - cobertos - {"apim"})
+    if orphans:
+        problemas.append(
+            f"{SUPERVISOR_SOURCE}: nem _SAP_INTERFACE_TYPES nem _SAAS_INTERFACE_TYPES cobrem {orphans} "
+            "— caem em generic mesmo com interface_type explicito"
+        )
+
+    if problemas:
+        return _fail(check, "; ".join(problemas[:6]))
+    return _ok(check)
+
+
 GATES = {
     "rag_dataset_schema": check_rag_dataset,
     "corpus_coverage": check_corpus_coverage,
@@ -544,6 +769,9 @@ GATES = {
     "das_index_current": check_index_current,
     "preflight_delegates": check_preflight_delegates,
     "prompt_digest_measured": check_prompt_digest,
+    "docs_markup_integrity": check_docs_markup_integrity,
+    "docs_code_references": check_docs_code_references,
+    "connector_reachable": check_connector_reachable,
 }
 
 _THRESHOLD_AWARE = frozenset({"rag_dataset_schema", "reranker_invariant"})

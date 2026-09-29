@@ -29,7 +29,9 @@ AgentDomain = Literal["sap", "saas", "generic"]
 # interface_type (ver Literal fechado em app/models.py::IncidentRequest)
 # mapeado para o dominio do sub-agente especialista.
 _SAP_INTERFACE_TYPES = {"odata", "rfc", "cap"}
-_SAAS_INTERFACE_TYPES = {"servicenow", "salesforce", "workday", "ariba"}
+# successfactors: SaaS de RH da SAP, mesmo caso do Ariba — marca SAP,
+# produto multi-tenant entregue como servico (OAuth, nao RFC on-premise).
+_SAAS_INTERFACE_TYPES = {"servicenow", "salesforce", "workday", "ariba", "successfactors"}
 
 # Heuristica de fallback quando interface_type nao foi informado (fluxo
 # livre por descricao textual, ver test_graph_e2e.py casos com

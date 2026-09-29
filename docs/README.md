@@ -34,7 +34,7 @@ deste documento.
 | Documento | Assunto |
 |---|---|
 | [`GETTING_STARTED.md`](GETTING_STARTED.md) | Do zero ao primeiro diagnóstico em menos de 10 minutos |
-| [`USER_GUIDE.md`](USER_GUIDE.md) | Uso da API: contrato de `IncidentRequest`/`DiagnosisResponse`, troubleshooting de negócio |
+| [`USER_GUIDE.md`](USER_GUIDE.md) | Guia de operação: autenticação, todas as superfícies (REST, UI, CLI, MCP, A2A, eventos), leitura do resultado e loop de verificação |
 | [`DEPLOY.md`](DEPLOY.md) | Deploy em outro ambiente com Docker Compose |
 | [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) | Diagnóstico de falha por sintoma (startup, AMQP, RAG, LLM, Kyma) |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Visão técnica do que existe no código. Local alternativo declarado para a prosa das DA-32/33/34/35 |

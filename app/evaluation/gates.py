@@ -593,6 +593,7 @@ PIPELINE_MODEL_SOURCE = Path("app/models.py")
 CONNECTORS_SOURCE = Path("app/connectors/__init__.py")
 SUPERVISOR_SOURCE = Path("app/agent/supervisor.py")
 ADMIN_SYSTEMS_SOURCE = Path("app/admin/models.py")
+CLI_SOURCE = Path("app/agent/graph.py")
 
 
 def _iter_docs(root: Path) -> list[Path]:
@@ -808,6 +809,27 @@ def check_connector_reachable(root: Path = REPO_ROOT) -> list[Finding]:
             f"{SUPERVISOR_SOURCE}: nem _SAP_INTERFACE_TYPES nem _SAAS_INTERFACE_TYPES cobrem {orphans} "
             "— caem em generic mesmo com interface_type explicito"
         )
+
+    # A quarta superficie e o CLI: as choices do --interface em
+    # app/agent/graph.py. Caso real: successfactors foi aceito pelo
+    # Literal, coberto pelo supervisor e listado no catalogo admin, e o
+    # argparse do CLI ainda o rejeitava — a mesma morte do conector em
+    # outra superficie, invisivel para as tres checagens de cima.
+    try:
+        cli_fonte = (root / CLI_SOURCE).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return _fail(check, f"{CLI_SOURCE} nao existe — superficie CLI sem checagem")
+    m_choices = re.search(r"--interface[^[]*choices=\[([^\]]*)\]", cli_fonte)
+    if m_choices is None:
+        problemas.append(f"{CLI_SOURCE}: choices do --interface nao encontrado")
+    else:
+        cli_choices = set(re.findall(r"""['"]([a-z_]+)['"]""", m_choices.group(1)))
+        rejeitados = sorted(conectores - cli_choices)
+        if rejeitados:
+            problemas.append(
+                f"{CLI_SOURCE}: --interface rejeita {rejeitados} — "
+                "choices nao cobrem o registro de conectores"
+            )
 
     if problemas:
         return _fail(check, "; ".join(problemas[:6]))

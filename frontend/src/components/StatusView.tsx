@@ -19,6 +19,7 @@ const CONNECTOR_LABELS: Record<InterfaceType, string> = {
   salesforce: 'SalesforceConnector',
   workday: 'WorkdayConnector',
   ariba: 'AribaConnector',
+  successfactors: 'SuccessFactorsConnector',
   cap: 'CAPConnector',
   apim: 'APIManagementConnector',
 };
@@ -31,6 +32,7 @@ const CONNECTOR_ORDER: InterfaceType[] = [
   'salesforce',
   'workday',
   'ariba',
+  'successfactors',
   'cap',
   'apim',
 ];

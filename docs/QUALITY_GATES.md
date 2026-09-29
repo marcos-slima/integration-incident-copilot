@@ -23,7 +23,7 @@ verificadas à mão, uma vez, e nunca mais.
 | `prompt_digest_measured` | o prompt em produção (`app/agent/prompts.py`) tem o mesmo digest do prompt **medido** no `data/eval/prompt_baseline.json` | instantâneo | todo push/PR |
 | `docs_markup_integrity` | fences de código balanceados e links relativos `.md` resolvendo, em `docs/`, `README.md` e `CLAUDE.md` | instantâneo | todo push/PR |
 | `docs_code_references` | referências `app/x.py::símbolo` e `app/x.py:N` citadas na documentação existem no código e na linha, e toda citação de arquivo .md em backticks existe em lugar real (raiz, `docs/`, `data/sample_docs/` ou ao lado do doc) | instantâneo | todo push/PR |
-| `connector_reachable` | todo conector registrado em `app/connectors/__init__.py` é aceito pelo Literal de `interface_type`, é aceito pelas choices do `--interface` do CLI, é documentado em `app/models.py`/`app/admin/models.py`, e é coberto por `_SAP_INTERFACE_TYPES` ou `_SAAS_INTERFACE_TYPES` (exceto `apim`, cross-vendor por decisão) | instantâneo | todo push/PR |
+| `connector_reachable` | todo conector registrado em `app/connectors/__init__.py` é aceito pelo Literal de `interface_type`, pelas choices do `--interface` do CLI, pelo dropdown da UI web (`SYSTEMS` em `frontend/src/components/DiagnoseView.tsx`), é documentado em `app/models.py`/`app/admin/models.py`, e é coberto por `_SAP_INTERFACE_TYPES` ou `_SAAS_INTERFACE_TYPES` (exceto `apim`, cross-vendor por decisão) | instantâneo | todo push/PR |
 | `migrations_and_dashboards` (job) | `alembic upgrade head` em banco limpo + as 45 queries dos 4 dashboards | ~1 min | todo push/PR |
 | `llm_eval` (job) | promptfoo contra o baseline; falha em regressão de caso | depende do provider | agendado 03:17 UTC + manual |
 

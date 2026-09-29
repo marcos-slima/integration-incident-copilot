@@ -150,7 +150,7 @@ Pra ir direto num símbolo, use `Ctrl+Shift+O` (Windows/Linux) com o arquivo abe
 
 ### BP3 — Node do conector
 
-**Arquivo:** `app/agent/graph.py`, função `connector_node`
+**Arquivo:** `app/agent/nodes.py`, função `connector_node` (linha 119)
 
 Coloque o breakpoint na linha `result = connector.fetch(...)`.
 
@@ -177,43 +177,74 @@ Breakpoint em `results = client.query_points(...)`.
 
 ### BP5 — Node de diagnóstico (chamada ao LLM)
 
-**Arquivo:** `app/agent/graph.py`, função `diagnose_node`
+**Arquivo:** `app/agent/nodes.py` — `diagnose_node` **não existe mais**: a DA-22
+(roteamento por domínio) o substituiu por três funções:
+`sap_diagnosis_node`, `saas_diagnosis_node` e `generic_diagnosis_node`
+(`app/agent/nodes.py:1060`, `:1067`, `:1074`) — o *node* do grafo se chama
+`saas_diagnose`, a *função* é `saas_diagnosis_node`. O `supervisor` escolhe qual
+roda; as três compartilham o mesmo corpo de chamada ao LLM.
 
 > **Atualizado após code review:** o código não usa mais `llm.invoke(prompt)`
-> direto — usa `llm.with_structured_output(DiagnosisModel, include_raw=True)`,
-> que valida a saída contra um schema Pydantic e retorna um **dicionário**,
-> não um `AIMessage` puro.
+> direto. O caminho primário é
+> `create_react_agent(llm, tools=..., response_format=DiagnosisModel)`,
+> que roda o loop ReAct e depois faz uma **chamada adicional** ao LLM com
+> `with_structured_output` de verdade (tool-calling nativo do provider),
+> devolvendo o resultado já validado. Não existe `include_raw=True` no
+> código, e `structured_llm` também não — são nomes de uma versão anterior.
 
 Dois breakpoints:
 
-**5a.** Na linha `result = structured_llm.invoke(prompt, ...)` — **antes** de executar.
-- Inspecione `prompt` (string completa)
-- Inspecione `llm` — confirme `model`, `temperature=0.0`, `seed=42`
+**5a.** Na linha `return react_agent.invoke(messages, config=config)`
+(`app/agent/nodes.py:943`) — **antes** de executar.
+- Inspecione o `prompt` montado (string completa) e o `json_instruction` anexado
+- Inspecione `react_tools` — é uma lista, e fica **vazia** quando
+  `WEB_SEARCH_ENABLED=false`. Esse é o enforcement de DA-29: a tool some do
+  agente, não só de uma instrução de prompt
+- Inspecione `llm` — confirme `model`, `temperature=0.0`, `seed=42` (DA-2)
 
-**5b.** Logo depois, na linha `raw_message = result["raw"]`.
-- `result` é um `dict` com duas chaves: `"raw"` (o `AIMessage` original, com `.content` em texto puro) e `"parsed"` (uma instância de `DiagnosisModel` já validada, ou `None` se a validação estruturada falhar)
-- Se `parsed` vier `None`, o código cai no bloco de fallback logo abaixo (parsing manual tolerante do `raw_message.content`) — é a mesma rede de segurança de sempre, agora como *segunda* camada, não a única
+**5b.** Logo depois, na linha `structured = react_result.get("structured_response")`
+(`app/agent/nodes.py:998`).
+- Se `structured` vier preenchido, o `DiagnosisModel` já vem validado pelo Pydantic
+- **Regressão real observada em 26/09/2026:** com `qwen3-coder-next` via Ollama,
+  o texto final do agente trazia `matched_source` preenchido, mas a chamada
+  adicional devolvia o campo nulo (4 de 13 casos do promptfoo, todos com
+  diagnóstico correto). O código trata isso logo abaixo, com
+  `_recover_matched_source_from_raw(raw)` — que não é alucinação porque
+  `_apply_confidence_guardrails` (BP6) ainda valida o nome contra as fontes
+  realmente recuperadas
+- Se `structured` vier `None`, o agente é refeito **sem** `response_format`
+  (linha 967) e o texto passa pelo parsing por regex — é a última camada,
+  não a primeira
 
-**Pergunta:** "o modelo recebeu exatamente o contexto que eu esperava, e a validação estruturada (`parsed`) teve sucesso, ou caiu no fallback manual?"
+**Pergunta:** "o modelo recebeu exatamente o contexto que eu esperava, e a
+validação estruturada teve sucesso, ou caiu no fallback?"
 
 ### BP6 — Guardrails determinísticos
 
-**Arquivo:** `app/agent/graph.py`, função `_apply_confidence_guardrails` (extraída de `diagnose_node` após o code review — antes ficava inline)
+**Arquivo:** `app/agent/nodes.py:691`, função `_apply_confidence_guardrails`
 
-Três verificações em sequência, todas de código, nenhuma delas depende do LLM se autoavaliar corretamente:
+> O campo `diagnosis["confidence"]` **não existe mais**. A revisão P1.5
+> (23/09/2026) separou o número em dois: `model_confidence`, que é o que o
+> LLM **auto-relata** e o que estes guardrails ajustam, e
+> `diagnosis_confidence`, calculado deterministicamente. Grep por
+> `diagnosis["confidence"]` não acha nada.
 
-1. **Clamp de range:** `diagnosis["confidence"] = max(0.0, min(1.0, ...))` — defesa em profundidade mesmo com `Field(ge=0.0, le=1.0)` já validando na origem via Pydantic
-2. **Fallback do conector:** mesmo guardrail de sempre — identificador não reconhecido → teto de confiança 0.4
-3. **Contexto vazio:** guardrail mais novo — se não veio nenhum documento do retriever **e** não tem dado de conector, teto de confiança 0.3, `matched_source` forçado pra `None`
+**Quatro** verificações em sequência, todas de código, nenhuma delas depende
+do LLM se autoavaliar corretamente:
 
-**O que observar:** rode uma vez com um caso conhecido (nenhum guardrail deveria disparar), uma vez com identificador desconhecido (guardrail 2), e uma vez com uma descrição totalmente fora do domínio sem `--interface` (guardrail 3).
+1. **Clamp de range:** `model_confidence = max(0.0, min(1.0, raw_model_confidence))` — defesa em profundidade mesmo com `Field(ge=0.0, le=1.0)` já validando na origem via Pydantic
+2. **Teto de evidência (DA-25):** `model_confidence = min(model_confidence, evidence_strength + EVIDENCE_CONFIDENCE_MARGIN)`, com a margem = `0.25` (`app/agent/nodes.py:551`). Confiança não pode exceder o quanto a evidência sustenta — este é o guardrail que mais aparece na prática e é o mais novo dos quatro
+3. **Fallback do conector:** mesmo guardrail de sempre — identificador não reconhecido → teto de 0.4
+4. **Contexto vazio:** se não veio nenhum documento do retriever **e** não tem dado de conector, teto de 0.3, `matched_source` forçado pra `None`
+
+**O que observar:** rode uma vez com um caso conhecido (nenhum guardrail deveria disparar), uma vez com identificador desconhecido (guardrail 3), e uma vez com uma descrição totalmente fora do domínio sem `--interface` (guardrail 4). Para ver o 2 disparando sozinho, use um caso com documento fraco: observe `evidence_strength` e compare com `model_confidence` antes e depois da linha do teto.
 
 **Pergunta:** "quantas camadas independentes de proteção existem entre uma resposta ruim do LLM e o que chega no usuário final — e cada uma delas dispara quando deveria?"
 
 
 ### BP7 — Node de relatório
 
-**Arquivo:** `app/agent/graph.py`, função `report_node`, no `return {"report_markdown": report}`
+**Arquivo:** `app/agent/nodes.py:1222`, função `report_node`, no `return {"report_markdown": report}`
 
 **O que observar:** a f-string `report` montada — compare com o `DiagnosisResponse.report_markdown` que sai na resposta HTTP final. Esse é o último ponto onde você vê tudo junto: causa raiz, confiança, fontes, dado do conector.
 

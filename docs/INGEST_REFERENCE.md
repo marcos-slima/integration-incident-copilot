@@ -116,3 +116,12 @@ for state_file in ['data/.ingest_state_incidents.json', 'data/.ingest_state_refe
         print(f"{p.name}: {len(state)} arquivos processados")
     else:
         print(f"{p.name}: não existe (nunca indexado)")
+EOF
+```
+
+Saída típica:
+
+```
+.ingest_state_incidents.json: 10 arquivos processados
+.ingest_state_reference.json: 106 arquivos processados
+```

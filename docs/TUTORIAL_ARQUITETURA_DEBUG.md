@@ -40,39 +40,65 @@ Cliente HTTP (curl / HTTPie / Bruno)
 └─────────────────────┬───────────────────────────────────┘
                        │ run_diagnosis(request)
                        ▼
-┌─────────────────────────────────────────────────────────┐
-│ app/agent/graph.py                                        │
-│   run_diagnosis() monta o estado inicial (CopilotState)    │
-│   e chama o grafo compilado LangGraph.                     │
-└─────────────────────┬───────────────────────────────────┘
-                       ▼
-        ┌──────────────────────────────┐
-        │  StateGraph (LangGraph)       │   ← máquina de estados,
-        │                                │      não um loop comum
-        │  connector → retrieve →        │
-        │  diagnose → report             │
-        └──────────────────────────────┘
-                       │
-   ┌───────────────────┼────────────────────┬─────────────────────┐
-   ▼                   ▼                    ▼                     ▼
-connector_node   retrieve_node        diagnose_node          report_node
-app/connectors/  app/rag/retriever.py  app/agent/graph.py     app/agent/graph.py
-   │                   │                    │
-   ▼                   ▼                    ▼
-SAPConnector      Qdrant (via          ChatOllama
-(mock hoje,       qdrant-client)       (langchain_ollama)
-OData/RFC)        + embeddings              │
-                  (nomic-embed-text          ▼
-                  via Ollama)          Ollama runtime local
-                                       (qwen3-coder-next:latest)
-                       │                    │
-                       └────────┬───────────┘
+      ┌──────────────────────────────────────────────────────────────┐
+      │ app/agent/graph.py                                           │
+      │ run_diagnosis() monta o estado inicial (CopilotState)        │
+      │ e chama o grafo compilado LangGraph.                         │
+      └──────────────────────────────────────────────────────────────┘
                                 ▼
-                     DiagnosisResponse (Pydantic)
-                                │
-                                ▼
-                  Cliente recebe JSON + report_markdown
+      ┌──────────────────────────────────────────────────────────────┐
+      │ StateGraph (LangGraph) — 9 nodes, entry point: supervisor    │
+      │                                                              │
+      │   supervisor ──► connector ──► retrieve                      │
+      │   classifica      9 conectores,    RAG híbrido: Qdrant       │
+      │   o domínio,      reais quando     (denso+BM25) + reranker   │
+      │   SEM LLM         configurados     mmarco-mMiniLMv2          │
+      │         │                                                    │
+      │         ▼  _route_to_specialist  lê `agent_domain`,          │
+      │         │  que o supervisor já decidiu no início             │
+      │         ▼                                                    │
+      │    ┌────────────┼─────────────┬──────────────┐               │
+      │    ▼            ▼             ▼              ▼               │
+      │  sap_diagnose saas_diagnose generic_diagnose                 │
+      │  (SAP)         (ServiceNow,   (multi-fornecedor,             │
+      │                Salesforce,    sem domínio                    │
+      │                Workday,       identificado)                  │
+      │                Ariba,                                        │
+      │                SuccessFactors)                               │
+      │    └────────────┼─────────────┴──────────────┘               │
+      │                 ▼                                            │
+      │         report ──► END                                       │
+      │                 ▲                                            │
+      │                 └── graph_write, só se USE_GRAPH_RAG=true    │
+      │                     (roda ANTES do report)                   │
+      └──────────────────────────────────────────────────────────────┘
 ```
+
+> **O fork é o ponto central do diagrama.** A DA-22 trocou o antigo
+> `diagnose_node` por três especialistas, e quem decide entre eles **não é o
+> supervisor**: o supervisor roda primeiro e *classifica* o domínio, gravando
+> `agent_domain` no estado. O roteamento acontece depois, por arestas
+> condicionais (`_route_to_specialist`) que leem esse campo. Depurar com
+> breakpoint só em `supervisor_node` não mostra a escolha acontecendo — ela
+> acontece na aresta, não no node.
+
+Cada node e o arquivo que o implementa:
+
+| Node do grafo | Função | Arquivo |
+|---|---|---|
+| `supervisor` | `supervisor_node` | `app/agent/supervisor.py` |
+| `connector` | `connector_node` | `app/agent/nodes.py` |
+| `retrieve` | `retrieve_node` | `app/agent/nodes.py` |
+| `sap_diagnose` | `sap_diagnosis_node` | `app/agent/nodes.py` |
+| `saas_diagnose` | `saas_diagnosis_node` | `app/agent/nodes.py` |
+| `generic_diagnose` | `generic_diagnosis_node` | `app/agent/nodes.py` |
+| `graph_enrich`, `graph_write` | `graph_enrich_node`, `graph_write_node` | `app/agent/nodes.py` (só com GraphRAG) |
+| `report` | `report_node` | `app/agent/nodes.py` |
+
+Os três especialistas chamam o mesmo corpo de diagnóstico, que fala com
+`ChatOllama` (`langchain_ollama`) apontando para o runtime local do Ollama
+(`qwen3-coder-next:latest`). O `structured_response` volta validado pelo
+Pydantic e a resposta HTTP sai como `DiagnosisResponse` + `report_markdown`.
 
 ### Onde cada etapa vive (arquivo real)
 
@@ -86,7 +112,7 @@ OData/RFC)        + embeddings              │
 | Busca de conhecimento (RAG) | `app/rag/ingest.py`, `app/rag/retriever.py` | Indexação e consulta no Qdrant |
 | Testes | `tests/` | Regressão automatizada de tudo acima |
 
-**Gap honesto:** `app/services/` existe na estrutura do repositório (criada no bootstrap inicial) mas está **vazia até hoje** — nenhuma lógica de negócio foi colocada lá. Não finja que existe algo funcionando ali.
+**Sobre `app/services/`:** não está vazia, e é mais central do que parece. `incident_repository.py` faz a persistência PostgreSQL das tabelas `incidents` e `verifications`; `incident_recorder.py` grava **cada** diagnóstico concluído em `incidents` e é chamado por `run_diagnosis()` — o ponto comum a todos os caminhos de entrada (`/diagnose`, worker RQ, webhook/AMQP, A2A e MCP). Se você depurar por que um relatório aparece no Grafana e não na tabela, esse é o arquivo.
 
 ### Analogia ABAP
 

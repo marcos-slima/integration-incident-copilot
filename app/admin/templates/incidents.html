@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Incidentes · Admin{% endblock %}
+{% block content %}
+<h2>Incidentes diagnosticados (DA-50)</h2>
+<p>Cada linha traz o sistema integrado correlacionado: <code>system_key</code>
+informado pelo cliente tem precedência; na ausencia dele, o conector
+(<code>interface_type</code>) resolve o sistema — quando o mesmo conector
+existe em mais de um sistema no catálogo, a linha é marcada
+<strong>ambígua</strong> em vez de escolher um sistema por conta própria.</p>
+
+<div>
+  <input id="f-system" placeholder="system_key (ex: cap_prod)">
+  <input id="f-interface" placeholder="interface_type (ex: cap)">
+  <select id="f-verified">
+    <option value="">veredito: todos</option>
+    <option value="false">veredito: ainda sem veredito</option>
+    <option value="true">veredito: com veredito</option>
+  </select>
+  <button onclick="loadIncidents()">Filtrar</button>
+  <button onclick="clearFilters()">Limpar</button>
+</div>
+
+<table id="incidents">
+  <thead><tr>
+    <th>Criado</th><th>id</th><th>Interface</th><th>Origem (connector_source_system)</th>
+    <th>Sistema correlacionado</th><th>Causa raiz provável</th>
+    <th>Conf. diag.</th><th>Evidência</th><th>Provider</th><th>Lat.</th>
+    <th>Verificação</th><th></th>
+  </tr></thead>
+  <tbody id="incidents-body"><tr><td colspan="12">carregando…</td></tr></tbody>
+</table>
+
+<h3>Detalhe do incidente</h3>
+<div id="detail"><p class="err" style="display:none"></p></div>
+
+<p class="warn" id="msg"></p>
+
+<script>
+const COLS = 12;
+function systemCell(sys) {
+  if (!sys || sys.match === 'none') return '<span class="pill err">sem correspondência</span>';
+  if (sys.match === 'ambiguous') {
+    return `<span class="pill warn">ambíguo</span> <code>${escapeHtml((sys.candidates || []).join(', '))}</code>`;
+  }
+  const label = sys.system_key + ' · ' + (sys.name || '-');
+  return `${pill(sys.status)} ${escapeHtml(label)} <span class="muted">(${escapeHtml(sys.match)})</span>`;
+}
+function verifiedCell(i) {
+  if (i.verified_at == null) return '<span class="pill">⏳ pendente</span>';
+  if (i.diagnosis_correct === true) return '<span class="pill ok">✅ correto</span>';
+  if (i.diagnosis_correct === false) return '<span class="pill err">❌ incorreto</span>';
+  return '<span class="pill warn">verificado (sem veredito)</span>';
+}
+function loadIncidents() {
+  const params = new URLSearchParams();
+  const sys = document.getElementById('f-system').value.trim();
+  const itf = document.getElementById('f-interface').value.trim();
+  const ver = document.getElementById('f-verified').value;
+  if (sys) params.set('system_key', sys);
+  if (itf) params.set('interface_type', itf);
+  if (ver) params.set('verified', ver);
+  adminFetch('/admin/api/incidents?' + params.toString()).then(r => {
+    if (r.status === 401) throw new Error('chave admin inválida — insira em cima');
+    if (r.status === 503) throw new Error('DB não configurado (DATABASE_URL ausente)');
+    return r.json();
+  }).then(rows => {
+    const tb = document.getElementById('incidents-body');
+    tb.innerHTML = '';
+    if (!rows.length) { tb.innerHTML = `<tr><td colspan="${COLS}">nenhum incidente para o filtro</td></tr>`; return; }
+    for (const i of rows) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${escapeHtml((i.created_at || '').replace('T', ' ').slice(0, 19))}</td>
+        <td><code>${escapeHtml(String(i.id).slice(0, 8))}</code></td>
+        <td>${escapeHtml(i.interface_type || '—')}</td>
+        <td>${escapeHtml(i.connector_source_system || '—')}</td>
+        <td>${systemCell(i.system)}</td>
+        <td>${escapeHtml((i.probable_root_cause || '—').slice(0, 90))}</td>
+        <td>${i.diagnosis_confidence == null ? '—' : escapeHtml(i.diagnosis_confidence)}</td>
+        <td>${i.evidence_strength == null ? '—' : escapeHtml(i.evidence_strength)}</td>
+        <td>${escapeHtml(i.llm_provider_used || '—')}</td>
+        <td>${escapeHtml(i.latency_ms == null ? '—' : i.latency_ms + ' ms')}</td>
+        <td>${verifiedCell(i)}</td>
+        <td><button onclick="loadDetail('${i.id}')">detalhe</button></td>`;
+      tb.appendChild(tr);
+    }
+  }).catch(e => document.getElementById('msg').textContent = e.message);
+}
+function loadDetail(id) {
+  adminFetch('/admin/api/incidents/' + encodeURIComponent(id)).then(r => {
+    if (r.status === 404) throw new Error('incidente não encontrado');
+    return r.json();
+  }).then(i => {
+    const el = document.getElementById('detail');
+    const ev = (i.evidence || []).map(e => `- [${e.trust_level || '?'}] ${e.source || e.description || JSON.stringify(e)}`).join('\n');
+    el.innerHTML = `<p><strong>${escapeHtml(i.id)}</strong> · ${systemCell(i.system)}</p>
+      <pre>${escapeHtml(i.description || '(sem descrição)')}</pre>
+      <p>Causa provável: ${escapeHtml(i.probable_root_cause || '—')}</p>
+      <p>Causa confirmada: ${escapeHtml(i.verified_root_cause || '—')}
+        (por ${escapeHtml(i.verified_by || '—')})</p>
+      <p>Códigos de erro: ${escapeHtml((i.error_codes || []).join(', ') || '—')}</p>
+      <p>Evidências (${(i.evidence || []).length}):</p>
+      <pre>${escapeHtml(ev || '(nenhuma)')}</pre>`;
+  }).catch(e => {
+    const el = document.getElementById('detail');
+    el.innerHTML = '';
+    const p = document.createElement('p');
+    p.className = 'err';
+    p.textContent = e.message;
+    el.appendChild(p);
+  });
+}
+function clearFilters() {
+  document.getElementById('f-system').value = '';
+  document.getElementById('f-interface').value = '';
+  document.getElementById('f-verified').value = '';
+  history.replaceState(null, '', '/admin/incidents');
+  loadIncidents();
+}
+// Drill-down a partir de /admin/systems: /admin/incidents?system_key=...
+(function initFromUrl() {
+  const sys = new URLSearchParams(location.search).get('system_key');
+  if (sys) document.getElementById('f-system').value = sys;
+  loadIncidents();
+})();
+</script>
+{% endblock %}

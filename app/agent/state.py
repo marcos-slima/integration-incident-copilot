@@ -62,6 +62,11 @@ class CopilotState(TypedDict, total=False):
     payload: str | None
     interface_type: str | None
     identifier: str | None
+    # DA-49/50: chave de sistema informado pelo cliente (opcional). Permite
+    # correlacionar incident com integration_systems (system_key) sem FK hard
+    # no contrato - propagado ate o recorder para populacao de
+    # connector_source_system com o valor informado quando presente.
+    connector_source_system: str | None
     llm_model: str
     # DA-22: dominio do sub-agente especialista que vai tratar o
     # diagnostico ("sap" | "saas" | "generic"), decidido pelo

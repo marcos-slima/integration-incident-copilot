@@ -15,13 +15,15 @@ from __future__ import annotations
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.admin.correlation import build_system_index, correlate
 from app.admin.repository import AdminRepository
 from app.admin.security import verify_admin_key
 from app.db import get_db_session
+from app.services.incident_repository import IncidentRepository
 
 logger = logging.getLogger(__name__)
 
@@ -150,11 +152,22 @@ async def registry_status(
         "metering_enabled": settings.metering_enabled,
         "models_count": None,
         "systems_count": None,
+        "incidents_count": None,
+        "unverified_count": None,
     }
     if session is not None:
         repo = AdminRepository(session)
         result["models_count"] = len(await repo.list_models())
         result["systems_count"] = len(await repo.list_systems())
+        # DA-50: contagem de incidentes e de quantos ainda nao tem veredito
+        # humano - best-effort: banco sem a tabela `incidents` (migration 001
+        # nao aplicada) nao pode derrubar o status do registro.
+        try:
+            incidents = IncidentRepository(session)
+            result["incidents_count"] = await incidents.count()
+            result["unverified_count"] = await incidents.count(verified=False)
+        except Exception:
+            logger.warning("[admin] Falha ao contar incidentes para registry/status", exc_info=True)
     return result
 
 
@@ -433,3 +446,121 @@ async def delete_system(
     if not deleted:
         raise HTTPException(status_code=404, detail="Sistema nao encontrado")
     return {"status": "deleted", "id": system_id}
+
+
+@router.get("/systems/{system_id}/incidents")
+async def list_system_incidents(
+    system_id: str,
+    session: SessionReq,
+    limit: int = Query(default=50, ge=1, le=200),
+) -> list[dict[str, Any]]:
+    """Incidentes correlacionados a um sistema do catalogo (DA-50).
+
+    Reusa EXATAMENTE a mesma regra de app/admin/correlation.py (match por
+    system_key, depois por connector_type unico) que a listagem geral, para
+    que o drill-down por sistema e a visao geral nunca contem numeros
+    diferentes. Por isso busca em duas frentes e filtra pela correlacao
+    resolvida, em vez de um unico WHERE estrito (que perderia os incidentes
+    anteriores a DA-50, cujo connector_source_system era o rotulo).
+
+    O indice e montado com o catalogo INTEIRO, nunca com `[system]`: com um
+    unico sistema no indice o fallback por connector_type sempre acharia
+    exatamente 1 candidato e resolveria qualquer incidente do mesmo tipo -
+    o drill-down de cap_prod engoliria os incidentes de cap_stage.
+    """
+    admin_repo = AdminRepository(session)
+    system = await admin_repo.get_system(system_id)
+    if system is None:
+        raise HTTPException(status_code=404, detail="Sistema nao encontrado")
+
+    index = build_system_index(await admin_repo.list_systems())
+    incidents_repo = IncidentRepository(session)
+    by_source = await incidents_repo.list_recent(limit, source_system=system.system_key)
+    by_interface = await incidents_repo.list_recent(limit, interface_type=system.connector_type)
+    merged = {str(i.id): i for i in [*by_source, *by_interface]}
+    rows: list[dict[str, Any]] = []
+    for incident in merged.values():
+        correlation = correlate(incident.interface_type, incident.connector_source_system, index)
+        if correlation["system_key"] == system.system_key:
+            rows.append(_incident_out(incident, correlation))
+    rows.sort(key=lambda r: r["created_at"] or "", reverse=True)
+    return rows[:limit]
+
+
+# ---------------------------------------------------------------------------
+# Incidentes (DA-50, Fase C) — listagem correlacionada com o catalogo
+# ---------------------------------------------------------------------------
+
+
+def _incident_out(
+    incident: Any, correlation: dict[str, Any], *, detail: bool = False
+) -> dict[str, Any]:
+    out: dict[str, Any] = {
+        "id": str(incident.id),
+        "created_at": incident.created_at.isoformat() if incident.created_at else None,
+        "interface_type": incident.interface_type,
+        "connector_source_system": incident.connector_source_system,
+        "probable_root_cause": incident.probable_root_cause,
+        "model_confidence": incident.model_confidence,
+        "diagnosis_confidence": incident.diagnosis_confidence,
+        "evidence_strength": incident.evidence_strength,
+        "llm_provider_used": incident.llm_provider_used,
+        "agent_domain": incident.agent_domain,
+        "latency_ms": incident.latency_ms,
+        "is_mock": incident.is_mock,
+        "sensitivity_level": incident.sensitivity_level,
+        "pii_detected": incident.pii_detected,
+        "redaction_applied": incident.redaction_applied,
+        "error_codes": incident.error_codes,
+        "trace_id": incident.trace_id,
+        "verified_at": incident.verified_at.isoformat() if incident.verified_at else None,
+        "diagnosis_correct": incident.diagnosis_correct,
+        "verified_by": incident.verified_by,
+        "verified_root_cause": incident.verified_root_cause,
+        "system": correlation,
+    }
+    if detail:
+        out["description"] = incident.description
+        out["evidence"] = incident.evidence_json or []
+    return out
+
+
+@router.get("/incidents")
+async def list_incidents(
+    session: SessionReq,
+    limit: int = Query(default=50, ge=1, le=200),
+    interface_type: str | None = None,
+    system_key: str | None = None,
+    verified: bool | None = None,
+) -> list[dict[str, Any]]:
+    """Incidentes recentes, cada um com o sistema integrado correlacionado.
+
+    - `system_key`: filtra pelo match EXATO (connector_source_system igual ao
+      system_key). Para o drill-down com a regra completa (inclui fallback
+      por connector_type), use /systems/{id}/incidents.
+    - `verified=false`: so incidentes sem veredito humano.
+    """
+    index = build_system_index(await AdminRepository(session).list_systems())
+    incidents = await IncidentRepository(session).list_recent(
+        limit,
+        interface_type=interface_type,
+        source_system=system_key,
+        verified=verified,
+    )
+    return [
+        _incident_out(i, correlate(i.interface_type, i.connector_source_system, index))
+        for i in incidents
+    ]
+
+
+@router.get("/incidents/{incident_id}")
+async def get_incident(incident_id: str, session: SessionReq) -> dict[str, Any]:
+    index = build_system_index(await AdminRepository(session).list_systems())
+    incident = await IncidentRepository(session).get_by_id(incident_id)
+    if incident is None:
+        raise HTTPException(status_code=404, detail="Incidente nao encontrado")
+    return _incident_out(
+        incident,
+        correlate(incident.interface_type, incident.connector_source_system, index),
+        detail=True,
+    )

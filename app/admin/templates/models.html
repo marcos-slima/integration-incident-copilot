@@ -88,11 +88,6 @@ function addModel(e) {
     .catch(err => document.getElementById('msg').textContent = err.message);
   return false;
 }
-function escapeHtml(s) {
-  const div = document.createElement('div');
-  div.textContent = s == null ? '' : String(s);
-  return div.innerHTML;
-}
 loadModels();
 </script>
 {% endblock %}

@@ -192,6 +192,12 @@ def run_diagnosis(
         "payload": request.payload,
         "interface_type": request.interface_type,
         "identifier": request.identifier,
+        # DA-50: propaga connector_source_system (system_key) do request para
+        # o state - antes esse campo existia em IncidentRequest mas nunca
+        # chegava ao pipeline, entao incidents.connector_source_system era
+        # sempre o rotulo generico do conector ("OData", "SAP CAP"), nunca a
+        # chave do catalogo. Ver app/services/incident_recorder.py.
+        "connector_source_system": request.connector_source_system,
         "llm_model": llm_model or settings.llm_model,
         "debug": debug,
         "incident_id": incident_id,

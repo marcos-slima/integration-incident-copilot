@@ -25,7 +25,17 @@ class IncidentRequest(BaseModel):
     # Sem esses campos, o pipeline deriva classificacao por heuristicas internas (gateway.py).
     connector_source_system: str | None = Field(
         default=None,
-        description="Sistema de origem do conector (ex: S/4HANA, BTP, CPI). Informativo.",
+        description=(
+            "Sistema de origem. DA-50: quando informado com o `system_key` "
+            "do catalogo de sistemas integrados (app/admin/ -> "
+            "integration_systems, ex: 'cap_prod'), e o valor com o qual o "
+            "incidente e correlacionado na tela /admin/incidents, na API "
+            "admin e no dashboard Grafana. Sem informacao, a correlacao cai "
+            "para `interface_type` -> `connector_type` e, havendo mais de "
+            "um sistema do mesmo conector, o resultado e 'ambiguo' em vez "
+            "de um palpite. Aceita rotulo livre tambem ('S/4HANA', 'BTP') - "
+            "nesse caso simplesmente nao casa com o catalogo."
+        ),
     )
     sensitivity_level: Literal["public", "internal", "confidential", "secret"] | None = Field(
         default=None,
@@ -241,7 +251,7 @@ class VerifyIncidentRequest(BaseModel):
     """DA-28 (VERIFIED_AS) + avaliacao externa (medio prazo, item 5 -
     'Metricas e feedback'): corpo de POST /incidents/{incident_id}/verify.
 
-    Dois efeitos independentes, cada um so acontece se as
+    Tres efeitos independentes, cada um so acontece se as
     pre-condicoes dele estiverem presentes - nenhum bloqueia o outro:
       1. Grava VERIFIED_AS no grafo (Neo4j) - exige GraphRAG ligado e
          `incident_id` correspondendo a um incidente ja gravado (ver
@@ -250,8 +260,13 @@ class VerifyIncidentRequest(BaseModel):
       2. Registra um score booleano ('correto'/'incorreto') no trace
          Langfuse do diagnostico original - exige `trace_id` (devolvido
          em DiagnosisResponse.trace_id) e Langfuse configurado.
-    400 se NENHUM dos dois puder acontecer (GraphRAG desligado/
-    incidente nao gravado E trace_id ausente) - nao ha nada credivel
+      3. DA-50: grava a verificacao na tabela `incidents` do PostgreSQL
+         (verified_at/diagnosis_correct/verified_by/verified_root_cause)
+         - exige DATABASE_URL e que o incidente exista na tabela. E o
+         efeito que alimenta a tela /admin/incidents e os dashboards
+         (antes disso, `verified_at` ficava sempre NULL no banco
+         analitico, independente de quantas verificacoes fossem feitas).
+    400 se NENHUM dos tres puder acontecer - nao ha nada credivel
     para fazer com a chamada nesse caso.
     """
 

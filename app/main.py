@@ -38,6 +38,7 @@ from app.models import (
 from app.queue import AsyncQueueUnavailableError, enqueue_diagnosis, get_job_status
 from app.rag.graph_store import GRAPH_UNAVAILABLE_EXCEPTIONS, ensure_constraints, verify_incident
 from app.rate_limit import limiter
+from app.services.incident_recorder import record_verification  # DA-50
 
 logger = logging.getLogger(__name__)
 
@@ -534,21 +535,23 @@ def verify_incident_endpoint(
     request: Request, incident_id: str, body: VerifyIncidentRequest
 ) -> dict[str, str | bool]:
     """DA-28 (VERIFIED_AS) + avaliacao externa (medio prazo, item 5 -
-    "Metricas e feedback"): registra a confirmacao EXPLICITA (humana ou
-    de outro sistema) da causa raiz de um incidente ja diagnosticado, e
+    "Metricas e feedback") + DA-50: registra a confirmacao EXPLICITA (humana
+    ou de outro sistema) da causa raiz de um incidente ja diagnosticado, e
     opcionalmente um veredito de correto/incorreto (`body.correct`)
     como score no trace Langfuse original (`body.trace_id`).
 
-    Dois efeitos INDEPENDENTES (ver docstring de VerifyIncidentRequest):
-    grafo (Neo4j, exige GraphRAG ligado + incident_id valido) e score
-    Langfuse (exige trace_id). Nenhum bloqueia o outro - um cliente que
-    so tem trace_id (GraphRAG desligado) ainda registra feedback no
-    Langfuse; um cliente que so tem incident_id ainda grava no grafo,
-    exatamente como antes desta mudanca (DA-28).
+    Tres efeitos INDEPENDENTES (ver docstring de VerifyIncidentRequest):
+    grafo (Neo4j, exige GraphRAG ligado + incident_id valido), score
+    Langfuse (exige trace_id) e DA-50: gravacao na tabela `incidents`
+    (best-effort, ver incident_recorder.record_verification). Nenhum
+    bloqueia o outro - um cliente que so tem trace_id (GraphRAG desligado)
+    ainda registra feedback no Langfuse; um cliente que so tem incident_id
+    ainda grava no grafo.
 
-    400 se nenhum dos dois puder acontecer - GraphRAG desligado (ou
-    sem tentativa de grafo porque nao houve incident_id gravavel) E
-    trace_id ausente, ou seja, a chamada nao tem NENHUMA pre-condicao
+    400 se nenhum dos tres puder acontecer - GraphRAG desligado (ou
+    sem tentativa de grafo porque nao houve incident_id gravavel), sem
+    gravacao no banco (sem DATABASE_URL ou incidente inexistente na tabela)
+    E trace_id ausente, ou seja, a chamada nao tem NENHUMA pre-condicao
     atendida para fazer alguma coisa.
     404 se GraphRAG estiver ligado mas o `incident_id` nao existir no
     grafo - mesmo comportamento estrito de antes (nao silencioso, o
@@ -558,6 +561,18 @@ def verify_incident_endpoint(
     demais endpoints mutantes).
     Autenticacao: X-API-Key header (mesma dependency de /diagnose).
     """
+    # DA-50: efeito SQL primeiro e best-effort (record_verification nunca
+    # levanta). Precisa vir antes do 404 do grafo para que os tres efeitos
+    # sejam de fato independentes: um incidente que existe na tabela mas nao
+    # no grafo ainda tem a verificacao persistida, senao o operador perderia
+    # o veredito por causa de um backend (Neo4j) que e opcional.
+    sql_updated = record_verification(
+        incident_id,
+        diagnosis_correct=body.correct,
+        verified_by=body.verified_by,
+        verified_root_cause=body.root_cause,
+    )
+
     graph_updated = False
     if settings.graph_rag_enabled:
         graph_updated = verify_incident(
@@ -589,13 +604,18 @@ def verify_incident_endpoint(
                 exc_info=True,
             )
 
-    if not settings.graph_rag_enabled and not langfuse_scored:
+    # DA-50: sem este passo, verified_at/diagnosis_correct ficavam sempre
+    # NULL no banco analitico e a tela /admin/incidents + os dashboards nunca
+    # mostravam verificacao.
+    if not graph_updated and not langfuse_scored and not sql_updated:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
                 "Nada para registrar: GraphRAG esta desligado "
-                "(GRAPH_RAG_ENABLED=false) e nenhum trace_id/correct valido "
-                "foi informado para gravar feedback no Langfuse."
+                "(GRAPH_RAG_ENABLED=false), nao ha DATABASE_URL ou o "
+                "incidente nao existe na tabela `incidents`, e nenhum "
+                "trace_id/correct valido foi informado para gravar feedback "
+                "no Langfuse."
             ),
         )
 
@@ -604,6 +624,7 @@ def verify_incident_endpoint(
         "status": "verified",
         "graph_updated": graph_updated,
         "langfuse_scored": langfuse_scored,
+        "sql_updated": sql_updated,
     }
 
 

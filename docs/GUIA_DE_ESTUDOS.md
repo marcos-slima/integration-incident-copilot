@@ -202,6 +202,9 @@ Detalhamento completo: README.md, seção "Decisões de Arquitetura" (14 itens)
 7. Encoding OData v4: httpx codifica espaço como "+", CAP exige "%20" — corrigido com urllib.parse.quote.
 8. pyrfc arquivado pela SAP (maio/2026) — bloqueio de RFC é pessoal (falta de S-user), não comercial pro cliente real.
 9. Diagrama do README estava paralelo, fluxo real é sequencial — corrigido.
+10. Alguém da equipe mantinha a DA-32 na lista de "candidatas" do CLAUDE.md depois de ela ter sido entregue — nenhum teste pegava drift de documentação.
+11. O primeiro quality gate (DA-51) rejeitava `expected_sources: []`, que é a forma **correta** nos casos `out_of_scope`: o gate acertava a forma e errava o significado. Gate que erra a premissa é desligado na primeira semana.
+12. Um comparador que trata "nenhum resultado" como "zero regressões" é um falso verde — payload vazio ou de formato desconhecido tem que falhar (DA-51).
 
 Contexto completo: docs/PROCESSO_DESENVOLVIMENTO.md
 
@@ -237,4 +240,5 @@ Lista completa: docs/ferramentas-sustentacao-ecossistema.md
 - Entender o fluxo com debugger: docs/TUTORIAL_ARQUITETURA_DEBUG.md
 - Ver o processo completo: docs/PROCESSO_DESENVOLVIMENTO.md
 - Tese de posicionamento (TCO): docs/TCO_SAP_AI_CORE_VS_SELF_HOSTED.md
+- Qualidade verificável: `uv run python scripts/quality_gate.py` (DA-51) e o detalle em `docs/QUALITY_GATES.md`
 - Próximos passos: validar schema real do APIManagementConnector contra tenant real (implementado, mas especulativo), validação real de Workday/Ariba/RFC (bloqueados), definir corte de v1.0

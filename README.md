@@ -81,7 +81,7 @@ Opção 1 — self-contained, sem depender de infraestrutura pessoal
 
 ```bash
 docker compose up -d      # sobe Ollama + Qdrant + a API
-docker compose exec ollama ollama pull qwen2.5-coder:32b
+docker compose exec ollama ollama pull qwen3-coder-next:latest
 docker compose exec ollama ollama pull nomic-embed-text
 ```
 
@@ -167,6 +167,12 @@ modelo de produção do grafo. Validado com a suíte completa de testes
 maior (~2min49s vs ~1min20s nos 16 testes) em troca de comportamento
 mais confiável sob incerteza.
 
+> **Superada na Fase 12:** o modelo de produção foi trocado para
+> `qwen3-coder-next:latest` após paridade técnica no promptfoo
+> (10/10 PASS, `concurrency: 1`). A comparação acima segue válida como
+> registro histórico do critério usado — `qwen2.5-coder:32b` não é mais
+> o modelo em produção. Ver `docs/PROCESSO_DESENVOLVIMENTO.md` Fase 12.
+
 ### 5. Observabilidade real com Langfuse
 
 **Contexto:** o Langfuse estava configurado desde o início do
@@ -242,6 +248,12 @@ determinística e reproduzível (3/3) no cenário mais crítico do
 pipeline desqualifica o candidato, independente do desempenho médio
 nos demais casos — confiabilidade sob o caso mais exigente pesa mais
 que desempenho médio.
+
+> **Superada na Fase 12:** o modelo de produção foi trocado para
+> `qwen3-coder-next:latest` (paridade 10/10 no promptfoo), depois desta
+> comparação. O critério desta seção — reprodutibilidade no caso crítico
+> como requisito de desqualificação — segue valendo e foi reaplicado na
+> Fase 12.
 
 **Valor do processo, não só do resultado:** esta comparação também
 prova que a decisão de modelo não é estática — é revisitada com
@@ -1427,3 +1439,71 @@ sem erro visível fora do Grafana):
   o resultado visual dos painéis; ele também substitui as variáveis de template
   por `TRUE` (equivalente a "All"), então um erro que só aparece com um filtro
   específico selecionado ainda pode escapar.
+
+### 35. Quality gates: transformar alegações de qualidade em invariantes verificadas (DA-51)
+
+**O problema.** As afirmações mais fortes deste README eram verificadas à mão,
+uma única vez, e nunca mais: "10/10 no promptfoo" (Fase 12), "hit@1 0.923 do
+mmarco sobre o baseline" (DA-29), as "45 queries dos 4 dashboards" (DA-50) e a
+tabela `integration_systems` com migration `004`. O CI (`.github/workflows/tests.yml`)
+rodava ruff, pytest com cobertura ≥ 80% e pip-audit/bandit — **nada** disso.
+Um dataset de avaliação podia ser esvaziado, um `expected_sources` podia apontar
+para documento que não existe mais, o modelo de produção podia ser trocado sem
+ninguém reexecutar o benchmark, e uma migration podia só funcionar na base
+local. Nenhuma dessas regressões quebraria o build. A DA-50 provou o custo
+desse buraco: três bugs de SQL (`evidence_strength` em coluna FLOAT,
+`ROUND(double,int)`, `date_trunc` com intervalo) derrubavam painéis inteiros sem
+deixar rastro em log ou teste.
+
+**A solução.** Camada de gates com duas categorias, porque "testar tudo no CI"
+sem LLM e sem infra é uma fantasia:
+
+- **Determinístico** (`app/evaluation/gates.py` + `scripts/quality_gate.py`) —
+  segundos, sem LLM, sem Qdrant, roda em todo push: schema e piso do dataset de
+  avaliação; todo `expected_sources` presente no corpus; presença de casos
+  `hard`/`out_of_scope`; **invariante DA-29 automatizada** (o
+  `RERANKER_MODEL` em produção tem que ser o vencedor medido no benchmark, com
+  hit@1 e margem mínima sobre o baseline ms-marco); validade das três configs do
+  promptfoo, inclusive se os scripts `exec:` referenciados ainda existem;
+  existência de baseline de LLM; e `candidate_das_fresh`, que falha o build se
+  uma DA marcada como "candidata" no `CLAUDE.md` já tiver seção em
+  `docs/ARCHITECTURE.md`.
+- **Job `migrations_and_dashboards`** — Postgres efêmero, `alembic upgrade head`
+  em banco limpo e as 45 queries dos 4 dashboards. É a **primeira vez** que as
+  migrations são validadas por máquina neste repositório.
+- **Job `llm_eval`** — promptfoo agendado (03:17 UTC) ou manual, com comparação
+  contra baseline versionado em `data/eval/promptfoo_baseline.json`. Sem
+  provider configurado o job escreve "NÃO EXECUTADO" no summary em vez de
+  reportar verde: os configs do promptfoo usam provider **local** (`exec:`) e o
+  runner hospedado não tem Ollama nem o modelo de 51 GB.
+
+**O que o gate encontrou no primeiro dia.** Dois problemas reais, nenhum deles
+visível para a suite:
+
+1. `candidate_das_fresh` acusou a **DA-32** listada como candidata "aguardam
+   Kyma" no `CLAUDE.md`, embora entregue em `67b78e8`
+   (`app/events/amqp_consumer.py`) e documentada em `docs/ARCHITECTURE.md`.
+2. A primeira versão do check de schema rejeitava `expected_sources: []` — mas
+   os dois casos `out_of_scope` do dataset têm essa lista vazia **de propósito**
+   ("fora do escopo: deve retornar baixa confiança"). O gate estava certo sobre
+   a forma e errado sobre o significado. Hoje `out_of_scope` *exige* lista
+   vazia, e lista preenchida nesse caso falha, porque o caso se contradiz.
+
+**Validação.** 34 testes novos em `tests/test_quality_gate.py` — a maioria
+testando que o gate **falha** quando deve (dataset encolhido, `hard` removido,
+modelo divergente do vencedor, margem insuficiente, YAML quebrado, script de
+provider apagado, DA entregue marcada como candidata, regressão de promptfoo,
+payload malformado). Suíte: **806 testes**. O caminho do job de migrações foi
+simulado localmente contra um banco descartável: `001 → 004` e 45/45 queries.
+
+**Limitações (deliberadamente registradas):**
+- `reranker_invariant` confere que o modelo em produção é o vencedor *medido
+  antes*; reexecutar o benchmark exige Qdrant + cross-encoder e continua manual
+  (`scripts/benchmark_rerankers.py`).
+- O gate de LLM não roda em todo PR, por custo e por causa do provider local.
+  Onde não roda, ele avisa — não mascara.
+- `normalize_promptfoo_results` recusa payload vazio ou de formato
+  desconhecido, mas valida o *envelope* do promptfoo  por forma, então uma
+  mudança de formato do promptfoo exige tocar no normalizador.
+- Detalhe completo, incluindo o que estes gates **não** cobrem:
+  `docs/QUALITY_GATES.md`.

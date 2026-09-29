@@ -2,7 +2,7 @@
 
 > **Status: Implementada.** Ver `app/a2a/` (`agent_card.py`,
 > `task_manager.py`, `server.py`) e a seção "A2A (Agent2Agent)" em
-> [docs/ARCHITECTURE.md](../ARCHITECTURE.md). Os pré-requisitos que
+> [docs/ARCHITECTURE.md](ARCHITECTURE.md). Os pré-requisitos que
 > mantinham esta proposta arquivada (conectores SAP fechados + suíte de
 > testes automatizada) foram satisfeitos nas Fases 7/8. A ressalva
 > abaixo sobre a GA inbound do Joule (Q4/2026) continua válida e não

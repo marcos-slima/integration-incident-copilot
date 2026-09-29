@@ -24,10 +24,10 @@ from __future__ import annotations
 
 import logging
 import uuid
-from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
 from app.config import settings
+from app.db import get_sync_session_factory
 from app.redaction import redact_pii_text
 
 if TYPE_CHECKING:
@@ -36,26 +36,15 @@ if TYPE_CHECKING:
 _logger = logging.getLogger(__name__)
 
 
-def _sync_url(raw: str) -> str:
-    for prefix in ("postgresql+asyncpg://", "postgresql://", "postgres://"):
-        if raw.startswith(prefix):
-            return "postgresql+psycopg2://" + raw[len(prefix) :]
-    return raw
-
-
-@lru_cache(maxsize=1)
 def _get_session_factory():
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
+    """Sessionmaker sync compartilhado (DA-52 consolidou em app/db.py).
 
-    engine = create_engine(
-        _sync_url(settings.database_url),
-        pool_pre_ping=True,
-        pool_size=2,
-        max_overflow=3,
-        connect_args={"connect_timeout": 3},
-    )
-    return sessionmaker(engine, expire_on_commit=False)
+    Antes desta DA, esta funcao e a de app/admin/repository.py eram copias
+    identicas do mesmo codigo. Duas copias nao divergem sozinhas, mas
+    divergem na primeira edicao -- e uma delas tenderia a ficar para tras
+    num patch de seguranca.
+    """
+    return get_sync_session_factory()
 
 
 def build_incident_row(

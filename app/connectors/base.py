@@ -30,6 +30,7 @@ from dataclasses import dataclass
 
 from app.circuit_breaker import CircuitBreaker
 from app.config import settings
+from app.contracts.model import Contract
 
 
 @dataclass
@@ -57,6 +58,22 @@ class SAPConnector(ABC):
         ServiceNowConnector configurado) fazem a chamada de fato.
         """
         raise NotImplementedError
+
+    def fetch_contract(self) -> Contract | None:
+        """DA-52: o contrato que o proprio sistema publica, quando publica.
+
+        Interface segregada, e nao mais um metodo obrigatorio: forcar
+        `fetch_contract` nos 8 conectores faria os 7 que nao temem
+        introsspeccao devolverem `None` em seis lugares, e o ganho seria
+        zero. Quem sabe ler contrato implementa; os outros herdam o
+        `None` e o detector registra `nao_introspectavel` como estado
+        proprio -- que e' diferente de "o contrato nao mudou".
+
+        Deliberadamente NAO faz parte do ABC: nenhum pipeline atual
+        chama isto, e o default nunca e' exercitado por testes de
+        conector, entao o contrato da classe base fica minimo.
+        """
+        return None
 
 
 # Alias preferido para conectores de sistemas que nao sao SAP (o nome

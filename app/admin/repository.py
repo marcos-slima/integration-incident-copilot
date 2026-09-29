@@ -21,7 +21,6 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import UTC, datetime
-from functools import lru_cache
 from typing import Any
 
 from sqlalchemy import select
@@ -36,6 +35,7 @@ from app.admin.models import (
     percent_consumed,
 )
 from app.config import settings
+from app.db import get_sync_session_factory
 
 logger = logging.getLogger(__name__)
 
@@ -336,26 +336,9 @@ class AdminRepository:
 # ---------------------------------------------------------------------------
 
 
-def _sync_url(raw: str) -> str:
-    for prefix in ("postgresql+asyncpg://", "postgresql://", "postgres://"):
-        if raw.startswith(prefix):
-            return "postgresql+psycopg2://" + raw[len(prefix) :]
-    return raw
-
-
-@lru_cache(maxsize=1)
 def _get_sync_session_factory():
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
-    engine = create_engine(
-        _sync_url(settings.database_url),
-        pool_pre_ping=True,
-        pool_size=2,
-        max_overflow=3,
-        connect_args={"connect_timeout": 3},
-    )
-    return sessionmaker(engine, expire_on_commit=False)
+    """Sessionmaker sync compartilhado (DA-52 consolidou em app/db.py)."""
+    return get_sync_session_factory()
 
 
 def record_usage(

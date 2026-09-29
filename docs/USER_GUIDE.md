@@ -90,12 +90,19 @@ uv run uvicorn app.main:app --reload   # desenvolvimento
 
 ### Autenticação (leia antes do primeiro curl)
 
-**Todo endpoint de diagnóstico exige `X-API-Key`.** Se `API_KEY` estiver vazia
-no `.env`, uma chave aleatória é gerada no startup e logada em nível WARNING
-(DA-18) — o endpoint nunca fica aberto sem chave. Para uso estável (ou para
-clientes MCP), fixe a chave no `.env` (ver `.env.example`).
+Cada credencial na camada dela (DA-18 + DA-54):
 
-Chaves por superfície:
+- **Usuário da UI web** — não digita chave nenhuma: faz **login**
+  (`usuário + senha`, no topo do formulário) e recebe um cookie de sessão
+  **HttpOnly**, assinado (HMAC-SHA256) e com prazo (8h por default). O
+  navegador o envia sozinho; `Sair` o apaga.
+- **Máquina/integração** — header `X-API-Key` em `/diagnose`,
+  `/llm/policy` e `/incidents/{id}/verify` (DA-18). Se `API_KEY` estiver
+  vazia no `.env`, uma chave aleatória é gerada no startup e logada em
+  nível WARNING — o endpoint nunca fica aberto sem chave.
+
+Chaves por superfície (credenciais de máquina — a UI web **não** usa
+nenhuma delas):
 
 | Superfície | Header | Setting |
 |---|---|---|
@@ -104,12 +111,23 @@ Chaves por superfície:
 | `POST /events/incident` | `X-Api-Key` (Event Mesh) | `EVENTS_API_KEY` |
 | `/admin` e `/admin/api/*` | `X-Admin-Api-Key` | `ADMIN_API_KEY` |
 
+Login de usuário (cookie de sessão): `POST /auth/login` (usuário+senha →
+cookie), `POST /auth/logout`, `GET /auth/session` (quem está logado). O
+login é **fail-closed**: sem `WEB_UI_USERS` configurado no `.env` do
+servidor, `/auth/login` responde 401 sempre — não existe "login aberto".
+Usuários são criados pelo operador do servidor com a one-liner
+documentada no `.env.example`; a senha nunca trafega em texto no `.env`,
+só o hash PBKDF2.
+
+O cookie de sessão **não** vale em MCP, A2A, Event Mesh ou admin — essas
+superfícies continuam exigindo as suas chaves dedicadas.
+
 ### Interface web
 
 A UI em `http://localhost:8000` tem três telas:
 
-**Diagnóstico** — formulário com o campo **API Key** (a chave fixada em
-`API_KEY` no `.env` do servidor; o backend responde **401** sem ela — DA-18),
+**Diagnóstico** — formulário com **login** (usuário + senha, DA-54 — o
+cookie de sessão HttpOnly flui sozinho, sem chave na mão do usuário),
 descrição do incidente, sistema de origem (os 9 conectores) e identificador
 opcional.
 

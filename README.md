@@ -151,6 +151,7 @@ final.
 | 51 | [36](#decisoes-de-arquitetura) | Quality gates: invariantes de avaliação verificadas por máquina (d |
 | 52 | [37](#decisoes-de-arquitetura) | Detecção de drift de contrato SAP: probe `$metadata` (interface se |
 | 53 | [38](#decisoes-de-arquitetura) | Prompt de diagnóstico como artefato versionado: `PromptSpec` (vers |
+| 54 | [39](#decisoes-de-arquitetura) | Login de sessão para a UI web (`/auth/login` + cookie HttpOnly; X-API-Key segue para máquinas) |
 
 ### 1. Alucinação por mistura de contexto (DA-1)
 
@@ -1838,3 +1839,75 @@ verdes. Suíte: **947 testes** (903 da DA-52 + 44 novos).
   artefato, não mede qualidade por versão. Faltaria achar as linhas por
   `prompt_digest` e comparar acurácia — e a invariante 13 já proíbe usar
   `verified`/`diagnosis_correct` para isso.
+
+
+### 39. Login de sessão para a UI web — cada credencial na camada dela (DA-54)
+
+**O problema.** A homologação pegou no primeiro clique: `Erro 401: X-API-Key
+inválida ou ausente`. O DA-18 exige `X-API-Key` em `/diagnose` — e a
+`X-API-Key` é uma credencial de **borda**, pensada para máquina-a-máquina
+(curl, MCP, A2A, outro agente). Mas a UI web reusava essa chave de
+infraestrutura, jogando um segredo do servidor na mão do **usuário final**:
+para operar pela interface, o usuário precisava acessar o servidor, abrir o
+`.env`, copiar o valor e colar no browser. Usuário de UI não deveria nem
+saber que `.env` existe. O paliativo da véspera (campo de API Key na UI)
+trocou "impossível autenticar" por "usuário carrega segredo de infra" —
+mesma camada invertida. O próprio código já previa a evolução: o comentário
+em `frontend/src/api/diagnose.ts` dizia *"em produção, considere migrar para
+autenticação via cookie de sessão obtido através de um endpoint
+`/auth/login` dedicado — essa evolução não exige mudança neste arquivo"*.
+
+**A solução.** Duas vias de autenticação em `/diagnose`, cada uma certa para
+a sua camada:
+
+- **máquina** — header `X-API-Key`, exatamente como antes (DA-18 intacto);
+- **humano** — `POST /auth/login` (usuário + senha) → cookie de sessão
+  `iic_session`, **HttpOnly** (JS não lê), **SameSite=Strict** (CSRF),
+  assinado com HMAC-SHA256 (stateless: `usuario:expiry:assinatura`; mexer em
+  qualquer campo invalida), com prazo (`SESSION_TTL_HOURS`, default 8h).
+
+Superfícies só-de-máquina (**MCP** `/mcp`, **A2A** `/a2a`, **Event Mesh**,
+**admin** `/admin`) **não** aceitam cookie de sessão: continuam exigindo as
+suas chaves dedicadas (DA-19/27/46). Um cookie de browser não abre nenhuma
+delas — testado quebrando de propósito.
+
+**Fail-closed**, no espírito DA-18: sem `WEB_UI_USERS` configurado,
+`/auth/login` responde 401 **sempre** (não existe "login aberto");
+`SESSION_SECRET` vazio gera segredo efêmero no startup com WARNING no log
+(sessões morrem a cada restart). Senha é verificada com PBKDF2-SHA256
+(`hashlib`, stdlib — **zero dependências novas**), piso de 600k iterações
+(requisito do parse: entrada com menos de 100k é pulada com WARNING), e
+**todas** as comparações de segredo usam `secrets.compare_digest` — a mesma
+disciplina de timing-attack do DA-18. Login inexistente e senha errada dão a
+**mesma** resposta, para não revelar quais usuários existem. Rate limit
+5/min por IP (mais apertado que o 10/min de `/diagnose`, porque aqui se
+testa senha).
+
+Usuários vivem no `.env` (`WEB_UI_USERS`) como
+`usuario:pbkdf2_sha256.iterações.salt.hash` — gerado com one-liner
+documentada (mesmo esquema do Fernet da DA-47). Single-tenant por design;
+um store de usuários com senhas próprias por usuário é a evolução natural
+quando houver mais de um operador.
+
+**O que NÃO mudou:** `frontend/src/api/diagnose.ts` — exatamente como o
+comentário previa, o cookie flui no fetch same-origin sem nenhuma mudança
+lá; o header `X-API-Key` continua sendo enviado se existir (compatível com
+quem já usava).
+
+**O porquê do separador `.`** no formato da credencial: `$` não. O docker
+compose **interpola** `$` dentro de valores em `${VAR:-}` no compose.yaml —
+achado real na homologação: o salt do `WEB_UI_USERS` **sumia** no caminho
+do `.env` para o container (env truncado no meio, login 401 sempre, e o
+container com a variável mais curta que o `.env`). Ponto não é caractere de
+interpolação — a credencial atravessa `.env` → compose → container inteira.
+
+**Validação.** 18 testes novos (`tests/test_auth.py`), um por promessa:
+cookie HttpOnly/SameSite/Path no login, `/auth/session` dizendo quem está
+logado, senha errada 401, login inexistente ≡ senha errada, login fechado
+sem `WEB_UI_USERS`, logout limpando, cookie autenticando `/diagnose`,
+`X-API-Key` ainda valendo, 401 sem nada, token adulterado/expirado/segredo
+errado, MCP e admin rejeitando cookie, parse de `WEB_UI_USERS` (entrada
+malformada pulada sem abrir auth, iterações fracas rejeitadas). Achado real
+do processo: o cookie jar do httpx persiste entre testes no client
+module-level — um login de teste anterior autenticava um teste que devia
+provar o 401; o fixture agora limpa o jar.

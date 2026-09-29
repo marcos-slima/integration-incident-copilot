@@ -8,7 +8,7 @@
 
 import { useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { callDiagnose, ApiError } from '../api/diagnose';
+import { callDiagnose, ApiError, getApiKey, setApiKey } from '../api/diagnose';
 import type {
   DiagnosisResponse,
   HistoryItem,
@@ -22,7 +22,9 @@ interface DiagnoseViewProps {
   onResult: (item: HistoryItem) => void; // callback para adicionar ao histórico
 }
 
-// Sistemas disponíveis no dropdown
+// Sistemas disponíveis no dropdown — os 9 conectores do pipeline
+// (app/connectors/__init__.py::_REGISTRY). O gate connector_reachable
+// reprova se um conector registrado faltar aqui.
 const SYSTEMS: Array<[string, string]> = [
   ['', 'Sem conector (texto livre)'],
   ['odata', 'OData / SAP Gateway'],
@@ -31,6 +33,7 @@ const SYSTEMS: Array<[string, string]> = [
   ['salesforce', 'Salesforce CRM'],
   ['workday', 'Workday HCM'],
   ['ariba', 'SAP Ariba'],
+  ['successfactors', 'SAP SuccessFactors EC'],
   ['cap', 'SAP CAP / BTP'],
   ['apim', 'SAP API Management'],
 ];
@@ -66,6 +69,12 @@ export function DiagnoseView({ onResult }: DiagnoseViewProps) {
   const [logs, setLogs]       = useState('');
   const [payload, setPayload] = useState('');
   const [showAdv, setShowAdv] = useState(false);
+
+  // API key (DA-18): lida do sessionStorage no mount — quem preenche é o
+  // usuário em runtime, nunca o código-fonte (frontend/src/api/diagnose.ts).
+  // Sem este campo o usuário não tem como autenticar: o backend responde
+  // 401 para TODO diagnóstico e a UI não oferece onde digitar a chave.
+  const [apiKey, setApiKeyState] = useState(() => getApiKey());
 
   // Estado do upload
   const [uploadFile, setUploadFile]     = useState<UploadedFile | null>(null);
@@ -104,8 +113,16 @@ export function DiagnoseView({ onResult }: DiagnoseViewProps) {
       setTimeout(() => resultRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     } catch (e) {
       if (e instanceof ApiError) {
-        // Erro HTTP do backend (401, 422, 429, 500)
-        setError(`Erro ${e.status}: ${e.message}`);
+        if (e.status === 401) {
+          setError(
+            'X-API-Key inválida ou ausente (401). Preencha o campo "API Key" ' +
+              'acima com o valor de API_KEY do servidor — todo /diagnose ' +
+              'exige a chave (DA-18).',
+          );
+        } else {
+          // Erro HTTP do backend (422, 429, 500)
+          setError(`Erro ${e.status}: ${e.message}`);
+        }
       } else {
         // Erro de rede (servidor offline, timeout)
         setError('Falha na comunicação com o servidor. Verifique se o backend está ativo.');
@@ -167,6 +184,24 @@ export function DiagnoseView({ onResult }: DiagnoseViewProps) {
       </p>
 
       <div className="form-card">
+        {/* Autenticação (DA-18) */}
+        <div className="field-row">
+          <label className="field-label">API Key (X-API-Key) *</label>
+          <input
+            className="field-input mono-input"
+            type="password"
+            autoComplete="off"
+            placeholder="A chave fixada em API_KEY no .env do servidor"
+            value={apiKey}
+            onChange={(e) => setApiKeyState(e.target.value)}
+            onBlur={() => setApiKey(apiKey.trim())}
+          />
+          <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>
+            O backend exige X-API-Key em todo /diagnose. A chave fica no
+            sessionStorage desta aba — nunca no código-fonte.
+          </div>
+        </div>
+
         {/* Descrição */}
         <div className="field-row">
           <label className="field-label">Descrição do incidente *</label>
@@ -347,7 +382,7 @@ export function DiagnoseView({ onResult }: DiagnoseViewProps) {
         <div className="result-card" ref={resultRef}>
           <div className="result-header">
             <span className="result-header-title">Resultado do diagnóstico</span>
-            <Badge value={result.confidence} />
+            <Badge value={result.diagnosis_confidence} />
           </div>
           <div className="result-body">
             <div className="section-label">Causa raiz provável</div>

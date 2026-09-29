@@ -704,16 +704,25 @@ def _literal_fiel() -> str:
 
 
 def _connector_root(
-    tmp_path: Path, registry: str, literal: str, supervisor: str, cli: str | None = None
+    tmp_path: Path,
+    registry: str,
+    literal: str,
+    supervisor: str,
+    cli: str | None = None,
+    ui: str | None = None,
 ) -> Path:
     (tmp_path / "app/connectors").mkdir(parents=True)
     (tmp_path / "app/agent").mkdir(parents=True)
     (tmp_path / "app/admin").mkdir(parents=True)
+    (tmp_path / "frontend/src/components").mkdir(parents=True)
     (tmp_path / "app/connectors/__init__.py").write_text(registry, encoding="utf-8")
     (tmp_path / "app/models.py").write_text(literal, encoding="utf-8")
     (tmp_path / "app/admin/models.py").write_text(literal, encoding="utf-8")
     (tmp_path / "app/agent/supervisor.py").write_text(supervisor, encoding="utf-8")
     (tmp_path / "app/agent/graph.py").write_text(cli or _SANE_CLI, encoding="utf-8")
+    (tmp_path / "frontend/src/components/DiagnoseView.tsx").write_text(
+        ui or _SANE_UI, encoding="utf-8"
+    )
     return tmp_path
 
 
@@ -732,6 +741,15 @@ _SANE_SUPERVISOR = "_SAP_INTERFACE_TYPES = {'odata'}\n_SAAS_INTERFACE_TYPES = {'
 _SANE_CLI = (
     'parser.add_argument("--interface", choices=["odata", "successfactors", "apim"],'
     " default=None)\n"
+)
+
+_SANE_UI = (
+    "const SYSTEMS: Array<[string, string]> = [\n"
+    "  ['', 'Sem conector'],\n"
+    "  ['odata', 'OData / SAP Gateway'],\n"
+    "  ['successfactors', 'SAP SuccessFactors EC'],\n"
+    "  ['apim', 'SAP API Management'],\n"
+    "];\n"
 )
 
 
@@ -771,6 +789,19 @@ def test_connector_reachable_acusa_cli_que_rejeita_conector(tmp_path: Path) -> N
     )
     falhas = [f for f in check_connector_reachable(root) if f.is_failure]
     assert "rejeita ['successfactors']" in falhas[0].message
+
+
+def test_connector_reachable_acusa_dropdown_sem_conector(tmp_path: Path) -> None:
+    """A quinta superficie: o dropdown da UI web. Achado na homologacao —
+    gates verdes em quatro superficies e o usuario sem o conector na
+    tela. Quem opera so pela interface nunca conseguiria enviar
+    interface_type=successfactors."""
+    ui_sem_sfsf = _SANE_UI.replace("  ['successfactors', 'SAP SuccessFactors EC'],\n", "")
+    root = _connector_root(
+        tmp_path, _SANE_REGISTRY, _literal_fiel(), _SANE_SUPERVISOR, ui=ui_sem_sfsf
+    )
+    falhas = [f for f in check_connector_reachable(root) if f.is_failure]
+    assert "dropdown nao oferece ['successfactors']" in falhas[0].message
 
 
 def test_connector_reachable_permite_apim_em_generic(tmp_path: Path) -> None:

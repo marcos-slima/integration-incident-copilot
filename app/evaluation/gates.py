@@ -594,6 +594,7 @@ CONNECTORS_SOURCE = Path("app/connectors/__init__.py")
 SUPERVISOR_SOURCE = Path("app/agent/supervisor.py")
 ADMIN_SYSTEMS_SOURCE = Path("app/admin/models.py")
 CLI_SOURCE = Path("app/agent/graph.py")
+UI_DROPDOWN_SOURCE = Path("frontend/src/components/DiagnoseView.tsx")
 
 
 def _iter_docs(root: Path) -> list[Path]:
@@ -830,6 +831,24 @@ def check_connector_reachable(root: Path = REPO_ROOT) -> list[Finding]:
                 f"{CLI_SOURCE}: --interface rejeita {rejeitados} — "
                 "choices nao cobrem o registro de conectores"
             )
+
+    # A quinta superficie e o dropdown da UI web: o SYSTEMS de
+    # frontend/src/components/DiagnoseView.tsx. Caso real (homologacao):
+    # successfactors aceito pelo Literal, pelo CLI, pelo supervisor e
+    # pelo catalogo — e ausente do dropdown, invisivel para quem so
+    # opera pela interface. Gates verdes, conector morto na tela.
+    try:
+        ui_fonte = (root / UI_DROPDOWN_SOURCE).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return _fail(check, f"{UI_DROPDOWN_SOURCE} nao existe — dropdown da UI sem checagem")
+    m_ui = re.search(r"const SYSTEMS[^=]*=\s*\[(.*?)\];", ui_fonte, re.DOTALL)
+    if m_ui is None:
+        problemas.append(f"{UI_DROPDOWN_SOURCE}: dropdown SYSTEMS nao encontrado")
+    else:
+        ui_valores = {v for v in re.findall(r"\[\s*'([a-z_]*)'\s*,", m_ui.group(1)) if v}
+        ausentes = sorted(conectores - ui_valores)
+        if ausentes:
+            problemas.append(f"{UI_DROPDOWN_SOURCE}: dropdown nao oferece {ausentes} ao usuario")
 
     if problemas:
         return _fail(check, "; ".join(problemas[:6]))

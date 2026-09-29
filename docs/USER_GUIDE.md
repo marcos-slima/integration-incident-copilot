@@ -108,8 +108,10 @@ Chaves por superfície:
 
 A UI em `http://localhost:8000` tem três telas:
 
-**Diagnóstico** — formulário com descrição do incidente, sistema de origem
-(os 9 conectores) e identificador opcional.
+**Diagnóstico** — formulário com o campo **API Key** (a chave fixada em
+`API_KEY` no `.env` do servidor; o backend responde **401** sem ela — DA-18),
+descrição do incidente, sistema de origem (os 9 conectores) e identificador
+opcional.
 
 **Histórico** — diagnósticos da sessão atual, com confiança e causa raiz.
 

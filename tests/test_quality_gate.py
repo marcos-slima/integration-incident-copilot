@@ -703,7 +703,9 @@ def _literal_fiel() -> str:
     return f"    interface_type: (Literal[{valores}\n        ] | None) = None\n"
 
 
-def _connector_root(tmp_path: Path, registry: str, literal: str, supervisor: str) -> Path:
+def _connector_root(
+    tmp_path: Path, registry: str, literal: str, supervisor: str, cli: str | None = None
+) -> Path:
     (tmp_path / "app/connectors").mkdir(parents=True)
     (tmp_path / "app/agent").mkdir(parents=True)
     (tmp_path / "app/admin").mkdir(parents=True)
@@ -711,6 +713,7 @@ def _connector_root(tmp_path: Path, registry: str, literal: str, supervisor: str
     (tmp_path / "app/models.py").write_text(literal, encoding="utf-8")
     (tmp_path / "app/admin/models.py").write_text(literal, encoding="utf-8")
     (tmp_path / "app/agent/supervisor.py").write_text(supervisor, encoding="utf-8")
+    (tmp_path / "app/agent/graph.py").write_text(cli or _SANE_CLI, encoding="utf-8")
     return tmp_path
 
 
@@ -725,6 +728,11 @@ _SANE_REGISTRY = (
 # "qualquer um" trazia sensitivity_level junto.
 
 _SANE_SUPERVISOR = "_SAP_INTERFACE_TYPES = {'odata'}\n_SAAS_INTERFACE_TYPES = {'successfactors'}\n"
+
+_SANE_CLI = (
+    'parser.add_argument("--interface", choices=["odata", "successfactors", "apim"],'
+    " default=None)\n"
+)
 
 
 def test_connector_reachable_pass_quando_tem_camada(tmp_path: Path) -> None:
@@ -751,6 +759,18 @@ def test_connector_reachable_acusa_conector_que_cai_em_generic(tmp_path: Path) -
     )
     falhas = [f for f in check_connector_reachable(root) if f.is_failure]
     assert "generic" in falhas[0].message
+
+
+def test_connector_reachable_acusa_cli_que_rejeita_conector(tmp_path: Path) -> None:
+    """A quarta superficie: o CLI. successfactors aceito pelo Literal,
+    coberto pelo supervisor, listado no catalogo — e o argparse do CLI
+    ainda o rejeitava com "invalid choice"."""
+    cli_sem_sfsf = _SANE_CLI.replace('"successfactors", ', "")
+    root = _connector_root(
+        tmp_path, _SANE_REGISTRY, _literal_fiel(), _SANE_SUPERVISOR, cli_sem_sfsf
+    )
+    falhas = [f for f in check_connector_reachable(root) if f.is_failure]
+    assert "rejeita ['successfactors']" in falhas[0].message
 
 
 def test_connector_reachable_permite_apim_em_generic(tmp_path: Path) -> None:

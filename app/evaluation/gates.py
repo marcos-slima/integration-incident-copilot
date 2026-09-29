@@ -286,10 +286,17 @@ def check_llm_baseline(root: Path = REPO_ROOT) -> list[Finding]:
 
 def _candidate_das(root: Path) -> list[str]:
     text = (root / CLAUDE_DOC).read_text(encoding="utf-8")
-    block = re.search(r"DAs candidatas.*?\n\n", text, re.DOTALL)
+    # Ancorado no INICIO DA LINHA do titulo, nao na primeira ocorrencia da
+    # frase: a tabela de DAs do proprio CLAUDE.md cita "das DAs candidatas"
+    # numa celula, e uma busca ingenua casava la e devolvia lista vazia.
+    block = re.search(
+        r"^[ \t]*(?:#{1,4}[ \t]*)?\**DAs candidatas[^\n]*\n(?P<body>.*?)(?:\n[ \t]*\n|\Z)",
+        text,
+        re.MULTILINE | re.DOTALL,
+    )
     if not block:
         return []
-    return sorted(set(re.findall(r"DA-\d+", block.group(0))))
+    return sorted(set(re.findall(r"DA-\d+", block.group("body"))))
 
 
 def check_candidate_das(root: Path = REPO_ROOT) -> list[Finding]:

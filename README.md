@@ -396,7 +396,7 @@ o que era real do que era falso alarme ou já havia sido corrigido:
   - `LLM_MODEL` como global mutável de módulo → injetado via `state`/
     parâmetro em `run_diagnosis(..., llm_model=...)`, eliminando risco
     de corrida entre execuções concorrentes
-  - Parsing de JSON manual e frágil → `llm.with_structured_output(DiagnosisModel, include_raw=True)`, com o parsing manual antigo mantido como *fallback*, não mais como único caminho
+  - Parsing de JSON manual e frágil → structured output de verdade, com o parsing manual antigo mantido como *fallback*, não mais como único caminho. O caminho primário é `create_react_agent(..., response_format=DiagnosisModel)`, que dispara uma **chamada adicional** ao LLM com `with_structured_output` (tool-calling nativo do provider) e devolve o `DiagnosisModel` já validado em `structured_response`; o regex só roda se essa chamada falhar
   - `confidence` sem validação de range → `Field(ge=0.0, le=1.0)` no
     schema Pydantic **+** clamp defensivo no código (a mesma filosofia
     de guardrail em camadas já usada para o fallback do conector,

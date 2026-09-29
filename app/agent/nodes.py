@@ -931,8 +931,8 @@ def _run_diagnosis_agent(state: CopilotState, persona: str) -> dict:
         # de verdade (tool-calling nativo do provider), e devolve o
         # resultado ja validado em react_result["structured_response"] -
         # nao mais so um texto que a gente torce pra estar em JSON. O
-        # parsing por regex abaixo (_extract_diagnosis_from_raw_message)
-        # deixa de ser o caminho principal e vira o ULTIMO fallback, so
+        # o parsing por regex abaixo deixa de ser o caminho
+        # principal e vira o ULTIMO fallback, so
         # usado quando structured_response nao vem preenchido.
         react_agent = create_react_agent(llm, tools=react_tools, response_format=DiagnosisModel)
         messages = {"messages": [{"role": "user", "content": prompt + json_instruction}]}

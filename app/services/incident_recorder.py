@@ -91,6 +91,12 @@ def build_incident_row(
         "evidence_strength": response.evidence_strength,
         "llm_provider_used": response.llm_provider_used,
         "agent_domain": response.agent_domain,
+        # DA-53: proveniencia de modelo e prompt. `response.llm_model` e' o
+        # que o state carregou (o nome real, nao o rotulo da rota -- invariante
+        # 8: modelo nao entra na tabela de rotas).
+        "llm_model": response.llm_model,
+        "prompt_version": response.prompt_version,
+        "prompt_digest": response.prompt_digest,
         "evidence_json": [e.model_dump(mode="json") for e in response.evidence] or None,
     }
 

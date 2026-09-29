@@ -1616,3 +1616,101 @@ e o CLI devolvendo exit ≠ 0 para breaking. Suíte: **903 testes**.
   `unverified` carrega o motivo em `reason`. Separar exigiria distinguir
   "o SAP disse que não tem contrato" de "o SAP não respondeu", e o
   detector hoje não sabe a diferença.
+
+### 37. Prompt de diagnóstico como artefato versionado, com gate contra o prompt medido (DA-53)
+
+**O problema.** O prompt de diagnóstico — o texto mais caro e mais
+influente do sistema — era três f-strings dentro de `app/agent/nodes.py`
+(a persona, o template, a instrução de saída), e a tabela `incidents` não
+guardava nem o modelo nem o prompt. Duas consequências, nenhuma visível:
+
+1. **Um incidente gravado era irreproduzível.** `llm_provider_used` diz
+   *qual transporte* respondeu, não *qual modelo* nem *qual prompt*. Quando
+   o modelo canônico mudou (DA-4/8, e de novo na DA-12), não havia como
+   responder "quais diagnósticos antigos saíram do modelo antigo?".
+2. **Não dava para saber se o prompt em produção era o prompt medido.** O
+   harness do promptfoo **chama `run_diagnosis` de verdade**
+   (`scripts/promptfoo_provider.py:30`) — ele não tem cópia do prompt. Isso
+   é uma boa notícia para a fidelity da medição e uma péssima para
+   rastreabilidade: o 10/10 da Fase 12 mede o texto de `nodes.py`, e trocar
+   uma palavra ali invalidava a medição **sem deixar rastro nenhum**. O
+   `RERANKER_MODEL` tinha invariante automatizada desde a DA-29; o prompt,
+   que era a variável mais sensível, não tinha nada.
+
+O caso mais traiçoeiro: editar um `Field(description=...)` do
+`DiagnosisModel`. O LangChain injeta essas descrições no schema de
+tool-calling (`app/agent/state.py:18-24`), então elas **são** prompt — em
+outro arquivo, sem nenhuma menção a prompt. Já quebrou uma vez
+(`matched_source` parou de ser preenchido) e nada automatizado pegaria.
+
+**A solução.** `app/agent/prompts.py` é a fonte única do artefato, e o
+digest é o que amarra produção à medição.
+
+- **`PromptSpec`**: `version` (`1.0.0`) + `digest` (sha256 de um tuplo
+  canônico com versão, template, **nomes dos slots**, as três personas, a
+  instrução de saída e **nomes + descrições + constraints dos campos do
+  `DiagnosisModel`**). Incluir o schema no digest é o ponto: é o que faz
+  o gate enxergar uma edição de `Field` feita a dez arquivos de distância.
+- **Nomes dos slots no digest, não o conteúdo.** Um slot novo (ou removido)
+  muda a estrutura do prompt e reprova o gate; o texto de um log não muda
+  nada. Se o digest cobrisse o conteúdo variável, cada incidente teria um
+  digest próprio e a coluna `incidents.prompt_digest` não serviria para
+  atribuir nada.
+- **Proveniência no caminho real**: `_run_diagnosis_agent` grava
+  `prompt_version`/`prompt_digest` no diagnóstico, `graph.py` os leva para
+  `DiagnosisResponse`, e `build_incident_row` para a tabela `incidents`
+  (migration `006`, com `llm_model` — que já circulava em `CopilotState` e
+  nunca era persistido). O `report_markdown` mostra modelo e versão do
+  prompt, para quem lê o diagnóstico.
+- **Gate `prompt_digest_measured`**, moldado no `reranker_invariant` da
+  DA-29: o digest de produção tem que ser o digest gravado em
+  `data/eval/prompt_baseline.json`, que é a declaração "este texto foi o
+  medido". Verificado com três mutações, todas reprovadas: uma palavra no
+  template, **um `Field(description=)` do `DiagnosisModel`**, e um slot
+  novo no template.
+
+**A decisão que custou menos e protegeu mais: não tocar no texto.** Era
+tentador gerar a instrução de saída a partir do `DiagnosisModel` e matar
+a duplicação entre `nodes.py:951-960` e `state.py:43-50`. Isso
+mudaria o prompt — e o texto medido. Eu trocaria um bug latente por um
+benchmark invalidado e um gate vermelho. O texto ficou como está, e o digest
+passa a **incluir os dois**, de modo que mexer em qualquer um dos dois
+exige re-medição. A duplicação continua, mas deixou de ser invisível.
+
+**Validação.** 44 testes novos em `tests/test_prompt_versioning.py`, e o
+resto do trabalho foi provar que **não mudou nada**: o texto extraído foi
+conferido byte a byte contra o renderizado pré-DA-53, em quatro cenários
+(sap/saas/generic/sem-contexto), com os sha256 travados em teste
+(`GOLDEN_SHA256`). Se um byte mudar, o teste falha e aponta que o promptfoo
+precisa ser reexecutado. Também: o digest é estável entre processos
+(subprocesso, senão a coluna seria inagrupável), o `render()` falha alto em
+slot faltando ou sobrando (senão um bloco de contexto desapareceria em
+silêncio), e `build_incident_row` bate com as colunas do ORM nos dois
+sentidos. Migration `006` validada em `001 → 006 → 005 → 006 → head` num
+Postgres descartável, com insert real pelo ORM nos dois cenários (LLM com
+proveniência, rule engine sem) e as 45 queries dos dashboards ainda
+verdes. Suíte: **944 testes**.
+
+**Limitações (deliberadamente registradas):**
+- **O digest não é um snapshot do que foi enviado.** Dois incidentes com o
+  mesmo digest usaram o mesmo *template*; o contexto (logs, RAG, conector)
+  era diferente. Para auditar o prompt exato de um incidente seria preciso
+  persistir o prompt renderizado, e aí entra PHI e custo de armazenamento
+  — decisão que não tomei aqui.
+- **O gate confia numa declaração.** Ele compara produção com
+  `data/eval/prompt_baseline.json`, mas nada impede que alguém rode
+  `--write-prompt-baseline` sem ter executado o promptfoo. O comando não
+  aceita digest digitado à mão (seria exatamente o artefato em que o gate
+  não deve confiar), mas a evolução natural — ligar o digest ao resultado do
+  promptfoo versionado — não foi feita.
+- **Proveniência de prompt não entra no event mesh.**
+  `IncidentEventData` é o lado **entrada** (`POST /events/incident`
+  representa o que um humano digitaria em `/diagnose`); a origem do
+  diagnóstico não pertence a um payload de entrada.
+- **Incidentes anteriores a `006` ficam com as colunas nulas.** Não há backfill:
+  não existe forma honesta de saber qual prompt gerou um diagnóstico gravado
+  antes de a informação existir.
+- **Análise por prompt continua não sendo possível.** O digest identifica o
+  artefato, não mede qualidade por versão. Faltaria achar as linhas por
+  `prompt_digest` e comparar acurácia — e a invariante 13 já proíbe usar
+  `verified`/`diagnosis_correct` para isso.

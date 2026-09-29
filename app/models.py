@@ -212,6 +212,36 @@ class DiagnosisResponse(BaseModel):
             "por autoavaliacao do LLM. Ver DA-22 (Multi-agent)."
         ),
     )
+    # DA-53: proveniencia. Sem estes campos, um incidente gravado e
+    # irreproduzivel: `llm_provider_used` diz QUAL transporte respondeu, mas
+    # nao qual MODELO nem qual PROMPT - e trocar o modelo canonico (DA-4/8,
+    # DA-12) nao deixava rastro de quais diagnosticos eram do modelo antigo.
+    llm_model: str | None = Field(
+        default=None,
+        description=(
+            "Nome do modelo que efetivamente produziu o diagnostico. Texto "
+            "livre ('qwen3-coder-next:latest', nome de deployment), NAO uma "
+            "rota: modelo nunca entra na tabela de rotas (invariante 8). None "
+            "quando o rule engine (DA-33) encerrou sem chamar o LLM. Ver DA-53."
+        ),
+    )
+    prompt_version: str | None = Field(
+        default=None,
+        description=(
+            "Revisao declarada do artefato de prompt de diagnostico "
+            "(app/agent/prompts.py::PROMPT_VERSION). None quando nenhum "
+            "prompt foi usado (rule engine). Ver DA-53."
+        ),
+    )
+    prompt_digest: str | None = Field(
+        default=None,
+        description=(
+            "SHA-256 do artefato de prompt: template, slots, personas, "
+            "instrucao de saida e schema estruturado. Dois diagnosticos com o "
+            "mesmo digest usaram o mesmo prompt. None quando nenhum prompt "
+            "foi usado. Ver DA-53."
+        ),
+    )
     evidence: list[Evidence] = Field(
         default_factory=list,
         description=(

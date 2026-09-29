@@ -104,6 +104,8 @@ Se o hook rodar ruff e reformatar arquivos → `git add` novamente + re-commit.
 app/
   agent/
     graph.py        # Grafo LangGraph + run_diagnosis() — ponto de entrada
+    prompts.py      # DA-53: artefato de prompt (version+digest); fonte
+                    # única de persona, template e instrução de saída
     nodes.py        # Todos os nodes: connector, retrieve, diagnose, report
                     # + _assemble_evidence(), _apply_confidence_guardrails()
     rules.py        # DA-33: Rule Engine determinístico (14 regras SAP/integração)
@@ -141,7 +143,7 @@ app/
   config.py         # Pydantic Settings — fonte única de verdade para config
   main.py           # FastAPI app, rotas, lifespan
 
-tests/              # 903 testes unitários (14 skipped) + 15 integração.
+tests/              # 944 testes unitários (14 skipped) + 15 integração.
                     # 10 deles são e2e da DA-52 e só rodam com
                     # IIC_TEST_DATABASE_URL + Postgres (job CI
                     # migrations_and_dashboards)
@@ -197,6 +199,7 @@ docs/               # ARCHITECTURE.md, GETTING_STARTED.md, TUTORIAL_ARQUITETURA_
 | DA-50 | Correlação `incidents` ↔ catálogo por `system_key` (exato, vindo de `IncidentRequest.connector_source_system`) com fallback por `connector_type` e ambiguidade fail-closed; verificação persistida no SQL; tela `/admin/incidents` + dashboard `iic-systems` | `app/admin/correlation.py`, `app/agent/graph.py`, `app/services/incident_recorder.py::record_verification`, `app/admin/routes.py`, `scripts/validate_dashboards.py` |
 | DA-51 | Quality gates: invariantes de avaliação verificadas por máquina (dataset/corpus, invariante DA-29, configs promptfoo, freshness das DAs candidatas) + migrações e 45 queries no CI | `app/evaluation/gates.py`, `scripts/quality_gate.py`, `.github/workflows/quality.yml`, `docs/QUALITY_GATES.md` |
 | DA-52 | Detecção de drift de contrato SAP: probe `$metadata` (interface segregada `fetch_contract`), normalização+hash canônico, severidade fechada (breaking/additive/cosmetic), baseline append-only `system_contracts` (migration 005) e sinal via event mesh só em breaking | `app/contracts/` (`model`, `odata`, `diff`, `baseline`, `observe`), `app/connectors/odata_connector.py::fetch_contract`, `scripts/check_contract_drift.py` |
+| DA-53 | Prompt de diagnóstico como artefato versionado: `PromptSpec` (version+digest) em módulo próprio, proveniência (`llm_model`/`prompt_version`/`prompt_digest`) na resposta, no relatório e em `incidents` (migration 006), e gate `prompt_digest_measured` amarra produção ao prompt medido | `app/agent/prompts.py`, `app/evaluation/gates.py::check_prompt_digest`, `data/eval/prompt_baseline.json` |
 
 **DAs candidatas (sem implementação ainda):**
 - DA-31: SAP AI Agent Hub registration (MCP + A2A) — bloqueada: exige tenant Kyma
@@ -229,7 +232,9 @@ docs/               # ARCHITECTURE.md, GETTING_STARTED.md, TUTORIAL_ARQUITETURA_
 17. **So `breaking` abre incidente** de drift; additive e cosmetic não. Rename provável é *cosmetic*: errar para breaking gera alarme falso e o detector é desligado
 18. **Fingerprint nunca é do XML bruto** — Properties/Entities/Annotations são `tuple` ordenadas e namespace/versão volátil ficam de fora. Sem isso o SAP republicando o serviço gera drift todo dia
 19. `get_sync_session_factory()` é cacheado **chaveado pela URL** e nunca cacheia `None` — `lru_cache` de zero args sobre `settings` mutável travava `None` em cache sem erro (achado pelo e2e da DA-52)
-20. `evidence_strength` é FLOAT (migration 002) — nunca usar predicado textual (`IN ('high','critical')`) em query de dashboard/relatório. `scripts/validate_dashboards.py` roda as 45 queries contra o Postgres real antes de dar o dashboard como bom
+20. **Texto de prompt só muda com o promptfoo junto** — o gate `prompt_digest_measured` (DA-53) reprova se o digest de `app/agent/prompts.py` divergir de `data/eval/prompt_baseline.json`. Isso inclui editar um `Field(description=)` do `DiagnosisModel`, que o LangChain injeta no schema de tool-calling. Depois de mudar de propósito: rode o promptfoo e regrave com `--write-prompt-baseline`
+21. **`prompt_digest`/`prompt_version` são NULL quando o rule engine encerra** (DA-53) — um diagnóstico sem LLM não foi produzido por prompt nenhum. Default `"desconhecido"` fabricaria procedência, o mesmo erro da invariante 13
+22. `evidence_strength` é FLOAT (migration 002) — nunca usar predicado textual (`IN ('high','critical')`) em query de dashboard/relatório. `scripts/validate_dashboards.py` roda as 45 queries contra o Postgres real antes de dar o dashboard como bom
 
 ---
 

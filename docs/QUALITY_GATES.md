@@ -18,6 +18,7 @@ verificadas à mão, uma vez, e nunca mais.
 | `llm_baseline` | existe baseline versionado do promptfoo (comparação de regressão de LLM) | instantâneo | todo push/PR |
 | `candidate_das_fresh` | nenhuma DA marcada como "candidata" no `CLAUDE.md` já entregue em `docs/ARCHITECTURE.md` | instantâneo | todo push/PR |
 | `preflight_delegates` | o preflight de RAM do harness é `app/evaluation/ram_preflight.py`, não python inline no `scripts/promptfoo_remote.sh` | instantâneo | todo push/PR |
+| `prompt_digest_measured` | o prompt em produção (`app/agent/prompts.py`) tem o mesmo digest do prompt **medido** no `data/eval/prompt_baseline.json` | instantâneo | todo push/PR |
 | `migrations_and_dashboards` (job) | `alembic upgrade head` em banco limpo + as 45 queries dos 4 dashboards | ~1 min | todo push/PR |
 | `llm_eval` (job) | promptfoo contra o baseline; falha em regressão de caso | depende do provider | agendado 03:17 UTC + manual |
 
@@ -81,6 +82,18 @@ recusado com exit 1 — nunca interpretado como "zero regressões".
   roda; não prova que o painel mostra o que alguém espera.
 - **Erros que só aparecem com um filtro específico selecionado.** O validador
   substitui as variáveis de template por "All".
+- **`prompt_digest_measured` não prova que a medição ainda é válida.** O gate
+  compara o digest de produção com o digest gravado. Ele prova que o texto
+  não mudou *desde a última vez que alguém regravou o arquivo* — mas nada
+  impede que alguém rode `--write-prompt-baseline` sem ter executado o
+  promptfoo. O arquivo é uma declaração, não uma prova; o valor está em ele
+  ser versionado e revisável no diff. Uma evolução natural é ligar o digest ao
+  resultado do promptfoo em `data/eval/promptfoo_baseline.json`, para que
+  gravar um digest exija um resultado de medição junto.
+- **O digest não cobre o conteúdo variável do prompt.** Logs, payload, chunk
+  RAG e dados do conector entram a cada incidente. Dois incidentes com o
+  mesmo digest usaram o mesmo *template*, não necessariamente o mesmo
+  contexto.
 
 ## Lições do processo
 

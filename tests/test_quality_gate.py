@@ -8,6 +8,8 @@ from app.evaluation.gates import (
     check_candidate_das,
     check_corpus_coverage,
     check_difficulty_mix,
+    check_documented_das,
+    check_index_current,
     check_promptfoo_configs,
     check_rag_dataset,
     check_reranker_invariant,
@@ -367,3 +369,103 @@ class TestPromptfooComparison:
     def test_sem_regressao_passa(self):
         findings = compare_promptfoo({"A": True, "B": True}, {"A": True, "B": True})
         assert "fail" not in _severities(findings)
+
+
+class TestDocumentedDas:
+    """A prosa de decisao existia; o rotulo (DA-N) nao.
+
+    Quinze secoes do README eram invisiveis para qualquer `grep "DA-15"`, e
+    a DA-30 nao tinha secao propria em lugar nenhum. `candidate_das_fresh`
+    (DA-51) nao pegou nada disso porque checa so uma direcao: que uma DA
+    marcada como candidata NAO esteja entregue. O inverso — DA entregue com
+    a prosa nao localizavel — nunca foi verificado.
+    """
+
+    def test_repositorio_real_esta_coerente(self):
+        assert not [f for f in check_documented_das() if f.is_failure]
+        assert not [f for f in check_index_current() if f.is_failure]
+
+    def test_da_registrada_sem_prosa_reprova(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text("## Decisões de Arquitetura\n\n### 1. Coisa (DA-1)\n", encoding="utf-8")
+        (tmp_path / "CLAUDE.md").write_text(
+            "| DA | O que é |\n|---|---|\n| DA-1 | a |\n| DA-2 | b |\n", encoding="utf-8"
+        )
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
+        falhas = [f for f in check_documented_das(tmp_path) if f.is_failure]
+        assert len(falhas) == 1
+        assert "DA-2" in falhas[0].message
+
+    def test_secao_orfa_no_readme_reprova(self, tmp_path):
+        """Sentido inverso: `(DA-9)` no README sem linha no registro do
+        CLAUDE.md e' prosa orfa — o proximo registrador nao vai acha-la."""
+        (tmp_path / "README.md").write_text(
+            "## Decisões de Arquitetura\n\n### 1. Coisa (DA-1/9)\n", encoding="utf-8"
+        )
+        (tmp_path / "CLAUDE.md").write_text(
+            "| DA | O que é |\n|---|---|\n| DA-1 | a |\n", encoding="utf-8"
+        )
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
+        falhas = [f for f in check_documented_das(tmp_path) if f.is_failure]
+        assert len(falhas) == 1
+        assert "DA-9" in falhas[0].message
+
+    def test_architecture_e_local_alternativo_aceito(self, tmp_path):
+        (tmp_path / "README.md").write_text(
+            "## Decisões de Arquitetura\n\n### 1. Coisa (DA-1)\n", encoding="utf-8"
+        )
+        (tmp_path / "CLAUDE.md").write_text(
+            "| DA | O que é |\n|---|---|\n| DA-1 | a |\n| DA-32 | b |\n", encoding="utf-8"
+        )
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs/ARCHITECTURE.md").write_text(
+            "# arq\n\n## AMQP (DA-32)\n", encoding="utf-8"
+        )
+        assert not [f for f in check_documented_das(tmp_path) if f.is_failure]
+
+    def test_indice_dessincronizado_reprova(self, tmp_path):
+        (tmp_path / "README.md").write_text(
+            "## Decisões de Arquitetura\n\n"
+            "| DA | Seção | O que é |\n|---|---|---|\n"
+            "| 1 | [1](#decisoes-de-arquitetura) | a |\n\n"
+            "### 1. Coisa (DA-1)\n### 2. Outra (DA-2)\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "CLAUDE.md").write_text(
+            "| DA | O que é |\n|---|---|\n| DA-1 | a |\n| DA-2 | b |\n", encoding="utf-8"
+        )
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
+        falhas = [f for f in check_index_current(tmp_path) if f.is_failure]
+        assert len(falhas) == 1
+        assert "DA-2" in falhas[0].message
+
+    def test_dash_no_indice_e_cobrado_pelo_outro_gate(self, tmp_path):
+        """Divisao de trabalho entre os dois gates, e nao um bug.
+
+        Uma linha `—` no indice significa "registrada e sem prosa", que e'
+        uma afirmacao *consistente* com a realidade — logo `das_index_current`
+        deve passar. Quem reprova e' `implemented_das_documented`, porque a
+        prosa e' que falta. Se os dois reprovassem pela mesma causa, a
+        segunda falha seria ruido.
+        """
+        (tmp_path / "README.md").write_text(
+            "## Decisões de Arquitetura\n\n"
+            "| DA | Seção | O que é |\n|---|---|---|\n"
+            "| 1 | [1](#decisoes-de-arquitetura) | a |\n"
+            "| 2 | **—** | b |\n\n"
+            "### 1. Coisa (DA-1)\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "CLAUDE.md").write_text(
+            "| DA | O que é |\n|---|---|\n| DA-1 | a |\n| DA-2 | b |\n", encoding="utf-8"
+        )
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
+
+        assert not [f for f in check_index_current(tmp_path) if f.is_failure]
+        falhas = [f for f in check_documented_das(tmp_path) if f.is_failure]
+        assert len(falhas) == 1
+        assert "DA-2" in falhas[0].message

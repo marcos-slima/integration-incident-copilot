@@ -102,13 +102,131 @@ stack completo do Langfuse — ver nota em
 Projeto em desenvolvimento — portfólio da trilha SAP Architect → AI
 Architect.
 
+
 ## Decisões de Arquitetura
 
 Registro dos problemas reais encontrados durante o desenvolvimento e
 como foram resolvidos — processo de engenharia, não só o resultado
 final.
 
-### 1. Alucinação por mistura de contexto
+| DA | Seção | O que é |
+|---|---|---|
+| 1 | [1](#decisoes-de-arquitetura) | RAG top-1 (evita mistura de contexto) |
+| 2 | [2](#decisoes-de-arquitetura) | `seed=42` obrigatório para determinismo Ollama |
+| 3 | [3](#decisoes-de-arquitetura) | Guardrails em código, não em prompt |
+| 4 | [4](#decisoes-de-arquitetura) | Comparações de modelo via promptfoo: `qwen2.5-coder:32b` ganhou do |
+| 8 | [8](#decisoes-de-arquitetura) | Comparações de modelo via promptfoo: `qwen2.5-coder:32b` ganhou do |
+| 14 | [14](#decisoes-de-arquitetura) | Camada A2A (Agent2Agent) JSON-RPC 2.0 |
+| 15 | — | Evidence/Trust Layer determinística |
+| 16 | — | `is_grounded` via evidence_strength (nunca autoavaliação LLM) |
+| 17 | — | Fallback para reference_library quando evidência fraca |
+| 18 | [16](#decisoes-de-arquitetura) | Auth X-API-Key obrigatória em `/diagnose` e `/a2a` |
+| 19 | [17](#decisoes-de-arquitetura) | Servidor MCP (capability catalog) |
+| 20 | [18](#decisoes-de-arquitetura) | Hybrid Inference: Ollama local → cloud fallback |
+| 21 | [19](#decisoes-de-arquitetura) | GraphRAG hardening: `(DriverError, TransientError)` vs `Neo4jError |
+| 22 | [20](#decisoes-de-arquitetura) | Multi-agent: supervisor → sap/saas/generic (sem LLM) |
+| 23 | [21](#decisoes-de-arquitetura) | Event Mesh via webhook CloudEvents → `run_diagnosis()` |
+| 24 | [22](#decisoes-de-arquitetura) | Deploy SAP BTP Kyma Runtime |
+| 25 | [24](#decisoes-de-arquitetura) | Evidence/Trust Layer v2 + threshold RAG pós-reranker |
+| 26 | [25](#decisoes-de-arquitetura) | AI Gateway v1: policy + circuit breaker + budget |
+| 27 | [26](#decisoes-de-arquitetura) | Capability Registry FAIL-CLOSED |
+| 28 | [27](#decisoes-de-arquitetura) | GraphRAG modelo `VERIFIED_AS` + endpoint `/incidents/{id}/verify` |
+| 29 | [28](#decisoes-de-arquitetura) | Benchmark rerankers → mmarco-mMiniLMv2 vence (+7pp Hit@1) |
+| 30 | — | PII redaction ampliado + smart log truncation + backoff exponencia |
+| 33 | ARCHITECTURE | Rule Engine determinístico (pré-filtro LLM, 14 regras SAP) |
+| 43 | [29](#decisoes-de-arquitetura) | Soberania de dados por origin real, fail-closed |
+| 44 | [30](#decisoes-de-arquitetura) | Sinal determinístico de escalonamento em 3 tiers (prep. tier 3) |
+| 45 | [31](#decisoes-de-arquitetura) | Universalidade de provider: rota auditada + capacidades por origin |
+| 46 | — | Registro gerenciado de modelos/credenciais por ORIGEM (LLM_REGISTR |
+| 47 | — | Credenciais cifradas em repouso com Fernet (master key no .env, nu |
+| 48 | — | Metering de tokens REAIS (usage_metadata, não estimativa) persisti |
+| 49 | [33](#decisoes-de-arquitetura) | Catálogo de sistemas integrados (`integration_systems`) na superfí |
+| 50 | [34](#decisoes-de-arquitetura) | Correlação `incidents` ↔ catálogo por `system_key` (exato, vindo d |
+| 51 | [35](#decisoes-de-arquitetura) | Quality gates: invariantes de avaliação verificadas por máquina (d |
+| 52 | [36](#decisoes-de-arquitetura) | Detecção de drift de contrato SAP: probe `$metadata` (interface se |
+| 53 | [37](#decisoes-de-arquitetura) | Prompt de diagnóstico como artefato versionado: `PromptSpec` (vers |
+
+| DA | Seção | O que é |
+|---|---|---|
+| 1 | [1](#decisoes-de-arquitetura) | RAG top-1 (evita mistura de contexto) |
+| 2 | [2](#decisoes-de-arquitetura) | `seed=42` obrigatório para determinismo Ollama |
+| 3 | [3](#decisoes-de-arquitetura) | Guardrails em código, não em prompt |
+| 4 | [4](#decisoes-de-arquitetura) | Comparações de modelo via promptfoo: `qwen2.5-coder:32b` ganhou do |
+| 8 | [8](#decisoes-de-arquitetura) | Comparações de modelo via promptfoo: `qwen2.5-coder:32b` ganhou do |
+| 14 | [14](#decisoes-de-arquitetura) | Camada A2A (Agent2Agent) JSON-RPC 2.0 |
+| 15 | [15](#decisoes-de-arquitetura) | Evidence/Trust Layer determinística |
+| 16 | [15](#decisoes-de-arquitetura) | `is_grounded` via evidence_strength (nunca autoavaliação LLM) |
+| 17 | [15](#decisoes-de-arquitetura) | Fallback para reference_library quando evidência fraca |
+| 18 | [16](#decisoes-de-arquitetura) | Auth X-API-Key obrigatória em `/diagnose` e `/a2a` |
+| 19 | [17](#decisoes-de-arquitetura) | Servidor MCP (capability catalog) |
+| 20 | [18](#decisoes-de-arquitetura) | Hybrid Inference: Ollama local → cloud fallback |
+| 21 | [19](#decisoes-de-arquitetura) | GraphRAG hardening: `(DriverError, TransientError)` vs `Neo4jError |
+| 22 | [20](#decisoes-de-arquitetura) | Multi-agent: supervisor → sap/saas/generic (sem LLM) |
+| 23 | [21](#decisoes-de-arquitetura) | Event Mesh via webhook CloudEvents → `run_diagnosis()` |
+| 24 | [22](#decisoes-de-arquitetura) | Deploy SAP BTP Kyma Runtime |
+| 25 | [24](#decisoes-de-arquitetura) | Evidence/Trust Layer v2 + threshold RAG pós-reranker |
+| 26 | [25](#decisoes-de-arquitetura) | AI Gateway v1: policy + circuit breaker + budget |
+| 27 | [26](#decisoes-de-arquitetura) | Capability Registry FAIL-CLOSED |
+| 28 | [27](#decisoes-de-arquitetura) | GraphRAG modelo `VERIFIED_AS` + endpoint `/incidents/{id}/verify` |
+| 29 | [28](#decisoes-de-arquitetura) | Benchmark rerankers → mmarco-mMiniLMv2 vence (+7pp Hit@1) |
+| 30 | **—** | PII redaction ampliado + smart log truncation + backoff exponencia |
+| 33 | ARCHITECTURE | Rule Engine determinístico (pré-filtro LLM, 14 regras SAP) |
+| 43 | [29](#decisoes-de-arquitetura) | Soberania de dados por origin real, fail-closed |
+| 44 | [30](#decisoes-de-arquitetura) | Sinal determinístico de escalonamento em 3 tiers (prep. tier 3) |
+| 45 | [31](#decisoes-de-arquitetura) | Universalidade de provider: rota auditada + capacidades por origin |
+| 46 | [32](#decisoes-de-arquitetura) | Registro gerenciado de modelos/credenciais por ORIGEM (LLM_REGISTR |
+| 47 | [32](#decisoes-de-arquitetura) | Credenciais cifradas em repouso com Fernet (master key no .env, nu |
+| 48 | [32](#decisoes-de-arquitetura) | Metering de tokens REAIS (usage_metadata, não estimativa) persisti |
+| 49 | [33](#decisoes-de-arquitetura) | Catálogo de sistemas integrados (`integration_systems`) na superfí |
+| 50 | [34](#decisoes-de-arquitetura) | Correlação `incidents` ↔ catálogo por `system_key` (exato, vindo d |
+| 51 | [35](#decisoes-de-arquitetura) | Quality gates: invariantes de avaliação verificadas por máquina (d |
+| 52 | [36](#decisoes-de-arquitetura) | Detecção de drift de contrato SAP: probe `$metadata` (interface se |
+| 53 | [37](#decisoes-de-arquitetura) | Prompt de diagnóstico como artefato versionado: `PromptSpec` (vers |
+
+> **Índice das decisões.** Derivado dos headings desta página e conferido por
+> `implemented_das_documented` (`scripts/quality_gate.py`): DA registrada no
+> `CLAUDE.md` sem seção própria reprova o build. `—` = registrada e ainda sem
+> prosa. `nota informal` = decisão real que nunca recebeu DA. DAs agrupadas
+> numa seção (ex.: DA-15/16/17, DA-46/47/48) compartilham o número dela.
+
+| DA | Seção | O que é |
+|---|---|---|
+| 1 | [1](#decisoes-de-arquitetura) | RAG top-1 (evita mistura de contexto) |
+| 2 | [2](#decisoes-de-arquitetura) | `seed=42` obrigatório para determinismo Ollama |
+| 3 | [3](#decisoes-de-arquitetura) | Guardrails em código, não em prompt |
+| 4 | [4](#decisoes-de-arquitetura) | Comparações de modelo via promptfoo: `qwen2.5-coder:32b` ganhou do |
+| 8 | [8](#decisoes-de-arquitetura) | Comparações de modelo via promptfoo: `qwen2.5-coder:32b` ganhou do |
+| 14 | [14](#decisoes-de-arquitetura) | Camada A2A (Agent2Agent) JSON-RPC 2.0 |
+| 15 | [15](#decisoes-de-arquitetura) | Evidence/Trust Layer determinística |
+| 16 | [15](#decisoes-de-arquitetura) | `is_grounded` via evidence_strength (nunca autoavaliação LLM) |
+| 17 | [15](#decisoes-de-arquitetura) | Fallback para reference_library quando evidência fraca |
+| 18 | [16](#decisoes-de-arquitetura) | Auth X-API-Key obrigatória em `/diagnose` e `/a2a` |
+| 19 | [17](#decisoes-de-arquitetura) | Servidor MCP (capability catalog) |
+| 20 | [18](#decisoes-de-arquitetura) | Hybrid Inference: Ollama local → cloud fallback |
+| 21 | [19](#decisoes-de-arquitetura) | GraphRAG hardening: `(DriverError, TransientError)` vs `Neo4jError |
+| 22 | [20](#decisoes-de-arquitetura) | Multi-agent: supervisor → sap/saas/generic (sem LLM) |
+| 23 | [21](#decisoes-de-arquitetura) | Event Mesh via webhook CloudEvents → `run_diagnosis()` |
+| 24 | [22](#decisoes-de-arquitetura) | Deploy SAP BTP Kyma Runtime |
+| 25 | [24](#decisoes-de-arquitetura) | Evidence/Trust Layer v2 + threshold RAG pós-reranker |
+| 26 | [25](#decisoes-de-arquitetura) | AI Gateway v1: policy + circuit breaker + budget |
+| 27 | [26](#decisoes-de-arquitetura) | Capability Registry FAIL-CLOSED |
+| 28 | [27](#decisoes-de-arquitetura) | GraphRAG modelo `VERIFIED_AS` + endpoint `/incidents/{id}/verify` |
+| 29 | [28](#decisoes-de-arquitetura) | Benchmark rerankers → mmarco-mMiniLMv2 vence (+7pp Hit@1) |
+| 30 | [29](#decisoes-de-arquitetura) | PII redaction ampliado + smart log truncation + backoff exponencia |
+| 33 | ARCHITECTURE | Rule Engine determinístico (pré-filtro LLM, 14 regras SAP) |
+| 43 | [30](#decisoes-de-arquitetura) | Soberania de dados por origin real, fail-closed |
+| 44 | [31](#decisoes-de-arquitetura) | Sinal determinístico de escalonamento em 3 tiers (prep. tier 3) |
+| 45 | [32](#decisoes-de-arquitetura) | Universalidade de provider: rota auditada + capacidades por origin |
+| 46 | [33](#decisoes-de-arquitetura) | Registro gerenciado de modelos/credenciais por ORIGEM (LLM_REGISTR |
+| 47 | [33](#decisoes-de-arquitetura) | Credenciais cifradas em repouso com Fernet (master key no .env, nu |
+| 48 | [33](#decisoes-de-arquitetura) | Metering de tokens REAIS (usage_metadata, não estimativa) persisti |
+| 49 | [34](#decisoes-de-arquitetura) | Catálogo de sistemas integrados (`integration_systems`) na superfí |
+| 50 | [35](#decisoes-de-arquitetura) | Correlação `incidents` ↔ catálogo por `system_key` (exato, vindo d |
+| 51 | [36](#decisoes-de-arquitetura) | Quality gates: invariantes de avaliação verificadas por máquina (d |
+| 52 | [37](#decisoes-de-arquitetura) | Detecção de drift de contrato SAP: probe `$metadata` (interface se |
+| 53 | [38](#decisoes-de-arquitetura) | Prompt de diagnóstico como artefato versionado: `PromptSpec` (vers |
+
+### 1. Alucinação por mistura de contexto (DA-1)
 
 **Problema:** ao passar os 3 documentos mais relevantes (RAG top-3)
 inteiros no prompt, o LLM ocasionalmente combinava causa raiz de
@@ -120,7 +238,7 @@ documentos diferentes (ex: misturava conceitos de IDoc e OData numa
 pelo nome, sem conteúdo. Eliminou a possibilidade de mistura na raiz,
 por design, em vez de depender de instrução de prompt.
 
-### 2. Não-determinismo com temperature=0
+### 2. Não-determinismo com temperature=0 (DA-2)
 
 **Problema:** o mesmo prompt, rodado duas vezes com `temperature=0.0`
 no Ollama, produzia respostas diferentes — incluindo uma alucinação
@@ -131,7 +249,7 @@ total sem um `seed` explícito.
 5 execuções idênticas seguidas do mesmo cenário antes considerado
 instável.
 
-### 3. Guardrail determinístico para dados de fallback
+### 3. Guardrail determinístico para dados de fallback (DA-3)
 
 **Problema:** quando um conector SAP não reconhece um identificador
 (cenário simulado/mock não mapeado), o LLM às vezes ainda tentava
@@ -144,7 +262,7 @@ conector retornou um dado de fallback (`ConnectorResult.is_fallback`)
 e, nesse caso, **impõe um teto de confiança (0.4)** independente do
 que o modelo reportar.
 
-### 4. Comparação formal de modelos (qwen3:30b-a3b vs qwen2.5-coder:32b)
+### 4. Comparação formal de modelos (qwen3:30b-a3b vs qwen2.5-coder:32b) (DA-4)
 
 **Contexto:** os problemas 1 e 3 acima ocorreram especificamente com
 o `qwen3:30b-a3b` (MoE, ~3B parâmetros ativos). Antes de assumir que
@@ -173,7 +291,7 @@ mais confiável sob incerteza.
 > registro histórico do critério usado — `qwen2.5-coder:32b` não é mais
 > o modelo em produção. Ver `docs/PROCESSO_DESENVOLVIMENTO.md` Fase 12.
 
-### 5. Observabilidade real com Langfuse
+### 5. Observabilidade real com Langfuse (nota informal — sem DA)
 
 **Contexto:** o Langfuse estava configurado desde o início do
 projeto, mas sem nenhum código realmente enviando dados para lá —
@@ -194,7 +312,7 @@ shutdown do FastAPI (`app/main.py`) e ao final da execução via CLI
 fixture de teste (`pytest` sobe/derruba o app via `TestClient`, que
 já passa pelo mesmo lifespan).
 
-### 6. Configuração centralizada (eliminando hardcoded)
+### 6. Configuração centralizada (eliminando hardcoded) (nota informal — sem DA)
 
 **Problema encontrado:** apesar de existir um `.env` desde o início
 do projeto, o código nunca o lia — URLs do Qdrant, modelo do LLM e
@@ -209,7 +327,7 @@ efetiva a qualquer momento, com segredos mascarados — permite
 verificar o que está realmente configurado sem depender de leitura de
 código-fonte.
 
-### 7. Segurança e CI antes da publicação
+### 7. Segurança e CI antes da publicação (nota informal — sem DA)
 
 Antes de tornar o repositório público:
 
@@ -223,7 +341,7 @@ Antes de tornar o repositório público:
   a cada push/PR — o badge de status no topo deste README reflete o
   resultado real da última execução, não uma alegação
 
-### 8. Segunda comparação de modelo: qwen3.6:35b-a3b avaliado e rejeitado
+### 8. Segunda comparação de modelo: qwen3.6:35b-a3b avaliado e rejeitado (DA-8)
 
 **Contexto:** meses após a decisão pelo `qwen2.5-coder:32b` (seção 4),
 a Alibaba lançou o `qwen3.6:35b-a3b` (MoE, 36B total/3B ativos,
@@ -261,7 +379,7 @@ critério formal sempre que surge um candidato relevante, com a mesma
 metodologia e o mesmo pipeline real usados desde a primeira vez,
 gerando decisões comparáveis ao longo do tempo.
 
-### 9. Achados de code review: estado global, parsing frágil, limites ausentes
+### 9. Achados de code review: estado global, parsing frágil, limites ausentes (nota informal — sem DA)
 
 Uma revisão de código externa identificou 10 pontos; a triagem separou
 o que era real do que era falso alarme ou já havia sido corrigido:
@@ -308,7 +426,7 @@ o que era real do que era falso alarme ou já havia sido corrigido:
   schema, texto explícito no prompt continua necessário para lógica
   de preenchimento — o schema garante a forma, não o conteúdo.
 
-### 10. LLM Gateway plugável (não hardcoded em Ollama)
+### 10. LLM Gateway plugável (não hardcoded em Ollama) (nota informal — sem DA)
 
 **Contexto:** o projeto nasceu 100% Ollama/local por decisão
 deliberada (custo zero de API para prototipar). O posicionamento do
@@ -335,7 +453,7 @@ silenciosa, quando o provedor escolhido não tem a configuração
 necessária (ex: `openai` sem `OPENAI_API_KEY`) — mesma filosofia dos
 guardrails determinísticos das seções 1 e 3.
 
-### 11. Conector real para sistema não-SAP (ServiceNow) e caminho RFC honesto
+### 11. Conector real para sistema não-SAP (ServiceNow) e caminho RFC honesto (nota informal — sem DA)
 
 **Contexto:** até aqui, os conectores (`ODataConnector`,
 `RFCConnector`) eram mocks assumidos como tal — corretos para
@@ -367,7 +485,7 @@ não-SAP com integração de fato funcional, ao lado de um caminho SAP
 (RFC) claramente desenhado para o cliente mais restrito (ECC
 on-premise), que é justamente quem não consegue pagar SAP AI Core.
 
-### 12. Fechando os conectores multi-vendor (Salesforce, Workday, SAP Ariba) e o caminho real do OData
+### 12. Fechando os conectores multi-vendor (Salesforce, Workday, SAP Ariba) e o caminho real do OData (nota informal — sem DA)
 
 **Contexto:** a seção anterior fechou 1 dos 4 cenários de referência
 multi-vendor do posicionamento do produto (ServiceNow), escolhido
@@ -403,7 +521,7 @@ ServiceNow↔SAP) estão "prontos para produção" — estão prontos para
 `.env`, sem tocar código), o que é uma barra bem mais alta que "mock
 bonito", mas ainda abaixo de "testado contra um cliente real".
 
-### 13. GraphRAG (Neo4j) deixa de ser só campo de configuração
+### 13. GraphRAG (Neo4j) deixa de ser só campo de configuração (nota informal — sem DA)
 
 **Contexto:** desde a Fase 4, `Settings` tinha campos para Neo4j e a
 documentação dizia explicitamente "reservado para uso futuro, nenhum
@@ -435,7 +553,7 @@ caminho default.
 daemon disponível no ambiente onde isso foi construído) — mesma
 ressalva já aplicada ao `RFCConnector._fetch_real`.
 
-### 14. Camada A2A (Agent2Agent) implementada, com a ressalva de GA preservada
+### 14. Camada A2A (Agent2Agent) implementada, com a ressalva de GA preservada (DA-14)
 
 **Contexto:** a proposta em
 [docs/proposals/a2a-interoperability-layer.md](docs/proposals/a2a-interoperability-layer.md)
@@ -776,7 +894,7 @@ Isso fecha o roadmap arquitetural consolidado deste projeto (AI Gateway
 → A2A/API auth → MCP → Hybrid Inference → GraphRAG → Multi-agent →
 Event Mesh → BTP/Kyma), todo executado nesta mesma sessão de trabalho.
 
-### 23. Follow-up pós-roadmap — multi-stage build do frontend + alinhamento de modelo default
+### 23. Follow-up pós-roadmap — multi-stage build do frontend + alinhamento de modelo default (nota informal — sem DA)
 
 Uma revisão arquitetural externa apontou dois problemas reais que
 sobreviveram à DA-24: (1) o `Dockerfile` não buildava o frontend
@@ -1054,7 +1172,53 @@ arquitetural externa estão fechados** (rate limit global, persistência
 A2A, circuit breaker, redaction de PII, métricas/feedback, fila
 assíncrona e este). Resta só o longo prazo, ainda não autorizado.
 
-### 29. Governança de soberania de dados por origin real (DA-43)
+### 29. Redaction de PII antes do prompt e do Langfuse, com truncamento inteligente e backoff (DA-30)
+
+**O problema.** Havia truncamento (`_truncate` em `nodes.py`) e ele limita
+**tamanho**, não **conteúdo**. Um operador colando o log de um IDoc no
+descrição do incidente fazia o e-mail, o CPF e o número do documento
+inteirarem o prompt do LLM — e, pior, chegarem ao Langfuse: o `@observe` do
+SDK captura os argumentos **e** o retorno de *toda* função decorada, ou
+seja, o `CopilotState` inteiro, não só o prompt que Havíamos sanitizado
+à mão. O ponto cego não era o que passava pelo prompt: era o que passava
+por volta dele.
+
+**A solução: três peças independentes, porque são três lugares diferentes.**
+
+1. **Redaction (`app/redaction.py`), regex-based.** `redact_pii_text()`
+   entra dentro de `sanitize_untrusted_input` e cobre o caminho *antes do
+   prompt*. `redact_pii_deep()` é passada como `mask=` na construção do
+   client Langfuse e cobre o caminho *antes do Langfuse* — esse é o ponto:
+   o SDK aplica a máscara a **qualquer** input/output capturado pelo
+   `@observe`, inclusive o que nenhuma sanitização manual alcançaria.
+   Padrões: e-mail, CNPJ, CPF, número de IDoc (16 dígitos), bearer token e
+   senha em JSON/YAML/env/XML. As duas últimas famílias preservam a chave
+   ou a tag (`"password": "[PASSWORD_REDACTED]"`), porque uma linha de log
+   que vira `[REDACTED]` inteiro não serve para diagnosticar nada.
+2. **CPF sem pontuação só com contexto** (`_redact_cpf_digits_with_context`).
+   `\d{11}` sozinho é ambíguo: telefone, serial, OTP, timestamp. Redigir
+   qualquer 11 dígitos apaga um aviso que o operador não consegue usar. A
+   substituição é feita por função auxiliar que exige vizinhança de CPF —
+   é o caso em que ser permissivo destrói o sinal.
+3. **Truncamento inteligente** (`_smart_truncate`) e **backoff exponencial
+   com jitter** (`llm/gateway.py`, `llm_gateway_backoff_base_seconds=0.5`,
+   teto de 8s, `2 ** min(n-1, 6)`): o gateway deixa de martelar um provedor
+   fora do ar e deixa de cortar o log no meio da evidência útil.
+
+**Limitações (deliberadamente registradas):**
+- **Não é DLP.** É regex sobre os padrões nomeados na avaliação, sem NER nem
+  classificador: CPF em formato exótico, telefone, endereço e nome próprio
+  passam. O próprio `app/llm/gateway.py` mantém o não-objetivo anotado
+  ("PII/DLP de verdade... permanece pendente") — isto reduz o gap, não o
+  fecha.
+- O backoff é do **gateway**, não do `factory`: chamadas diretas ao factory
+  fora do AI Gateway não têm retry nem backoff. Invariante 3 é o que mantém
+  isso raro, e é por isso que ela existe.
+- `_smart_truncate` corta por tamanho de bloco, não por semântica: um log
+  enorme com a causa na última linha perde a causa. O redaction é
+   patterns-based, o truncamento é structural.
+
+### 30. Governança de soberania de dados por origin real (DA-43)
 
 O AI Gateway (DA-26) roteia por *nome* de provider, mas "confidencial"
 é uma propriedade do **endpoint de destino**, não do rótulo. Um
@@ -1088,7 +1252,7 @@ vazia: com `settings.api_key == ""` a comparação passa, e a proteção
 depende do lifespan gerar uma chave no startup. Em produção
 funciona; em teste que não rode o lifespan, não.
 
-### 30. Sinal determinístico de escalonamento em três tiers (DA-44)
+### 31. Sinal determinístico de escalonamento em três tiers (DA-44)
 
 Preparo para um tier 3 (modelo pago: GPT/Claude/Gemini): o pipeline
 precisa decidir *quando* escalar, e o sinal disponível — `evidence_strength`
@@ -1154,7 +1318,7 @@ por ele.
 - O tier 3 **não faz parte desta DA**: esta decide se há caso para
   escalar, não quem escala.
 
-### 31. Universalidade de provider: rota auditada, capacidades por origin, identidade de embedding (DA-45)
+### 32. Universalidade de provider: rota auditada, capacidades por origin, identidade de embedding (DA-45)
 
 **O problema.** "Qualquer modelo que o cliente quiser, é só informar" era
 meia verdade. `ChatOpenAI(base_url=...)` fala `/chat/completions`, então
@@ -1254,7 +1418,7 @@ total: 682 testes, sem regressão.
   adapter/rota nova. "Qualquer modelo" vale para qualquer modelo atrás de um
   contrato OpenAI-compatible.
 
-### 32. Registro gerenciado de modelos, credenciais cifradas e metering real (DA-46/47/48)
+### 33. Registro gerenciado de modelos, credenciais cifradas e metering real (DA-46/47/48)
 
 **O problema.** DA-45 tornou o `.env` "fonte da verdade" para modelos e
 credenciais. Mas todo o conhecimento de custo e consumo vivia em lugar nenhum:
@@ -1308,7 +1472,7 @@ testes, sem regressão.
 - Um provider com resposta sem `usage` (não-OpenAI-não-Ollama) não incrementa
   metering; o modelo continua com orçamento estimado.
 
-### 33. Catálogo de sistemas integrados gerenciados pela superfície admin (DA-49)
+### 34. Catálogo de sistemas integrados gerenciados pela superfície admin (DA-49)
 
 **O problema.** O mapa do que o copiloto observa (SAP OData, SAP RFC,
 ServiceNow, Salesforce, Workday, Ariba, CAP, APIM) vivia espalhado em runbooks
@@ -1351,7 +1515,7 @@ banco. Suíte total: 734 testes, sem regressão.
   compartilham o mesmo `DATABASE_URL` — sem banco, a página `/admin/systems`
   fica navegável mas sem dado (mesmo comportamento de `/admin/models`).
 
-### 34. Correlação de incidentes com o catálogo de sistemas + verificação persistida (DA-50)
+### 35. Correlação de incidentes com o catálogo de sistemas + verificação persistida (DA-50)
 
 **O problema.** A DA-49 criou o catálogo de sistemas integrados, mas ele era um
 registro morto: ninguém conseguia responder *quais sistemas estão gerando
@@ -1440,7 +1604,7 @@ sem erro visível fora do Grafana):
   por `TRUE` (equivalente a "All"), então um erro que só aparece com um filtro
   específico selecionado ainda pode escapar.
 
-### 35. Quality gates: transformar alegações de qualidade em invariantes verificadas (DA-51)
+### 36. Quality gates: transformar alegações de qualidade em invariantes verificadas (DA-51)
 
 **O problema.** As afirmações mais fortes deste README eram verificadas à mão,
 uma única vez, e nunca mais: "10/10 no promptfoo" (Fase 12), "hit@1 0.923 do
@@ -1508,7 +1672,7 @@ simulado localmente contra um banco descartável: `001 → 004` e 45/45 queries.
 - Detalhe completo, incluindo o que estes gates **não** cobrem:
   `docs/QUALITY_GATES.md`.
 
-### 36. Detecção de drift de contrato SAP: baseline, severidade e incidente (DA-52)
+### 37. Detecção de drift de contrato SAP: baseline, severidade e incidente (DA-52)
 
 **O problema.** O `ODataConnector` lia campos **hardcoded**
 (`MessageId`, `StatusText`, `MessageType`, `RetryCount` — `odata_connector.py:177`)
@@ -1592,7 +1756,7 @@ caminho inteiro roda, não nas unidades:
    *mapper* do ORM bate com o schema. Divergência de coluna, índice ou
    nome só aparece quando o SELECT real roda.
 
-**Validação.** 79 testes novos: 21 do parser/fingerprint, 35 da matriz de
+**Validação.** 89 testes novos: 21 do parser/fingerprint, 35 da matriz de
 severidade, 23 de orquestração e **10 end-to-end** atravessando conector →
 HTTP → parser → **PostgreSQL real** → diff → CloudEvent, no job
 `migrations_and_dashboards` do CI (Postgres efêmero, `alembic upgrade
@@ -1621,7 +1785,7 @@ e o CLI devolvendo exit ≠ 0 para breaking. Suíte: **903 testes**.
   "o SAP disse que não tem contrato" de "o SAP não respondeu", e o
   detector hoje não sabe a diferença.
 
-### 37. Prompt de diagnóstico como artefato versionado, com gate contra o prompt medido (DA-53)
+### 38. Prompt de diagnóstico como artefato versionado, com gate contra o prompt medido (DA-53)
 
 **O problema.** O prompt de diagnóstico — o texto mais caro e mais
 influente do sistema — era três f-strings dentro de `app/agent/nodes.py`
@@ -1693,7 +1857,7 @@ silêncio), e `build_incident_row` bate com as colunas do ORM nos dois
 sentidos. Migration `006` validada em `001 → 006 → 005 → 006 → head` num
 Postgres descartável, com insert real pelo ORM nos dois cenários (LLM com
 proveniência, rule engine sem) e as 45 queries dos dashboards ainda
-verdes. Suíte: **944 testes**.
+verdes. Suíte: **947 testes** (903 da DA-52 + 44 novos).
 
 **Limitações (deliberadamente registradas):**
 - **O digest não é um snapshot do que foi enviado.** Dois incidentes com o

@@ -143,7 +143,9 @@ app/
   config.py         # Pydantic Settings — fonte única de verdade para config
   main.py           # FastAPI app, rotas, lifespan
 
-tests/              # 944 testes unitários (14 skipped) + 15 integração.
+tests/              # suite unitária + integração; o número exato muda a cada
+                    # commit, então não é declarado aqui — rode
+                    # `uv run pytest tests/ -m "not integration"` para o total atual.
                     # 10 deles são e2e da DA-52 e só rodam com
                     # IIC_TEST_DATABASE_URL + Postgres (job CI
                     # migrations_and_dashboards)
@@ -226,7 +228,7 @@ docs/               # ARCHITECTURE.md, GETTING_STARTED.md, TUTORIAL_ARQUITETURA_
 11. Rota `require_loopback` e `require_loopback=False` são mutuamente exclusivos — `local_lab` apontando para a internet, e `enterprise_azure` apontando para loopback, falham no boot
 12. **Correlação incidente↔sistema é fail-closed** — `app/admin/correlation.py` só resolve por `connector_type` quando há UM único candidato; com 2+ devolve `ambiguous` com a lista. Nenhuma superfície (UI, API, dashboard) escolhe um sistema por conta própria (DA-50)
 13. `verified` ≠ `verified_at` — `POST /incidents/{id}/verify` grava `verified_at` sempre, mas `diagnosis_correct=None` fica NULL. Coagir para `True` infla a acurácia nos dashboards (DA-50)
-14. **Gate de qualidade roda junto com a suite** — `uv run python scripts/quality_gate.py` (DA-51) valida dataset de avaliação, corpus, invariante do reranker, configs do promptfoo e a lista de DAs candidatas. `docs/QUALITY_GATES.md` documenta o que eles NÃO cobrem
+14. **Gate de qualidade roda junto com a suite** — `uv run python scripts/quality_gate.py` (DA-51) valida dataset de avaliação, corpus, invariante do reranker, configs do promptfoo, a lista de DAs candidatas **e a documentação das DAs** (`implemented_das_documented` + `das_index_current`: DA registrada sem prosa localizável reprova, assim como seção órfã). Prosa de decisão mora no `README.md` (`### N. Título (DA-N)`); `docs/ARCHITECTURE.md` é local alternativo declarado para DA-32/33/34/35. DAs entregues juntas compartilham uma seção (`(DA-46/47/48)`). `docs/QUALITY_GATES.md` documenta o que eles NÃO cobrem
 15. **Ausência de evidência nunca é "sem drift"** — a DA-52 tem **quatro** estados (`clean`, `drift`, `first_observation`, `unverified`) e `unverified` é um deles. `first_observation` (sem baseline) e `unverified` (sem leitura) são distintos de `clean`, e `unverified` nunca abre incidente nem grava/apaga baseline
 16. **`system_contracts` é append-only e sem FK** para `integration_systems` — histórico de observação, não cadastro. Migration 005
 17. **So `breaking` abre incidente** de drift; additive e cosmetic não. Rename provável é *cosmetic*: errar para breaking gera alarme falso e o detector é desligado
@@ -265,7 +267,12 @@ docs/               # ARCHITECTURE.md, GETTING_STARTED.md, TUTORIAL_ARQUITETURA_
 1. Implementar e validar com testes
 2. Adicionar entrada na tabela de DAs acima neste `CLAUDE.md`
 3. Adicionar seção `### N. Título (DA-N)` no `README.md` com problema/solução/limitações
-4. Commitar com prefixo `feat(DA-N):` no commit message
+   — o `(DA-N)` é obrigatório: sem ele a prosa existe mas é invisível para qualquer
+   busca por número, que foi exatamente o que aconteceu com 15 seções. DAs entregues
+   na mesma mudança podem compartilhar a seção (`(DA-46/47/48)`)
+4. Acrescentar a linha `| DA-N | ... |` na tabela acima e a entrada no **índice** do `README.md`
+   (seção `## Decisões de Arquitetura`). Os dois gates reprovam o build se algum dos dois faltar
+5. Commitar com prefixo `feat(DA-N):` no commit message
 
 ---
 

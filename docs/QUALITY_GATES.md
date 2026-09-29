@@ -18,7 +18,7 @@ verificadas à mão, uma vez, e nunca mais.
 | `llm_baseline` | existe baseline versionado do promptfoo (comparação de regressão de LLM) | instantâneo | todo push/PR |
 | `candidate_das_fresh` | nenhuma DA marcada como "candidata" no `CLAUDE.md` já entregue em `docs/ARCHITECTURE.md` | instantâneo | todo push/PR |
 | `implemented_das_documented` | toda DA registrada no `CLAUDE.md` tem prosa localizável (seção `### N. ... (DA-N)` no `README.md`, ou `docs/ARCHITECTURE.md` como local alternativo declarado) — e, no sentido inverso, nenhuma seção `(DA-N)` órfã | instantâneo | todo push/PR |
-| `das_index_current` | o índice de DAs do `README.md` lista exatamente o mesmo conjunto do registro do `CLAUDE.md`, e cada linha aponta para seção que existe | instantâneo | todo push/PR |
+| `das_index_current` | o índice de DAs do `README.md` é único (sem tabela colada duas vezes), lista exatamente o mesmo conjunto do registro do `CLAUDE.md`, cada linha aponta para seção que existe, e o número da coluna Seção é o do heading real (não o da seção vizinha) | instantâneo | todo push/PR |
 | `preflight_delegates` | o preflight de RAM do harness é `app/evaluation/ram_preflight.py`, não python inline no `scripts/promptfoo_remote.sh` | instantâneo | todo push/PR |
 | `prompt_digest_measured` | o prompt em produção (`app/agent/prompts.py`) tem o mesmo digest do prompt **medido** no `data/eval/prompt_baseline.json` | instantâneo | todo push/PR |
 | `docs_markup_integrity` | fences de código balanceados e links relativos `.md` resolvendo, em `docs/`, `README.md` e `CLAUDE.md` | instantâneo | todo push/PR |

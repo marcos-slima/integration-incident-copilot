@@ -1000,7 +1000,8 @@ inferencia local ou custo de API.
 
 **Implementacao:** `app/agent/rules.py` — `ErrorRule` dataclass
 (pattern regex, action, root_cause, confidence) + catalogo
-`KNOWN_ERROR_RULES` com 14 regras cobrindo:
+`KNOWN_ERROR_RULES` com 21 regras cobrindo (14 originais + 7 da
+expansão adiante, seção "Rule Engine: 14 → 21 regras"):
 - OAuth expirado / tokens JWT invalidos
 - HTTP 401/403 (permissao/autorizacao)
 - Material lock (M8082) e Pricing condition (VK041)
@@ -1024,7 +1025,7 @@ testes que precisam forcar o caminho LLM.
 **Economia esperada:** 60-70% de reducao de chamadas LLM para cargas de
 trabalho de suporte SAP com erros repetitivos.
 
-**Validacao:** `tests/test_da33.py` (28 testes) — todos os 14 patterns
+**Validacao:** `tests/test_da33.py` (40 testes) — todos os 21 patterns
 individualmente, integracao com estado LangGraph, e invariante de
 catalogo (nenhuma regra duplicada, nenhum pattern vazio).
 

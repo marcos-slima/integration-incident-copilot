@@ -108,7 +108,7 @@ app/
                     # única de persona, template e instrução de saída
     nodes.py        # Todos os nodes: connector, retrieve, diagnose, report
                     # + _assemble_evidence(), _apply_confidence_guardrails()
-    rules.py        # DA-33: Rule Engine determinístico (14 regras SAP/integração)
+    rules.py        # DA-33: Rule Engine determinístico (21 regras SAP/integração)
     escalation.py   # DA-44: sinal determinístico de escalonamento (3 tiers)
     supervisor.py   # DA-22: classifica domínio (sap/saas/generic) sem LLM
     state.py        # CopilotState (TypedDict)
@@ -192,7 +192,7 @@ docs/               # índice em README.md; ARCHITECTURE.md, GETTING_STARTED.md,
 | DA-28 | GraphRAG modelo `VERIFIED_AS` + endpoint `/incidents/{id}/verify` | `rag/graph_store.py` |
 | DA-29 | Benchmark rerankers → mmarco-mMiniLMv2 vence (+7pp Hit@1) | `retriever.py::RERANKER_MODEL` |
 | DA-30 | PII redaction ampliado + smart log truncation + backoff exponencial | `redaction.py` |
-| DA-33 | Rule Engine determinístico (pré-filtro LLM, 14 regras SAP) | `agent/rules.py` |
+| DA-33 | Rule Engine determinístico (pré-filtro LLM, 21 regras SAP) | `agent/rules.py` |
 | DA-43 | Soberania de dados por origin real, fail-closed | `llm/gateway.py` + `GET /llm/policy` |
 | DA-44 | Sinal determinístico de escalonamento em 3 tiers (prep. tier 3) | `agent/escalation.py` |
 | DA-45 | Universalidade de provider: rota auditada + capacidades por origin + identidade de embedding | `llm/routes.py`, `llm/capabilities.py`, `llm/origins.py`, `rag/embedding_guard.py` |

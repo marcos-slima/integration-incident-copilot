@@ -473,6 +473,68 @@ class TestDocumentedDas:
         assert len(falhas) == 1
         assert "DA-2" in falhas[0].message
 
+    def test_indice_colado_duas_vezes_reprova(self, tmp_path):
+        """O indice chegou a estar colado TRES vezes no README de verdade,
+        com numeros de secao defasados por um nas copias velhas — e o gate
+        passava, porque `re.search` via so a primeira tabela e a comparacao
+        de conjunto nao enxerga duplicata."""
+        indice = (
+            "| DA | Seção | O que é |\n|---|---|---|\n| 1 | [1](#decisoes-de-arquitetura) | a |\n\n"
+        )
+        (tmp_path / "README.md").write_text(
+            "## Decisões de Arquitetura\n\n" + indice + indice + "### 1. Coisa (DA-1)\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "CLAUDE.md").write_text(
+            "| DA | O que é |\n|---|---|\n| DA-1 | a |\n", encoding="utf-8"
+        )
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
+        falhas = [f for f in check_index_current(tmp_path) if f.is_failure]
+        assert len(falhas) == 1
+        assert "duplicado" in falhas[0].message
+        assert "2 tabelas" in falhas[0].message
+
+    def test_indice_aponta_secao_errada_reprova(self, tmp_path):
+        """O numero da coluna "Seção" nunca era conferido: um indice stale
+        apontava DA-53 para a secao 37 quando a real era 38, e o gate
+        passava porque 37 EXISTIA — secao vizinha tambem e' um numero."""
+        (tmp_path / "README.md").write_text(
+            "## Decisões de Arquitetura\n\n"
+            "| DA | Seção | O que é |\n|---|---|---|\n"
+            "| 1 | [2](#decisoes-de-arquitetura) | a |\n"
+            "| 2 | [2](#decisoes-de-arquitetura) | b |\n\n"
+            "### 1. Coisa (DA-1)\n### 2. Outra (DA-2)\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "CLAUDE.md").write_text(
+            "| DA | O que é |\n|---|---|\n| DA-1 | a |\n| DA-2 | b |\n", encoding="utf-8"
+        )
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
+        falhas = [f for f in check_index_current(tmp_path) if f.is_failure]
+        assert len(falhas) == 1
+        assert "DA-1: indice diz secao 2, a real e 1" in falhas[0].message
+
+    def test_indice_architecture_falso_reprova(self, tmp_path):
+        """Rotulo ARCHITECTURE sem prosa em docs/ARCHITECTURE.md manda o
+        leitor para o arquivo errado — o heading existe no README, nao la."""
+        (tmp_path / "README.md").write_text(
+            "## Decisões de Arquitetura\n\n"
+            "| DA | Seção | O que é |\n|---|---|---|\n"
+            "| 1 | ARCHITECTURE | a |\n\n"
+            "### 1. Coisa (DA-1)\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "CLAUDE.md").write_text(
+            "| DA | O que é |\n|---|---|\n| DA-1 | a |\n", encoding="utf-8"
+        )
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
+        falhas = [f for f in check_index_current(tmp_path) if f.is_failure]
+        assert len(falhas) == 1
+        assert "DA-1 rotulada ARCHITECTURE" in falhas[0].message
+
 
 # ---------------------------------------------------------------------------
 # Gates de integridade da documentacao e de alcancabilidade dos conectores.

@@ -503,20 +503,33 @@ def check_index_current(root: Path = REPO_ROOT) -> list[Finding]:
     apodrece: sem esta checagem, o indice continua "verde" apontando para
     numeros de secao que mudaram, que e' pior do que nao ter indice —
     porque parece navegavel e nao e.
+
+    Duas classes de apodrecimento, ambas achadas em revisao real do
+    README: o indice chegou a estar COLADO tres vezes seguidas (duas
+    copias stale com numeros de secao defasados por um), e o numero da
+    coluna "Seção" nunca foi conferido contra os headings — a versao
+    anterior usava `re.search` (via so a primeira tabela) e comparava
+    CONJUNTOS de DAs, entao duplicata era invisivel e o mapeamento
+    errado passava.
     """
     check = "das_index_current"
     readme = (root / "README.md").read_text(encoding="utf-8")
-    bloco = re.search(
-        r"^\| DA \| Seção \| O que é \|\n\|---\|---\|---\|\n(?P<corpo>.*?)(?:\n\n|\Z)",
+    tabelas = re.findall(
+        r"^\| DA \| Seção \| O que é \|\n\|---\|---\|---\|\n(.*?)(?:\n\n|\Z)",
         readme,
         re.MULTILINE | re.DOTALL,
     )
-    if not bloco:
+    if not tabelas:
         return _fail(check, "tabela de indice de DAs nao encontrada no README.md")
+    if len(tabelas) > 1:
+        return _fail(
+            check,
+            f"indice de DAs duplicado: {len(tabelas)} tabelas no README.md"
+            " — mantenha apenas a mais recente",
+        )
+    corpo = tabelas[0]
 
-    declarados = {
-        int(n) for n in re.findall(r"^\|\s*(\d+)\s*\|", bloco.group("corpo"), re.MULTILINE)
-    }
+    declarados = {int(n) for n in re.findall(r"^\|\s*(\d+)\s*\|", corpo, re.MULTILINE)}
     registradas = _registered_das(root)
     if declarados != registradas:
         faltando = sorted(registradas - declarados)
@@ -533,12 +546,37 @@ def check_index_current(root: Path = REPO_ROOT) -> list[Finding]:
     quebradas = [
         n
         for n in declarados
-        if f"| {n} | **—** |" not in bloco.group("corpo")
-        and n not in in_readme
-        and n not in in_arch
+        if f"| {n} | **—** |" not in corpo and n not in in_readme and n not in in_arch
     ]
     if quebradas:
         return _fail(check, f"indice aponta para secao inexistente: {_das(quebradas)}")
+
+    # O numero da coluna "Seção" tem que ser o numero do heading REAL —
+    # nao apenas um numero que exista em algum lugar. Indice stale aponta
+    # para a secao vizinha e continua parecendo navegavel.
+    desencontradas: list[str] = []
+    for linha in corpo.splitlines():
+        m = re.match(r"^\|\s*(\d+)\s*\|\s*([^|]+?)\s*\|", linha)
+        if not m:
+            continue
+        da, celula = int(m.group(1)), m.group(2)
+        numero = re.match(r"\[(\d+)\]", celula)
+        if numero:
+            real = in_readme.get(da)
+            if real is None:
+                desencontradas.append(
+                    f"DA-{da} aponta para secao {numero.group(1)} mas nao tem prosa no README.md"
+                )
+            elif real != int(numero.group(1)):
+                desencontradas.append(
+                    f"DA-{da}: indice diz secao {numero.group(1)}, a real e {real}"
+                )
+        elif celula == "ARCHITECTURE" and da not in in_arch:
+            desencontradas.append(
+                f"DA-{da} rotulada ARCHITECTURE mas sem prosa em {ARCHITECTURE_DOC}"
+            )
+    if desencontradas:
+        return _fail(check, "; ".join(desencontradas))
     return _ok(check)
 
 

@@ -111,82 +111,6 @@ Registro dos problemas reais encontrados durante o desenvolvimento e
 como foram resolvidos — processo de engenharia, não só o resultado
 final.
 
-| DA | Seção | O que é |
-|---|---|---|
-| 1 | [1](#decisoes-de-arquitetura) | RAG top-1 (evita mistura de contexto) |
-| 2 | [2](#decisoes-de-arquitetura) | `seed=42` obrigatório para determinismo Ollama |
-| 3 | [3](#decisoes-de-arquitetura) | Guardrails em código, não em prompt |
-| 4 | [4](#decisoes-de-arquitetura) | Comparações de modelo via promptfoo: `qwen2.5-coder:32b` ganhou do |
-| 8 | [8](#decisoes-de-arquitetura) | Comparações de modelo via promptfoo: `qwen2.5-coder:32b` ganhou do |
-| 14 | [14](#decisoes-de-arquitetura) | Camada A2A (Agent2Agent) JSON-RPC 2.0 |
-| 15 | — | Evidence/Trust Layer determinística |
-| 16 | — | `is_grounded` via evidence_strength (nunca autoavaliação LLM) |
-| 17 | — | Fallback para reference_library quando evidência fraca |
-| 18 | [16](#decisoes-de-arquitetura) | Auth X-API-Key obrigatória em `/diagnose` e `/a2a` |
-| 19 | [17](#decisoes-de-arquitetura) | Servidor MCP (capability catalog) |
-| 20 | [18](#decisoes-de-arquitetura) | Hybrid Inference: Ollama local → cloud fallback |
-| 21 | [19](#decisoes-de-arquitetura) | GraphRAG hardening: `(DriverError, TransientError)` vs `Neo4jError |
-| 22 | [20](#decisoes-de-arquitetura) | Multi-agent: supervisor → sap/saas/generic (sem LLM) |
-| 23 | [21](#decisoes-de-arquitetura) | Event Mesh via webhook CloudEvents → `run_diagnosis()` |
-| 24 | [22](#decisoes-de-arquitetura) | Deploy SAP BTP Kyma Runtime |
-| 25 | [24](#decisoes-de-arquitetura) | Evidence/Trust Layer v2 + threshold RAG pós-reranker |
-| 26 | [25](#decisoes-de-arquitetura) | AI Gateway v1: policy + circuit breaker + budget |
-| 27 | [26](#decisoes-de-arquitetura) | Capability Registry FAIL-CLOSED |
-| 28 | [27](#decisoes-de-arquitetura) | GraphRAG modelo `VERIFIED_AS` + endpoint `/incidents/{id}/verify` |
-| 29 | [28](#decisoes-de-arquitetura) | Benchmark rerankers → mmarco-mMiniLMv2 vence (+7pp Hit@1) |
-| 30 | — | PII redaction ampliado + smart log truncation + backoff exponencia |
-| 33 | ARCHITECTURE | Rule Engine determinístico (pré-filtro LLM, 14 regras SAP) |
-| 43 | [29](#decisoes-de-arquitetura) | Soberania de dados por origin real, fail-closed |
-| 44 | [30](#decisoes-de-arquitetura) | Sinal determinístico de escalonamento em 3 tiers (prep. tier 3) |
-| 45 | [31](#decisoes-de-arquitetura) | Universalidade de provider: rota auditada + capacidades por origin |
-| 46 | — | Registro gerenciado de modelos/credenciais por ORIGEM (LLM_REGISTR |
-| 47 | — | Credenciais cifradas em repouso com Fernet (master key no .env, nu |
-| 48 | — | Metering de tokens REAIS (usage_metadata, não estimativa) persisti |
-| 49 | [33](#decisoes-de-arquitetura) | Catálogo de sistemas integrados (`integration_systems`) na superfí |
-| 50 | [34](#decisoes-de-arquitetura) | Correlação `incidents` ↔ catálogo por `system_key` (exato, vindo d |
-| 51 | [35](#decisoes-de-arquitetura) | Quality gates: invariantes de avaliação verificadas por máquina (d |
-| 52 | [36](#decisoes-de-arquitetura) | Detecção de drift de contrato SAP: probe `$metadata` (interface se |
-| 53 | [37](#decisoes-de-arquitetura) | Prompt de diagnóstico como artefato versionado: `PromptSpec` (vers |
-
-| DA | Seção | O que é |
-|---|---|---|
-| 1 | [1](#decisoes-de-arquitetura) | RAG top-1 (evita mistura de contexto) |
-| 2 | [2](#decisoes-de-arquitetura) | `seed=42` obrigatório para determinismo Ollama |
-| 3 | [3](#decisoes-de-arquitetura) | Guardrails em código, não em prompt |
-| 4 | [4](#decisoes-de-arquitetura) | Comparações de modelo via promptfoo: `qwen2.5-coder:32b` ganhou do |
-| 8 | [8](#decisoes-de-arquitetura) | Comparações de modelo via promptfoo: `qwen2.5-coder:32b` ganhou do |
-| 14 | [14](#decisoes-de-arquitetura) | Camada A2A (Agent2Agent) JSON-RPC 2.0 |
-| 15 | [15](#decisoes-de-arquitetura) | Evidence/Trust Layer determinística |
-| 16 | [15](#decisoes-de-arquitetura) | `is_grounded` via evidence_strength (nunca autoavaliação LLM) |
-| 17 | [15](#decisoes-de-arquitetura) | Fallback para reference_library quando evidência fraca |
-| 18 | [16](#decisoes-de-arquitetura) | Auth X-API-Key obrigatória em `/diagnose` e `/a2a` |
-| 19 | [17](#decisoes-de-arquitetura) | Servidor MCP (capability catalog) |
-| 20 | [18](#decisoes-de-arquitetura) | Hybrid Inference: Ollama local → cloud fallback |
-| 21 | [19](#decisoes-de-arquitetura) | GraphRAG hardening: `(DriverError, TransientError)` vs `Neo4jError |
-| 22 | [20](#decisoes-de-arquitetura) | Multi-agent: supervisor → sap/saas/generic (sem LLM) |
-| 23 | [21](#decisoes-de-arquitetura) | Event Mesh via webhook CloudEvents → `run_diagnosis()` |
-| 24 | [22](#decisoes-de-arquitetura) | Deploy SAP BTP Kyma Runtime |
-| 25 | [24](#decisoes-de-arquitetura) | Evidence/Trust Layer v2 + threshold RAG pós-reranker |
-| 26 | [25](#decisoes-de-arquitetura) | AI Gateway v1: policy + circuit breaker + budget |
-| 27 | [26](#decisoes-de-arquitetura) | Capability Registry FAIL-CLOSED |
-| 28 | [27](#decisoes-de-arquitetura) | GraphRAG modelo `VERIFIED_AS` + endpoint `/incidents/{id}/verify` |
-| 29 | [28](#decisoes-de-arquitetura) | Benchmark rerankers → mmarco-mMiniLMv2 vence (+7pp Hit@1) |
-| 30 | **—** | PII redaction ampliado + smart log truncation + backoff exponencia |
-| 33 | ARCHITECTURE | Rule Engine determinístico (pré-filtro LLM, 14 regras SAP) |
-| 43 | [29](#decisoes-de-arquitetura) | Soberania de dados por origin real, fail-closed |
-| 44 | [30](#decisoes-de-arquitetura) | Sinal determinístico de escalonamento em 3 tiers (prep. tier 3) |
-| 45 | [31](#decisoes-de-arquitetura) | Universalidade de provider: rota auditada + capacidades por origin |
-| 46 | [32](#decisoes-de-arquitetura) | Registro gerenciado de modelos/credenciais por ORIGEM (LLM_REGISTR |
-| 47 | [32](#decisoes-de-arquitetura) | Credenciais cifradas em repouso com Fernet (master key no .env, nu |
-| 48 | [32](#decisoes-de-arquitetura) | Metering de tokens REAIS (usage_metadata, não estimativa) persisti |
-| 49 | [33](#decisoes-de-arquitetura) | Catálogo de sistemas integrados (`integration_systems`) na superfí |
-| 50 | [34](#decisoes-de-arquitetura) | Correlação `incidents` ↔ catálogo por `system_key` (exato, vindo d |
-| 51 | [35](#decisoes-de-arquitetura) | Quality gates: invariantes de avaliação verificadas por máquina (d |
-| 52 | [36](#decisoes-de-arquitetura) | Detecção de drift de contrato SAP: probe `$metadata` (interface se |
-| 53 | [37](#decisoes-de-arquitetura) | Prompt de diagnóstico como artefato versionado: `PromptSpec` (vers |
-
-> **Índice das decisões.** Derivado dos headings desta página e conferido por
-> `implemented_das_documented` (`scripts/quality_gate.py`): DA registrada no
 > `CLAUDE.md` sem seção própria reprova o build. `—` = registrada e ainda sem
 > prosa. `nota informal` = decisão real que nunca recebeu DA. DAs agrupadas
 > numa seção (ex.: DA-15/16/17, DA-46/47/48) compartilham o número dela.
@@ -215,7 +139,7 @@ final.
 | 28 | [27](#decisoes-de-arquitetura) | GraphRAG modelo `VERIFIED_AS` + endpoint `/incidents/{id}/verify` |
 | 29 | [28](#decisoes-de-arquitetura) | Benchmark rerankers → mmarco-mMiniLMv2 vence (+7pp Hit@1) |
 | 30 | [29](#decisoes-de-arquitetura) | PII redaction ampliado + smart log truncation + backoff exponencia |
-| 33 | ARCHITECTURE | Rule Engine determinístico (pré-filtro LLM, 14 regras SAP) |
+| 33 | ARCHITECTURE | Rule Engine determinístico (pré-filtro LLM, 21 regras SAP) |
 | 43 | [30](#decisoes-de-arquitetura) | Soberania de dados por origin real, fail-closed |
 | 44 | [31](#decisoes-de-arquitetura) | Sinal determinístico de escalonamento em 3 tiers (prep. tier 3) |
 | 45 | [32](#decisoes-de-arquitetura) | Universalidade de provider: rota auditada + capacidades por origin |

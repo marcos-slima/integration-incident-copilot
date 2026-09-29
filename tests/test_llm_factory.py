@@ -90,7 +90,7 @@ def test_azure_openai_fully_configured_builds_client():
 
 
 def test_model_name_override_is_respected():
-    cfg = Settings(llm_provider="ollama", llm_model="qwen2.5-coder:32b")
+    cfg = Settings(llm_provider="ollama", llm_model="qwen3-coder-next:latest")
     llm = get_chat_model(model_name="qwen3:30b-a3b", config=cfg)
     assert llm.model == "qwen3:30b-a3b"
 

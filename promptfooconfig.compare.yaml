@@ -3,7 +3,8 @@
 # Credenciais e nomes de modelo vem do ambiente - nunca deste arquivo:
 #   GEMINI_API_KEY, GEMINI_MODEL  (chave em https://aistudio.google.com)
 #   GROQ_API_KEY,   GROQ_MODEL    (chave em https://console.groq.com)
-#   OLLAMA_MODEL                   (default em scripts/promptfoo_remote.sh)
+#   OLLAMA_MODEL          (OLLAMA,        default qwen3-coder-next:latest)
+#   OLLAMA_STRICT_MODEL   (OLLAMA_STRICT, default qwen3-strict:latest)
 # Uso:
 #   uv sync --extra openai
 #   npx promptfoo eval -c promptfooconfig.compare.yaml --no-cache -j 1 --delay 12000
@@ -20,12 +21,34 @@
 #     --filter-providers "Ollama|Groq"
 # (--filter-providers é regex sobre o LABEL do provider.)
 #
+# OS DOIS PROVIDERS LOCAIS NAO COEXISTEM (adicionado 2026-09-28):
+#   qwen3-coder-next e qwen3-strict tem 48.2G de pesos cada. A maquina de
+#   desenvolvimento tem 115G de RAM e ~91G disponiveis, e o servico roda com
+#   OLLAMA_MAX_LOADED_MODELS=2 + OLLAMA_KEEP_ALIVE=30m - ou seja, o Ollama
+#   tenta manter os DOIS resident em vez de despejar um para o outro. Medido
+#   nesta maquina: um so ja ocupa 49.9G (pesos + KV cache) e derruba o
+#   disponivel de 91G para 39G; com o segundo para subir, o runner morre por
+#   OOM no MEIO da suite. O promptfoo entao registra "este provider falhou em
+#   4 de 7 casos" e o report vira prova de que o modelo novo e pior. Nao e -
+#   e falta de RAM, e a conclusao errada sobrevive no README.
+#   Por isso: UM local por execucao, descarregando o anterior entre elas.
+#     ollama stop qwen3-strict:latest
+#     npx promptfoo eval -c promptfooconfig.compare.yaml -j 1 \
+#       --filter-providers "coder-next"
+#     npx promptfoo eval -c promptfooconfig.compare.yaml -j 1 \
+#       --filter-providers "strict"
+#   O runner tem um preflight de RAM que PARA a suite e diz o que descarregar
+#   (o maior resident, nao o primeiro em ordem alfabetica - parar o
+#   nomic-embed-text de 0.3G nao libera memoria nenhuma). Se voce viu
+#   "PREFLIGHT FAIL", o resultado faltando e' esse: nao e falha do modelo.
+#
 # COTA — leia antes de rodar:
 #   O Gemini no free tier tem 20 requests/dia por model
 #   (generate_content_free_tier_requests). Um unico caso deste suite
 #   pode gastar VARIAS chamadas, porque o pipeline e' ReAct (diagnostico +
-#   relatorio), nao uma chamada so. 7 casos x 3 providers estoura 20/dia
-#   com folga. Sintoma: 429 RESOURCE_EXHAUSTED com
+#   relatorio), nao uma chamada so. 7 casos x 2 providers de cloud (Gemini +
+#   Groq) estoura 20/dia com folga - o quarto provider desta suite e' local
+#   e nao consome cota. Sintoma: 429 RESOURCE_EXHAUSTED com
 #   "Quota exceeded for metric: ...limit: 20".
 #   Opcoes: chave com billing ativo, um model de free tier com cota
 #   maior, ou rodar so um provider por vez (--filter-providers). Nao
@@ -46,12 +69,15 @@
 # OLLAMA ou o GROQ reclamarem de `seed`, e' caso de acrescentar a origin
 # na tabela, nao de repor o export.
 #
-# DIFERENCA CRITICA entre os 3 provedores (2026-09-28, medido):
-#   OLLAMA 7/7 rodam (o local e' o unico sem cota).
+# DIFERENCA CRITICA entre os provedores (2026-09-28, medido):
+#   OLLAMA coder-next 7/7 rodam (o local e' o unico sem cota).
+#   OLLAMA strict     acrescentado depois; ver o bloco "OS DOIS PROVIDERS
+#                     LOCAIS NAO COEXISTEM" acima - precisa de execucao
+#                     propria, com o coder-next descarregado antes.
 #   GROQ   7/7 PASS - camada gratuita, cota folgada.
 #   GEMINI free tier estoura cota; precisa de chave com billing.
 #
-# Os 2 casos com interface_type=rfc passam nos 3 provedores SEM chamar
+# Os 2 casos com interface_type=rfc passam em todos os provedores SEM chamar
 # nenhum LLM: o rule engine (DA-33) resolve antes. Eles medem o pipeline
 # deterministico, nao a qualidade do modelo - o que e' correto, mas
 # significa que 2 dos 7 casos nao discriminam provider. Ao reportar,
@@ -102,7 +128,18 @@ providers:
 # quebrada. O modelo real que rodou esta no campo model_used da
 # resposta JSON de cada provider.
 - id: "exec:scripts/promptfoo_remote.sh OLLAMA"
-  label: "local: Ollama (qwen via scripts/promptfoo_remote.sh)"
+  label: "local: Ollama coder-next (qwen via scripts/promptfoo_remote.sh)"
+# Segundo provider LOCAL, para medir o qwen3-strict contra o modelo de
+# producao. Sao builds distintos da mesma base (79.7B qwen3next, Q4_K_M,
+# digests ca06e9e4 vs 216bf36b) - nao e' alias do mesmo peso, entao a
+# comparacao mede algo.
+#
+# O LABEL contem "coder-next" e "strict" de proposito: o cabecalho manda
+# rodar um provider local por vez com --filter-providers, e o filtro e'
+# regex sobre o label. Dois labels genericos ("local: Ollama") nao
+# permitiriam separar os dois na hora de filtrar.
+- id: "exec:scripts/promptfoo_remote.sh OLLAMA_STRICT"
+  label: "local: Ollama strict (qwen3-strict via scripts/promptfoo_remote.sh)"
 - id: "exec:scripts/promptfoo_remote.sh GEMINI"
   label: "cloud: Gemini (scripts/promptfoo_remote.sh)"
 - id: "exec:scripts/promptfoo_remote.sh GROQ"
@@ -153,7 +190,7 @@ tests:
     #
     # O que distingue as duas situacoes e' matched_source: quando o
     # guardrail funciona, ele devolve null em vez de anexar um documento
-    # qualquer. Medido nos 3 providers em 2026-09-28: matched_source=null
+    # qualquer. Medido nos providers em 2026-09-28: matched_source=null
     # e' o comportamento real e consistente, entao fixar aqui nao mede
     # sorte - mede o contrato do guardrail.
     #

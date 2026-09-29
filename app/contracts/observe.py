@@ -194,10 +194,19 @@ def _persist(report: DriftReport, contract: Contract, *, connector_type: str) ->
 def emit_incident(report: DriftReport, *, connector_type: str) -> bool:
     """Se o report for breaking, entrega o evento ao event mesh (DA-23).
 
-    Devolve `True` quando houve emissao. `False` significa "nada a fazer
-    agora" - que inclui tanto "esta limpo" quanto "o envio falhou": os dois
-    sao nao-incidentes para quem.poll, e o erro ja foi logado. A
-    distincao importa para o operador ver o report, nao para o loop.
+    **Contrato de retorno, e a confusao que ele nao esconde.** `True`
+    quando houve emissao. `False` cobre DOIS casos: "nao havia nada a
+    emitir" (report limpo) e "a entrega falhou". Para o loop de polling a
+    distincao e' irrelevante — os dois sao nao-incidentes e o erro ja foi
+    logado. Mas quem mostra o resultado a um humano precisa saber qual dos
+    dois foi, senao a mensagem aponta o operador para a causa errada (foi
+    exatamente o que aconteceu na primeira versao do CLI, que respondia
+    "--no-emit?" mesmo quando a falha era de rede).
+
+    Como recuperar a distincao: `False` + `report.is_breaking` implica
+    falha na entrega, porque o caminho "nada a fazer" so' ocorre com report
+    nao-breaking. Quem precisar de um sinal explicito em vez dessa
+    inferencia deve trocar o `bool` por um enum de duas posicoes.
     """
     data = to_incident_data(report, connector_type=connector_type)
     if data is None:

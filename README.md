@@ -1530,8 +1530,12 @@ Duas armadilhas específicas de um detector de drift:
    que compare o XML bruto gera ruído todo dia e é desligado na primeira
    semana.
 
-**A solução.** Cinco estados, porque a distinção entre *não verificável* e
+**A solução.** Quatro estados, porque a distinção entre *não verificável* e
 *verificado e igual* é justamente o que o detector precisa expressar:
+
+> Quatro, não cinco. `unavailable` e `not_introspectable` seriam estados
+> distintos e **não existem** — ambos caem em `unverified`, que carrega a
+> diferença em `reason`. Ver a última limitação desta seção.
 
 | Estado | Significado | Abre incidente? |
 |---|---|---|

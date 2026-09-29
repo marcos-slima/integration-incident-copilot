@@ -1,10 +1,17 @@
 """DA-52: deteccao de drift de contrato em integracoes.
 
-`model`   contrato normalizado + impressao digital estavel
-`diff`    comparativo e classificacao de severidade (puro, sem LLM)
-`odata`   leitura do `$metadata` (EDMX) de um servico OData v4
-`probes`  I/O: busca o contrato do lado do SAP (httpx / pyrfc)
-`observe` orquestra probe -> baseline -> diff -> sinal
+`model`     contrato normalizado + impressao digital estavel
+`odata`     leitura do `$metadata` (EDMX) de um servico OData v4
+`diff`      comparativo e classificacao de severidade (puro, sem LLM)
+`baseline`  persistencia da observacao (ORM `system_contracts`, migration 005)
+`observe`   orquestra probe -> diff -> baseline -> sinal
+
+Nao ha modulo `probes` aqui de proposito: a leitura do contrato e'
+responsabilidade do CONECTOR, via `SAPConnector.fetch_contract()`
+(app/connectors/base.py). Quem tem a credencial e quem sabe falar com o SAP
+e' o conector — o detector nao deveria carregar segredo de sistema nenhum
+para fazer uma leitura. Os 7 conectores sem introspeccao herdam `None` e
+caem em `unverified`.
 """
 
 from app.contracts.diff import (

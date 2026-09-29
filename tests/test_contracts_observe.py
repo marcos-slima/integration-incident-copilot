@@ -320,3 +320,109 @@ class TestContratoVazio:
         assert isinstance(contract.entities["I_Message"], Entity)
         assert contract.entities["I_Message"].properties["MessageId"].key is True
         assert isinstance(contract.entities["I_Message"].properties["StatusText"], Property)
+
+
+def _breaking_report():
+    """Report breaking de verdade, para exercitar o caminho de emissao."""
+    from app.contracts.diff import Change, DriftReport
+
+    return DriftReport(
+        system_key="cap_prod",
+        status=ObservationStatus.DRIFT,
+        severity=SEVERITY_BREAKING,
+        changes=(
+            Change(
+                severity=SEVERITY_BREAKING,
+                kind="property_removed",
+                entity="I_Message",
+                property="StatusText",
+                old="Edm.String",
+            ),
+        ),
+        fingerprint_before="a" * 64,
+        fingerprint_after="b" * 64,
+        kind="odata_v4",
+    )
+
+
+class TestCLI:
+    """O CLI é ferramenta de diagnóstico: uma mensagem que aponta a causa
+    errada custa mais que não dizer nada. A primeira versão respondia
+    "--no-emit?" para os DOIS casos de `emit_incident() == False`, então uma
+    falha de entrega mandava o operador procurar a flag errada."""
+
+    def _run(self, capsys, monkeypatch, *, no_emit: bool, emitted: bool, report=None):
+        import scripts.check_contract_drift as cli
+
+        monkeypatch.setattr(cli, "check_connector", lambda *a, **k: report or _breaking_report())
+        monkeypatch.setattr(cli, "emit_incident", lambda *a, **k: emitted)
+        argv = ["--system-key", "cap_prod", "--connector-type", "odata"]
+        if no_emit:
+            argv.append("--no-emit")
+        codigo = cli.main(argv)
+        return codigo, capsys.readouterr().out
+
+    def test_falha_na_entrega_nao_eculpa_a_flag(self, capsys, monkeypatch):
+        codigo, saida = self._run(capsys, monkeypatch, no_emit=False, emitted=False)
+        assert codigo == 1, "breaking tem de sair != 0 para o CI"
+        assert "falhou" in saida
+        assert "--no-emit" not in saida.replace("(ver log)", ""), (
+            "com --no-emit ausente, citar a flag manda o operador para a causa errada"
+        )
+
+    def test_no_emit_explicito_diz_que_e_esperado(self, capsys, monkeypatch):
+        _, saida = self._run(capsys, monkeypatch, no_emit=True, emitted=False)
+        assert "--no-emit" in saida
+        assert "falhou" not in saida
+
+    def test_emissao_bem_sucedida(self, capsys, monkeypatch):
+        _, saida = self._run(capsys, monkeypatch, no_emit=False, emitted=True)
+        assert "incidente: emitido" in saida
+        assert "falhou" not in saida
+
+    def test_report_nao_breaking_nao_fala_de_incidente(self, capsys, monkeypatch):
+        from app.contracts.diff import unverified_report
+
+        _, saida = self._run(
+            capsys, monkeypatch, no_emit=False, emitted=False, report=unverified_report("s", "x")
+        )
+        assert "incidente:" not in saida
+        assert "sem opiniao" in saida
+
+    def test_unverified_sai_zero_para_nao_derrotar_o_ci(self, capsys, monkeypatch):
+        from app.contracts.diff import unverified_report
+
+        codigo, _ = self._run(
+            capsys, monkeypatch, no_emit=False, emitted=False, report=unverified_report("s", "x")
+        )
+        assert codigo == 0, "SAP fora do ar nao e motivo para build vermelho"
+
+
+class TestContratoDeEmitIncident:
+    def test_false_com_breaking_implica_falha_de_entrega(self):
+        """O docstring promete essa inferencia; o CLI depende dela.
+
+        Se `emit_incident` passar a devolver False para um report breaking
+        por outro motivo, o CLI volta a acusar a flag errada.
+        """
+        from app.contracts.observe import to_incident_data
+
+        report = _breaking_report()
+        assert report.is_breaking
+        assert to_incident_data(report, connector_type="odata") is not None, (
+            "um report breaking TEM de gerar evento; se to_incident_data devolve None, "
+            "o CLI nao consegue distinguir 'nada a fazer' de 'falhou'"
+        )
+
+    def test_emit_nao_chama_evento_quando_nao_ha_breaking(self, monkeypatch):
+        from app.contracts import observe as observe_module
+        from app.contracts.diff import diff_contracts
+
+        chamado: list = []
+        from app.events import consumer
+
+        monkeypatch.setattr(consumer, "handle_incident_event", lambda e: chamado.append(e))
+        contract = parse_odata_metadata(EDMX_BEFORE)
+        limpo = diff_contracts(contract, contract)
+        assert observe_module.emit_incident(limpo, connector_type="odata") is False
+        assert chamado == []

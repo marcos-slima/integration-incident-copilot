@@ -17,7 +17,7 @@ conectores por dominio":
     (b) Copilot como MCP CLIENT consumindo conectores externos via MCP
         - migraria os `app/connectors/*` para servidores MCP de
         terceiros/proprios. Fica para uma fase seguinte (ver
-        `docs/proposals/` se/quando avaliado); misturar os dois agora
+        `docs/a2a-interoperability-layer.md` se/quando avaliado); misturar os dois agora
         seria escopo maior que o necessario para o item do roadmap.
 
 "Leitura primeiro" (conforme o roadmap): as ferramentas expostas aqui

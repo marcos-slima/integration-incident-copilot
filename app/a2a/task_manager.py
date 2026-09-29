@@ -13,7 +13,7 @@ alcancaveis por esse tipo de agente sao implementados:
     submitted -> working -> completed | failed
 
 Isso e exatamente o escopo que a proposta original (ver
-docs/proposals/a2a-interoperability-layer.md) definiu como criterio de
+docs/a2a-interoperability-layer.md) definiu como criterio de
 aceite - implementar os estados que o protocolo suporta mas que este
 agente nunca vai de fato atingir seria "preciosismo" sem valor real.
 

@@ -6,10 +6,9 @@
 // - useState<T | null>: estado que pode ser null
 // - FileReader API com TypeScript
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { callDiagnose, ApiError } from '../api/diagnose';
-import { getSession, login, logout, type SessionState } from '../api/auth';
 import type {
   DiagnosisResponse,
   HistoryItem,
@@ -21,6 +20,7 @@ import { Badge } from './Badge';
 // Props do componente
 interface DiagnoseViewProps {
   onResult: (item: HistoryItem) => void; // callback para adicionar ao histórico
+  onSessionExpired: () => void; // DA-54: 401 devolve para a tela de login
 }
 
 // Sistemas disponíveis no dropdown — os 9 conectores do pipeline
@@ -62,7 +62,7 @@ interface UploadedFile {
   target: 'logs' | 'payload';
 }
 
-export function DiagnoseView({ onResult }: DiagnoseViewProps) {
+export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) {
   // Estado do formulário
   const [desc, setDesc]       = useState('');
   const [sys, setSys]         = useState('');
@@ -70,42 +70,6 @@ export function DiagnoseView({ onResult }: DiagnoseViewProps) {
   const [logs, setLogs]       = useState('');
   const [payload, setPayload] = useState('');
   const [showAdv, setShowAdv] = useState(false);
-
-  // Login de sessão (DA-54): usuário+senha em /auth/login → cookie HttpOnly
-  // que o browser envia sozinho. O campo de API Key saiu da camada do
-  // usuário — X-API-Key é credencial de máquina (curl/MCP/A2A).
-  const [session, setSession] = useState<SessionState>({ authenticated: false });
-  const [loginUser, setLoginUser] = useState('');
-  const [loginPass, setLoginPass] = useState('');
-  const [loginMsg, setLoginMsg] = useState('');
-
-  useEffect(() => {
-    getSession()
-      .then(setSession)
-      .catch(() => {}); // sessão inacessível = não autenticado, formulário aparece
-  }, []);
-
-  async function doLogin() {
-    if (!loginUser.trim() || !loginPass) {
-      setLoginMsg('Preencha usuário e senha.');
-      return;
-    }
-    setLoginMsg('');
-    try {
-      const s = await login(loginUser.trim(), loginPass);
-      setSession(s);
-      setLoginPass('');
-      setError('');
-    } catch (e) {
-      if (e instanceof ApiError) setLoginMsg(`Erro ${e.status}: ${e.message}`);
-      else setLoginMsg('Falha na comunicação com o servidor.');
-    }
-  }
-
-  async function doLogout() {
-    await logout().catch(() => {});
-    setSession({ authenticated: false });
-  }
 
   // Estado do upload
   const [uploadFile, setUploadFile]     = useState<UploadedFile | null>(null);
@@ -145,10 +109,10 @@ export function DiagnoseView({ onResult }: DiagnoseViewProps) {
     } catch (e) {
       if (e instanceof ApiError) {
         if (e.status === 401) {
-          setError(
-            'Sem autenticação (401). Faça login no formulário acima — ' +
-              'ou, se for uma integração, envie o header X-API-Key.',
-          );
+          // DA-54: sessão expirada em pleno uso — o App troca para a
+          // tela de login com aviso; aqui só o rastro do motivo
+          setError('Sessão expirada (401) — entre novamente.');
+          onSessionExpired();
         } else {
           // Erro HTTP do backend (422, 429, 500)
           setError(`Erro ${e.status}: ${e.message}`);
@@ -214,66 +178,6 @@ export function DiagnoseView({ onResult }: DiagnoseViewProps) {
       </p>
 
       <div className="form-card">
-        {/* Autenticação (DA-54): login de sessão — o cookie HttpOnly flui
-            sozinho; o usuário nunca manipula a X-API-Key da camada de máquina */}
-        <div className="field-row">
-          {session.authenticated ? (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-                width: '100%',
-              }}
-            >
-              <span style={{ fontSize: 12, color: '#475569' }}>
-                Autenticado como <strong>{session.username}</strong> — sessão
-                válida por {session.ttl_hours ?? 8}h
-              </span>
-              <button className="upload-target-btn" onClick={doLogout}>
-                Sair
-              </button>
-            </div>
-          ) : (
-            <>
-              <label className="field-label">Login *</label>
-              <div className="grid-2" style={{ display: 'grid', gap: 10 }}>
-                <input
-                  className="field-input mono-input"
-                  type="text"
-                  autoComplete="username"
-                  placeholder="usuário"
-                  value={loginUser}
-                  onChange={(e) => setLoginUser(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && doLogin()}
-                />
-                <input
-                  className="field-input mono-input"
-                  type="password"
-                  autoComplete="current-password"
-                  placeholder="senha"
-                  value={loginPass}
-                  onChange={(e) => setLoginPass(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && doLogin()}
-                />
-              </div>
-              <div style={{ display: 'flex', gap: 10, marginTop: 8, alignItems: 'center' }}>
-                <button className="upload-target-btn active" onClick={doLogin}>
-                  Entrar
-                </button>
-                {loginMsg && (
-                  <span style={{ fontSize: 11, color: '#B91C1C' }}>{loginMsg}</span>
-                )}
-              </div>
-              <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>
-                O login cria um cookie de sessão HttpOnly, assinado e com prazo
-                — o navegador o envia sozinho; você não digita chave nenhuma.
-              </div>
-            </>
-          )}
-        </div>
-
         {/* Descrição */}
         <div className="field-row">
           <label className="field-label">Descrição do incidente *</label>

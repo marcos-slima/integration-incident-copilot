@@ -341,3 +341,40 @@ textarea.field-input{resize:vertical;line-height:1.6}
   font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;
   flex-shrink:0
 }
+
+/* Login — tela independente (DA-54) */
+.login-wrap{
+  height:100vh;display:flex;align-items:center;justify-content:center;
+  background:#0A1628
+}
+.login-card{
+  width:380px;max-width:calc(100vw - 32px);
+  background:#0F2040;border:1px solid #1E3A5F;border-radius:8px;
+  padding:28px;display:flex;flex-direction:column
+}
+.login-title{font-size:18px;font-weight:600;margin:14px 0 4px}
+.login-sub{font-size:12px;color:#94A3B8;margin-bottom:16px;line-height:1.6}
+.login-notice{
+  font-size:12px;color:#FBBF24;background:#FBBF2412;
+  border:1px solid #FBBF2440;border-radius:4px;padding:8px 10px;margin-bottom:14px
+}
+.login-submit{margin-top:6px;width:100%}
+.login-foot{
+  margin-top:16px;font-size:11px;color:#64748B;line-height:1.6;
+  border-top:1px solid #1E3A5F;padding-top:12px
+}
+
+/* Sessão no Sidebar (DA-54) */
+.session-info{
+  margin-top:auto;padding:12px 16px 0;border-top:1px solid #1E3A5F;
+  display:flex;flex-direction:column;gap:4px
+}
+.session-user{
+  font-family:'JetBrains Mono',monospace;font-size:12px;color:#F8FAFC
+}
+.session-logout{
+  align-self:flex-start;padding:4px 10px;border-radius:4px;border:none;
+  background:transparent;border:1px solid #1E3A5F;color:#94A3B8;
+  font-size:11px;cursor:pointer;font-family:'Inter',sans-serif
+}
+.session-logout:hover{border-color:#0EA5E9;color:#F8FAFC}

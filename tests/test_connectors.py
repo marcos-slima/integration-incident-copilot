@@ -817,6 +817,79 @@ def test_po_connector_http_error_e_fallback(monkeypatch):
     assert result.is_fallback is True
 
 
+def test_po_connector_token_401_vira_result_e_nao_excecao(monkeypatch):
+    """REGRESSAO CORRIGIDA. O `raise_for_status` do token endpoint estoura
+    `httpx.HTTPStatusError`, que NAO e subclasse de `RequestError`: um 401 do
+    APIM subia como excecao em vez de virar `ConnectorResult`. O grafo veria
+    500 em vez de um conector degradado com evidencia — e o circuit breaker
+    nem registrava a falha, que e' justamente o sinal que ele existe para
+    capturar. Mesmo par de `except` do `ODataConnector` e `AribaConnector`.
+    """
+    monkeypatch.setattr(
+        "app.connectors.po_connector.settings",
+        Settings(
+            po_base_url="https://apim.corp.example/po",
+            po_auth_mode="oauth2",
+            po_oauth_token_url="https://apim.corp.example/oauth/token",
+            po_oauth_client_id="id",
+            po_oauth_client_secret="seg",
+        ),
+    )
+    client = httpx.Client(
+        transport=httpx.MockTransport(lambda r: httpx.Response(401, text="invalid_client"))
+    )
+    result = POConnector(client=client).fetch("FAILED")
+    assert result.status == "error"
+    assert result.error_code == "401"
+    assert result.is_mock is False
+    assert result.is_fallback is True
+    assert "401" in result.message
+
+
+def test_po_connector_token_sem_access_token_vira_result(monkeypatch):
+    """200 sem `access_token`, ou corpo que nao e JSON: um APIM mal
+    configurado faz isso sem nenhum erro HTTP. Sem este caminho, a KeyError
+    do dict ou o JSONDecodeError subiam como excecao."""
+    monkeypatch.setattr(
+        "app.connectors.po_connector.settings",
+        Settings(
+            po_base_url="https://apim.corp.example/po",
+            po_auth_mode="oauth2",
+            po_oauth_token_url="https://apim.corp.example/oauth/token",
+            po_oauth_client_id="id",
+            po_oauth_client_secret="seg",
+        ),
+    )
+    # B023: a lambda precisa amarrar `corpo` no default. Sem isso ela fecha
+    # sobre a variavel do loop e as duas iteracoes testariam o mesmo corpo —
+    # o dict sem `access_token` passaria sem nunca ter sido exercitado.
+    for corpo in ({"token_type": "Bearer"}, "<html>proxy error</html>"):
+        client = httpx.Client(
+            transport=httpx.MockTransport(lambda r, c=corpo: httpx.Response(200, json=c))
+        )
+        result = POConnector(client=client).fetch("FAILED")
+        assert result.status == "error"
+        assert result.is_fallback is True
+
+
+def test_po_connector_erro_de_rede_registra_no_circuit_breaker(monkeypatch):
+    """O caminho de rede tambem estava sem teste: e' o unico motivo de o
+    breaker existir no conector, e uma regressao ali passaria despercebida."""
+    monkeypatch.setattr(
+        "app.connectors.po_connector.settings",
+        Settings(po_base_url="https://wd-dmz.corp.example/po", po_username="u", po_password="p"),
+    )
+
+    def estoura(r: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("Connection refused", request=r)
+
+    client = httpx.Client(transport=httpx.MockTransport(estoura))
+    result = POConnector(client=client).fetch("FAILED")
+    assert result.status == "error"
+    assert result.error_code == "CONNECTION_ERROR"
+    assert result.is_fallback is True
+
+
 def test_po_connector_summary_limita_linhas(monkeypatch):
     """Teto de linhas no resumo: o `raw` completo vai junto para o RAG, mas
     o texto injetado no prompt do LLM nao pode crescer sem limite."""

@@ -212,7 +212,34 @@ class POConnector(ExternalSystemConnector):
                 params["id"] = identifier
 
             response = client.get(url, params=params, headers=headers)
-        except httpx.RequestError as exc:
+        except httpx.HTTPStatusError as exc:
+            # Mesmo par do `ODataConnector`/`AribaConnector`: o `raise_for_status`
+            # do token endpoint estoura `HTTPStatusError`, que NAO e subclasse de
+            # `RequestError`. Sem este `except`, um 401 do APIM subia como
+            # excecao em vez de virar `ConnectorResult` — o grafo veria 500 em
+            # vez de um conector degradado com evidencia. O GET da facade, por
+            # sua vez, tem checagem de status explicita abaixo.
+            connector_circuit_breaker.record_failure(
+                _SOURCE,
+                settings.connector_circuit_failure_threshold,
+                settings.connector_circuit_cooldown_seconds,
+            )
+            return ConnectorResult(
+                source_system=_SOURCE,
+                status="error",
+                error_code=str(exc.response.status_code),
+                message=(
+                    f"Falha ao obter token OAuth2 do APIM diante do PO/PI: "
+                    f"HTTP {exc.response.status_code}"
+                ),
+                raw=exc.response.text[:2000],
+                is_mock=False,
+                is_fallback=True,
+            )
+        except (httpx.RequestError, KeyError, ValueError) as exc:
+            # `RequestError`: rede/socket. `KeyError`/`ValueError`: o token
+            # endpoint respondeu 200 sem `access_token`, ou com corpo que nao e
+            # JSON — um APIM mal configurado faz isso sem erro HTTP.
             connector_circuit_breaker.record_failure(
                 _SOURCE,
                 settings.connector_circuit_failure_threshold,
@@ -300,7 +327,15 @@ def _oauth2_token(client: httpx.Client) -> str:
         auth=(settings.po_oauth_client_id, settings.po_oauth_client_secret),
     )
     response.raise_for_status()
-    return response.json()["access_token"]
+    # Validar a forma aqui, em vez de deixar o `dict[...]` estourar: um APIM
+    # mal configurado responde 200 com corpo que nao e objeto JSON, ou objeto
+    # sem `access_token`, e cada caso levantava uma excecao diferente
+    # (TypeError, KeyError, JSONDecodeError) que subiria pelo grafo. Um
+    # ValueError unico deixa o tradutor em `_fetch_real` com um caminho so.
+    data = response.json()
+    if not isinstance(data, dict) or "access_token" not in data:
+        raise ValueError(f"resposta do token endpoint sem access_token: {str(data)[:200]}")
+    return str(data["access_token"])
 
 
 def _extract_messages(payload: Any) -> list[dict[str, Any]]:

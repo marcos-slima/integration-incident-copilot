@@ -1,0 +1,401 @@
+[
+  {
+    "key": "tev1",
+    "model": "tev1",
+    "notes": "Tev1 local instalado nesta maquina. Variante exata (0.8B/4B) nao exposta por /api/tags.",
+    "ok": true,
+    "error": null,
+    "n_cases": 21,
+    "agreement": 0.9047619047619048,
+    "disagreements": [
+      {
+        "id": "duplicate_incident_idempotency",
+        "expected": "sap",
+        "predicted": "generic",
+        "confidence": 0.9351307552477517,
+        "provenance": "derivado:classify_domain"
+      },
+      {
+        "id": "workday_successfactors_sync_error",
+        "expected": "sap",
+        "predicted": "saas",
+        "confidence": 0.8811660652794127,
+        "provenance": "derivado:classify_domain"
+      }
+    ],
+    "abstention_curve": [
+      {
+        "threshold": 0.0,
+        "coverage": 1.0,
+        "precision": 0.9047619047619048,
+        "n_answered": 21
+      },
+      {
+        "threshold": 0.1,
+        "coverage": 0.9523809523809523,
+        "precision": 0.9,
+        "n_answered": 20
+      },
+      {
+        "threshold": 0.25,
+        "coverage": 0.9523809523809523,
+        "precision": 0.9,
+        "n_answered": 20
+      },
+      {
+        "threshold": 0.5,
+        "coverage": 0.8571428571428571,
+        "precision": 0.8888888888888888,
+        "n_answered": 18
+      },
+      {
+        "threshold": 0.75,
+        "coverage": 0.47619047619047616,
+        "precision": 0.8,
+        "n_answered": 10
+      },
+      {
+        "threshold": 0.9,
+        "coverage": 0.2857142857142857,
+        "precision": 0.8333333333333334,
+        "n_answered": 6
+      }
+    ],
+    "confidence_bins": [
+      {
+        "range": "[0.0,0.1)",
+        "n": 1,
+        "accuracy": 1.0
+      },
+      {
+        "range": "[0.2,0.4)",
+        "n": 2,
+        "accuracy": 1.0
+      },
+      {
+        "range": "[0.4,0.6)",
+        "n": 1,
+        "accuracy": 1.0
+      },
+      {
+        "range": "[0.6,0.8)",
+        "n": 8,
+        "accuracy": 1.0
+      },
+      {
+        "range": "[0.8,1.0)",
+        "n": 9,
+        "accuracy": 0.7777777777777778
+      }
+    ],
+    "severity_distribution": {
+      "0": 0.14285714285714285,
+      "1": 0.8571428571428571,
+      "2": 0.0
+    },
+    "severity_mean_confidence": 0.30541229273968296,
+    "determinism_identical_fraction": 1.0,
+    "determinism_n": 5,
+    "latency_ms_mean": 667.5540814290538,
+    "latency_ms_p50": 597.4111120012822,
+    "latency_ms_p95": 705.505448000622,
+    "input_tokens_mean": 1216.904761904762,
+    "output_tokens_mean": 3.0,
+    "per_case": [
+      {
+        "id": "apim_gateway_auth_throttle",
+        "text_preview": "# SAP API Management (API Gateway) - 401/403, 429 e 55s  ## Sintoma Chamadas que passam pela SAP API Managemen",
+        "expected": "sap",
+        "predicted": "sap",
+        "confidence": 0.2896910814272706,
+        "probabilities": {
+          "sap": 0.7042030579449269,
+          "saas": 0.08043810591651485,
+          "generic": 0.21535883613855814
+        },
+        "correct": true,
+        "provenance": "derivado:classify_domain"
+      },
+      {
+        "id": "ariba_po_supplier_mismatch",
+        "text_preview": "# SAP Ariba - Pedido de Compra Bloqueado por Divergencia de Fornecedor  ## Sintoma Um pedido de compra (PO) en",
+        "expected": "sap",
+        "predicted": "sap",
+        "confidence": 0.08964599462712308,
+        "probabilities": {
+          "sap": 0.539646809952575,
+          "saas": 0.1848946279793798,
+          "generic": 0.2754585620680453
+        },
+        "correct": true,
+        "provenance": "derivado:classify_domain"
+      },
+      {
+        "id": "cap_custom_purchase_approval_failure",
+        "text_preview": "# Servico CAP Customizado - Falha ao Processar Aprovacao de Pedido de Compra  ## Sintoma Um servico CAP custom",
+        "expected": "sap",
+        "predicted": "sap",
+        "confidence": 0.7545812729848941,
+        "probabilities": {
+          "sap": 0.9371337049860229,
+          "saas": 0.01525660700252848,
+          "generic": 0.047609688011448575
+        },
+        "correct": true,
+        "provenance": "derivado:classify_domain"
+      },
+      {
+        "id": "cpi_http_401",
+        "text_preview": "# CPI iFlow - Erro HTTP 401 (Unauthorized)  ## Sintoma iFlow no Integration Suite (CPI) recebe HTTP 401 ao cha",
+        "expected": "sap",
+        "predicted": "sap",
+        "confidence": 0.9098889328037721,
+        "probabilities": {
+          "sap": 0.9809435365899225,
+          "saas": 0.0012650004678564613,
+          "generic": 0.01779146294222096
+        },
+        "correct": true,
+        "provenance": "derivado:classify_domain"
+      },
+      {
+        "id": "duplicate_incident_idempotency",
+        "text_preview": "# Duplicidade de incidente - reentrega de webhook e idempotencia  ## Sintoma O mesmo incidente e diagnosticado",
+        "expected": "sap",
+        "predicted": "generic",
+        "confidence": 0.9351307552477517,
+        "probabilities": {
+          "sap": 0.001031447697896857,
+          "saas": 0.011582780559520134,
+          "generic": 0.9873857717425831
+        },
+        "correct": false,
+        "provenance": "derivado:classify_domain"
+      },
+      {
+        "id": "idoc_status_51",
+        "text_preview": "# IDoc Status 51 - Application Document Not Posted  ## Sintoma IDoc fica travado com status 51 na fila de entr",
+        "expected": "sap",
+        "predicted": "sap",
+        "confidence": 0.9288982762886969,
+        "probabilities": {
+          "sap": 0.9860919458250836,
+          "saas": 0.0015404578391809954,
+          "generic": 0.012367596335735346
+        },
+        "correct": true,
+        "provenance": "derivado:classify_domain"
+      },
+      {
+        "id": "odata_contract_drift",
+        "text_preview": "# OData - Mudanca de contrato e metadados  ## Sintoma Um servico OData que funcionava passa a devolver erro de",
+        "expected": "sap",
+        "predicted": "sap",
+        "confidence": 0.7176761442260042,
+        "probabilities": {
+          "sap": 0.9168043934549254,
+          "saas": 0.006847863942643018,
+          "generic": 0.07634774260243168
+        },
+        "correct": true,
+        "provenance": "derivado:classify_domain"
+      },
+      {
+        "id": "odata_timeout_cpi",
+        "text_preview": "# OData Service Timeout em iFlow (CPI / Integration Suite)  ## Sintoma iFlow no SAP Integration Suite (CPI) fa",
+        "expected": "sap",
+        "predicted": "sap",
+        "confidence": 0.9577794296013958,
+        "probabilities": {
+          "sap": 0.9923508065186881,
+          "saas": 0.00037231489866069724,
+          "generic": 0.0072768785826510815
+        },
+        "correct": true,
+        "provenance": "derivado:classify_domain"
+      },
+      {
+        "id": "po_pi_message_ordering",
+        "text_preview": "# SAP PO/PI - Ordem de mensagens e atomicidade de canal  ## Sintoma Mensagens no SAP PO/PI chegam fora de orde",
+        "expected": "sap",
+        "predicted": "sap",
+        "confidence": 0.9810185585613578,
+        "probabilities": {
+          "sap": 0.9970985634599957,
+          "saas": 0.00031860499065759296,
+          "generic": 0.0025828315493466618
+        },
+        "correct": true,
+        "provenance": "derivado:classify_domain"
+      },
+      {
+        "id": "po_pi_stuck_message",
+        "text_preview": "# SAP PO/PI - Mensagem travada no Monitor (RABAX/EOIO)  ## Sintoma Mensagem de integracao fica presa no SAP Pr",
+        "expected": "sap",
+        "predicted": "sap",
+        "confidence": 0.9191388633783556,
+        "probabilities": {
+          "sap": 0.983109254078383,
+          "saas": 0.0007788155781462331,
+          "generic": 0.016111930343470773
+        },
+        "correct": true,
+        "provenance": "derivado:classify_domain"
+      },
+      {
+        "id": "rfc_connection_refused",
+        "text_preview": "# RFC Destination - Connection Refused  ## Sintoma Chamada RFC (via SM59, ou de um sistema externo) falha com ",
+        "expected": "sap",
+        "predicted": "sap",
+        "confidence": 0.8883098427854343,
+        "probabilities": {
+          "sap": 0.9745569809564402,
+          "saas": 0.000988065408942274,
+          "generic": 0.024454953634617478
+        },
+        "correct": true,
+        "provenance": "derivado:classify_domain"
+      },
+      {
+        "id": "rfc_gateway_pool_timeout",
+        "text_preview": "# RFC Gateway - Pool de Processos de Dialogo Esgotado  ## Sintoma Chamada RFC sincrona (via destino RFC config",
+        "expected": "sap",
+        "predicted": "sap",
+        "confidence": 0.8628549657837492,
+        "probabilities": {
+          "sap": 0.9661411241128289,
+          "saas": 0.0005372559075239151,
+          "generic": 0.03332161997964722
+        },
+        "correct": true,
+        "provenance": "derivado:classify_domain"
+      },
+      {
+        "id": "salesforce_case_sap_sync_failure",
+        "text_preview": "# Salesforce - Case sobre Falha Silenciosa na Sincronizacao com SAP  ## Sintoma Um Case e aberto no Salesforce",
+        "expected": "sap",
+        "predicted": "sap",
+        "confidence": 0.28020511712934015,
+        "probabilities": {
+          "sap": 0.6318361209650671,
+          "saas": 0.043041621797115244,
+          "generic": 0.32512225723781746
+        },
+        "correct": true,
+        "provenance": "derivado:classify_domain"
+      },
+      {
+        "id": "servicenow_itsm_alert",
+        "text_preview": "# ServiceNow - Alerta de Monitoramento sobre Falha SAP  ## Sintoma Um incidente e aberto automaticamente no Se",
+        "expected": "sap",
+        "predicted": "sap",
+        "confidence": 0.6097504131998166,
+        "probabilities": {
+          "sap": 0.8776483420954952,
+          "saas": 0.021677777025982028,
+          "generic": 0.10067388087852261
+        },
+        "correct": true,
+        "provenance": "derivado:classify_domain"
+      },
+      {
+        "id": "workday_successfactors_sync_error",
+        "text_preview": "# Workday - Falha na Replicacao de Dados vindos do SuccessFactors  ## Sintoma Um evento de integracao falha no",
+        "expected": "sap",
+        "predicted": "saas",
+        "confidence": 0.8811660652794127,
+        "probabilities": {
+          "sap": 0.00041610454370391196,
+          "saas": 0.9718121976296485,
+          "generic": 0.0277716978266475
+        },
+        "correct": false,
+        "provenance": "derivado:classify_domain"
+      },
+      {
+        "id": "wordboundary_sapato",
+        "text_preview": "O sapato do usuario ficou manchado depois de usar o portal. Nao ha integracao envolvida.",
+        "expected": "generic",
+        "predicted": "generic",
+        "confidence": 0.6909311330296426,
+        "probabilities": {
+          "sap": 0.02524863364748678,
+          "saas": 0.05866453648397499,
+          "generic": 0.9160868298685383
+        },
+        "correct": true,
+        "provenance": "autorado"
+      },
+      {
+        "id": "wordboundary_sapiens",
+        "text_preview": "Os dados do cliente Sapiens foram duplicados na carga manual.",
+        "expected": "generic",
+        "predicted": "generic",
+        "confidence": 0.5025499508943863,
+        "probabilities": {
+          "sap": 0.09733791383490145,
+          "saas": 0.06255380162110688,
+          "generic": 0.8401082845439918
+        },
+        "correct": true,
+        "provenance": "autorado"
+      },
+      {
+        "id": "no_signal",
+        "text_preview": "O relatorio mensal nao abriu na manha de segunda-feira.",
+        "expected": "generic",
+        "predicted": "generic",
+        "confidence": 0.6635365886806868,
+        "probabilities": {
+          "sap": 0.03466261097823544,
+          "saas": 0.05790165826000116,
+          "generic": 0.9074357307617633
+        },
+        "correct": true,
+        "provenance": "autorado"
+      },
+      {
+        "id": "idoc_only",
+        "text_preview": "IDoc travado com status 51 na fila de entrada (WE02/BD87).",
+        "expected": "sap",
+        "predicted": "sap",
+        "confidence": 0.7203013904063676,
+        "probabilities": {
+          "sap": 0.9130309819076481,
+          "saas": 0.0026359695295310854,
+          "generic": 0.084333048562821
+        },
+        "correct": true,
+        "provenance": "autorado"
+      },
+      {
+        "id": "po_pi_only",
+        "text_preview": "Mensagem presa no Process Integration; diretorio de erros do PO crescendo sem consumo.",
+        "expected": "sap",
+        "predicted": "sap",
+        "confidence": 0.7009578172673233,
+        "probabilities": {
+          "sap": 0.9019716017974168,
+          "saas": 0.0015105906371215966,
+          "generic": 0.09651780756546167
+        },
+        "correct": true,
+        "provenance": "autorado"
+      },
+      {
+        "id": "saas_only",
+        "text_preview": "Worker nao foi criado no Workday por divergencia de Person_ID_External vindo do SuccessFactors.",
+        "expected": "saas",
+        "predicted": "saas",
+        "confidence": 0.7386675051154745,
+        "probabilities": {
+          "sap": 0.00469807735845022,
+          "saas": 0.9237710030184738,
+          "generic": 0.07153091962307605
+        },
+        "correct": true,
+        "provenance": "autorado"
+      }
+    ]
+  }
+]

@@ -219,7 +219,7 @@ def _users() -> dict[str, WebUser]:
 
 @router.post("/login")
 @limiter.limit("5/minute")
-def login(request: Request, body: LoginRequest, response: Response) -> dict[str, str | bool]:
+def login(request: Request, body: LoginRequest, response: Response) -> dict[str, str | bool | int]:
     """Troca usuario+senha por cookie de sessao HttpOnly.
 
     Fail-closed: sem WEB_UI_USERS configurado, responde 401 sempre —
@@ -237,7 +237,16 @@ def login(request: Request, body: LoginRequest, response: Response) -> dict[str,
     token = sign_session(body.username, ttl, settings.session_secret)
     response.set_cookie(value=token, **session_cookie_kwargs())
     logger.info("login de UI aceito (usuario=%s, ip=%s)", body.username, request.client.host)
-    return {"ok": True, "username": body.username}
+    # MESMO shape de GET /auth/session: authenticated/username/ttl_hours.
+    # O App da UI guarda esta resposta direto como estado da sessao e
+    # decide renderizar pelo campo `authenticated` — uma resposta sem
+    # ele deixava o app preso na tela de login com login BEM-sucedido
+    # (bug real da homologacao: {"ok": true} sem `authenticated`).
+    return {
+        "authenticated": True,
+        "username": body.username,
+        "ttl_hours": settings.session_ttl_hours,
+    }
 
 
 @router.post("/logout")

@@ -3,10 +3,13 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 from app.evaluation.gates import (
+    GATES,
     Thresholds,
     check_candidate_das,
+    check_connector_coverage,
     check_connector_reachable,
     check_connector_validation_matrix,
     check_corpus_coverage,
@@ -1175,3 +1178,166 @@ def test_da_registered_conta_migration_de_alembic(tmp_path: Path) -> None:
     root = _da_root(tmp_path, _REGISTRO_OK, {"alembic/versions/006_x.py": "# DA-53 aqui\n"})
     falhas = [f for f in check_da_registered(root) if f.is_failure]
     assert falhas and "DA-53" in falhas[0].message
+
+
+# ---------------------------------------------------------------------------
+# DA-58: mapa de cobertura (nona superficie da invariante 23)
+# ---------------------------------------------------------------------------
+
+_COB_MECANISMOS = ["apis", "odata"]
+_COB_PRODUTOS = [
+    {"name": "Ariba", "kind": "sap_product", "mechanisms": {"apis": "supported", "odata": "none"}},
+    {
+        "name": "BW/4HANA",
+        "kind": "sap_product",
+        "mechanisms": {"apis": "supported", "odata": "supported"},
+    },
+]
+# `odata` entra como GENERICO de BW/4HANA, que e' o caso real: cliente de
+# mecanismo alcançando um produto que ele nao foi feito para. E' o que
+# deixa `apis` de BW/4HANA como lacuna real enquanto o gate segue verde.
+_COB_COBERTURA = [
+    {
+        "connector": "ariba",
+        "dedicated_to": "Ariba",
+        "generic_for": [],
+        "mechanisms": ["apis"],
+    },
+    {
+        "connector": "odata",
+        "dedicated_to": None,
+        "generic_for": ["BW/4HANA"],
+        "mechanisms": ["odata"],
+    },
+]
+_COB_REGISTRY = (
+    "_REGISTRY = {\n    'ariba': AribaConnector,\n    'odata': ODataConnector,\n}\n\n"
+    "_REAL_MODE_SETTING = {\n    'ariba': 'ariba_base_url',\n    'odata': 'odata_service_url',\n}\n"
+)
+
+
+def _cobertura_root(
+    tmp_path: Path, cobertura: list | None = None, produtos: list | None = None
+) -> Path:
+    root = _connector_root(
+        tmp_path,
+        _COB_REGISTRY,
+        _literal_fiel(),
+        _SANE_SUPERVISOR,
+        admin='CONNECTOR_TYPES = ("ariba", "odata")\n',
+    )
+    (root / "data").mkdir(exist_ok=True)
+    (root / "data/sap_products.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 1,
+                "mechanisms": _COB_MECANISMOS,
+                "products": produtos or _COB_PRODUTOS,
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    (root / "data/connector_coverage.yaml").write_text(
+        yaml.safe_dump(
+            {"schema_version": 1, "coverage": cobertura or _COB_COBERTURA}, sort_keys=False
+        ),
+        encoding="utf-8",
+    )
+    return root
+
+
+def _reescrever_mapa(root: Path) -> None:
+    """Regrava o doc versionado com o mapa atual, para os testes que so' mudam
+    o DADO."""
+    from app.evaluation.coverage import (
+        GENERATED_NOTE,
+        build_matrix,
+        load_all,
+        render_markdown,
+    )
+
+    produtos, mecanismos, cobertura, labels = load_all(root)
+    (root / "docs/COVERAGE_MAP.md").write_text(
+        render_markdown(
+            build_matrix(produtos, cobertura, mecanismos), mecanismos, labels, GENERATED_NOTE
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_connector_coverage_pass_com_dado_coerente(tmp_path: Path) -> None:
+    root = _cobertura_root(tmp_path)
+    _reescrever_mapa(root)
+    assert not [f for f in check_connector_coverage(root) if f.is_failure]
+
+
+def test_connector_coverage_acusa_conector_registrado_sem_declaracao(tmp_path: Path) -> None:
+    """Nona superficie: `odata` esta no registro e funciona, e nao tem linha
+    de cobertura. O mapa o mostraria como ausente, sem nenhum sinal — a
+    mesma morte silenciosa das outras oito."""
+    root = _cobertura_root(tmp_path, cobertura=[_COB_COBERTURA[0]])
+    _reescrever_mapa(root)
+    falhas = [f for f in check_connector_coverage(root) if f.is_failure]
+    assert falhas and "odata" in falhas[0].message and "sem linha" in falhas[0].message
+
+
+def test_connector_coverage_acusa_mapa_desatualizado(tmp_path: Path) -> None:
+    """O doc versionado e' gerado. Se os dados mudarem e o doc nao for
+    regravado, o mapa passa a descrever um estado que nao existe."""
+    root = _cobertura_root(tmp_path)
+    _reescrever_mapa(root)
+    # `ariba` passa a cobrir BW/4HANA tambem. O dado continua COERENTE (o
+    # produto existe, o conector existe) — so' mudou. E' o caso comum de
+    # desatualizacao, edicao de dado sem `--write`, e nao o de incoerencia.
+    cobertura = [
+        {**_COB_COBERTURA[0], "dedicated_to": ["Ariba", "BW/4HANA"]},
+        _COB_COBERTURA[1],
+    ]
+    (root / "data/connector_coverage.yaml").write_text(
+        yaml.safe_dump({"schema_version": 1, "coverage": cobertura}, sort_keys=False),
+        encoding="utf-8",
+    )
+    falhas = [f for f in check_connector_coverage(root) if f.is_failure]
+    assert falhas and "desatualizado" in falhas[0].message
+
+
+def test_connector_coverage_acusa_doc_ausente(tmp_path: Path) -> None:
+    root = _cobertura_root(tmp_path)
+    falhas = [f for f in check_connector_coverage(root) if f.is_failure]
+    assert falhas and "coverage_map.py --write" in falhas[0].message
+
+
+def test_connector_coverage_acusa_produto_fantasma(tmp_path: Path) -> None:
+    root = _cobertura_root(
+        tmp_path,
+        cobertura=[
+            {
+                "connector": "ariba",
+                "dedicated_to": "NaoExiste",
+                "generic_for": [],
+                "mechanisms": ["apis"],
+            }
+        ],
+    )
+    _reescrever_mapa(root)
+    falhas = [f for f in check_connector_coverage(root) if f.is_failure]
+    assert falhas and "NaoExiste" in falhas[0].message
+
+
+def test_connector_coverage_NAO_reprova_por_lacuna(tmp_path: Path) -> None:
+    """A distincao que mantem o gate util: `BW/4HANA` expoe `apis` e nada no
+    repo alcanca. Reprovar por isso seria exigir 20+ conectores novos para o
+    CI ficar verde, e o gate deixaria de medir se o mapa bate com o codigo."""
+    root = _cobertura_root(tmp_path)
+    _reescrever_mapa(root)
+    findings = check_connector_coverage(root)
+    assert not [f for f in findings if f.is_failure]
+    assert any("lacuna" in f.message for f in findings)
+
+
+def test_connector_coverage_entra_no_run_all(tmp_path: Path) -> None:
+    """O gate tem de rodar junto com a suite (DA-51); registration e' o que
+    transforma uma checagem em barreira."""
+    assert "connector_coverage" in GATES
+    assert GATES["connector_coverage"] is check_connector_coverage

@@ -172,6 +172,7 @@ final.
 | 55 | [40](#decisoes-de-arquitetura) | Manutenção de usuários pelo admin com ativação em duas etapas: token por e-mail → código por telefone (out-of-band até haver SMTP/SMS) |
 | 56 | [41](#decisoes-de-arquitetura) | Conector SAP PO/PI on-premise: Basic Auth nativo contra o Message Monitor, com OAuth2 opcional para quando há API Management na frente |
 | 57 | [43](#decisoes-de-arquitetura) | Fontes de busca web como configuração (`web_search_sources`): `WEB_SEARCH_POLICY=approved` deixa de ser no-op |
+| 58 | [44](#decisoes-de-arquitetura) | Mapa de cobertura produto SAP × mecanismo, calculado de dados versionados: 3 níveis (`dedicated` / `generic` / `absent`) em vez de um booleano |
 
 ### 1. Alucinação por mistura de contexto (DA-1)
 
@@ -2328,3 +2329,107 @@ aceita `interface_type` no corpo do PATCH e ignora — a mesma allowlist que
   testado é a resolução fail-closed e o CRUD; a qualidade da query de cada
   filtro é conteúdo do seed, e o seed é uma afirmação sobre o Help Portal
   que só o uso real confirma.
+
+### 44. Mapa de cobertura: `dedicated`, `generic` e `absent` (DA-58)
+
+**O problema.** O repositório tem 10 conectores e uma matriz de validação
+em `docs/ARCHITECTURE.md` que diz o que foi testado contra sistema real.
+Não existe, porém, nenhuma resposta à pergunta que um avaliador faz antes de
+conectar qualquer coisa: *dado um produto SAP e um mecanismo, há código
+aqui que fala com ele — e o que sabemos desse código além de ele existir?*
+
+Responder com "temos conector OData" seria responder duas perguntas
+diferentes com uma palavra. A pergunta que o mapa responde é por
+**par** (produto, mecanismo), e a resposta tem três estados, não um.
+
+**A solução.** Dado versionado (`data/sap_products.yaml` com 27 linhas × 9
+mecanismos, `data/connector_coverage.yaml` com o destino e os mecanismos de
+cada conector), cálculo em `app/evaluation/coverage.py`, geração por
+`scripts/coverage_map.py` e doc gerado `docs/COVERAGE_MAP.md`. O gate
+`connector_coverage` (DA-51) reprova por **incoerência**, nunca por lacuna.
+
+Os três estados:
+
+| Estado | Significado | Pode afirmar? |
+|---|---|---|
+| `dedicated` | existe conector **feito** para o produto | sim |
+| `generic` | cliente de **mecanismo** alcançaria o produto se a URL apontasse; **nunca validado** contra ele | não |
+| `absent` | nada no repositório alcança o par | é a fila de trabalho |
+
+`generic` é o estado que impede o mapa de mentir. O `ODataConnector` é
+`generic` para 15 produtos e não foi validado contra nenhum deles. Tratá-lo
+como `dedicated` — ou colapsar os três estados em um booleano — faria o
+mapa afirmar suporte que ninguém testou, que é exatamente o que a matriz de
+`docs/ARCHITECTURE.md` proíbe com outro vocabulário.
+
+**Quatro decisões que o mapa precisou tomar, e o porquê de cada uma.**
+
+1. **`unknown` ≠ `none`.** A fonte distingue "não expõe" de "não sei", e o
+   enum mantêm os dois (`app/evaluation/coverage.py::LEVELS`). Mecanismo
+   desconhecido **não** vira lacuna: a lacuna vira trabalho de código, e
+   isso seria trabalho de fonte — o mapa apontaria o dedo para o time
+   errado. `unknown` já existe em `app/llm/capabilities.py` (DA-45) pelo
+   mesmo motivo.
+2. **Os dois eixos são independentes.** "Capacidade" é afirmação sobre o
+   produto (vem da fonte); "cobertura" é fato sobre o repositório
+   (verificável por gate). Uma célula pode ser `dedicated` com
+   capacidade `unknown`, e é o caso de `ServiceNow`: existe conector
+   dedicado e validado, e a fonte não cobre o produto. Colapsar os dois eixos
+   faria um deles virar mentira.
+3. **`MDI` é mecanismo, não nível.** Na fonte, `Data Integration` de
+   SuccessFactors vale `MDI` (Master Data Integration). Achatar os dois no
+   mesmo campo faria `MDI` e `✓` parecerem alternativas um do outro, e não
+   são. Ficou `supported` + nota, num campo `{level, note}`.
+4. **Um conector pode cobrir dois produtos.** `ariba` é dedicado de `Ariba`
+   **e** `Business Network` — o próprio docstring diz as duas. Declarar só
+   `Ariba` subestimaria a cobertura, que é erro na mesma direção da omissão,
+   pelo mesmo motivo.
+
+**O que o mapa encontrou.** `Integration Suite` é a maior lacuna do
+conjunto: a fonte diz que os 22 produtos são integráveis por ele, e o
+repositório não tem cliente de Cloud Integration nenhum. O ponto é delicate,
+porque o docstring de `apim_connector.py` diz *"Conector SAP API
+Management / Integration Suite"* — mas o código lê
+`APIM_ANALYTICS_URL/events`, ou seja, eventos de **analytics**, com endpoint
+especulativo. É fonte de sinal de observabilidade, não orquestrador. Deixar
+isso marcar a coluna como coberta afirmaria que o repositório orquestra
+fluxo por Integration Suite para 22 produtos, e não orquestra nenhum; a
+armadilha está registrada em `data/connector_coverage.yaml` e travada por
+teste (`test_apim_nao_cobre_integration_suite`).
+
+Além disso: 5 dos 22 produtos com conector dedicado (S/4HANA e ECC não
+entram — são alcançados por `generic`), 76 lacunas no total, e 5 linhas
+(`ServiceNow`, `Salesforce`, `Workday`, `API Management`, PO/PI) com
+capacidade integralmente `unknown` porque a fonte não cobre middleware nem
+terceiros.
+
+**Por que reprovar por incoerência e não por lacuna.** Exigir cobertura
+completa seria exigir 76 conectores novos para o CI ficar verde, e o gate
+deixaria de medir a única coisa que importa: se o mapa ainda corresponde ao
+código. A lacuna é o relatório; a incoerência é o defeito. O gate falha
+quando um conector registrado não tem linha de cobertura (a **nona**
+superfície da invariante 23), quando a declaração aponta para produto
+inexistente, ou quando `docs/COVERAGE_MAP.md` está desatualizado — este
+último é o que impede que o mapa enveleça em silêncio.
+
+**Limitações (registradas de propósito).**
+
+- **A matriz de capacidade não tem fonte.** Foi transcrita de uma tabela de
+  referência sem citação publicada e sem release SAP. Está no cabeçalho de
+  `data/sap_products.yaml` e no topo do mapa gerado, e é a razão de a coluna
+  não poder ser citada como fato de produto SAP. Só a coluna de cobertura é
+  verificável.
+- **A tradução dos glifos é interpretação nossa** (`✓✓`→`native`,
+  `✓`→`supported`, `✓/cenários`→`conditional`, `limitado`→`limited`,
+  `—`→`none`), não vocabular da fonte.
+- **`apim` permanece especulativo** (DA-45/DA-56): o mapa o conta como
+  conector dedicado de API Management, mas o schema nunca foi confirmado
+  contra documentação real. Cobertura de código não é cobertura de contrato.
+- **O mapa não é medição de desempenho.** Nada aqui diz que um conector
+  funciona rápido ou em escala; `dedicated` é sobre existência e escopo
+  declarado, e `docs/ARCHITECTURE.md` continua sendo quem diz o que foi
+  validado contra sistema real.
+- **`Sales/Service Cloud` ficou fora do escopo dedicado de `salesforce`.** O
+  docstring do conector cita Service Cloud como exemplo de caso, mas o
+  conector fala com a plataforma Salesforce. Declarar ambos seria afirmar
+  escopo que ninguém verificou; fica como questão aberta, não como omissão.

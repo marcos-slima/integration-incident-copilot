@@ -1,0 +1,130 @@
+# DA-58: declaracao de cobertura por conector.
+#
+# O QUE ISTO E': a unica fonte de verdade sobre QUAL produto SAP cada
+# conector do repositorio alcanca, e por QUAL mecanismo. O mapa em
+# `docs/COVERAGE_MAP.md` e' CALCULADO a partir daqui — nao editado a mao.
+#
+# POR QUE UM ARQUIVO E NAO UM COMENTARIO NO CODIGO: o mapa de cobertura
+# envelhece. A invariante 23 deste projeto ja ardeu seis vezes porque um
+# conector novo entrou em parte das superficies e nao em outras. Declarar
+# a cobertura num arquivo separado, e o gate exigir que todo conector do
+# `_REGISTRY` tenha linha aqui, faz dessa ausencia um build quebrado em
+# vez de um documento que ninguem repara em atualizar.
+#
+# ------------------------------------------------------------------
+# TRES NIVEIS DE COBERTURA — e o ponto inteiro do mapa
+# ------------------------------------------------------------------
+# `dedicated`  — existe um conector FEITO para aquele produto. E o unico
+#                nivel que da para afirmar sem ressalva. Ex.: Ariba.
+#
+# `generic`    — existe um conector de MECANISMO (OData, RFC) que, se a
+#                URL apontar para aquele produto, fala com ele. NAO e o
+#                mesmo que suporte: o `ODataConnector` nunca foi validado
+#                contra instancia real nenhuma (ver `docs/ARCHITECTURE.md`),
+#                entao "alcancaria" e uma afirmacao sobre o cliente HTTP,
+#                nao sobre o produto. O mapa imprime "generic (nao
+#                validado)" justamente para nao deixar isso virar
+#                "validado" por leitura apressada.
+#
+# `absent`     — nada no repositorio alcanca este par (produto, mecanismo).
+#                E o resultado que interessa: e a fila de trabalho.
+#
+# ------------------------------------------------------------------
+# O QUE NAO ESTA AQUI, DE PROPOSITO
+# ------------------------------------------------------------------
+# Nao ha `validated: true` neste arquivo. Validacao contra sistema real e
+# uma propriedade do par (conector, sistema), e ela vive em
+# `docs/ARCHITECTURE.md`, verificada por gate proprio
+# (`check_connector_validation_matrix`). Se este arquivo pudesse marcar
+# "validado", teriamos duas fontes para o mesmo fato e nenhuma autoritativa.
+
+schema_version: 1
+
+# `target`: produto de `data/sap_products.yaml` que este conector cobre.
+# `dedicated_to`: se true, o conector foi escrito para este produto.
+# `mechanisms`: dimensoes da matriz que este conector exercita de fato.
+# `generic_for`: produtos que o conector alcanca por ser generico de
+#                mecanismo (nao por ser feito para eles). Nao aparece
+#                junto de `dedicated_to`.
+coverage:
+  # --- conectores genericos de mecanismo SAP ---------------------------------
+  # Nao existe "conector S/4HANA": existem clientes de protocolo. A
+  # distincao abaixo e o que impede o mapa de dizer que temos cobertura
+  # de S/4HANA quando o que temos e um cliente OData.
+  - connector: odata
+    dedicated_to: null
+    generic_for: [S/4HANA, ECC, IBP, EWM, TM, GTS, Commerce, Sales/Service Cloud, Datasphere, BW/4HANA, SAC, RAP, Kyma, SuccessFactors, CAP]
+    mechanisms: [odata, apis, soap]
+    note: "Cliente OData generico. Aponta para qualquer servico que exponha OData. A matriz diz que o produto tem OData; NAO diz que este conector foi validado contra ele — nenhum foi."
+
+  - connector: rfc
+    dedicated_to: null
+    generic_for: [S/4HANA, ECC, EWM, TM, GTS]
+    mechanisms: [rfc, idoc, apis]
+    note: "Cliente RFC/BAPI + status de IDoc contra qualquer sistema ABAP. Validado contra ABAP Cloud Developer Trial (A4H rel 754), o que e' ABAP em nuvem — nao S/4HANA on-premise nem ECC."
+
+  # --- conectores dedicados a middleware SAP ---------------------------------
+  - connector: po
+    dedicated_to: Process Orchestration / PI
+    generic_for: []
+    mechanisms: [apis]
+    note: "DA-56. API NAO PUBLICA: Message Monitor nao esta no Help Portal e varia entre patches."
+
+  - connector: apim
+    dedicated_to: API Management
+    generic_for: []
+    mechanisms: [apis]
+    note: >-
+      ARMADILHA REGISTRADA. O docstring do conector diz "Conector SAP API
+      Management / Integration Suite", e qualquer um que leia isso vai
+      marcar a coluna `integration_suite` como coberta para os 22
+      produtos. Nao e' o caso: o codigo le `APIM_ANALYTICS_URL/events`,
+      isto e' eventos de ANALYTICS (taxa de erro, violacao de policy), com
+      endpoint especulativo. E' fonte de sinal de OBSERVABILIDADE, nao
+      cliente de Cloud Integration — o repo nao orquestra fluxo nenhum
+      pelo Integration Suite. Por isso `mechanisms` e' so `apis`.
+      Fechar a lacuna `integration_suite` exige um conector de Cloud
+      Integration (CPI), que nao existe.
+
+  # --- conectores dedicados a produto SAP ------------------------------------
+  - connector: successfactors
+    dedicated_to: SuccessFactors
+    generic_for: []
+    mechanisms: [odata, apis]
+    note: "DA-34. OData v2 PerPerson. Nunca validado contra tenant real."
+
+  - connector: ariba
+    dedicated_to: [Ariba, Business Network]
+    generic_for: []
+    mechanisms: [apis, files]
+    note: >-
+      Dedicado as DUAS linhas de proposito: o docstring do conector e' "Conector
+      SAP Ariba / Business Network" e ele afirma nao ter sido testado contra
+      "uma instancia Ariba/Business Network real". Declarar so Ariba
+      subestimaria a cobertura — erro na mesma direcao do docstring, e pelo
+      mesmo motivo. Nunca validado contra instancia real.
+
+  - connector: cap
+    dedicated_to: CAP
+    generic_for: []
+    mechanisms: [odata, apis]
+    note: "Validado contra SAP CAP real (BTP Trial)."
+
+  # --- conectores dedicados a sistemas nao-SAP -------------------------------
+  - connector: workday
+    dedicated_to: Workday
+    generic_for: []
+    mechanisms: [apis]
+    note: "Nunca validado contra tenant real."
+
+  - connector: servicenow
+    dedicated_to: ServiceNow
+    generic_for: []
+    mechanisms: [apis]
+    note: "Validado contra ServiceNow PDI real."
+
+  - connector: salesforce
+    dedicated_to: Salesforce
+    generic_for: []
+    mechanisms: [apis]
+    note: "Validado contra Salesforce Developer Edition real."

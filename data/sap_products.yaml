@@ -1,0 +1,213 @@
+# DA-58: matriz de produto SAP x mecanismo de integracao.
+#
+# ESTE ARQUIVO E' DADO, NAO PROSA. Ele existe para o mapa de cobertura
+# (`scripts/coverage_map.py`) ser calculado, e nao mantido a mao.
+#
+# ------------------------------------------------------------------
+# PROVENIENCIA — LER ANTES DE USAR
+# ------------------------------------------------------------------
+# A matriz abaixo foi transcrita de uma tabela de referencia fornecida
+# para o projeto. **Ela nao veio com fonte publicada nem com release SAP
+# de referencia.** Isso e' registrado aqui deliberadamente, no padrao da
+# matriz de validacao de conectores (`docs/ARCHITECTURE.md`), que ja
+# proibe apresentar "afirmamos que existe" como "verificamos que existe".
+#
+# Consequencias praticas, e elas valem ate a fonte aparecer:
+#   - `docs/COVERAGE_MAP.md` e' gerado deste arquivo e por isso carrega a
+#     mesma falta de fonte. Nao cite o mapa como fato de produto SAP.
+#   - Levels de CAPACIDADE SAP sao afirmacao, nao medicao. O que o
+#     projeto mede de verdade esta em `docs/ARCHITECTURE.md` (conectores
+#     validados contra sistema real) e e' um conjunto menor.
+#   - A coluna "cobertura" do mapa gerado fala do REPO, nao do produto
+#     SAP: "temos um conector dedicado" e' fato do codigo; "o SAP suporta
+#     IDoc aqui" e' afirmacao herdada da fonte acima.
+#
+# ------------------------------------------------------------------
+# TRADUCAO DOS GLIFOS (interpretacao nossa, nao da fonte)
+# ------------------------------------------------------------------
+# A fonte usa simbolos, nao um enum. O mapeamento adotado:
+#
+#   ✓✓           -> native       forca maxima / assinatura do produto
+#   ✓            -> supported    suportado
+#   ✓/cenarios   -> conditional  suportado, porem so em cenarios nomeados
+#   limitado     -> limited      suporte parcial, com restricao
+#   —            -> none         sem suporte
+#   (vazio)      -> unknown      nao sei. AUSENCIA DE DADO != "nao tem"
+#
+# `unknown` existe separada de `none` pelo mesmo motivo que existe em
+# `app/llm/capabilities.py` (DA-45): "esse destino nao aceita `seed`" e
+# "nao sei se aceita" sao fatos diferentes, e o segundo nao pode virar
+# negacao na mao. Nenhuma linha desta matriz usa `unknown` hoje — as
+# middleware e nao-SAP abaixo sao onde ele e' honesto.
+#
+# Nota lateral: `MDI` na coluna Data Integration de SuccessFactors e' um
+# NOME DE MECANISMO (Master Data Integration), nao um nivel de suporte.
+# Por isso virou `supported` + nota, e nunca um booleano: um esquema que
+# aceitasse "MDI" no mesmo campo de "✓" teria duas perguntas diferentes
+# na mesma coluna.
+
+schema_version: 1
+
+# As 9 dimensoes da fonte, na ordem em que aparecem na tabela.
+mechanisms:
+  - apis
+  - events
+  - idoc
+  - rfc
+  - soap
+  - odata
+  - files
+  - data_integration
+  - integration_suite
+
+mechanism_labels:
+  apis: APIs
+  events: Events
+  idoc: IDoc
+  rfc: RFC
+  soap: SOAP
+  odata: OData
+  files: Files
+  data_integration: Data Integration
+  integration_suite: Integration Suite
+
+# ---------------------------------------------------------------------------
+# PRODUTOS SAP
+#
+# `kind: sap_product` = linha da fonte, com matriz de mecanismos.
+# `kind: sap_middleware` = o repo tem conector, a fonte NAO tem linha.
+# `kind: non_sap` = o repo tem conector, nao e SAP.
+# As duas ultimas categorias tem `mechanisms: unknown` em todas as
+# dimensoes, e isso e' intencional: a fonte nao cobre middleware nem
+# sistemas de terceiros, e preencher com palpite seria pior que
+# deixar explicitamente desconhecido.
+# ---------------------------------------------------------------------------
+
+products:
+  # --- produtos SAP com linha na fonte -------------------------------------
+  - name: S/4HANA
+    kind: sap_product
+    mechanisms: {apis: native, events: native, idoc: native, rfc: native, soap: native, odata: native, files: native, data_integration: native, integration_suite: native}
+
+  - name: ECC
+    kind: sap_product
+    mechanisms: {apis: supported, events: limited, idoc: native, rfc: native, soap: native, odata: supported, files: native, data_integration: native, integration_suite: native}
+
+  - name: SuccessFactors
+    kind: sap_product
+    mechanisms:
+      apis: supported
+      events: supported
+      idoc: none
+      rfc: none
+      soap: supported
+      odata: supported
+      files: supported
+      data_integration: {level: supported, note: "MDI (Master Data Integration) — nome de mecanismo, nao nivel"}
+      integration_suite: supported
+
+  - name: Ariba
+    kind: sap_product
+    mechanisms: {apis: supported, events: supported, idoc: none, rfc: none, soap: none, odata: none, files: supported, data_integration: none, integration_suite: supported}
+
+  - name: Business Network
+    kind: sap_product
+    mechanisms: {apis: supported, events: supported, idoc: none, rfc: none, soap: none, odata: none, files: supported, data_integration: none, integration_suite: supported}
+
+  - name: Concur
+    kind: sap_product
+    mechanisms: {apis: supported, events: conditional, idoc: none, rfc: none, soap: conditional, odata: none, files: supported, data_integration: none, integration_suite: supported}
+
+  - name: Fieldglass
+    kind: sap_product
+    mechanisms: {apis: supported, events: conditional, idoc: none, rfc: none, soap: conditional, odata: none, files: supported, data_integration: none, integration_suite: supported}
+
+  - name: IBP
+    kind: sap_product
+    mechanisms: {apis: supported, events: conditional, idoc: none, rfc: none, soap: none, odata: supported, files: supported, data_integration: supported, integration_suite: supported}
+
+  - name: EWM
+    kind: sap_product
+    mechanisms: {apis: supported, events: supported, idoc: native, rfc: native, soap: supported, odata: supported, files: supported, data_integration: none, integration_suite: supported}
+
+  - name: TM
+    kind: sap_product
+    mechanisms: {apis: supported, events: supported, idoc: native, rfc: native, soap: supported, odata: supported, files: supported, data_integration: none, integration_suite: supported}
+
+  - name: GTS
+    kind: sap_product
+    mechanisms: {apis: supported, events: conditional, idoc: native, rfc: native, soap: supported, odata: supported, files: supported, data_integration: none, integration_suite: supported}
+
+  - name: Commerce
+    kind: sap_product
+    mechanisms: {apis: supported, events: supported, idoc: none, rfc: none, soap: conditional, odata: supported, files: supported, data_integration: none, integration_suite: supported}
+
+  - name: Sales/Service Cloud
+    kind: sap_product
+    mechanisms: {apis: supported, events: supported, idoc: none, rfc: none, soap: supported, odata: supported, files: supported, data_integration: none, integration_suite: supported}
+
+  - name: Datasphere
+    kind: sap_product
+    mechanisms: {apis: supported, events: none, idoc: none, rfc: none, soap: none, odata: supported, files: supported, data_integration: native, integration_suite: supported}
+
+  - name: BW/4HANA
+    kind: sap_product
+    mechanisms: {apis: supported, events: none, idoc: none, rfc: none, soap: none, odata: supported, files: supported, data_integration: native, integration_suite: supported}
+
+  - name: SAC
+    kind: sap_product
+    mechanisms: {apis: supported, events: none, idoc: none, rfc: none, soap: none, odata: supported, files: supported, data_integration: supported, integration_suite: supported}
+
+  - name: CAP
+    kind: sap_product
+    mechanisms: {apis: supported, events: supported, idoc: none, rfc: none, soap: supported, odata: supported, files: supported, data_integration: supported, integration_suite: supported}
+
+  - name: RAP
+    kind: sap_product
+    mechanisms: {apis: supported, events: supported, idoc: none, rfc: none, soap: supported, odata: supported, files: supported, data_integration: supported, integration_suite: supported}
+
+  - name: Kyma
+    kind: sap_product
+    mechanisms: {apis: supported, events: supported, idoc: none, rfc: none, soap: supported, odata: supported, files: supported, data_integration: supported, integration_suite: supported}
+
+  - name: Build Process Automation
+    kind: sap_product
+    mechanisms: {apis: supported, events: supported, idoc: none, rfc: none, soap: none, odata: none, files: supported, data_integration: none, integration_suite: supported}
+
+  - name: Joule / Agents
+    kind: sap_product
+    mechanisms: {apis: supported, events: supported, idoc: none, rfc: none, soap: none, odata: none, files: none, data_integration: none, integration_suite: supported}
+
+  - name: AI Core / GenAI Hub
+    kind: sap_product
+    mechanisms: {apis: supported, events: none, idoc: none, rfc: none, soap: none, odata: none, files: none, data_integration: supported, integration_suite: supported}
+
+  # --- middleware SAP: o repo tem conector, a fonte NAO tem linha ----------
+  # Acrescentados por nos (DA-58). Sem matriz de mecanismos porque a fonte
+  # nao cobre middleware: `unknown` e' a resposta honesta, `none` seria
+  # uma negativa inventada.
+  - name: Process Orchestration / PI
+    kind: sap_middleware
+    note: "Linha acrescentada por nos: a fonte cobre produtos, nao middleware. O repo tem `POConnector` (DA-56)."
+    mechanisms: {apis: unknown, events: unknown, idoc: unknown, rfc: unknown, soap: unknown, odata: unknown, files: unknown, data_integration: unknown, integration_suite: unknown}
+
+  - name: API Management
+    kind: sap_middleware
+    note: "Linha acrescentada por nos, pelo mesmo motivo da anterior. O repo tem `APIManagementConnector`, com schema ESPECULATIVO."
+    mechanisms: {apis: unknown, events: unknown, idoc: unknown, rfc: unknown, soap: unknown, odata: unknown, files: unknown, data_integration: unknown, integration_suite: unknown}
+
+  # --- nao-SAP: o repo tem conector, a fonte nao cobre ----------------------
+  - name: ServiceNow
+    kind: non_sap
+    note: "Validado contra ServiceNow PDI real (ver `docs/ARCHITECTURE.md`)."
+    mechanisms: {apis: unknown, events: unknown, idoc: unknown, rfc: unknown, soap: unknown, odata: unknown, files: unknown, data_integration: unknown, integration_suite: unknown}
+
+  - name: Salesforce
+    kind: non_sap
+    note: "Validado contra Salesforce Developer Edition real (ver `docs/ARCHITECTURE.md`)."
+    mechanisms: {apis: unknown, events: unknown, idoc: unknown, rfc: unknown, soap: unknown, odata: unknown, files: unknown, data_integration: unknown, integration_suite: unknown}
+
+  - name: Workday
+    kind: non_sap
+    note: "Nunca validado contra instancia real (ver `docs/ARCHITECTURE.md`)."
+    mechanisms: {apis: unknown, events: unknown, idoc: unknown, rfc: unknown, soap: unknown, odata: unknown, files: unknown, data_integration: unknown, integration_suite: unknown}

@@ -92,10 +92,13 @@ uv run uvicorn app.main:app --reload   # desenvolvimento
 
 Cada credencial na camada dela (DA-18 + DA-54):
 
-- **Usuário da UI web** — não digita chave nenhuma: faz **login**
-  (`usuário + senha`, no topo do formulário) e recebe um cookie de sessão
-  **HttpOnly**, assinado (HMAC-SHA256) e com prazo (8h por default). O
-  navegador o envia sozinho; `Sair` o apaga.
+- **Usuário da UI web** — não digita chave nenhuma: a UI abre numa
+  **tela de login independente** (DA-54) — o app inteiro (formulário,
+  histórico, stack) só renderiza **depois** da sessão existir. O login
+  (`usuário + senha`) devolve um cookie de sessão **HttpOnly**, assinado
+  (HMAC-SHA256) e com prazo (8h por default); o navegador o envia sozinho,
+  `Sair` o apaga, e a sessão expirada em pleno uso devolve para a tela de
+  login com aviso.
 - **Máquina/integração** — header `X-API-Key` em `/diagnose`,
   `/llm/policy` e `/incidents/{id}/verify` (DA-18). Se `API_KEY` estiver
   vazia no `.env`, uma chave aleatória é gerada no startup e logada em
@@ -126,10 +129,12 @@ superfícies continuam exigindo as suas chaves dedicadas.
 
 A UI em `http://localhost:8000` tem três telas:
 
-**Diagnóstico** — formulário com **login** (usuário + senha, DA-54 — o
-cookie de sessão HttpOnly flui sozinho, sem chave na mão do usuário),
-descrição do incidente, sistema de origem (os 9 conectores) e identificador
-opcional.
+**Tela de login** (antes de qualquer outra, DA-54) — usuário + senha; sem
+sessão, nada do app renderiza. Depois dela:
+
+**Diagnóstico** — formulário limpo (só o incidente: descrição, sistema de
+origem com os 9 conectores, identificador opcional) — credencial nenhuma
+na mão do usuário; o cookie de sessão HttpOnly flui sozinho.
 
 **Histórico** — diagnósticos da sessão atual, com confiança e causa raiz.
 

@@ -12,6 +12,8 @@ interface SidebarProps {
   view: ViewId;                    // qual tela está ativa
   setView: (v: ViewId) => void;    // função que muda a tela
   historyCount: number;            // badge do histórico
+  username?: string;               // DA-54: quem está logado
+  onLogout?: () => void;           // DA-54: volta para a tela de login
 }
 
 interface NavItem {
@@ -21,7 +23,7 @@ interface NavItem {
   icon: React.ReactNode;           // qualquer JSX válido
 }
 
-export function Sidebar({ view, setView, historyCount }: SidebarProps) {
+export function Sidebar({ view, setView, historyCount, username, onLogout }: SidebarProps) {
   const items: NavItem[] = [
     {
       id: 'diagnose',
@@ -103,6 +105,19 @@ export function Sidebar({ view, setView, historyCount }: SidebarProps) {
         <div className="model-name">qwen3-coder-next</div>
         <div className="model-meta">80B/3B · 262K ctx</div>
       </div>
+
+      {/* DA-54: sessão — quem está logado e saída */}
+      {username && (
+        <div className="session-info">
+          <div className="model-label">sessão</div>
+          <div className="session-user">{username}</div>
+          {onLogout && (
+            <button className="session-logout" onClick={onLogout}>
+              Sair
+            </button>
+          )}
+        </div>
+      )}
     </aside>
   );
 }

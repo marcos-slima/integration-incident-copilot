@@ -140,6 +140,15 @@ app/
   events/
     consumer.py     # DA-23: webhook CloudEvents → run_diagnosis()
   a2a/              # DA-14: Agent2Agent (JSON-RPC 2.0)
+  auth.py           # DA-54: sessão da UI (login/cookie HMAC + logout/
+                    # session) e DA-55: rotas públicas de ativação
+                    # (/auth/verify/email, /auth/verify/phone); o login
+                    # verifica .env (bootstrap) → banco (web_users ativos)
+  webusers.py       # DA-55: domínio de usuários da UI — token de e-mail
+                    # (HMAC, namespace próprio), código de telefone (só o
+                    # hash guardado, único-uso), status pending_email →
+                    # pending_phone → active, entrega out-of-band
+                    # (adaptador deliver_email/deliver_sms para SMTP/SMS)
   config.py         # Pydantic Settings — fonte única de verdade para config
   main.py           # FastAPI app, rotas, lifespan
 

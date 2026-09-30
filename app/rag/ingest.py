@@ -18,6 +18,7 @@ Uso:
 import argparse
 import hashlib
 import json
+import re
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
@@ -201,28 +202,49 @@ def file_hash(path: Path) -> str:
     return h.hexdigest()
 
 
+#: Ordem importa: o primeiro bucket casado vence. As chaves sao CASADAS POR
+#: TOKEN, nunca por substring -- casar por substring classifica
+#: "po_pi_message_ordering.md" como "sales" ("order" dentro de "ordering") e
+#: "apim_..._throttle.md" como "hcm" ("hr" dentro de "throttle").
+CATEGORY_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("security", ("security", "authorization", "auth", "xsuaa")),
+    ("abap", ("abap", "rap", "bapi", "rfc")),
+    ("integration", ("integration", "cpi", "iflow", "idoc", "odata", "api")),
+    ("cap_btp", ("cap", "btp", "cloud")),
+    ("ui", ("fiori", "ui5", "frontend")),
+    ("database", ("hana", "sql", "database", "db")),
+    ("hcm", ("successfactor", "hcm", "hr", "payroll")),
+    ("finance", ("finance", "fi", "co", "accounting")),
+    ("procurement", ("mm", "material", "procurement", "ariba", "vendor")),
+    # "salesforce" e explicito: antes ele so casava porque "sales" e
+    # substring de "salesforce"; com casamento por token cairia em "general".
+    ("sales", ("sd", "sales", "salesforce", "order", "crm")),
+)
+
+_TOKEN_RE = re.compile(r"[A-Z]+(?![a-z])|[A-Z][a-z0-9]*|[a-z0-9]+")
+
+
+def _filename_tokens(filename: str) -> set[str]:
+    """Tokens do nome do arquivo, quebrando snake_case, hifen e camelCase."""
+    stem = Path(filename).stem
+    tokens: set[str] = set()
+    for chunk in re.split(r"[^A-Za-z0-9]+", stem):
+        tokens.update(tok.lower() for tok in _TOKEN_RE.findall(chunk))
+    return tokens
+
+
+def _token_matches(token: str, keyword: str) -> bool:
+    """Token casa com a keyword: exato ou plural simples (orders -> order)."""
+    return token == keyword or token == f"{keyword}s" or token == f"{keyword}es"
+
+
 def infer_category(filename: str) -> str:
-    name = filename.lower()
-    if any(k in name for k in ["security", "authorization", "auth", "xsuaa"]):
-        return "security"
-    if any(k in name for k in ["abap", "rap", "bapi", "rfc"]):
-        return "abap"
-    if any(k in name for k in ["integration", "cpi", "iflow", "idoc", "odata", "api"]):
-        return "integration"
-    if any(k in name for k in ["cap", "btp", "cloud"]):
-        return "cap_btp"
-    if any(k in name for k in ["fiori", "ui5", "frontend"]):
-        return "ui"
-    if any(k in name for k in ["hana", "sql", "database", "db"]):
-        return "database"
-    if any(k in name for k in ["successfactor", "hcm", "hr", "payroll"]):
-        return "hcm"
-    if any(k in name for k in ["finance", "fi", "co", "accounting"]):
-        return "finance"
-    if any(k in name for k in ["mm", "material", "procurement", "ariba", "vendor"]):
-        return "procurement"
-    if any(k in name for k in ["sd", "sales", "order", "crm"]):
-        return "sales"
+    tokens = _filename_tokens(filename)
+    if not tokens:
+        return "general"
+    for category, keywords in CATEGORY_KEYWORDS:
+        if any(_token_matches(token, kw) for token in tokens for kw in keywords):
+            return category
     return "general"
 
 

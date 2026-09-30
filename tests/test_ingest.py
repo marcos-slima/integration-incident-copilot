@@ -17,7 +17,12 @@ app/rag/ingest.py). Estes testes provam que:
    lugar, sem precisar de delete previo nem deixar pontos orfaos para
    os indices que continuam existindo."""
 
-from app.rag.ingest import deterministic_document_id, deterministic_point_id, embed_and_upsert
+from app.rag.ingest import (
+    deterministic_document_id,
+    deterministic_point_id,
+    embed_and_upsert,
+    infer_category,
+)
 
 
 def test_deterministic_document_id_stable_for_same_source():
@@ -162,3 +167,43 @@ def test_run_ingest_returns_error_count_on_failure(tmp_path, monkeypatch):
         "incidents", limit=None, excludes=[], reset_state=False, reset_collection=False
     )
     assert result == 1
+
+
+# --- infer_category: casamento por TOKEN, nunca por substring -------------
+# Regressao real: "order" e substring de "ordering", entao
+# po_pi_message_ordering.md era indexado como categoria "sales". O mesmo
+# defeito classificaria "capital" como "integration" ("api"), "throttle"
+# como "hcm" ("hr") e "profile" como "finance" ("fi").
+
+
+def test_infer_category_casado_por_token_nao_por_substring():
+    assert infer_category("po_pi_message_ordering.md") == "general"
+    assert infer_category("x_capital_review.md") == "general"
+    assert infer_category("x_profile_change.md") == "general"
+    assert infer_category("x_connector_error.md") == "general"
+    assert infer_category("x_wrapped_request.md") == "general"
+    assert infer_category("x_author_lookup.md") == "general"
+    assert infer_category("x_comm_summary.md") == "general"
+    assert infer_category("x_rapid_deploy.md") == "general"
+    assert infer_category("x_sdn_switch.md") == "general"
+
+
+def test_infer_category_preserva_buckets_por_token_exato():
+    assert infer_category("cpi_http_401.md") == "integration"
+    assert infer_category("idoc_status_51.md") == "integration"
+    assert infer_category("rfc_connection_refused.md") == "abap"
+    assert infer_category("ariba_po_supplier_mismatch.md") == "procurement"
+    assert infer_category("cap_custom_purchase_approval_failure.md") == "cap_btp"
+    assert infer_category("apim_gateway_auth_throttle.md") == "security"
+
+
+def test_infer_category_salesforce_continua_sales():
+    # "sales" e substring de "salesforce": antes dependia desse acidente.
+    assert infer_category("salesforce_case_sap_sync_failure.md") == "sales"
+
+
+def test_infer_category_aceita_plural_e_camel_case():
+    assert infer_category("workday_successfactors_sync_error.md") == "hcm"
+    assert infer_category("abapOrdersTimeout.md") == "abap"
+    assert infer_category("sem_extensao") == "general"
+    assert infer_category("") == "general"

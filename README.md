@@ -171,6 +171,7 @@ final.
 | 54 | [39](#decisoes-de-arquitetura) | Login de sessão para a UI web (`/auth/login` + cookie HttpOnly; X-API-Key segue para máquinas) |
 | 55 | [40](#decisoes-de-arquitetura) | Manutenção de usuários pelo admin com ativação em duas etapas: token por e-mail → código por telefone (out-of-band até haver SMTP/SMS) |
 | 56 | [41](#decisoes-de-arquitetura) | Conector SAP PO/PI on-premise: Basic Auth nativo contra o Message Monitor, com OAuth2 opcional para quando há API Management na frente |
+| 57 | [43](#decisoes-de-arquitetura) | Fontes de busca web como configuração (`web_search_sources`): `WEB_SEARCH_POLICY=approved` deixa de ser no-op |
 
 ### 1. Alucinação por mistura de contexto (DA-1)
 
@@ -2233,3 +2234,97 @@ apresentá-la como vitória do benchmark, e aqui ela foi empate técnico.
   incidentes que o produto vai ver.
 - A decisão de roadmap é um argumento de produto, não uma medição. Está
   registrada como o que é.
+
+### 43. Fontes de busca web como configuração, e `approved` que não era no-op (DA-57)
+
+**O problema.** A busca web do grafo (`web_search_node` + tool ReAct) era
+alimentada por **dois mapas literais** em `app/agent/nodes.py`:
+`_WEB_SEARCH_SITE_MAP` e o `tech_term` por conector. Três defeitos, todos
+silenciosos:
+
+1. **`WEB_SEARCH_POLICY=approved` não aprovava nada.** O predicado era
+   `policy == "approved"` — e o ramo `approved` caía no mesmo caminho de
+   `public_only`. A política não consultava nenhuma fonte: o nome dizia
+   "aprovado" e o comportamento era "habilitado".
+2. **Dois conectores nunca tiveram fonte.** `successfactors` (DA-34) e `po`
+   (DA-56) não estavam em nenhum dos dois mapas, então perdiam o `tech_term`
+   e caíam no genérico "SAP integration" — exatamente o caso que a DA-56
+   documentou como bug de preexistente, agora pela via da busca web.
+3. **Não havia manutenção.** Mudar um filtro de site era edição de código e
+   deploy; o `site_filter` era Expressão Regular em alguns casos, o que
+   dependia de como o regex do DuckDuckGo interpretava cada `site:`.
+
+**A solução.** `web_search_sources` (migration 008), uma linha por
+`interface_type` — que é a unidade de configuração do produto, já que é o
+Literal do pipeline e a chave com que o grafo pergunta. Os sites de um
+conector são uma expressão `site:a OR site:b` dentro do mesmo
+`site_filter`, não linhas separadas: linha por site duplicaria a noção de
+"qual é a fonte do PO/PI?" em N lugares. Sem FK para `integration_systems`
+pela mesma razão da DA-52 — fonte de busca é configuração de pesquisa, e um
+conector pode ter fonte aprovada sem ter `integration_system` com o mesmo
+`connector_type`.
+
+**Fail-closed é o ponto, não o detalhe.** `resolve_approved_source()` devolve
+`None` — e o chamador não faz busca — quando não há `DATABASE_URL`, a tabela
+ainda não existe (migration não aplicada), a linha não existe, está
+desabilitada, ou está sem `site_filter`/`tech_term`. **Não existe fallback em
+código**: um dict de emergência reintroduziria exatamente o bug que a DA-57
+remove, e o efeito seria invisível. Falha de banco também é `None`, não
+exceção — é um fallback opcional do RAG, e derrubar o diagnóstico por causa
+da busca web seria o efeito errado. O erro fica em log para o operador.
+
+**A sétima superfície do `connector_reachable`.** Conector aceito no Literal,
+roteado no supervisor, oferecido no CLI e no dropdown, presente no catálogo
+do admin — e **sem linha no seed** = busca web desligada para ele, sem erro
+em lugar nenhum. Esse é o tipo de ausência que só se descobre em produção,
+então o gate passou a ler `alembic/versions/008_*.py` e exige o seed
+cobrindo o Literal inteiro, com teste para a superfície e para o arquivo
+inexistente.
+
+**Bug de preexistente encontrado no caminho (corrigido aqui) — a oitava
+superfície.** `<select name="connector_type">` do formulário de sistemas do
+admin (`app/admin/templates/systems.html`) tinha **8 das 10 opções**:
+faltavam `successfactors` (DA-34) e `po` (DA-56). Aqui a falha é de outro
+tipo, e é por isso que ela precisava da própria verificação: nas outras
+sete, a ausência de um conector é morte — ele não existe para o produto. No
+formulário, o conector **continua funcionando**: ele é representável por um
+sistema cadastrado com outro `connector_type`, ou fica sem
+`integration_system` nenhum. O que quebra é a **correlação DA-50**, que
+cai no fallback por `connector_type` e é *fail-closed* quando há mais de um
+sistema do mesmo tipo — ou seja, o operador recebe "ambíguo" para um
+incidente que ele consegue desambiguar olhando a tela.
+
+O detalhe que fecha o caso: a prosa do gate já afirmava cobrir "o catálogo
+admin" e parava em `CONNECTOR_TYPES`. `CONNECTOR_TYPES` é a tupla do
+catálogo (`app/admin/models.py`), não o formulário — e era a segunda leitura
+de um arquivo que existe justamente para ser a versão que o operador
+enxerga. Um conector pode estar na tupla e faltar no `<select>`, e nenhuma
+das sete checagens via isso, porque nenhuma lia o formulário. O gate agora
+ancora em `name="connector_type"` (e não no primeiro `<select>` do arquivo,
+que é o de `environment`) e tem quatro testes: conector ausente, os selects
+de `environment`/`status` não contados como conectores, arquivo inexistente,
+e o arquivo real conferido sem passar pelo gate.
+
+**O que o `interface_type` imutável no PATCH protege.** Trocar o
+`interface_type` de uma linha existente trocaria qual conector tem qual
+filtro, e a linha antiga ficaria órfã servindo o conector errado. A API
+aceita `interface_type` no corpo do PATCH e ignora — a mesma allowlist que
+`_apply_update` já usava para `system_key` na DA-49, e o mesmo motivo.
+
+**Limitações (registradas de propósito).**
+
+- O `site_filter` continua sendo uma **Expressão de busca**, não uma lista
+  validada. A API valida que não é vazio e que o `interface_type` existe no
+  Literal; ela não valida a sintaxe de cada `site:`. Validar a query contra
+  o motor de busca real seria dar ao cadastro uma garantia que ele não tem.
+- **Uma fonte por conector.** Um conector com dois backends de documentação
+  genuinamente diferentes (ex.: CAP com CAP Java e CAP Node) tem de caber em
+  um `tech_term` só. Se isso aparecer, é revisão da unidade de configuração —
+  não um índice em cima desta tabela.
+- A tabela não é um log: `updated_at` sobrescreve, e não há histórico de
+  quem trocou o filtro. Para isso, o gestor de credenciais (DA-47) é o
+  caminho, com cifragem e semântica de segredo.
+- **Nada disso foi validado contra o DuckDuckGo em produção.** O que está
+  testado é a resolução fail-closed e o CRUD; a qualidade da query de cada
+  filtro é conteúdo do seed, e o seed é uma afirmação sobre o Help Portal
+  que só o uso real confirma.

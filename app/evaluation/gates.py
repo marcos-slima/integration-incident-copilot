@@ -672,6 +672,8 @@ SUPERVISOR_SOURCE = Path("app/agent/supervisor.py")
 ADMIN_SYSTEMS_SOURCE = Path("app/admin/models.py")
 CLI_SOURCE = Path("app/agent/graph.py")
 UI_DROPDOWN_SOURCE = Path("frontend/src/components/DiagnoseView.tsx")
+WEB_SEARCH_SEED_SOURCE = Path("alembic/versions/008_create_web_search_sources.py")
+ADMIN_SYSTEMS_FORM = Path("app/admin/templates/systems.html")
 
 
 def _iter_docs(root: Path) -> list[Path]:
@@ -977,6 +979,67 @@ def check_connector_reachable(root: Path = REPO_ROOT) -> list[Finding]:
             problemas.append(
                 f"{ADMIN_SYSTEMS_SOURCE}: CONNECTOR_TYPES nao cobre {fora} — a correlacao "
                 "incidente->sistema (DA-50) nao tem por onde casar esses conectores"
+            )
+
+    # A setima superficie e' o seed de `web_search_sources` (DA-57). Ela e'
+    # verificavel porque a resolucao e' FAIL-CLOSED: sem linha habilitada
+    # para o interface_type, a busca web NAO acontece. Um conector novo
+    # aceito pelo Literal, pelo supervisor, pelo CLI, pelo dropdown e pelo
+    # catalogo, e sem linha no seed, fica sem nenhuma fonte de pesquisa —
+    # e nenhuma das seis checagens acima via isso, porque todas leem
+    # codigo, e a fonte passou a ser DADO. Caso real (achado na DA-57):
+    # `successfactors` e `po` nunca estiveram em nenhum dos dois mapas
+    # hardcoded e perdiam tambem o tech_term.
+    try:
+        seed_fonte = (root / WEB_SEARCH_SEED_SOURCE).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return _fail(
+            check, f"{WEB_SEARCH_SEED_SOURCE} nao existe — seed das fontes de busca sem checagem"
+        )
+    m_seed = re.search(r"^SEED\s*=\s*\[(.*?)^\]", seed_fonte, re.DOTALL | re.MULTILINE)
+    if m_seed is None:
+        problemas.append(f"{WEB_SEARCH_SEED_SOURCE}: bloco SEED nao encontrado")
+    else:
+        seed_valores = set(re.findall(r'\(\s*"([a-z_]+)"\s*,', m_seed.group(1)))
+        sem_fonte = sorted(conectores - seed_valores)
+        if sem_fonte:
+            problemas.append(
+                f"{WEB_SEARCH_SEED_SOURCE}: seed das fontes de busca nao cobre {sem_fonte} — "
+                "esses conectores ficam SEM fonte aprovada e, com a resolucao fail-closed "
+                "da DA-57, sem busca web"
+            )
+
+    # A oitava superficie e' o <select name="connector_type"> do formulario de
+    # sistemas do admin. E' a tela que responde "qual sistema e' este", ou
+    # seja, a que alimenta a correlacao DA-50: um conector aceito em todo o
+    # produto e ausente daqui NAO TEM como ter um `integration_system`, e por
+    # isso cai no fallback por `connector_type` — que e' fail-closed quando
+    # ha mais de um sistema do mesmo tipo. Caso real (achado na DA-57):
+    # `successfactors` (DA-34) e `po` (DA-56) faltavam nos dois <select>
+    # deste arquivo. Diferente das sete anteriores, aqui o conector nao
+    # morre: ele e' representavel por um sistema cadastrado com outro
+    # `connector_type`, e a falha aparece como correlacao ambigua em vez de
+    # erro. Por isso a prosa anterior do gate citava `CONNECTOR_TYPES` e
+    # parava nele, achando que cobrir o catalogo cobria a tela.
+    try:
+        form_fonte = (root / ADMIN_SYSTEMS_FORM).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return _fail(
+            check, f"{ADMIN_SYSTEMS_FORM} nao existe — formulario de sistemas sem checagem"
+        )
+    m_form = re.search(
+        r"<select\s+name=\"connector_type\"[^>]*>(.*?)</select>", form_fonte, re.DOTALL
+    )
+    if m_form is None:
+        problemas.append(f'{ADMIN_SYSTEMS_FORM}: <select name="connector_type"> nao encontrado')
+    else:
+        form_valores = set(re.findall(r"""value=["']([a-z_]+)["']""", m_form.group(1)))
+        ausentes = sorted(conectores - form_valores)
+        if ausentes:
+            problemas.append(
+                f"{ADMIN_SYSTEMS_FORM}: o formulario de sistemas nao oferece {ausentes} — "
+                "esses conectores nao tem como ter integration_system, e a correlacao "
+                "DA-50 cai no fallback por connector_type (fail-closed se houver ambiguidade)"
             )
 
     if problemas:

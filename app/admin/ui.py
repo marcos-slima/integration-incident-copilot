@@ -65,3 +65,9 @@ async def admin_incidents(request: Request):
 @ui_router.get("/users", include_in_schema=False)
 async def admin_users(request: Request):
     return _render(request, "users.html")
+
+
+@ui_router.get("/web-search", include_in_schema=False)
+async def admin_web_search(request: Request):
+    """DA-57: fontes de busca web aprovadas por interface_type."""
+    return _render(request, "web_search.html")

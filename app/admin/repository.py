@@ -32,6 +32,7 @@ from app.admin.models import (
     LlmCredential,
     LlmModel,
     LlmUsage,
+    WebSearchSource,
     percent_consumed,
 )
 from app.config import settings
@@ -327,6 +328,85 @@ class AdminRepository:
         if system is None:
             return False
         await self._session.delete(system)
+        await self._session.flush()
+        return True
+
+    # -- web_search_sources (DA-57) -------------------------------------
+
+    async def list_web_search_sources(self) -> list[WebSearchSource]:
+        stmt = select(WebSearchSource).order_by(WebSearchSource.interface_type)
+        result = await self._session.execute(stmt)
+        return list(result.scalars())
+
+    async def get_web_search_source(
+        self,
+        source_id: uuid.UUID | str | None = None,
+        *,
+        interface_type: str | None = None,
+    ) -> WebSearchSource | None:
+        """Busca por id OU por interface_type. Sem argumento: None."""
+        if source_id is not None:
+            if isinstance(source_id, str):
+                try:
+                    source_id = uuid.UUID(source_id)
+                except ValueError:
+                    source_id = None
+            if source_id is not None:
+                result = await self._session.execute(
+                    select(WebSearchSource).where(WebSearchSource.id == source_id)
+                )
+                return result.scalar_one_or_none()
+        if interface_type is not None:
+            result = await self._session.execute(
+                select(WebSearchSource).where(
+                    WebSearchSource.interface_type == interface_type.strip()
+                )
+            )
+            return result.scalar_one_or_none()
+        return None
+
+    async def create_web_search_source(
+        self,
+        *,
+        interface_type: str,
+        site_filter: str,
+        tech_term: str,
+        enabled: bool = True,
+        notes: str | None = None,
+    ) -> WebSearchSource:
+        row = WebSearchSource(
+            interface_type=interface_type.strip(),
+            site_filter=site_filter.strip(),
+            tech_term=tech_term.strip(),
+            enabled=enabled,
+            notes=notes or None,
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return row
+
+    async def update_web_search_source(
+        self, source_id: uuid.UUID | str, fields: dict[str, Any]
+    ) -> WebSearchSource | None:
+        source = await self.get_web_search_source(source_id)
+        if source is None:
+            return None
+        allow = {"site_filter", "tech_term", "enabled", "notes"}
+        for key, value in fields.items():
+            if key not in allow:
+                continue
+            if key in {"site_filter", "tech_term"}:
+                value = (value or "").strip()
+            setattr(source, key, value)
+        source.updated_at = _now()
+        await self._session.flush()
+        return source
+
+    async def delete_web_search_source(self, source_id: uuid.UUID | str) -> bool:
+        source = await self.get_web_search_source(source_id)
+        if source is None:
+            return False
+        await self._session.delete(source)
         await self._session.flush()
         return True
 

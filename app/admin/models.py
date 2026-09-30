@@ -23,7 +23,16 @@ esta configurada — mesmo padrao de app/services/incident_repository.py):
                       e' PBKDF2 do mesmo formato da DA-54 (ponto como
                       separador, por causa da interpolacao `$` do compose);
                       login verifica AQUI primeiro e cai no WEB_UI_USERS
-                      do .env como bootstrap (mesma chave da DA-54).
+                       do .env como bootstrap (mesma chave da DA-54).
+    web_search_sources  FONTES DE BUSCA WEB APROVADAS (DA-57): uma linha
+                      por `interface_type` (o Literal do pipeline), com o
+                      `tech_term` e o `site_filter` que montam a query.
+                      Substitui dois mapas literais em `app/agent/nodes.py`.
+                      Leitura FAIL-CLOSED: `interface_type` sem linha (ou
+                      com linha desabilitada/sem filtro) => sem busca web,
+                      e sem fallback em codigo. SEM FK para
+                      `integration_systems` pela mesma razao da DA-52: e'
+                      configuracao de pesquisa, nao referencia a um sistema.
 
 Colunas foram escolhidas compativeis com PostgreSQL E SQLite de teste
 (dialeto async aiosqlite): `Uuid` nativo-driver, sem JSONB, sem tipos
@@ -332,3 +341,60 @@ class WebUser(Base):
 
     def __repr__(self) -> str:
         return f"<WebUser {self.username} status={self.status}>"
+
+
+# ---------------------------------------------------------------------------
+# web_search_sources (DA-57)
+# ---------------------------------------------------------------------------
+
+
+class WebSearchSource(Base):
+    """Fonte de busca web APROVADA por `interface_type` (DA-57).
+
+    Antes desta tabela, os dois mapas que montam a query de busca web
+    (`_WEB_SEARCH_SITE_MAP` e `tech_term`, ambos em `app/agent/nodes.py`)
+    eram literais no codigo, e nenhuma superficie de configuracao os
+    tocava. Duas consequencias reais:
+
+    1. `successfactors` (DA-34) e `po` (DA-56) nunca entraram em nenhum dos
+       dois mapas. Um incidente desses nao perdia so a lista de sites: perdia
+       o `tech_term` tambem, caindo no genérico "SAP integration" — a
+       identidade do conector se perdia ANTES do filtro de site, entao
+       corrigir so o site map nao bastaria.
+    2. `web_search_policy="approved"` nao aprovava nada: o ramo `approved`
+       de `_web_search_allowed()` retornava True incondicionalmente. O nome
+       prometia uma lista de sites aprovados que nao existia em lugar
+       nenhum do codigo.
+
+    Aqui a lista vira dado, com uma linha por `interface_type` (o Literal
+    fechado do pipeline). O gate `connector_reachable` (DA-51) foi
+    estendido para esta 7a superficie: um conector aceito em todo o resto
+    do produto, e sem fonte de pesquisa aprovada, e o mesmo tipo de conector
+    morto que a DA-50 e a DA-56 já corrigiram em outras telas.
+
+    FAIL-CLOSED: a ausencia de linha (ou `enabled=False`) significa "sem
+    fonte aprovada" e a busca web NAO acontece para aquele interface_type.
+    Nao existe fallback hardcoded — e o que mantem o requisito de zero
+    hardcoded e evita que a tabela seja contornada por um default em codigo.
+    """
+
+    __tablename__ = "web_search_sources"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    interface_type: Mapped[str] = mapped_column(String(32), nullable=False, unique=True, index=True)
+    site_filter: Mapped[str] = mapped_column(Text, nullable=False)
+    tech_term: Mapped[str] = mapped_column(String(128), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_now, onupdate=_now
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<WebSearchSource {self.interface_type} enabled={self.enabled} "
+            f"term={self.tech_term!r}>"
+        )

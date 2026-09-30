@@ -23,6 +23,10 @@ dependencies = [
     # chamadas HTTP reais contra a Table API
     "httpx>=0.27",
     "fastembed>=0.8.0",
+    # DA-52: parse do EDMX de $metadata (host remoto = entrada nao confiavel).
+    # bandit B314 exige defusedxml para nao estourar DTD/entidade; antes ele
+    # entrava so como transitiva e o fix dependia de outra dependencia.
+    "defusedxml>=0.7.1",
     "numpy>=2.5.1",
     "aiofiles>=25.1.0",
     "ddgs>=9.16.0",

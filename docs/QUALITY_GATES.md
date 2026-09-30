@@ -173,6 +173,36 @@ recusado com exit 1 — nunca interpretado como "zero regressões".
 5. **Teste verde não prova que o código roda.** O preflight de RAM era um
    heredoc de 92 linhas dentro de `scripts/promptfoo_remote.sh`, sem
    cobertura: a aritmética que decide se a suite carrega 48 G só podia ser
+   conferida com a RAM à mão. E o inverso também vale: **o job que roda não
+   prova que a coisa medida está medida.** O `rag-quality` rodava com
+   `EMBEDDING_BACKEND=fastembed` (DA-38) porque o GitHub Actions não tem
+   Ollama, mas a *ingestão* ignorava essa variável e indexava com
+   `OllamaEmbeddings` fixo. O retriever consultava com bge-small (384 dims)
+   numa collection criada com nomic-embed-text (768), e a busca morria com
+   `Wrong input: Vector dimension error: expected dim: 768, got 384`. O job
+   era verde por never ter recuperado nada — a falha era de nao
+   mensurável, e só apareceu quando o gate passou a ser rodado de verdade.
+   Duas correções: a ingestão passou a usar o mesmo resolvedor de embedder
+   da consulta (`retriever._get_embeddings`), e `_FastEmbedWrapper` ganhou
+   `embed_documents`, que só a consulta usava — sem ele a ingestão falhava
+   com `'_FastEmbedWrapper' object has no attribute 'embed_documents'`.
+6. **O limiar precisa discriminar os grupos, não existir.** O
+   `oos_rejection_rate` media `hits[0]["score"] < 0.7`, e `score` é cosseno
+   denso puro. Medido no corpus de avaliação: in-scope vai de 0.719 a 0.871,
+   out-of-scope dá 0.753 e 0.779 — **os grupos se sobrepõem**, e o único
+   limiar que separaria (0.780) rejeitaria junto 4 dos 13 in-scope. O gate
+   media similaridade de cosseno e chamava isso de rejeição. O sinal que
+   discrimina é `rerank_score_calibrated` (DA-42): in-scope ≥ 0.975,
+   out-of-scope ≤ 0.050. O gate passou a medir o mesmo número que decide a
+   admissão na pipeline, no ponto neutro da sigmoid (σ(0) = 0.50), que fica
+   a 0.45 dos dois lados. E quando o hit vem sem esse campo — rerank não
+   rodou — o gate **erra** em vez de tratar a ausência como 0.0, que seria
+   um falso verde pela regra 2. Verificado por perturbação: com a sigmoid
+   forçada a 0.99 o gate reprova, e com o `rerank()` neutralizado ele levanta
+   `RuntimeError`. Nota: o corpus tem **2** casos out-of-scope; a taxa é
+   0%, 50% ou 100%, então a métrica é fraca por construção e o gate serve
+   mais como rede de regressão do que como medida de qualidade. Ampliar o
+   corpus é trabalho em aberto, não algo que um limiar ajustado conserte.
    verificada carregando 48 G. Movido para
    `app/evaluation/ram_preflight.py` (núcleo puro, 15 testes) e
    `preflight_delegates` passou a vigiar que o script continua delegando —

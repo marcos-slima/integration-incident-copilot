@@ -39,6 +39,8 @@ from qdrant_client.models import (
 
 from app.config import settings
 from app.rag.embedding_guard import stamp_collection, verify_collection_embedding
+from app.rag.retriever import _FastEmbedWrapper
+from app.rag.retriever import _get_embeddings as get_query_embeddings
 
 # §4.5 (avaliacao externa §3.5): pymupdf4llm.use_layout(False) desativa
 # o motor de layout ONNX (BoxRFDGNN) que detecta colunas/tabelas em PDFs.
@@ -224,7 +226,7 @@ def infer_category(filename: str) -> str:
     return "general"
 
 
-def probe_vector_size(embeddings: OllamaEmbeddings) -> int:
+def probe_vector_size(embeddings: OllamaEmbeddings | _FastEmbedWrapper) -> int:
     return len(embeddings.embed_query("probe"))
 
 
@@ -439,7 +441,17 @@ def run_ingest(
         print(f"[{target}] Nada a fazer.")
         return 0
 
-    embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
+    # DA-38: a INGESTAO precisa respeitar EMBEDDING_BACKEND tanto quanto a
+    # consulta. Antes ela ignorava a variavel e usava Ollama fixo, enquanto
+    # `retriever._get_embeddings()` respeitava. O job `rag-quality` do CI
+    # ingeria com fastembed mas a ingestao montava a collection com o
+    # nomic-embed-text do Ollama: os pontos saiam 384 (bge-small) numa
+    # collection de 768, e a consulta falhava com
+    # "expected dim: 768, got 384". Nao era ambiente: o job do GitHub roda
+    # sem Ollama, entao la a ingestao nem completava. Agora a ingestao e a
+    # consulta usam o MESMO embedder, e a dimensao da collection e' sempre
+    # medida do embedder em maos (probe), nunca assumida.
+    embeddings = get_query_embeddings()
     splitter = MarkdownTextSplitter(
         chunk_size=cfg["chunk_size"], chunk_overlap=cfg["chunk_overlap"]
     )

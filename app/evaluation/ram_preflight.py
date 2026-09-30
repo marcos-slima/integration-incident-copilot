@@ -106,7 +106,10 @@ def say(message: str) -> None:
 
 
 def _get(host: str, path: str) -> Any:
-    with urllib.request.urlopen(f"{host}{path}", timeout=3) as response:
+    # `host` vem de OLLAMA_HOST (env do operador, nao entrada de
+    # usuario) e `path` e' uma das duas literais desta funcao. Nao ha
+    # concatenacao de dado externo na URL.
+    with urllib.request.urlopen(f"{host}{path}", timeout=3) as response:  # nosec B310
         return json.load(response)
 
 

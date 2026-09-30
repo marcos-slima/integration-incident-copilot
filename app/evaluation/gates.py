@@ -497,6 +497,82 @@ def check_documented_das(root: Path = REPO_ROOT) -> list[Finding]:
     return _ok(check)
 
 
+def check_da_registered(root: Path = REPO_ROOT) -> list[Finding]:
+    """Toda DA citada no codigo de produto tem linha no registro do CLAUDE.md.
+
+    Os dois gates de DA existentes (`implemented_das_documented` e
+    `das_index_current`) conferem a coerencia ENTRE a tabela do CLAUDE.md e a
+    prosa do README. Os dois lados sao cegos ao codigo: uma DA implementada e
+    nunca registrada nao deixa nenhum rastro, porque ninguem le o codigo
+    procurando numero de DA.
+
+    O resultado (achado em revisao real do livro-razao): cinco decisoes
+    entregues com prosa so' em docstring — DA-12 (troca do modelo
+    canonico), DA-38 (backend de embedding do CI), DA-39 (politica de
+    soberania de dados no gateway), DA-40 (aiormq -> AMQP 1.0/Proton) e
+    DA-41 (circuit breaker com Redis compartilhado). Tres delas — DA-39,
+    DA-40 e DA-41 — sao das mais arquiteturais do projeto e eram
+    invisiveis para quem navega pelas DAs, que e' a superficie de
+    portfolio. DA-39 e' citada em `app/config.py` e `app/llm/gateway.py`;
+    DA-40 e' o proprio docstring de `app/events/amqp_consumer.py`.
+
+    Um numero e' considered registrado se a linha da tabela do CLAUDE.md o
+    cita, inclusive na forma agrupada `DA-4/8` — mesma regra de
+    `_registered_das`, para o gate nao accuse a forma que o projeto ja usa.
+
+    `tests/` fica de fora de proposito: os testes dos gates inventam numeros
+    sinteticos justamente para exercitar o caminho de falha, e exigir
+    registro deles seria exigir documentacao de um numero que existe so'
+    dentro do fixture. O que a implementacao precisa documentar nao e o
+    teste que a prova.
+
+    Uma DA candidata e' aceitavel sem linha: `DA-31` esta na lista de
+    candidatas do CLAUDE.md e citada no codigo, e' o estado correto de uma
+    decisao ainda nao tomada. Numero inventado para ilustrar um docstring,
+    ao contrario, e' ruido — por isso o exemplo acima nao escreve o numero
+    literal, que o proprio gate leria como citacao.
+    """
+    check = "da_registered"
+    registradas = _registered_das(root)
+    if not registradas:
+        return _warn(check, "nenhuma DA encontrada na tabela de registro do CLAUDE.md")
+    # Candidata nao e DA entregue: tem lista propria no CLAUDE.md, e o codigo
+    # pode legitimamente citar a decisao que ainda nao existe.
+    citadas_como_candidata = {int(d[3:]) for d in _candidate_das(root)}
+
+    # Ignora diretorios ocultos (.venv, .git, .precommit-cache-tmp — este
+    # ultimo traz `site-packages` de Python que casa `DA-N` em SPDX headers)
+    # e os nao-produto. `rglob` sobre a raiz pegaria ambos.
+    ignorados = {"node_modules", "static", "tests", "__pycache__", "site-packages"}
+    citados: dict[int, str] = {}
+    for caminho in sorted(root.rglob("*.py")):
+        partes = caminho.relative_to(root).parts
+        if any(p in ignorados or p.startswith(".") for p in partes[:-1]):
+            continue
+        # As tres arvores de codigo de produto. Alembic entra: uma migration
+        # que implementa uma decisao (a 006 e' a DA-53) e' implementacao.
+        if partes[0] not in ("app", "scripts", "alembic"):
+            continue
+        fonte = caminho.read_text(encoding="utf-8", errors="ignore")
+        for grupo in re.findall(r"DA-(\d+(?:/\d+)*)", fonte):
+            for n in grupo.split("/"):
+                citados.setdefault(int(n), str(caminho.relative_to(root)))
+
+    sem_registro = sorted(
+        n for n in citados if n not in registradas and n not in citadas_como_candidata
+    )
+    if sem_registro:
+        detalhe = ", ".join(f"DA-{n} (em {citados[n]})" for n in sem_registro[:6])
+        return _fail(
+            check,
+            f"{detalhe} citadas no codigo sem linha na tabela de DAs do CLAUDE.md — "
+            f"a prosa de decisao existe so' na docstring, invisivel para quem "
+            f"navega pelas DAs. As {_das(sem_registro)} ou entram na tabela (com "
+            f"secao de prosa) ou o numero some do codigo",
+        )
+    return _ok(check)
+
+
 def check_index_current(root: Path = REPO_ROOT) -> list[Finding]:
     """O indice de DAs do README tem que refletir os headings de verdade.
 
@@ -979,6 +1055,7 @@ GATES = {
     "llm_baseline": check_llm_baseline,
     "candidate_das_fresh": check_candidate_das,
     "implemented_das_documented": check_documented_das,
+    "da_registered": check_da_registered,
     "das_index_current": check_index_current,
     "preflight_delegates": check_preflight_delegates,
     "prompt_digest_measured": check_prompt_digest,

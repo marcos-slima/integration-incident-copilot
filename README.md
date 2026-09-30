@@ -130,6 +130,7 @@ final.
 | 3 | [3](#decisoes-de-arquitetura) | Guardrails em código, não em prompt |
 | 4 | [4](#decisoes-de-arquitetura) | Comparações de modelo via promptfoo: `qwen2.5-coder:32b` ganhou do |
 | 8 | [8](#decisoes-de-arquitetura) | Comparações de modelo via promptfoo: `qwen2.5-coder:32b` ganhou do |
+| 12 | [47](#decisoes-de-arquitetura) | Troca final do modelo canônico para `qwen3-coder-next:latest` (MoE 80B/3B, 262K ctx) — empate técnico 10/10, decidida por roadmap |
 | 14 | [14](#decisoes-de-arquitetura) | Camada A2A (Agent2Agent) JSON-RPC 2.0 |
 | 15 | [15](#decisoes-de-arquitetura) | Evidence/Trust Layer determinística |
 | 16 | [15](#decisoes-de-arquitetura) | `is_grounded` via evidence_strength (nunca autoavaliação LLM) |
@@ -147,7 +148,15 @@ final.
 | 28 | [27](#decisoes-de-arquitetura) | GraphRAG modelo `VERIFIED_AS` + endpoint `/incidents/{id}/verify` |
 | 29 | [28](#decisoes-de-arquitetura) | Benchmark rerankers → mmarco-mMiniLMv2 vence (+7pp Hit@1) |
 | 30 | [29](#decisoes-de-arquitetura) | PII redaction ampliado + smart log truncation + backoff exponencia |
+| 32 | ARCHITECTURE | Consumidor AMQP 1.0 assíncrono para Solace Cloud / SAP Event Mesh (protocolo corrigido pela DA-40) |
 | 33 | ARCHITECTURE | Rule Engine determinístico (pré-filtro LLM, 21 regras SAP) |
+| 34 | ARCHITECTURE | Conector SuccessFactors EC (OAuth2 Client Credentials + OData v2 PerPerson) |
+| 35 | ARCHITECTURE | `/health` como readiness probe real (GET nos serviços) + expansão do catálogo Rule Engine |
+| 38 | [43](#decisoes-de-arquitetura) | `EMBEDDING_BACKEND=fastembed` para o job de avaliação RAG no CI, que não tem Ollama |
+| 39 | [44](#decisoes-de-arquitetura) | Política de soberania de dados no AI Gateway (`strict` / `cloud_with_dlp`) |
+| 40 | [45](#decisoes-de-arquitetura) | Migração aiormq (AMQP 0.9.1) → python-qpid-proton (AMQP 1.0), com wrapper asyncio |
+| 41 | [46](#decisoes-de-arquitetura) | Circuit breaker com backend Redis compartilhado (fallback em memória sem infra obrigatória) |
+| 42 | [42](#decisoes-de-arquitetura) | Escala calibrada por sigmoid para o rerank score (nenhum consumer usa o score cru) |
 | 43 | [30](#decisoes-de-arquitetura) | Soberania de dados por origin real, fail-closed |
 | 44 | [31](#decisoes-de-arquitetura) | Sinal determinístico de escalonamento em 3 tiers (prep. tier 3) |
 | 45 | [32](#decisoes-de-arquitetura) | Universalidade de provider: rota auditada + capacidades por origin |
@@ -2053,3 +2062,174 @@ caminho Basic Auth via `MockTransport`, detalhe por `messageId`, modo
 OAuth2 (Client Credentials + Bearer), tolerância do parser, resposta
 não-JSON, rejeição de identifier com injection, erro HTTP e teto de linhas
 no resumo. Suíte completa e gates verdes.
+
+### 42. Escala calibrada por sigmoid para o rerank score (DA-42)
+
+**O problema.** O score do cross-encoder de rerank ([DA-29](#decisoes-de-arquitetura))
+é um logit, não uma probabilidade: ele não é comparável entre documentos, e
+`0.7` numa consulta e `0.7` em outra não significam a mesma coisa. Três
+consumidores o usavam direto e cada um tinha seu próprio corte — a
+`evidence_strength` (DA-15/16), o limiar de admissão pós-reranker (DA-25) e os
+tiers de escalonamento ([DA-44](#decisoes-de-arquitetura)). O mesmo par
+documento/consulta podia ser "evidência forte" para um e "descartável" para
+outro, dependendo do consumidor.
+
+**A solução.** Uma escala única em `rag/retriever.py`, que transforma o logit
+em um valor comparável por sigmoid, exposta como
+`hit["rerank_score_calibrated"]`. Os três consumidores passam a ler a mesma
+escala, e o score cru continua disponível para quem precisar do detalhe. O
+nome é explícito de propósito: `rerank_score` continua sendo o logit, e quem
+toma decisão por limiar tem que escolher conscientemente entre as duas
+variáveis.
+
+**Limitações (registradas de propósito).**
+- Os pontos de corte (`FLOOR_TIER_MIN_EVIDENCE = 0.62`,
+  `CURATED_TIER_MIN_EVIDENCE = 0.45`) **não foram calibrados** contra o
+  corpus de 28.962 chunks. São pontos de partida escolhidos pela forma da
+  curva, a serem substituídos por medição no re-baseline. Hipótese, não
+  constante validada.
+- A escala é monotônica, que é o que se pede a uma sigmoid; ela não promete
+  que 0.7 signifique "70% de chance de o documento responder a pergunta".
+  Nenhum consumidor deve narrar a escala como probabilidade.
+
+### 43. Backend de embedding trocável, para o CI não depender de Ollama (DA-38)
+
+**O problema.** O job de avaliação RAG no GitHub Actions precisa produzir
+embeddings para indexar o corpus e medir recuperação. O caminho de produção
+(indexação e consulta) usava o embedding do Ollama — que exige um servidor
+Ollama no runner. Duas saídas ruins: deixar o job indexar com um embedder
+diferente do de produção (a medição passa a descrever outro sistema), ou não
+rodar a medição no CI (e ela passa a depender de alguém lembrar de rodar na
+máquina).
+
+**A solução.** `EMBEDDING_BACKEND` com dois backends: `ollama` (default, o de
+produção) e `fastembed`, um adaptador mínimo sobre `fastembed.TextEmbedding`
+que implementa só a interface `.embed_query()` que o Qdrant consome. O CI
+exporta `EMBEDDING_BACKEND=fastembed`; em produção a variável não é definida e
+o comportamento é o anterior.
+
+A decisão de política é a mesma dos conectores: o CI não é um ambiente
+diferente do produto, é o mesmo produto rodando sem a dependência opcional. A
+alternativa seria um segundo embedder só para teste, que mediria um sistema que
+ninguém usa.
+
+**Limitações.**
+- Os dois backends produzem vetores de **identidades diferentes**. Misturar
+  corpus indexado com um e consultado com o outro degrada a recuperação sem
+  erro visível. O CI fixa a variável explicitamente justamente para não
+  depender do default.
+- `fastembed` é CPU-only. Serve para o CI e para quem não quer subir um
+  Ollama; não é caminho para produção de alta vazão.
+
+### 44. Soberania de dados no AI Gateway: o modo é política, não preferência (DA-39)
+
+**O problema.** O gateway (DA-26) sabia trocar de provedor local para nuvem em
+fallback, o que é ótimo para disponibilidade e um problema para
+confidencialidade: um payload marcado como confidencial saía para um provedor
+público sem que ninguém tivesse decidido isso. A rota de fallback é um caminho
+de saída, e caminho de saída é onde dado sensível escapa.
+
+**A solução.** `data_sovereignty_mode` com dois valores, `strict` (default) e
+`cloud_with_dlp`. `_select_allowed_providers()` filtra os candidatos pela
+policy antes de tentar qualquer um: dado `public` passa por todos; dado
+`confidential` só alcança providers locais — ou os destinos em
+`CONFIDENTIAL_ALLOWED_ORIGINS` quando o modo é `cloud_with_dlp`, que exige que
+a redaction de PII (DA-30) já tenha rodado; qualquer valor fora do enum
+conhecido é **fail-closed** (nega).
+
+O default `strict` preserva o comportamento original do produto, que era
+on-premise. `cloud_with_dlp` é a afirmação de que a fronteira de dados foi
+declarada explicitamente e que cloud é aceitável depois da redaction — e a
+soberania por **origin real** (DA-43) fecha o buraco de "o rótulo `openai`
+apontando para Gemini".
+
+**Limitações.**
+- A política é por origem, não por rótulo, mas o destino ainda precisa estar
+  registrado com a capacidade de aceitar o dado. Um destino não registrado
+  não é "permitido por estar na allowlist" — ele nem chega a ser candidato.
+- A garantia de soberania é tão forte quanto a redaction: `cloud_with_dlp` com
+  PII não redacted é o pior dos dois mundos, e a ordem redaction→gateway é
+  invariante (DA-30), não convenção.
+
+### 45. aiormq não é AMQP 1.0: a falha era silenciosa (DA-40)
+
+**O problema.** O consumidor de eventos (DA-32) usava `aiormq` para falar com o
+Solace Cloud / SAP Event Mesh. `aiormq` implementa AMQP **0.9.1**, o protocolo
+do RabbitMQ. O Solace usa exclusivamente AMQP **1.0**. A conexão parecia
+funcionar: o handshake TLS completava e o banner AMQP era trocado. Mas as
+operações de producer/consumer (`queue_declare`, `basic_consume`) enviam
+frames 0.9.1, que são inválidos para um broker 1.0 — o Solace fecha a conexão
+ou ignora os frames, sem erro explícito. Um "conecta e não consome" que parece
+tudo certo.
+
+**A solução.** `python-qpid-proton` (a lib oficial do Apache Qpid Proton, a
+mesma que o SAP Event Mesh usa internamente) com um wrapper asyncio via
+`asyncio.run_in_executor()`: a API do Proton é síncrona/blocking, então roda em
+thread pool em vez de travar o event loop. `amqp_consumer.py` continua sendo o
+ponto de entrada, e DA-32 permanece o número da capacidade (consumidor AMQP
+assíncrono) enquanto DA-40 é a correção do protocolo.
+
+O que a DA-40 ensina vale para qualquer integração assíncrona: **handshake
+bem-sucedido não é prova de que os dois lados falam o mesmo protocolo.** A
+verificação precisa chegar a uma operação de dados, não a um banner.
+
+**Limitações.**
+- O handshake TLS continua sendo o teste mais fraco possível. A suíte cobre o
+  caminho real com frames 1.0 via mock, mas não há tenant Solace para validar
+  ponta a ponta.
+- A escolha de uma lib síncrona dentro de um produto async é dívida de
+  contexto: `run_in_executor` não é gratuito, e o Proton carrega sua própria
+  camada de reactor.
+
+### 46. Circuit breaker com backend Redis compartilhado (DA-41)
+
+**O problema.** O circuit breaker (DA-26) guardava estado em memória, por
+processo. Em deploy Kyma com mais de uma réplica, cada pod tem o próprio
+estado: N pods podem abrir e fechar o circuito para o mesmo provider sem
+visibilidade cruzada. O sintoma é um circuit breaker que "funciona" no staging
+de uma réplica e falha em produção com seis — sem nenhum erro, só mais
+latência e mais fallbacks do que o orçamento previa.
+
+**A solução.** Backend Redis opcional em `circuit_breaker.py`: quando Redis está
+disponível, o estado (falhas consecutivas e `opened_at`) é distribuído entre
+todos os pods, com TTL proporcional ao cooldown, para que providers "quietos"
+expirem sozinhos. Quando Redis não está disponível (`REDIS_URL` vazio ou Redis
+fora do ar), há fallback automático para o comportamento em memória original.
+
+O fallback é o ponto: o projeto segue sem infra obrigatória. Quem não tem Redis
+perde o estado compartilhado e ganha o de antes, que é o comportamento de
+"clone e rode".
+
+**Limitações.**
+- O fallback silencioso é uma armadilha clássica: sem Redis, o breaker volta a
+  ser por processo e ninguém é avisado. O comportamento degradado não pode ser
+  invisível.
+- O estado compartilhado usa o relógio de cada pod para `opened_at`; skew de
+  horário entre réplicas aparece como janela de cooldown errada.
+- A semântica do circuito (closed → open → half-open implícito → closed) não
+  mudou; o que mudou foi onde o estado mora.
+
+### 47. A troca de modelo que não tinha número (DA-12)
+
+**O problema.** O modelo canônico já tinha duas decisões de comparação
+registradas — [DA-4](#decisoes-de-arquitetura) e [DA-8](#decisoes-de-arquitetura) — e
+mesmo assim a troca de produção não tinha registro próprio. O commit `0222b79`
+(que trocou `qwen2.5-coder:32b` por `qwen3-coder-next:latest`) foi commitado
+como `feat:` sem prefixo de DA, e por isso ficou anos sem linha na tabela. DAs
+seguintes passaram a citá-lo pelo número — `app/models.py`, `alembic/006` — como
+se já estivesse registrado. É a diferença entre uma DA que existe na prosa e uma
+DA que existe: o número aparecia no código, mas não na fonte de verdade.
+
+**A solução.** Registrar a troca como DA-12, com o que de fato a motivou: no
+promptfoo ela **empatou** com `qwen2.5-coder:32b` (10/10 nos casos atuais), e a
+troca foi decidida por alinhamento de roadmap (MoE 80B/3B ativo, 262K de
+contexto), não por métrica. Registrar isso importa justamente porque o número
+é pouco ostensivo: a tentação, ao documentar uma troca de modelo, é
+apresentá-la como vitória do benchmark, e aqui ela foi empate técnico.
+
+**Limitações (registradas de propósito).**
+- "Empate 10/10" é empate **nos casos do promptfoo**, não equivalência
+  absoluta. O promptfoo mede o dataset de avaliação; ele não mede todos os
+  incidentes que o produto vai ver.
+- A decisão de roadmap é um argumento de produto, não uma medição. Está
+  registrada como o que é.

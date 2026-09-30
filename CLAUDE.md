@@ -187,6 +187,10 @@ docs/               # índice em README.md; ARCHITECTURE.md, GETTING_STARTED.md,
 | DA-2 | `seed=42` obrigatório para determinismo Ollama | `factory.py` |
 | DA-3 | Guardrails em código, não em prompt | `nodes.py::_apply_confidence_guardrails()` |
 | DA-4/8 | Comparações de modelo via promptfoo: `qwen2.5-coder:32b` ganhou do `qwen3:30b-a3b` (DA-4) e do `qwen3.6:35b-a3b` (DA-8); trocado por `qwen3-coder-next:latest` na Fase 12 (paridade 10/10) | `config.py::llm_model` |
+| DA-12 | Troca final do modelo canônico para `qwen3-coder-next:latest` (MoE 80B/3B, 262K ctx) — empate técnico 10/10 com `qwen2.5-coder:32b` no promptfoo, decidida por roadmap (commit `0222b79`, sem prefixo de DA: por isso ficou anos sem registro) | `config.py::llm_model` + `README` |
+| DA-32 | Consumidor AMQP 1.0 assíncrono para Solace Cloud / SAP Event Mesh (corrigido pela DA-40) | `events/amqp_consumer.py` |
+| DA-34 | Conector SuccessFactors EC (OAuth2 Client Credentials + OData v2 PerPerson) | `connectors/successfactors_connector.py` |
+| DA-35 | `/health` como readiness probe real (GET nos serviços) + expansão do catálogo Rule Engine | `main.py::_probe_infra_services` |
 | DA-14 | Camada A2A (Agent2Agent) JSON-RPC 2.0 | `app/a2a/` |
 | DA-15 | Evidence/Trust Layer determinística | `nodes.py::_assemble_evidence()` |
 | DA-16 | `is_grounded` via evidence_strength (nunca autoavaliação LLM) | `nodes.py` |
@@ -205,6 +209,11 @@ docs/               # índice em README.md; ARCHITECTURE.md, GETTING_STARTED.md,
 | DA-29 | Benchmark rerankers → mmarco-mMiniLMv2 vence (+7pp Hit@1) | `retriever.py::RERANKER_MODEL` |
 | DA-30 | PII redaction ampliado + smart log truncation + backoff exponencial | `redaction.py` |
 | DA-33 | Rule Engine determinístico (pré-filtro LLM, 21 regras SAP) | `agent/rules.py` |
+| DA-38 | `EMBEDDING_BACKEND=fastembed` para o job de avaliação RAG no CI, que não tem Ollama | `rag/retriever.py` |
+| DA-39 | Política de soberania de dados no AI Gateway (`strict` / `cloud_with_dlp`) | `config.py` + `llm/gateway.py` |
+| DA-40 | Migração aiormq (AMQP 0.9.1) → python-qpid-proton (AMQP 1.0), com wrapper asyncio | `events/amqp_consumer.py` |
+| DA-41 | Circuit breaker com backend Redis compartilhado (fallback em memória sem infra obrigatória) | `circuit_breaker.py` |
+| DA-42 | Escala calibrada por sigmoid para o rerank score (nenhum consumer usa o score cru) | `rag/retriever.py` + `agent/escalation.py` |
 | DA-43 | Soberania de dados por origin real, fail-closed | `llm/gateway.py` + `GET /llm/policy` |
 | DA-44 | Sinal determinístico de escalonamento em 3 tiers (prep. tier 3) | `agent/escalation.py` |
 | DA-45 | Universalidade de provider: rota auditada + capacidades por origin + identidade de embedding | `llm/routes.py`, `llm/capabilities.py`, `llm/origins.py`, `rag/embedding_guard.py` |
@@ -245,7 +254,7 @@ docs/               # índice em README.md; ARCHITECTURE.md, GETTING_STARTED.md,
 11. Rota `require_loopback` e `require_loopback=False` são mutuamente exclusivos — `local_lab` apontando para a internet, e `enterprise_azure` apontando para loopback, falham no boot
 12. **Correlação incidente↔sistema é fail-closed** — `app/admin/correlation.py` só resolve por `connector_type` quando há UM único candidato; com 2+ devolve `ambiguous` com a lista. Nenhuma superfície (UI, API, dashboard) escolhe um sistema por conta própria (DA-50)
 13. `verified` ≠ `verified_at` — `POST /incidents/{id}/verify` grava `verified_at` sempre, mas `diagnosis_correct=None` fica NULL. Coagir para `True` infla a acurácia nos dashboards (DA-50)
-14. **Gate de qualidade roda junto com a suite** — `uv run python scripts/quality_gate.py` (DA-51) valida dataset de avaliação, corpus, invariante do reranker, configs do promptfoo, a lista de DAs candidatas **e a documentação das DAs** (`implemented_das_documented` + `das_index_current`: DA registrada sem prosa localizável reprova, assim como seção órfã). Prosa de decisão mora no `README.md` (`### N. Título (DA-N)`); `docs/ARCHITECTURE.md` é local alternativo declarado para DA-32/33/34/35. DAs entregues juntas compartilham uma seção (`(DA-46/47/48)`). `docs/QUALITY_GATES.md` documenta o que eles NÃO cobrem
+14. **Gate de qualidade roda junto com a suite** — `uv run python scripts/quality_gate.py` (DA-51) valida dataset de avaliação, corpus, invariante do reranker, configs do promptfoo, a lista de DAs candidatas **e o livro-razão das DAs em três direções**: `implemented_das_documented` (prosa ↔ registro), `das_index_current` (índice do README) e `da_registered` (DA citada em `app/`, `scripts/`, `alembic/` tem linha na tabela). A terceira direção só existe porque nove DAs estavam fora do registro com a prosa apenas na docstring — `uv run python scripts/quality_gate.py` (DA-51) valida dataset de avaliação, corpus, invariante do reranker, configs do promptfoo, a lista de DAs candidatas, **a documentação das DAs** (inclusive `da_registered`: DA citada no código sem linha na tabela reprova) (`implemented_das_documented` + `das_index_current`: DA registrada sem prosa localizável reprova, assim como seção órfã). Prosa de decisão mora no `README.md` (`### N. Título (DA-N)`); `docs/ARCHITECTURE.md` é local alternativo declarado para DA-32/33/34/35. DAs entregues juntas compartilham uma seção (`(DA-46/47/48)`). `docs/QUALITY_GATES.md` documenta o que eles NÃO cobrem
 15. **Ausência de evidência nunca é "sem drift"** — a DA-52 tem **quatro** estados (`clean`, `drift`, `first_observation`, `unverified`) e `unverified` é um deles. `first_observation` (sem baseline) e `unverified` (sem leitura) são distintos de `clean`, e `unverified` nunca abre incidente nem grava/apaga baseline
 16. **`system_contracts` é append-only e sem FK** para `integration_systems` — histórico de observação, não cadastro. Migration 005
 17. **So `breaking` abre incidente** de drift; additive e cosmetic não. Rename provável é *cosmetic*: errar para breaking gera alarme falso e o detector é desligado

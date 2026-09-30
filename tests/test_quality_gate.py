@@ -9,6 +9,7 @@ from app.evaluation.gates import (
     check_connector_reachable,
     check_connector_validation_matrix,
     check_corpus_coverage,
+    check_da_registered,
     check_difficulty_mix,
     check_docs_code_references,
     check_docs_markup_integrity,
@@ -956,3 +957,91 @@ def test_connector_validation_matrix_ignora_prosa_que_mentiona_conector(tmp_path
     )
     falhas = [f for f in check_connector_validation_matrix(root) if f.is_failure]
     assert falhas
+
+
+# ── gate da_registered: DA citada no codigo tem linha no CLAUDE.md ─────────
+def _da_root(tmp_path: Path, registro: str, extra: dict[str, str] | None = None) -> Path:
+    (tmp_path / "app/rag").mkdir(parents=True)
+    (tmp_path / "app/evaluation").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "CLAUDE.md").write_text(registro, encoding="utf-8")
+    for nome, texto in (extra or {"app/rag/retriever.py": "# sem citacao\n"}).items():
+        caminho = tmp_path / nome
+        caminho.parent.mkdir(parents=True, exist_ok=True)
+        caminho.write_text(texto, encoding="utf-8")
+    return tmp_path
+
+
+_REGISTRO_OK = """# Contexto
+
+| DA | O que | Onde |
+|---|---|---|
+| DA-39 | politica de soberania | gateway |
+| DA-56 | conector PO/PI | connectors |
+
+**DAs candidatas (sem implementacao ainda):**
+- DA-31: SAP AI Agent Hub — bloqueada: exige tenant Kyma
+"""
+
+
+def test_da_registered_pass_quando_toda_citacao_tem_linha(tmp_path: Path) -> None:
+    root = _da_root(tmp_path, _REGISTRO_OK, {"app/rag/retriever.py": "# DA-39 no codigo\n"})
+    assert not [f for f in check_da_registered(root) if f.is_failure]
+
+
+def test_da_registered_acusa_da_so_na_docstring(tmp_path: Path) -> None:
+    """O defeito achado: cinco decisoes entregues com prosa apenas em
+    docstring (DA-12, 38, 39, 40, 41) e tres com prosa no ARCHITECTURE e
+    nenhuma linha na tabela (DA-32, 34, 35). Nenhum gate anterior via o
+    codigo — os dois gates de DA so' comparavam a tabela do CLAUDE.md com a
+    prosa do README, e as duas pontas eram cegas a implementacao."""
+    root = _da_root(tmp_path, _REGISTRO_OK, {"app/rag/retriever.py": "# DA-41 no codigo\n"})
+    falhas = [f for f in check_da_registered(root) if f.is_failure]
+    assert falhas
+    assert "DA-41" in falhas[0].message
+    assert "app/rag/retriever.py" in falhas[0].message
+
+
+def test_da_registered_aceita_da_candidata(tmp_path: Path) -> None:
+    """DA-31 esta na lista de candidatas e citada no codigo: e' o estado
+    correto de uma decisao ainda nao tomada, nao uma DA nao registrada."""
+    root = _da_root(tmp_path, _REGISTRO_OK, {"app/rag/retriever.py": "# DA-31 citado\n"})
+    assert not [f for f in check_da_registered(root) if f.is_failure]
+
+
+def test_da_registered_aceita_forma_agrupada_do_registro(tmp_path: Path) -> None:
+    """`DA-4/8` na tabela registra as duas. O gate nao pode acusar a forma
+    que o proprio projeto ja usa."""
+    registro = _REGISTRO_OK.replace("| DA-39 |", "| DA-4/8 |")
+    root = _da_root(tmp_path, registro, {"app/rag/retriever.py": "# DA-4 e DA-8 citados\n"})
+    assert not [f for f in check_da_registered(root) if f.is_failure]
+
+
+def test_da_registered_ignora_tests(tmp_path: Path) -> None:
+    """Os testes dos gates inventam numeros sinteticos para exercitar o
+    caminho de falha. Exigir registro deles seria exigir documentacao de um
+    numero que so existe dentro do fixture."""
+    root = _da_root(tmp_path, _REGISTRO_OK)
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests/test_algo.py").write_text("# DA-77 sintetico\n", encoding="utf-8")
+    assert not [f for f in check_da_registered(root) if f.is_failure]
+
+
+def test_da_registered_ignora_diretorios_ocultos(tmp_path: Path) -> None:
+    """`.precommit-cache-tmp/.../site-packages` traz Python vendorizado cujo
+    SPDX header casa o padrao. Sem o filtro, o gate acusaria numeros de
+    biblioteca de terceiros."""
+    root = _da_root(tmp_path, _REGISTRO_OK)
+    (tmp_path / ".venv/lib/site-packages").mkdir(parents=True)
+    (tmp_path / ".venv/lib/site-packages/x.py").write_text(
+        "# DA-88 de terceiros\n", encoding="utf-8"
+    )
+    assert not [f for f in check_da_registered(root) if f.is_failure]
+
+
+def test_da_registered_conta_migration_de_alembic(tmp_path: Path) -> None:
+    """Alembic e' implementacao: a migration 006 (DA-53) grava proveniencia de
+    prompt e modelo. Se `alembic/` ficasse fora, uma DA implementada so' por
+    migration escaparia."""
+    root = _da_root(tmp_path, _REGISTRO_OK, {"alembic/versions/006_x.py": "# DA-53 aqui\n"})
+    falhas = [f for f in check_da_registered(root) if f.is_failure]
+    assert falhas and "DA-53" in falhas[0].message

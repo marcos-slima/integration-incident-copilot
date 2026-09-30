@@ -19,6 +19,7 @@ verificadas à mão, uma vez, e nunca mais.
 | `candidate_das_fresh` | nenhuma DA marcada como "candidata" no `CLAUDE.md` já entregue em `docs/ARCHITECTURE.md` | instantâneo | todo push/PR |
 | `implemented_das_documented` | toda DA registrada no `CLAUDE.md` tem prosa localizável (seção `### N. ... (DA-N)` no `README.md`, ou `docs/ARCHITECTURE.md` como local alternativo declarado) — e, no sentido inverso, nenhuma seção `(DA-N)` órfã | instantâneo | todo push/PR |
 | `das_index_current` | o índice de DAs do `README.md` é único (sem tabela colada duas vezes), lista exatamente o mesmo conjunto do registro do `CLAUDE.md`, cada linha aponta para seção que existe, e o número da coluna Seção é o do heading real (não o da seção vizinha) | instantâneo | todo push/PR |
+| `da_registered` | toda DA citada no código de produto (`app/`, `scripts/`, `alembic/`) tem linha na tabela de DAs do `CLAUDE.md`. Nove DAs estavam fora do livro-razão com a prosa só na docstring: três delas (soberania de dados, AMQP 1.0, circuit breaker Redis) são das mais arquiteturais do projeto e invisíveis para quem navega pelas DAs | instantâneo | todo push/PR |
 | `preflight_delegates` | o preflight de RAM do harness é `app/evaluation/ram_preflight.py`, não python inline no `scripts/promptfoo_remote.sh` | instantâneo | todo push/PR |
 | `prompt_digest_measured` | o prompt em produção (`app/agent/prompts.py`) tem o mesmo digest do prompt **medido** no `data/eval/prompt_baseline.json` | instantâneo | todo push/PR |
 | `docs_markup_integrity` | fences de código balanceados e links relativos `.md` resolvendo, em `docs/`, `README.md` e `CLAUDE.md` | instantâneo | todo push/PR |
@@ -100,6 +101,10 @@ recusado com exit 1 — nunca interpretado como "zero regressões".
   RAG e dados do conector entram a cada incidente. Dois incidentes com o
   mesmo digest usaram o mesmo *template*, não necessariamente o mesmo
   contexto.
+- **Se o número da DA no código é a DA certa.** `da_registered` exige que `DA-N` apareça na
+  tabela do `CLAUDE.md`; ele não confere que a linha descreva aquilo que o código faz. Uma DA
+  registrada com a prosa trocada passa. É o mesmo limite de toda documentação versionada:
+  o gate garante a amarração, não a verdade.
 - **A prosa em si.** `implemented_das_documented` verifica que a seção
   *existe* e que a DA está amarrada a ela. Ele não avalia se o texto explica o
   problema, a solução e as limitações — um gate de estilo documental reprovar

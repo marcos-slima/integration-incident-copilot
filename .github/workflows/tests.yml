@@ -85,9 +85,25 @@ jobs:
       - name: Sincronizar dependências
         run: uv sync --dev
 
+      # `--no-emit-project` nao e' opcional. `uv export` inclui o proprio
+      # projeto como requirement editavel (file:///...), e o pip-audit instala
+      # as dependencias com `--require-hashes`; um editavel nao tem hash, entao
+      # o comando morria com "the editable requirement ... cannot be installed
+      # when requiring hashes" e nao auditava NADA. Como o step e'
+      # continue-on-error, o job `security` ficava verde sobre uma auditoria
+      # que nunca rodou — o `continue-on-error` foi mantido para CVEs sem fix
+      # disponivel, mas ele estava mascarando tambem o proprio erro do
+      # ferramenta. Foi assim que 6 CVEs reais (urllib3 2.7.0, pypdf 6.15.0)
+      # sobreviveram a varios pushes; o gate so foi visto quando o comando foi
+      # rodado na mao. Agora roda de verdade e reporta "No known
+      # vulnerabilities found".
       - name: pip-audit — CVEs nas dependências
         continue-on-error: true
-        run: uv run pip-audit --requirement <(uv export --no-dev --format requirements-txt)
+        run: |
+          req="$(mktemp -t requirements-ci-XXXXXX.txt)"
+          uv export --no-dev --no-emit-project --format requirements-txt > "$req"
+          uv run pip-audit --requirement "$req"
+          rm -f "$req"
 
       - name: bandit — SAST Python
         run: uv run bandit -r app/ -ll -f json -o bandit-report.json || uv run bandit -r app/ -ll

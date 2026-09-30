@@ -17,7 +17,10 @@ dependencies = [
     "langfuse>=4.14",
     "python-dotenv>=1.0",
     "langchain-text-splitters>=1.1.2",
-    "pypdf>=6.15.0",
+    # >=6.16.1: PYSEC-2026-3910/3911/3913 (pypdf 6.15.0). A versao anterior
+    # estava pinada acima do piso com CVEs corrigidos; o job `security` do
+    # CI nao os enxergava (ver [tool.uv] e o comentário de constraint abaixo).
+    "pypdf>=6.16.1",
     "pydantic-settings>=2.14.2",
     # runtime (nao so teste): usado pelo ServiceNowConnector para
     # chamadas HTTP reais contra a Table API
@@ -87,6 +90,15 @@ reports = [
 prometheus = [
     "prometheus-fastapi-instrumentator>=7.0",
 ]
+
+[tool.uv]
+# CVE-2026-97687/97688/97689 no urllib3 2.7.0 (fix: 2.8.0). urllib3 e'
+# transitivo (requests, langfuse, etc.), entao nao ha linha `urllib3=` em
+# dependencies para subir o piso. Uma constraint e' o mecanismo correto: ela
+# governa a resolucao sem declarar uma dependencia que o projeto nao usa
+# diretamente. Sem isto o pip-audit mantem o processo de seguranca verde
+# sobre uma versao com CVE conhecida.
+constraint-dependencies = ["urllib3>=2.8.0"]
 
 [tool.ruff]
 line-length = 100

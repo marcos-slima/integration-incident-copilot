@@ -166,10 +166,21 @@ services:
   neo4j:
     image: neo4j:5.26.0-community
     profiles: ["graphrag"]
-    # DA-34: healthcheck — Neo4j expoe /db/neo4j/available (HTTP
-    # acessivel em 7474 sem autenticacao para health).
+    # DA-34: healthcheck. O comentario anterior dizia que
+    # /db/neo4j/available respondia sem autenticacao, e isso era verdade em
+    # versoes antigas: no 5.26 o endpoint devolve 401, e `curl -f` falha em
+    # 401. Pior: a imagem neo4j:5.26.0-community nao tem `curl` (so `wget`),
+    # entao o healthcheck era `curl: not found` em TODA execucao — o
+    # container ficava `unhealthy` para sempre e nunca melhorava. Nenhum
+    # `depends_on` consulta o estado, entao nada quebrava: o healthcheck
+    # mentia sem consequencia observavel, que e' a forma mais facil de um
+    # sinal de saude apodrecer. Agora usa `wget` na raiz (200 sem auth),
+    # igual ao healthcheck do job neo4j-smoke no CI.
+    # CMD-SHELL, e nao CMD: em exec form nao ha shell, entao `|| exit 1`
+    # viraria ARGUMENTO do wget (ele tentaria baixar a URL "||") e o health
+    # check ficaria pendurado em vez de reprovar. Verificado nos dois modos.
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7474/db/neo4j/available"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 10

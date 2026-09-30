@@ -31,7 +31,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_database_url() -> str:
+def _database_url() -> str:
     """Le a URL de dentro da funcao, e nao no import.
 
     `pytest.mark.skipif` so impede a EXECUCAO dos testes: o modulo ainda e'
@@ -144,7 +144,7 @@ def db(monkeypatch: pytest.MonkeyPatch):
 
     # Aponta o app para o banco descartavel ANTES de pedir a factory: ela
     # e' cacheada por URL, e pedir antes devolveria um pool para outro banco.
-    database_url = test_database_url()
+    database_url = _database_url()
     monkeypatch.setattr(observe_module.settings, "database_url", database_url)
     reset_sync_session_factory()
 
@@ -282,7 +282,7 @@ class TestCicloCompleto:
     def test_cli_reporta_o_drift_com_codigo_de_saida_1(self, db, odata_config, tmp_path):
         env = {
             **os.environ,
-            "DATABASE_URL": test_database_url(),
+            "DATABASE_URL": _database_url(),
             "ODATA_SERVICE_URL": odata_config.base,
             "ODATA_OAUTH_TOKEN_URL": f"{odata_config.base}/token",
             "ODATA_CLIENT_ID": "cid",

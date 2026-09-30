@@ -29,7 +29,8 @@ AgentDomain = Literal["sap", "saas", "generic"]
 
 # interface_type (ver Literal fechado em app/models.py::IncidentRequest)
 # mapeado para o dominio do sub-agente especialista.
-_SAP_INTERFACE_TYPES = {"odata", "rfc", "cap"}
+# "po" = SAP PO/PI on-premise: middleware SAP de integracao, nao SaaS.
+_SAP_INTERFACE_TYPES = {"odata", "rfc", "cap", "po"}
 # successfactors: SaaS de RH da SAP, mesmo caso do Ariba — marca SAP,
 # produto multi-tenant entregue como servico (OAuth, nao RFC on-premise).
 _SAAS_INTERFACE_TYPES = {"servicenow", "salesforce", "workday", "ariba", "successfactors"}
@@ -74,6 +75,12 @@ _SAP_KEYWORDS = (
     "successfactors",
     "sfsf",
     "ariba",
+    # DA-56: vocabulario de PO/PI. Termos especificos de proposito —
+    # "po"/"pi" soltos casariam com palavras portuguesas comuns.
+    "process orchestration",
+    "process integration",
+    "sap po",
+    "sap pi",
 )
 
 # Padrao com word boundary para "sap" — evita falsos positivos em

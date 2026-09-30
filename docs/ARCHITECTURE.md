@@ -133,6 +133,7 @@ codigo Python para ativar - so preencher variaveis no `.env`.
 | `RFCConnector` | **Real, validado contra ABAP Cloud Developer Trial real** (A4H rel 754, `RFC_SYSTEM_INFO` via `pyrfc` 3.3.1 + SDK 7.50 PL19) | `BAPI_IDOC_STATUS` nao disponivel no Trial — criar funcao Z ou usar landscape real para validar BAPI especifica |
 | `ServiceNowConnector` | **Real, validado contra ServiceNow PDI real** (Table API via HTTP, Basic Auth) | Nada - segundo conector com validacao ponta-a-ponta contra sistema real |
 | `SalesforceConnector` | **Real, validado contra Salesforce Developer Edition real** (OAuth2 Client Credentials + SOQL) | Nada - primeiro conector com validacao ponta-a-ponta contra sistema real, nao so mock |
+| `POConnector` | **Real** (Basic Auth nativo + `/mdt/api/1.0/facade`) quando `PO_BASE_URL` apontar para a fachada exposta. ⚠️ **API NAO PUBLICA**: o Message Monitor nao esta no Help Portal e varia entre patches/releases, e o payload e' lido de forma tolerante porisso | Validar contra um PO/PI real (7.5) e confirmar o path/formato; o Alert Inbox (`/nwa/api/1.0/alerts`) ainda nao foi implementado |
 | `WorkdayConnector` | **Real** (OAuth2 + REST) quando `WORKDAY_TENANT` configurado | Um tenant Workday real |
 | `AribaConnector` | **Real** (OAuth2 + REST) quando `ARIBA_BASE_URL` configurado | Acesso a Ariba Network/API Business Hub |
 | `CAPConnector` | **Real, validado contra SAP CAP real** (OData v4 + XSUAA client_credentials, BTP Trial) | Nada - terceiro conector com validacao ponta-a-ponta contra sistema real |

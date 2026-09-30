@@ -144,6 +144,9 @@ app/
                     # session) e DA-55: rotas públicas de ativação
                     # (/auth/verify/email, /auth/verify/phone); o login
                     # verifica .env (bootstrap) → banco (web_users ativos)
+  connectors/       # 10 conectores: odata, rfc, servicenow, salesforce,
+                    # workday, ariba, successfactors, cap, apimanagement,
+                    # po (DA-56, SAP PO/PI on-premise)
   webusers.py       # DA-55: domínio de usuários da UI — token de e-mail
                     # (HMAC, namespace próprio), código de telefone (só o
                     # hash guardado, único-uso), status pending_email →
@@ -215,6 +218,7 @@ docs/               # índice em README.md; ARCHITECTURE.md, GETTING_STARTED.md,
 | DA-53 | Prompt de diagnóstico como artefato versionado: `PromptSpec` (version+digest) em módulo próprio, proveniência (`llm_model`/`prompt_version`/`prompt_digest`) na resposta, no relatório e em `incidents` (migration 006), e gate `prompt_digest_measured` amarra produção ao prompt medido | `app/agent/prompts.py`, `app/evaluation/gates.py::check_prompt_digest`, `data/eval/prompt_baseline.json` |
 | DA-54 | Login de sessão para a UI web: `POST /auth/login` (usuário+senha → cookie HttpOnly assinado HMAC) como alternativa à `X-API-Key` em `/diagnose`; superfícies de máquina (MCP/A2A/events/admin) seguem só com chaves dedicadas | `app/auth.py`, `app/main.py`, `frontend/src/api/auth.ts` |
 | DA-55 | Manutenção de usuários da UI pelo admin: tabela `web_users` (migration 007), ativação em duas etapas (token e-mail → código telefone, out-of-band até haver SMTP/SMS), CRUD `/admin/api/users` + tela `/admin/users`; login verifica banco **e** `.env` (bootstrap nunca desliga) | `app/webusers.py`, `app/admin/` (models, routes, ui), `app/auth.py` (`/auth/verify/*`, login env→banco), migration 007 |
+| DA-56 | Conector SAP PO/PI on-premise (`POConnector`): Basic Auth nativo contra o Message Monitor `/mdt/api/1.0/facade`, OAuth2 opcional quando há API Management na frente, agnóstico ao padrão de exposição (informe a fachada em `PO_BASE_URL`); API **não pública** e nunca validada contra PO/PI real | `app/connectors/po_connector.py`, `app/config.py` (`po_*`), matriz em `docs/ARCHITECTURE.md` |
 
 **DAs candidatas (sem implementação ainda):**
 - DA-31: SAP AI Agent Hub registration (MCP + A2A) — bloqueada: exige tenant Kyma
@@ -250,6 +254,7 @@ docs/               # índice em README.md; ARCHITECTURE.md, GETTING_STARTED.md,
 20. **Texto de prompt só muda com o promptfoo junto** — o gate `prompt_digest_measured` (DA-53) reprova se o digest de `app/agent/prompts.py` divergir de `data/eval/prompt_baseline.json`. Isso inclui editar um `Field(description=)` do `DiagnosisModel`, que o LangChain injeta no schema de tool-calling. Depois de mudar de propósito: rode o promptfoo e regrave com `--write-prompt-baseline`
 21. **`prompt_digest`/`prompt_version` são NULL quando o rule engine encerra** (DA-53) — um diagnóstico sem LLM não foi produzido por prompt nenhum. Default `"desconhecido"` fabricaria procedência, o mesmo erro da invariante 13
 22. `evidence_strength` é FLOAT (migration 002) — nunca usar predicado textual (`IN ('high','critical')`) em query de dashboard/relatório. `scripts/validate_dashboards.py` roda as 45 queries contra o Postgres real antes de dar o dashboard como bom
+23. **Nenhum conector novo entra só no registro** — `po` (DA-56) precisou de 7 edições em 6 arquivos: registro (`_REGISTRY` + `_REAL_MODE_SETTING`), os **dois** Literals de `interface_type` em `app/models.py` (request e envelope), supervisor, choices do CLI, dropdown da UI e `CONNECTOR_TYPES` do catálogo admin. O gate `connector_reachable` cobre as seis superfícies, e cada Literal é conferido por separado — a união dos dois mascararia a queda de um deles. Sem a 6ª superfície (`CONNECTOR_TYPES`), o conector aceito em todo o produto fica invisível na tela que responde "qual sistema é", que é onde a correlação DA-50 acontece
 
 ---
 
@@ -272,6 +277,7 @@ docs/               # índice em README.md; ARCHITECTURE.md, GETTING_STARTED.md,
 - GraphRAG (Neo4j) é opt-in; desligado por default — não ativar em testes unitários
 - Backend `device_bash` cloud não alcança `localhost` da máquina do usuário — usar Claude Code CLI local para testes de integração reais
 - `starlette.Mount()` não propaga lifespan ASGI para sub-apps
+- **Matriz de validação dos conectores é uma afirmação por conector** — RFC/ServiceNow/Salesforce/CAP foram validados contra instância real; **OData, Workday, Ariba e PO/PI não** (PO/PI ainda por causa de API não pública). `docs/ARCHITECTURE.md` é a fonte; nunca apresentar "tem conector" como "foi validado"
 
 ---
 

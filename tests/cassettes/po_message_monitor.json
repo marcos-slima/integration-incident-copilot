@@ -1,0 +1,11 @@
+{
+  "_source": "SINTETICO — NAO e' uma captura real. A API /mdt/api/1.0/facade (Message Monitor) do SAP PO/PI nao e' publica nem esta documentada no Help Portal, e varia entre releases. Este corpo foi escrito a mao no formato que o conector tolera, para exercitar o parser contra o contrato que ele assume. Nao existe resposta real gravada: o conector nunca foi validado contra um PO/PI de verdade (DA-56) — ver a matriz de conectores em docs/ARCHITECTURE.md.",
+  "response": [
+    {
+      "messageId": "PO-FAILED-001",
+      "status": "FAILED",
+      "interface": "Z_S4_ORDER_OUT",
+      "errorText": "Connection refused pelo sistema receptor (destino SAP S/4HANA)"
+    }
+  ]
+}

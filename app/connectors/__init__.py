@@ -7,6 +7,7 @@ from app.connectors.ariba_connector import AribaConnector
 from app.connectors.base import ConnectorResult, ExternalSystemConnector, SAPConnector
 from app.connectors.cap_connector import CAPConnector
 from app.connectors.odata_connector import ODataConnector
+from app.connectors.po_connector import POConnector
 from app.connectors.rfc_connector import HAS_PYRFC, RFCConnector
 from app.connectors.salesforce_connector import SalesforceConnector
 from app.connectors.servicenow_connector import ServiceNowConnector
@@ -23,6 +24,7 @@ _REGISTRY: dict[str, type[SAPConnector]] = {
     "successfactors": SuccessFactorsConnector,
     "cap": CAPConnector,
     "apim": APIManagementConnector,
+    "po": POConnector,
 }
 
 # Setting que cada conector usa para decidir modo real vs mock dentro do
@@ -38,6 +40,7 @@ _REAL_MODE_SETTING: dict[str, str] = {
     "successfactors": "sfsf_base_url",
     "cap": "cap_service_url",
     "apim": "apim_analytics_url",
+    "po": "po_base_url",
 }
 
 
@@ -81,6 +84,7 @@ __all__ = [
     "ConnectorResult",
     "ExternalSystemConnector",
     "ODataConnector",
+    "POConnector",
     "RFCConnector",
     "SAPConnector",
     "SalesforceConnector",

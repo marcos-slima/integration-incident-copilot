@@ -63,6 +63,7 @@ def test_health_endpoint():
         "successfactors",
         "cap",
         "apim",
+        "po",
     }
     for connector_info in body["connectors"].values():
         assert connector_info["status"] in {"real", "mock", "misconfigured"}

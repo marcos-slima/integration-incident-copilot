@@ -6,7 +6,7 @@ from app.agent.supervisor import classify_domain, supervisor_node
 
 
 def test_classify_domain_from_sap_interface_type():
-    for interface_type in ("odata", "rfc", "cap"):
+    for interface_type in ("odata", "rfc", "cap", "po"):
         assert classify_domain({"interface_type": interface_type, "description": ""}) == "sap"
 
 
@@ -112,3 +112,26 @@ def test_supervisor_node_returns_generic_for_unknown():
 def test_supervisor_node_returns_sap_for_odata_keyword():
     result = supervisor_node({"interface_type": None, "description": "erro na query OData v4"})
     assert result == {"agent_domain": "sap"}
+
+
+# ── DA-56: SAP PO/PI e' middleware SAP on-premise, nao SaaS ─────────────────
+def test_classify_domain_po_e_sap_e_nao_saas():
+    """PO/PI poderia ser classificado como SaaS por ser produto SAP — mas e'
+    on-premise (RFC/ICM, nao OAuth multi-tenant). Roteando errado, o
+    incidente iria para o sub-agente de SaaS, que assume produto na nuvem."""
+    assert classify_domain({"interface_type": "po", "description": ""}) == "sap"
+
+
+def test_classify_domain_po_por_descricao_livre():
+    """Sem interface_type, o vocabulario de PO/PI tem de puxar para `sap`.
+    Os termos sao especificos de proposito: "po"/"pi" soltos casariam com
+    palavras portuguesas comuns."""
+    assert (
+        classify_domain({"interface_type": None, "description": "SAP PO mensagem FAILED"}) == "sap"
+    )
+    assert (
+        classify_domain(
+            {"interface_type": None, "description": "interface travada no Process Orchestration"}
+        )
+        == "sap"
+    )

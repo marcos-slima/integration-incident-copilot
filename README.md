@@ -72,9 +72,12 @@ conectores).
 - **Observabilidade**: Langfuse (opcional; tracing de todo o fluxo do
   agente quando configurado)
 - **Conectores**: OData / RFC / ServiceNow / Salesforce / Workday / SAP
-  Ariba / SAP CAP / SAP API Management (schema especulativo, ver
-  ARCHITECTURE.md) — reais (chamada HTTP/OAuth2 de verdade) quando
-  configurados, caem em mock só sem credencial/endpoint informado
+  Ariba / SAP CAP / SAP API Management (schema especulativo) / SAP PO-PI
+  (API não pública) — reais (chamada HTTP/OAuth2 de verdade) quando
+  configurados, caem em mock só sem credencial/endpoint informado.
+  **A matriz de qual conector foi de fato validado contra uma instância
+  real está em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — a lista
+  acima é de implementações, não de validações.
 
 ## Desenvolvimento local
 
@@ -153,6 +156,7 @@ final.
 | 53 | [38](#decisoes-de-arquitetura) | Prompt de diagnóstico como artefato versionado: `PromptSpec` (vers |
 | 54 | [39](#decisoes-de-arquitetura) | Login de sessão para a UI web (`/auth/login` + cookie HttpOnly; X-API-Key segue para máquinas) |
 | 55 | [40](#decisoes-de-arquitetura) | Manutenção de usuários pelo admin com ativação em duas etapas: token por e-mail → código por telefone (out-of-band até haver SMTP/SMS) |
+| 56 | [41](#decisoes-de-arquitetura) | Conector SAP PO/PI on-premise: Basic Auth nativo contra o Message Monitor, com OAuth2 opcional para quando há API Management na frente |
 
 ### 1. Alucinação por mistura de contexto (DA-1)
 
@@ -1970,3 +1974,77 @@ que fez a suíte depender da máquina — o conftest agora isola
 stack + migration 007): admin cria → token out-of-band → `/auth/verify/email`
 → admin reemite código → `/auth/verify/phone` → **login do usuário ativado
 com cookie de sessão** → `/diagnose` 200; senha errada 401.
+
+
+### 41. Conector SAP PO/PI: o middleware on-premise que não é REST-first (DA-56)
+
+**O problema.** SAP Process Orchestration / PI é middleware de integração
+A2A/B2B muito adotado em LATAM e Europa, e é onde muitos incidentes de
+integração nascem — mensagens em FAILED/HOLDING. O produto tinha 9
+conectores e nenhum falava com ele. E o PO/PI não é um sistema REST-first:
+a API do Message Monitor (`/mdt/api/1.0/facade`) **não está no Help
+Portal** como API suportada e **varia entre patches e releases** (7.3 ≠ 7.4 ≠
+7.5). Some-se a isso que a forma de expor o PO/PI muda tudo: proxy/WAF na
+DMZ, SAP Web Dispatcher, ADC, API Management como fachada, BTP + Cloud
+Connector, reverse invoke.
+
+**A solução.** `POConnector` com duas decisões que o esqueleto ingênuo não
+teria:
+
+1. **O conector é agnóstico quanto à exposição.** Não existe `detect_padro()`:
+   o padrão de exposição é escolha de infra, e a única coisa que o conector
+   precisa saber é *a fachada*. `PO_BASE_URL` aponta para o proxy/Web
+   Dispatcher/APIM e ele fala com o PO/PI por trás. Isso também é
+   orientador: expor a porta ICM direto na Internet é anti-pattern que o
+   conector não pode nem deve suportar, e a docstring diz isso.
+
+2. **Autenticação nativa é Basic Auth** (usuário/senha do stack ABAP) —
+   PO/PI não tem OAuth2. O modo `oauth2` existe para quando um API
+   Management **na frente** dele traduz Basic → OAuth2 Client Credentials,
+   reaproveitando o mesmo contrato de `odata_connector`/`ariba_connector`.
+   Fail-closed: `po_auth_mode=oauth2` sem token URL levanta
+   `ConfigurationError` em vez de mandar Basic para um token endpoint e
+   receber 401 sem explicação.
+
+**O bug do esqueleto.** A primeira versão do desenho passava
+`httpx.get(..., proxies={...})` — `proxies` foi **removido no httpx 0.28**
+(o projeto está em 0.28.1): `TypeError` na primeira chamada real, e nenhum
+teste mock a pegaria. Além disso o esqueleto usava `httpx.get` de módulo
+(quebra a injeção de `MockTransport`, convenção da casa para exercitar o
+caminho HTTP real) e não passava por `circuit_breaker_guard` nem por
+`validate_identifier_charset` — este último é o controle que impede
+injeção de query string a partir do identifier do usuário, e nenhum
+conector real pode ser a exceção.
+
+**O que a API instável impôs no código.** O parser é deliberadamente
+tolerante (`_extract_messages`): lista direta, envelope `messages`,
+envelope OData (`d.results`) e objeto único, todos aceitos — porque um
+formato inesperado no PO/PI tem de virar evidência legível, não traceback
+no grafo. Resposta não-JSON (o Message Monitor pode responder XML
+conforme patch) vira `UNEXPECTED_CONTENT_TYPE` com o path verificado, não
+`JSONDecodeError`. E nenhum parâmetro que não pudesse ser verificado foi
+enviado: o desenho original mandava `maxRows=20`, que não está documentado
+em lugar nenhum — a lista é limitada no resumo, não na chamada.
+
+**A honestidade do status.** Este conector entra no registro, no Literal,
+no supervisor, no CLI, no dropdown e no catálogo do admin — e a matriz de
+`docs/ARCHITECTURE.md` o marca com ⚠️ **API não pública, nunca validado
+contra um PO/PI real**, na mesma categoria de risco do `APIManagementConnector`.
+A cassette `tests/cassettes/po_message_monitor.json` é declarada
+**sintética** no próprio `_source`, porque as outras cassettes são
+capturas reais e esta não tem como ser.
+
+**Bug de preexistente encontrado no caminho (corrigido aqui).**
+`CONNECTOR_TYPES`, no catálogo de sistemas do admin (DA-49), **não tinha
+`successfactors`** — o Literal aceitava, o supervisor roteava, o CLI e a
+UI ofereciam, e a correlação DA-50, que resolve incidente→sistema por
+`connector_type`, não tinha por onde casar um incidente de SuccessFactors.
+O gate `connector_reachable` **afirmava** cobrir o catálogo admin na própria
+prosa e nunca lia o arquivo. Agora ele lê, e há teste para a superfície.
+
+**Validação.** 14 testes: mock, filtro de status, identifier desconhecido,
+`use_real` sem URL (falha alto), `oauth2` sem token URL (falha alto),
+caminho Basic Auth via `MockTransport`, detalhe por `messageId`, modo
+OAuth2 (Client Credentials + Bearer), tolerância do parser, resposta
+não-JSON, rejeição de identifier com injection, erro HTTP e teto de linhas
+no resumo. Suíte completa e gates verdes.

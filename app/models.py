@@ -24,6 +24,7 @@ class IncidentRequest(BaseModel):
             "workday",
             "ariba",
             "successfactors",
+            "po",
             "cap",
             "apim",
         ]
@@ -89,6 +90,7 @@ class IncidentEventData(BaseModel):
             "workday",
             "ariba",
             "successfactors",
+            "po",
             "cap",
             "apim",
         ]

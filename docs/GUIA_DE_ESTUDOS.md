@@ -33,7 +33,7 @@ promptfoo, Docker Compose, GitHub Actions.
 **Por que importa como peca de portfolio:** nao e so "um RAG que
 funciona" - e um agente com guardrails deterministicos (nao confia
 cegamente no LLM), decisoes de modelo embasadas em comparacao formal,
-oito conectores multi-vendor (quatro validados contra sistema real: Salesforce, ServiceNow, CAP, RFC/ABAP Trial — nao
+dez conectores multi-vendor (quatro validados contra sistema real: Salesforce, ServiceNow, CAP, RFC/ABAP Trial — nao
 so mock), camada A2A real (protocolo aberto), e um historico
 documentado de bugs reais encontrados e corrigidos com metodologia,
 nao achismo.
@@ -200,7 +200,7 @@ Detalhamento completo: README.md, seção "Decisões de Arquitetura" (14 itens)
 5. Field(description=...) não influencia geração via with_structured_output no Ollama — só restringe tipo/formato. Correção real exigiu texto no prompt.
 6. Isolamento de teste quebrado: 7 testes demo_mode/mock dependiam do .env vazio — corrigido com monkeypatch explícito.
 7. Encoding OData v4: httpx codifica espaço como "+", CAP exige "%20" — corrigido com urllib.parse.quote.
-8. pyrfc arquivado pela SAP (maio/2026) — bloqueio de RFC é pessoal (falta de S-user), não comercial pro cliente real.
+8. pyrfc arquivado pela SAP (maio/2026) — o bloqueio de RFC na época era pessoal (falta de S-user), não comercial pro cliente real. Contornado depois: o RFC foi validado contra ABAP Cloud Developer Trial (A4H rel 754, ver a matriz de conectores).
 9. Diagrama do README estava paralelo, fluxo real é sequencial — corrigido.
 10. Alguém da equipe mantinha a DA-32 na lista de "candidatas" do CLAUDE.md depois de ela ter sido entregue — nenhum teste pegava drift de documentação.
 11. O primeiro quality gate (DA-51) rejeitava `expected_sources: []`, que é a forma **correta** nos casos `out_of_scope`: o gate acertava a forma e errava o significado. Gate que erra a premissa é desligado na primeira semana.
@@ -241,4 +241,4 @@ Lista completa: docs/ferramentas-sustentacao-ecossistema.md
 - Ver o processo completo: docs/PROCESSO_DESENVOLVIMENTO.md
 - Tese de posicionamento (TCO): docs/TCO_SAP_AI_CORE_VS_SELF_HOSTED.md
 - Qualidade verificável: `uv run python scripts/quality_gate.py` (DA-51) e o detalle em `docs/QUALITY_GATES.md`
-- Próximos passos: validar schema real do APIManagementConnector contra tenant real (implementado, mas especulativo), validação real de Workday/Ariba/RFC (bloqueados), definir corte de v1.0
+- Próximos passos: validar schema real do APIManagementConnector contra tenant real (implementado, mas especulativo), validação real de Workday/Ariba/SuccessFactors/OData/PO-PI (bloqueados por falta de tenant; ver a matriz de conectores), definir corte de v1.0

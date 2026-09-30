@@ -7,6 +7,9 @@
 > Fase 9: fechamento dos conectores multi-vendor restantes, GraphRAG
 > real (desligado por default) e a camada A2A.
 
+> **Nota de estado (documento histórico).** Este tutorial descreve a Fase 9, no ponto em que foi escrito. A lista de conectores **não validados contra instância real** mudou desde então: `SalesforceConnector` passou a ser validado contra uma Developer Edition real, e a matriz completa (10 conectores) está em [ARCHITECTURE.md](ARCHITECTURE.md#conectores---mock-vs-real-hoje). O que segue descreve o estado da Fase 9, não o de hoje.
+>
+
 ## 1. Motivo desta fase
 
 Ao final da Fase 8, uma pergunta direta ("alguma dívida técnica em

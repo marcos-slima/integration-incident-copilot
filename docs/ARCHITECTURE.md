@@ -129,13 +129,14 @@ codigo Python para ativar - so preencher variaveis no `.env`.
 
 | Conector | Estado hoje | Falta so |
 |---|---|---|
-| `ODataConnector` | **Real** (OAuth2 client_credentials + OData v2) quando `ODATA_SERVICE_URL` configurado | Um tenant CPI/Integration Suite real para validar contra producao |
+| `ODataConnector` | **Real** (OAuth2 client_credentials + OData v2) quando `ODATA_SERVICE_URL` configurado — ⚠️ **NUNCA validado contra instância real** | Um tenant CPI/Integration Suite real para validar contra producao |
 | `RFCConnector` | **Real, validado contra ABAP Cloud Developer Trial real** (A4H rel 754, `RFC_SYSTEM_INFO` via `pyrfc` 3.3.1 + SDK 7.50 PL19) | `BAPI_IDOC_STATUS` nao disponivel no Trial — criar funcao Z ou usar landscape real para validar BAPI especifica |
 | `ServiceNowConnector` | **Real, validado contra ServiceNow PDI real** (Table API via HTTP, Basic Auth) | Nada - segundo conector com validacao ponta-a-ponta contra sistema real |
 | `SalesforceConnector` | **Real, validado contra Salesforce Developer Edition real** (OAuth2 Client Credentials + SOQL) | Nada - primeiro conector com validacao ponta-a-ponta contra sistema real, nao so mock |
 | `POConnector` | **Real** (Basic Auth nativo + `/mdt/api/1.0/facade`) quando `PO_BASE_URL` apontar para a fachada exposta. ⚠️ **API NAO PUBLICA**: o Message Monitor nao esta no Help Portal e varia entre patches/releases, e o payload e' lido de forma tolerante porisso | Validar contra um PO/PI real (7.5) e confirmar o path/formato; o Alert Inbox (`/nwa/api/1.0/alerts`) ainda nao foi implementado |
-| `WorkdayConnector` | **Real** (OAuth2 + REST) quando `WORKDAY_TENANT` configurado | Um tenant Workday real |
-| `AribaConnector` | **Real** (OAuth2 + REST) quando `ARIBA_BASE_URL` configurado | Acesso a Ariba Network/API Business Hub |
+| `WorkdayConnector` | **Real** (OAuth2 + REST) quando `WORKDAY_TENANT` configurado — ⚠️ **NUNCA validado contra instância real** | Um tenant Workday real |
+| `AribaConnector` | **Real** (OAuth2 + REST) quando `ARIBA_BASE_URL` configurado — ⚠️ **NUNCA validado contra instância real** | Acesso a Ariba Network/API Business Hub |
+| `SuccessFactorsConnector` | **Real** (OAuth2 Client Credentials + OData v2 PerPerson) quando `SUCCESSFACTORS_TENANT` configurado — ⚠️ **NUNCA validado contra instância real** (DA-34) | Um tenant SuccessFactors real; no cenário de referência SuccessFactors↔Workday só o lado Workday foi exercitado |
 | `CAPConnector` | **Real, validado contra SAP CAP real** (OData v4 + XSUAA client_credentials, BTP Trial) | Nada - terceiro conector com validacao ponta-a-ponta contra sistema real |
 | `APIManagementConnector` | ⚠️ **Implementado com schema ESPECULATIVO** (OAuth2 Client Credentials + endpoint assumido por analogia a produtos similares - NAO confirmado contra documentacao real do SAP API Management) | Validar contrato real da Analytics API contra um tenant de verdade; corrigir endpoint/schema conforme necessario |
 

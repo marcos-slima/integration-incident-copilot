@@ -23,9 +23,14 @@ agente + conectores) para esse público, rodando local ou sobre um
 provedor que o cliente já tenha — ver
 [TCO_SAP_AI_CORE_VS_SELF_HOSTED.md](docs/TCO_SAP_AI_CORE_VS_SELF_HOSTED.md).
 E não fica restrito a SAP: o mesmo contrato de conector (`app/connectors/`)
-já cobre cinco sistemas de referência não-SAP/multi-vendor de verdade
-(ServiceNow, Salesforce, Workday, SAP Ariba), não só mock — ver seção
-"Conectores" em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+cobre nove sistemas além do núcleo SAP — ServiceNow, Salesforce, Workday,
+SuccessFactors, SAP Ariba, SAP PO/PI e SAP API Management, todos com
+caminho real implementado (não só mock). **Só quatro foram validados contra
+uma instância de verdade** (RFC, ServiceNow, Salesforce e CAP); os demais
+têm o código de produção exercitado contra o formato documentado da API, mas
+nunca contra um tenant real. A matriz que diz quem é quem está em
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#conectores---mock-vs-real-hoje) —
+leia a coluna "validado" antes de citar um conector como prova.
 
 ## Arquitetura
 

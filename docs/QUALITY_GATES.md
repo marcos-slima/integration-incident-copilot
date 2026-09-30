@@ -24,6 +24,7 @@ verificadas à mão, uma vez, e nunca mais.
 | `docs_markup_integrity` | fences de código balanceados e links relativos `.md` resolvendo, em `docs/`, `README.md` e `CLAUDE.md` | instantâneo | todo push/PR |
 | `docs_code_references` | referências `app/x.py::símbolo` e `app/x.py:N` citadas na documentação existem no código e na linha, e toda citação de arquivo .md em backticks existe em lugar real (raiz, `docs/`, `data/sample_docs/` ou ao lado do doc) | instantâneo | todo push/PR |
 | `connector_reachable` | todo conector registrado em `app/connectors/__init__.py` é aceito pelo Literal de `interface_type`, pelas choices do `--interface` do CLI, pelo dropdown da UI web (`SYSTEMS` em `frontend/src/components/DiagnoseView.tsx`), é documentado em `app/models.py`/`app/admin/models.py`, e é coberto por `_SAP_INTERFACE_TYPES` ou `_SAAS_INTERFACE_TYPES` (exceto `apim`, cross-vendor por decisão) | instantâneo | todo push/PR |
+| `connector_validation_matrix` | todo conector registrado em `app/connectors/__init__.py` tem linha na matriz de validação de `docs/ARCHITECTURE.md` — a única fonte de verdade sobre o que foi testado contra instância real — e nenhuma linha órfã sobrou para conector removido. Apodreceu em silêncio uma vez: `successfactors` ficou meses sem linha, com todos os gates verdes | instantâneo | todo push/PR |
 | `migrations_and_dashboards` (job) | `alembic upgrade head` em banco limpo + as 45 queries dos 4 dashboards | ~1 min | todo push/PR |
 | `llm_eval` (job) | promptfoo contra o baseline; falha em regressão de caso | depende do provider | agendado 03:17 UTC + manual |
 
@@ -129,11 +130,20 @@ recusado com exit 1 — nunca interpretado como "zero regressões".
 - **Identificadores citados dentro de bloco de código.** O gate procura
   `app/…py::símbolo` em qualquer lugar do markdown, inclusive dentro de
   blocos ``` ; um exemplo ilustrativo num fence pode ser acusado.
-- **A semântica da descrição de um conector.** `connector_reachable` confere
-  que `successfactors` está no Literal e que o supervisor o cobre. Ele não
-  confere se o conector funciona contra um tenant real — SuccessFactors nunca
-  foi validado ponta a ponta contra um sistema de verdade, como nenhum dos
-  outros.
+- **Se o conector funciona contra um tenant real.** `connector_reachable` e
+  `connector_validation_matrix` conferem presença e coerência: que todo
+  conector registrado tem linha na matriz de
+  [docs/ARCHITECTURE.md](ARCHITECTURE.md#conectores---mock-vs-real-hoje)
+  e que nenhuma linha órfã sobrou. Nenhum dos dois confere a **verdade** da
+  afirmação "validado". `connector_validation_matrix` é o gate que impede a
+  apodrecer, não o que atesta: ele exige que a matriz * exista* e cubra todo
+  conector registrado, porque `SuccessFactorsConnector` (DA-34) ficou meses
+  sem linha nenhuma com todos os gates verdes. Já a matriz é uma afirmação
+  versionada, revisável no diff — o mesmo limite de `prompt_digest_measured`
+  (ver acima). Atestar a validação exigiria o artefato da execução real
+  (log da chamada contra o tenant, data, versão do produto), que hoje não
+  existe versionado para nenhum dos dez conectores, nem para os quatro
+  validados.
 
 ## Lições do processo
 

@@ -116,14 +116,21 @@ nenhuma delas):
 
 Login de usuário (cookie de sessão): `POST /auth/login` (usuário+senha →
 cookie), `POST /auth/logout`, `GET /auth/session` (quem está logado). O
-login é **fail-closed**: sem `WEB_UI_USERS` configurado no `.env` do
-servidor, `/auth/login` responde 401 sempre — não existe "login aberto".
-Usuários são criados pelo operador do servidor com a one-liner
-documentada no `.env.example`; a senha nunca trafega em texto no `.env`,
-só o hash PBKDF2.
+login é **fail-closed**: sem nenhuma fonte de usuário, 401 sempre.
+
+**De onde vêm os usuários (DA-55):** o admin mantém a tabela `web_users`
+(tela `/admin/users`, chave admin), e a primeira entrada de cada um exige
+**ativação em duas etapas**: token enviado ao e-mail (24h) e depois código
+de 6 dígitos enviado ao telefone (10 min) — ambos confirmados na própria
+tela de login ("Ativar conta"). Até haver SMTP/provedor de SMS
+configurados, o token/código sai **out-of-band**: aparece ao admin na
+tela `/admin/users`, que entrega ao usuário pelo canal que controlar.
+O `.env` (`WEB_UI_USERS`, DA-54) segue valendo como bootstrap do
+operador — o operador nunca fica trancado fora.
 
 O cookie de sessão **não** vale em MCP, A2A, Event Mesh ou admin — essas
-superfícies continuam exigindo as suas chaves dedicadas.
+superfícies continuam exigindo as suas chaves dedicadas. O admin de
+usuários (`/admin/users`) usa a `X-Admin-Api-Key` (DA-46), não a sessão.
 
 ### Interface web
 

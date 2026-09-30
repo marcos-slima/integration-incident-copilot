@@ -20,8 +20,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin.correlation import build_system_index, correlate
+from app.admin.models import WebUser
 from app.admin.repository import AdminRepository
 from app.admin.security import verify_admin_key
+from app.config import settings
 from app.db import get_db_session
 from app.services.incident_repository import IncidentRepository
 
@@ -564,3 +566,193 @@ async def get_incident(incident_id: str, session: SessionReq) -> dict[str, Any]:
         correlate(incident.interface_type, incident.connector_source_system, index),
         detail=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# DA-55: usuarios da UI web (CRUD + emissoes de ativacao)
+# ---------------------------------------------------------------------------
+
+
+class UserCreate(BaseModel):
+    username: str = Field(min_length=3, max_length=64, pattern=r"^[a-z0-9_.-]+$")
+    email: str = Field(min_length=3, max_length=256, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    phone: str = Field(min_length=8, max_length=32, pattern=r"^\+?[0-9\s-]{8,32}$")
+    password: str = Field(min_length=10, max_length=256)
+
+
+class UserPatch(BaseModel):
+    email: str | None = Field(default=None, max_length=256, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    phone: str | None = Field(default=None, max_length=32, pattern=r"^\+?[0-9\s-]{8,32}$")
+    status: str | None = Field(default=None, max_length=16)
+
+
+def _user_out(user: Any) -> dict[str, Any]:
+    """NUNCA expoe password_hash nem phone_code_hash — nem em list, nem em
+    detail. O hash e' o segredo; a resposta de admin e' lida por humano e
+    logada em lugar que humano le."""
+    return {
+        "id": str(user.id),
+        "username": user.username,
+        "email": user.email,
+        "phone": user.phone,
+        "status": user.status,
+        "email_verified_at": user.email_verified_at.isoformat() if user.email_verified_at else None,
+        "phone_verified_at": user.phone_verified_at.isoformat() if user.phone_verified_at else None,
+        "created_by": user.created_by,
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+        "updated_at": user.updated_at.isoformat() if user.updated_at else None,
+    }
+
+
+async def _get_user_or_404(session: AsyncSession, user_id: str) -> Any:
+    from uuid import UUID
+
+    try:
+        uid = UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Usuario nao encontrado") from None
+    user = await session.get(WebUser, uid)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Usuario nao encontrado")
+    return user
+
+
+@router.get("/users")
+async def list_users(session: SessionReq) -> list[dict[str, Any]]:
+    from sqlalchemy import select
+
+    users = (await session.scalars(select(WebUser).order_by(WebUser.created_at))).all()
+    return [_user_out(u) for u in users]
+
+
+@router.post("/users", status_code=status.HTTP_201_CREATED)
+async def create_user(payload: UserCreate, session: SessionReq) -> dict[str, Any]:
+    """Cria usuario PENDENTE de e-mail. A senha inicial entra como PBKDF2
+    (mesmo formato DA-54) — nunca em claro em lugar nenhum.
+
+    Out-of-band (SMTP nao configurado): o token de ativacao volta AQUI,
+    na resposta de admin (canal X-Admin-Api-Key), com WARNING no log.
+    Entrega real: `deliver_email` em app/webusers.py — token sai da
+    resposta sozinho quando o canal entrega de verdade."""
+    from app.webusers import create_user as domain_create_user
+
+    try:
+        user, tokens = await domain_create_user(
+            session,
+            username=payload.username,
+            email=payload.email,
+            phone=payload.phone,
+            password=payload.password,
+            created_by="admin-api",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from None
+    out = _user_out(user)
+    out["activation"] = {
+        "email_token": tokens.email_token,  # None quando entregue de verdade
+        "email_delivered": tokens.email_delivered,
+        "next_step": "email",
+    }
+    return out
+
+
+@router.post("/users/{user_id}/email-token")
+async def reissue_email_token(user_id: str, session: SessionReq) -> dict[str, Any]:
+    """Reemite o token da etapa 1 (so' para pendentes de e-mail)."""
+    from app.webusers import EMAIL_TOKEN_TTL_SECONDS, deliver_email, sign_email_token
+
+    user = await _get_user_or_404(session, user_id)
+    if user.status != "pending_email":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"reemissao de token de e-mail exige status pending_email (atual: {user.status})",
+        )
+    token = sign_email_token(user.username, EMAIL_TOKEN_TTL_SECONDS, settings.session_secret)
+    result = deliver_email(user.email, f"Token de ativacao: {token}")
+    await session.commit()
+    return {
+        "id": str(user.id),
+        "username": user.username,
+        "activation": {
+            "email_token": token if not result.delivered else None,
+            "email_delivered": result.delivered,
+            "next_step": "email",
+        },
+    }
+
+
+@router.post("/users/{user_id}/phone-code")
+async def reissue_phone_code(user_id: str, session: SessionReq) -> dict[str, Any]:
+    """Reemite o codigo da etapa 2 (so' para pendentes de telefone).
+
+    Out-of-band: o codigo volta AQUI (admin), nunca em rota publica."""
+    from datetime import UTC, datetime, timedelta
+
+    from app.webusers import (
+        PHONE_CODE_TTL_SECONDS,
+        deliver_sms,
+        generate_phone_code,
+        hash_phone_code,
+    )
+
+    user = await _get_user_or_404(session, user_id)
+    if user.status != "pending_phone":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"reemissao de codigo exige status pending_phone (atual: {user.status})",
+        )
+    code = generate_phone_code()
+    user.phone_code_hash = hash_phone_code(code, settings.session_secret)
+    user.phone_code_expires_at = datetime.now(UTC) + timedelta(seconds=PHONE_CODE_TTL_SECONDS)
+    result = deliver_sms(user.phone, f"Codigo de ativacao: {code}")
+    await session.commit()
+    return {
+        "id": str(user.id),
+        "username": user.username,
+        "activation": {
+            "phone_code": code if not result.delivered else None,
+            "phone_delivered": result.delivered,
+            "next_step": "phone",
+        },
+    }
+
+
+@router.patch("/users/{user_id}")
+async def patch_user(
+    user_id: str,
+    payload: UserPatch,
+    session: SessionReq,
+) -> dict[str, Any]:
+    """Atualiza e-mail/telefone e transiciona status (active<->disabled).
+    Mudanca de e-mail/telefone de usuario ATIVO reexige ativacao? Nao —
+    reexige reemissao manual das etapas; documentado na DA-55."""
+    user = await _get_user_or_404(session, user_id)
+    if payload.status is not None:
+        if payload.status not in ("active", "disabled"):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="status aceita: active, disabled",
+            )
+        if user.status.startswith("pending") and payload.status != "disabled":
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="usuario pendente so pode ser desativado ou ter as etapas reemitidas",
+            )
+        user.status = payload.status
+        if payload.status == "disabled":
+            user.phone_code_hash = None
+            user.phone_code_expires_at = None
+    if payload.email is not None:
+        user.email = payload.email
+    if payload.phone is not None:
+        user.phone = payload.phone
+    await session.commit()
+    await session.refresh(user)
+    return _user_out(user)
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(user_id: str, session: SessionReq) -> None:
+    user = await _get_user_or_404(session, user_id)
+    await session.delete(user)
+    await session.commit()

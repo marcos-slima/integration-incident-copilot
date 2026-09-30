@@ -378,3 +378,12 @@ textarea.field-input{resize:vertical;line-height:1.6}
   font-size:11px;cursor:pointer;font-family:'Inter',sans-serif
 }
 .session-logout:hover{border-color:#0EA5E9;color:#F8FAFC}
+.login-ok{
+  font-size:12px;color:#2E9E4F;background:#2E9E4F12;
+  border:1px solid #2E9E4F40;border-radius:4px;padding:8px 10px;margin-bottom:14px
+}
+.login-alt{
+  margin-top:12px;background:none;border:none;color:#0EA5E9;
+  font-size:12px;cursor:pointer;font-family:'Inter',sans-serif;text-decoration:underline
+}
+.login-alt:hover{color:#7DD3FC}

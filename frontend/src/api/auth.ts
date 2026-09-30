@@ -39,3 +39,38 @@ export async function login(username: string, password: string): Promise<Session
 export async function logout(): Promise<void> {
   await fetch('/auth/logout', { method: 'POST' });
 }
+
+// DA-55: ativacao de conta em duas etapas (rotas publicas, rate-limited).
+// Respostas 401 sao GENERICAS de proposito: usuario inexistente ==
+// token/codigo errado — o servidor nao revela quem existe.
+export async function verifyEmail(username: string, token: string) {
+  const res = await fetch('/auth/verify/email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, token }),
+  });
+  if (!res.ok) {
+    const message =
+      res.status === 429
+        ? 'Muitas tentativas — aguarde um minuto'
+        : 'token inválido ou usuário inexistente';
+    throw new ApiError(res.status, message);
+  }
+  return res.json();
+}
+
+export async function verifyPhone(username: string, code: string) {
+  const res = await fetch('/auth/verify/phone', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, code }),
+  });
+  if (!res.ok) {
+    const message =
+      res.status === 429
+        ? 'Muitas tentativas — aguarde um minuto'
+        : 'código inválido ou usuário inexistente';
+    throw new ApiError(res.status, message);
+  }
+  return res.json();
+}

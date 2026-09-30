@@ -17,6 +17,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin.correlation import build_system_index, correlate
@@ -85,6 +86,21 @@ class SystemPatch(BaseModel):
     base_url: str | None = None
     environment: str | None = Field(default=None, max_length=16)
     status: str | None = Field(default=None, max_length=16)
+    notes: str | None = None
+
+
+class WebSearchSourceCreate(BaseModel):
+    interface_type: str = Field(min_length=1, max_length=32)
+    site_filter: str = Field(min_length=1, max_length=2000)
+    tech_term: str = Field(min_length=1, max_length=128)
+    enabled: bool = True
+    notes: str | None = None
+
+
+class WebSearchSourcePatch(BaseModel):
+    site_filter: str | None = Field(default=None, max_length=2000)
+    tech_term: str | None = Field(default=None, max_length=128)
+    enabled: bool | None = None
     notes: str | None = None
 
 
@@ -448,6 +464,117 @@ async def delete_system(
     if not deleted:
         raise HTTPException(status_code=404, detail="Sistema nao encontrado")
     return {"status": "deleted", "id": system_id}
+
+
+# ---------------------------------------------------------------------------
+# web_search_sources (DA-57)
+# ---------------------------------------------------------------------------
+
+
+def _source_out(s) -> dict[str, Any]:
+    return {
+        "id": str(s.id),
+        "interface_type": s.interface_type,
+        "site_filter": s.site_filter,
+        "tech_term": s.tech_term,
+        "enabled": bool(s.enabled),
+        "notes": s.notes,
+        "created_at": s.created_at.isoformat() if s.created_at else None,
+        "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+    }
+
+
+def _validate_source_interface_type(interface_type: str) -> None:
+    """`interface_type` tem de estar no Literal do pipeline.
+
+    Sem isso, a tabela aceitaria um conector que o grafo nunca produz e a
+    linha ficaria como configuracao morta — o mesmo modo de falha que o
+    gate `connector_reachable` existe para barrar nas outras superficies.
+    """
+    from app.admin.models import CONNECTOR_TYPES
+
+    value = (interface_type or "").strip()
+    if value not in CONNECTOR_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(f"interface_type invalido: {value!r} (aceita: {', '.join(CONNECTOR_TYPES)})"),
+        )
+
+
+@router.get("/web-search-sources")
+async def list_web_search_sources(session: SessionReq) -> list[dict[str, Any]]:
+    repo = AdminRepository(session)
+    return [_source_out(s) for s in await repo.list_web_search_sources()]
+
+
+@router.post("/web-search-sources", status_code=status.HTTP_201_CREATED)
+async def create_web_search_source(
+    payload: WebSearchSourceCreate,
+    session: SessionReq,
+) -> dict[str, Any]:
+    _validate_source_interface_type(payload.interface_type)
+    repo = AdminRepository(session)
+    if await repo.get_web_search_source(interface_type=payload.interface_type) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"interface_type '{payload.interface_type}' ja tem fonte cadastrada",
+        )
+    try:
+        source = await repo.create_web_search_source(**payload.model_dump())
+        await session.commit()
+    except IntegrityError:
+        # O pre-check acima tem janela: dois admins criando o mesmo
+        # interface_type ao mesmo tempo passam os dois. Quem decide e' a
+        # constraint UNIQUE — sem este catch a segunda viraria 500.
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"interface_type '{payload.interface_type}' ja tem fonte cadastrada",
+        ) from None
+    return _source_out(source)
+
+
+@router.get("/web-search-sources/{source_id}")
+async def get_web_search_source(source_id: str, session: SessionReq) -> dict[str, Any]:
+    repo = AdminRepository(session)
+    source = await repo.get_web_search_source(source_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail="Fonte de busca nao encontrada")
+    return _source_out(source)
+
+
+@router.patch("/web-search-sources/{source_id}")
+async def patch_web_search_source(
+    source_id: str,
+    payload: WebSearchSourcePatch,
+    session: SessionReq,
+) -> dict[str, Any]:
+    # interface_type e' IMUTAVEL: e' a chave que o grafo usa para casar o
+    # incidente com a fonte. Trocar o valor em vez de criar outra linha
+    # deixaria o cadastro mentindo sobre qual conector tem qual filtro.
+    updates = payload.model_dump(exclude_unset=True)
+    for key, value in updates.items():
+        if key in {"site_filter", "tech_term"} and not (value or "").strip():
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"{key} nao pode ficar vazio: sem ele a linha e' ignorada "
+                "pela resolucao fail-closed",
+            )
+    repo = AdminRepository(session)
+    source = await repo.update_web_search_source(source_id, updates)
+    if source is None:
+        raise HTTPException(status_code=404, detail="Fonte de busca nao encontrada")
+    await session.commit()
+    return _source_out(source)
+
+
+@router.delete("/web-search-sources/{source_id}")
+async def delete_web_search_source(source_id: str, session: SessionReq) -> dict[str, Any]:
+    repo = AdminRepository(session)
+    if not await repo.delete_web_search_source(source_id):
+        raise HTTPException(status_code=404, detail="Fonte de busca nao encontrada")
+    await session.commit()
+    return {"status": "deleted", "id": source_id}
 
 
 @router.get("/systems/{system_id}/incidents")

@@ -49,20 +49,22 @@ from app.rag.graph_store import (
 from app.rag.retriever import retrieve
 from app.redaction import redact_pii_deep, redact_pii_text
 
-# Mapeamento de interface_type para fontes de busca web — compartilhado entre
-# web_search_node (fallback do grafo) e _make_web_search_tool (ReAct tool).
-# Centralizado aqui para evitar duplicidade e garantir consistência.
-_WEB_SEARCH_SITE_MAP: dict[str, str] = {
-    "odata": "site:help.sap.com OR site:community.sap.com/t5/technology-blogs-by-sap",
-    "rfc": "site:help.sap.com/docs/SAP_NETWEAVER OR site:community.sap.com OR site:github.com/SAP/PyRFC",
-    "cap": "site:cap.cloud.sap OR site:github.com/SAP/cloud-cap-samples OR site:community.sap.com",
-    "servicenow": "site:developer.servicenow.com OR site:community.sap.com OR site:help.sap.com",
-    "salesforce": "site:developer.salesforce.com OR site:community.sap.com OR site:github.com/SAP",
-    "workday": "site:community.workday.com OR site:community.sap.com",
-    "ariba": "site:help.sap.com/docs/ARIBA OR site:community.sap.com",
-    "apim": "site:help.sap.com/docs/SAP_API_MANAGEMENT OR site:community.sap.com",
-}
-_WEB_SEARCH_SITE_MAP_DEFAULT = "site:community.sap.com OR site:github.com/SAP OR site:help.sap.com"
+# DA-57: a fonte de busca web aprovada por `interface_type` deixou de ser
+# literal em codigo. Os dois mapas que viviam aqui
+# (`_WEB_SEARCH_SITE_MAP` com 8 entradas e o dict `tech_term` com 8) foram
+# para a tabela `web_search_sources`, e a resolucao e FAIL-CLOSED:
+# `resolve_approved_source()` devolve None quando nao ha linha habilitada
+# e a busca web NAO acontece. Sem fallback em codigo — um default
+# hardcoded seria a falha silenciosa que a DA-57 removeu: um conector novo
+# aceito em todo o produto, e jogado num filtro generico sem ninguem ver.
+#
+# Consequencia que vale registrar: `successfactors` (DA-34) e `po` (DA-56)
+# nunca estiveram em nenhum dos dois mapas, e perdiam tambem o `tech_term`
+# (cai no generico "SAP integration"), entao a identidade do conector se
+# perdia ANTES do filtro de site. A migration 008 semeia as 10 linhas.
+#
+# Ver app/services/web_search_sources.py e
+# app/admin/models.py::WebSearchSource.
 
 # Avaliacao externa (medio prazo, item 4): inicializa o client Langfuse
 # EXPLICITAMENTE com mask=redact_pii_deep, ANTES de qualquer
@@ -210,19 +212,32 @@ def graph_write_node(state: CopilotState) -> CopilotState:
 
 
 def _web_search_allowed(state) -> bool:
-    """P0.2: gate unico de egress para busca web - usado pelo
+    """P0.2 + DA-57: gate unico de egress para busca web - usado pelo
     web_search_node e pelo tool do agente ReAct. Exige web_search_enabled
-    (interruptor principal) E que WEB_SEARCH_POLICY permita."""
+    (interruptor principal), que WEB_SEARCH_POLICY permita E que exista uma
+    fonte APROVADA (linha habilitada em `web_search_sources`) para o
+    `interface_type` do incidente.
+
+    DA-57: o ramo `approved` antes retornava `True` incondicionalmente — o
+    nome prometia uma lista de sites aprovados que nao existia em lugar
+    nenhum do codigo. Agora `approved` significa o que diz: so passa quem
+    tem linha habilitada. Sem linha => sem busca web, e a fonte e' lida do
+    banco (fail-closed), nao de um default em codigo.
+    """
     from app.llm.gateway import classify_sensitivity
+    from app.services.web_search_sources import resolve_approved_source
 
     if not settings.web_search_enabled:
         return False
     policy = settings.web_search_policy
     if policy == "disabled":
         return False
-    if policy == "public_only":
-        return classify_sensitivity(state) == "public"
-    return True
+    if policy == "public_only" and classify_sensitivity(state) != "public":
+        return False
+    # Unica fonte de verdade da query: a linha aprovada. Sem ela, o
+    # interface_type nao tem onde buscar — e nao ha tech_term generico
+    # para cair (era exatamente o que escondia successfactors e po).
+    return resolve_approved_source(state.get("interface_type")) is not None
 
 
 @observe_span(name="web_search")
@@ -249,19 +264,16 @@ def web_search_node(state: CopilotState) -> CopilotState:
     if not _web_search_allowed(state) or top_score >= settings.web_search_threshold:
         return {"web_search_results": []}
 
-    interface_type = state.get("interface_type", "")
+    from app.services.web_search_sources import resolve_approved_source
 
-    site_filter = _WEB_SEARCH_SITE_MAP.get(interface_type, _WEB_SEARCH_SITE_MAP_DEFAULT)
-    tech_term = {
-        "odata": "OData SAP Gateway",
-        "rfc": "RFC ABAP BAPI",
-        "cap": "SAP CAP CDS BTP",
-        "servicenow": "ServiceNow SAP integration",
-        "salesforce": "Salesforce SAP integration",
-        "workday": "Workday SAP integration",
-        "ariba": "SAP Ariba integration",
-        "apim": "SAP API Management",
-    }.get(interface_type, "SAP integration")
+    # DA-57: fonte aprovada vem do banco (fail-closed). `_web_search_allowed`
+    # ja garantiu que existe; o segundo check cobre a corrida em que a linha
+    # foi desabilitada entre as duas leituras.
+    source = resolve_approved_source(state.get("interface_type"))
+    if source is None:
+        return {"web_search_results": []}
+    site_filter = source.site_filter
+    tech_term = source.tech_term
 
     # P0.2 (revisao arquitetural externa, 23/09/2026): a descricao ORIGINAL do
     # incidente nunca vai para a rede — pode conter nome de cliente, sistema,
@@ -831,9 +843,30 @@ def _sanitize_web_search_query(query: str) -> str:
 
 def _make_web_search_tool(state):
     """Fabrica um tool de busca web contextualizado com o interface_type
-    do incidente — o agente ReAct decide quando chamar."""
-    interface_type = state.get("interface_type") or ""
-    site_filter = _WEB_SEARCH_SITE_MAP.get(interface_type, _WEB_SEARCH_SITE_MAP_DEFAULT)
+    do incidente — o agente ReAct decide quando chamar.
+
+    DA-57: `site_filter` vem da linha aprovada em `web_search_sources`. Sem
+    linha habilitada nao ha tool — o ReAct recebe uma tool que diz explicitamente
+    que nao ha fonte aprovada, em vez de uma que buscaria num filtro generico.
+    """
+    from app.services.web_search_sources import resolve_approved_source
+
+    source = resolve_approved_source(state.get("interface_type"))
+
+    if source is None:
+
+        @lc_tool
+        def web_search_tool(query: str) -> str:
+            """Busca web indisponivel para este incidente (DA-57, fail-closed)."""
+            return (
+                "Busca web indisponivel: nao ha fonte aprovada cadastrada para o "
+                "interface_type deste incidente. Responda a partir do RAG local, do "
+                "conector e das regras — nao invente fonte externa."
+            )
+
+        return web_search_tool
+
+    site_filter = source.site_filter
 
     @lc_tool
     def web_search_tool(query: str) -> str:

@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -714,6 +715,8 @@ def _connector_root(
     ui: str | None = None,
     admin: str | None = None,
     matriz: str | None = None,
+    seed: str | None = None,
+    form: str | None = None,
 ) -> Path:
     (tmp_path / "app/connectors").mkdir(parents=True)
     (tmp_path / "app/agent").mkdir(parents=True)
@@ -732,7 +735,52 @@ def _connector_root(
     )
     (tmp_path / "docs").mkdir(exist_ok=True)
     (tmp_path / "docs/ARCHITECTURE.md").write_text(matriz or _SANE_MATRIZ, encoding="utf-8")
+    # Setima superficie (DA-57): o seed da migration das fontes de busca. Sem
+    # ele a resolucao fail-closed deixa o conector sem fonte aprovada — o
+    # sintoma (busca web silenciosamente desligada) so aparece em producao.
+    (tmp_path / "alembic/versions").mkdir(parents=True)
+    (tmp_path / "alembic/versions/008_create_web_search_sources.py").write_text(
+        seed or _SANE_SEED, encoding="utf-8"
+    )
+    # Oitava superficie (achado na DA-57): o <select name="connector_type">
+    # do formulario de sistemas do admin.
+    (tmp_path / "app/admin/templates").mkdir(parents=True)
+    (tmp_path / _ADMIN_SYSTEMS_FORM).write_text(form or _SANE_SISTEMS_FORM, encoding="utf-8")
     return tmp_path
+
+
+_ADMIN_SYSTEMS_FORM = Path("app/admin/templates/systems.html")
+
+# Mesmo formato do arquivo real: <select name="connector_type"> com <option
+# value="...">. O gate ancora no nome do select e nos values, e' nao no texto
+# visivel, para nao confundir com os selects de environment/status do mesmo
+# arquivo.
+_SANE_SISTEMS_FORM = """<form id="newsystem">
+  <select name="connector_type">
+    <option value="odata">odata</option>
+    <option value="successfactors">successfactors</option>
+    <option value="apim">apim</option>
+  </select>
+  <select name="environment">
+    <option value="prod">prod</option>
+  </select>
+  <select name="status">
+    <option value="active">active</option>
+  </select>
+</form>
+"""
+
+
+# Formato espelhado em alembic/versions/008_create_web_search_sources.py: o gate
+# ancora no bloco `SEED = [...]` e nos tuples ("interface_type", "site", "termo").
+_SANE_SEED = (
+    '"""DA-57: fontes de busca web aprovadas."""\n\n'
+    "SEED = [\n"
+    '    ("odata", "site:help.sap.com/docs/odata", "OData V4 SAP gateway"),\n'
+    '    ("successfactors", "site:help.sap.com/docs/sap-successfactors", "SFSF EC"),\n'
+    '    ("apim", "site:help.sap.com/docs/api-management", "SAP API Management"),\n'
+    "]\n"
+)
 
 
 _SANE_REGISTRY = (
@@ -842,6 +890,88 @@ def test_connector_reachable_permite_apim_em_generic(tmp_path: Path) -> None:
         "_SAP_INTERFACE_TYPES = {'odata'}\n_SAAS_INTERFACE_TYPES = {'successfactors'}\n",
     )
     assert not [f for f in check_connector_reachable(root) if f.is_failure]
+
+
+def test_connector_reachable_acusa_seed_das_fontes_de_busca_sem_conector(
+    tmp_path: Path,
+) -> None:
+    """Setima superficie (DA-57): o conector esta em todas as outras seis e
+    mesmo assim nao tem linha no seed de web_search_sources. Com a resolucao
+    fail-closed o efeito e busca web desligada para ele, sem erro em
+    lugar nenhum — o tipo de coisa que so se descobre em producao.
+    """
+    seed_sem_apim = _SANE_SEED.replace(
+        '    ("apim", "site:help.sap.com/docs/api-management", "SAP API Management"),\n', ""
+    )
+    assert "apim" not in seed_sem_apim
+    root = _connector_root(
+        tmp_path, _SANE_REGISTRY, _literal_fiel(), _SANE_SUPERVISOR, seed=seed_sem_apim
+    )
+    falhas = [f for f in check_connector_reachable(root) if f.is_failure]
+    assert falhas, "seed sem o conector deveria reprovar"
+    assert "008_create_web_search_sources.py" in falhas[0].message
+    assert "apim" in falhas[0].message
+
+
+def test_connector_reachable_acusa_seed_inexistente(tmp_path: Path) -> None:
+    """O gate tambem falha se a migration sumir: a checagem do seed nao pode
+    passar por ausencia de arquivo (fail-closed, como o resto do gate)."""
+    root = _connector_root(tmp_path, _SANE_REGISTRY, _literal_fiel(), _SANE_SUPERVISOR)
+    (root / "alembic/versions/008_create_web_search_sources.py").unlink()
+    falhas = [f for f in check_connector_reachable(root) if f.is_failure]
+    assert falhas
+    assert "008_create_web_search_sources.py nao existe" in falhas[0].message
+
+
+def test_connector_reachable_acusa_formulario_de_sistemas_sem_conector(
+    tmp_path: Path,
+) -> None:
+    """Oitava superficie (achado na DA-57): o conector esta nas outras sete e
+    nao aparece no <select name="connector_type"> do formulario de sistemas do
+    admin. Sem essa linha ele nao TEM como ter `integration_system`, e a
+    correlacao DA-50 cai no fallback por `connector_type` — que e'
+    fail-closed com mais de um sistema do mesmo tipo. Nao e a mesma morte
+    das outras superficies (aqui nao ha erro, ha correlacao ambigua), e por
+    isso o gate precisa ler o arquivo em vez de confiar em `CONNECTOR_TYPES`.
+    """
+    form_sem_apim = _SANE_SISTEMS_FORM.replace('    <option value="apim">apim</option>\n', "")
+    assert "apim" not in form_sem_apim
+    root = _connector_root(
+        tmp_path, _SANE_REGISTRY, _literal_fiel(), _SANE_SUPERVISOR, form=form_sem_apim
+    )
+    falhas = [f for f in check_connector_reachable(root) if f.is_failure]
+    assert falhas, "formulario sem o conector deveria reprovar"
+    assert "systems.html" in falhas[0].message
+    assert "apim" in falhas[0].message
+
+
+def test_connector_reachable_ignora_selects_de_environment_e_status(tmp_path: Path) -> None:
+    """O gate ancora em `name="connector_type"`, nao no primeiro <select> do
+    arquivo: `prod`/`active` estao no mesmo template e nao sao conectores."""
+    root = _connector_root(tmp_path, _SANE_REGISTRY, _literal_fiel(), _SANE_SUPERVISOR)
+    assert not [f for f in check_connector_reachable(root) if f.is_failure]
+
+
+def test_connector_reachable_acusa_formulario_de_sistemas_inexistente(tmp_path: Path) -> None:
+    root = _connector_root(tmp_path, _SANE_REGISTRY, _literal_fiel(), _SANE_SUPERVISOR)
+    (root / _ADMIN_SYSTEMS_FORM).unlink()
+    falhas = [f for f in check_connector_reachable(root) if f.is_failure]
+    assert falhas
+    assert "systems.html nao existe" in falhas[0].message
+
+
+def test_repositorio_real_formulario_de_sistemas_cobre_o_literal() -> None:
+    """Trava a regressao no arquivo real, sem depender do gate: se alguem
+    remover `po` ou `successfactors` do <select> de novo, isto falha."""
+    html = (_ADMIN_SYSTEMS_FORM).read_text(encoding="utf-8")
+    bloco = re.search(r"<select\s+name=\"connector_type\"[^>]*>(.*?)</select>", html, re.DOTALL)
+    assert bloco is not None, "select de connector_type nao encontrado em systems.html"
+    oferidos = set(re.findall(r"""value=["']([a-z_]+)["']""", bloco.group(1)))
+    from app.admin.models import CONNECTOR_TYPES
+
+    assert set(CONNECTOR_TYPES) <= oferidos, (
+        f"conectores sem linha no formulario de sistemas: {sorted(set(CONNECTOR_TYPES) - oferidos)}"
+    )
 
 
 def test_connector_reachable_acusa_registry_e_settings_divergentes(tmp_path: Path) -> None:

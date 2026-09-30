@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}Fontes de busca web · Admin{% endblock %}
+{% block content %}
+<h2>Fontes de busca web aprovadas (DA-57)</h2>
+<p>
+  Uma linha por <code>interface_type</code>. É esta lista que monta a query de
+  busca web (termo técnico + filtro de site). A resolução é
+  <strong>fail-closed</strong>: conector <em>sem linha aqui</em> não tem busca
+  web — não existe filtro genérico em código.
+</p>
+<p class="warn">
+  <code>WEB_SEARCH_POLICY=approved</code> só libera a busca para o que estiver
+  <strong>habilitado</strong> nesta tabela. Desmarcar o <em>enabled</em> equivale a
+  remover a fonte, sem perder o cadastro.
+</p>
+<button onclick="loadSources()">Recarregar</button>
+<table id="sources">
+  <thead><tr>
+    <th>interface_type</th><th>tech_term</th><th>site_filter</th>
+    <th>enabled</th><th>Notas</th><th>Ações</th>
+  </tr></thead>
+  <tbody id="sources-body"><tr><td colspan="6">carregando…</td></tr></tbody>
+</table>
+
+<h3>Nova fonte</h3>
+<form id="newsource" onsubmit="return addSource(event)">
+  <select name="interface_type">
+    <option value="odata">odata</option>
+    <option value="rfc">rfc</option>
+    <option value="servicenow">servicenow</option>
+    <option value="salesforce">salesforce</option>
+    <option value="workday">workday</option>
+    <option value="ariba">ariba</option>
+    <option value="successfactors">successfactors</option>
+    <option value="cap">cap</option>
+    <option value="apim">apim</option>
+    <option value="po">po</option>
+  </select>
+  <input name="tech_term" placeholder="termo técnico (ex: OData SAP Gateway)" required>
+  <input name="site_filter" placeholder="site:help.sap.com OR site:community.sap.com" required>
+  <input name="notes" placeholder="notas (opcional)">
+  <button type="submit">Adicionar</button>
+</form>
+
+<h3>Editar fonte <span id="edit-id"></span></h3>
+<div id="edit" hidden>
+  <form id="edit-form" onsubmit="return saveEdit(event)">
+    <input name="tech_term" placeholder="novo tech_term — vazio mantém o atual">
+    <input name="site_filter" placeholder="novo site_filter — vazio mantém o atual">
+    <input name="notes" placeholder="novas notas — vazio mantém as atuais">
+    <button type="submit">Salvar</button>
+    <button type="button" onclick="cancelEdit()">cancelar</button>
+  </form>
+  <p class="warn">
+    <code>interface_type</code> não é editável: trocar o conector de uma linha
+    deixaria a linha antiga servindo o conector errado.
+  </p>
+</div>
+
+<p class="warn" id="msg"></p>
+
+<script>
+function loadSources() {
+  adminFetch('/admin/api/web-search-sources').then(r => {
+    if (r.status === 401) throw new Error('chave admin inválida — insira em cima');
+    if (r.status === 503) throw new Error('DB não configurado (DATABASE_URL ausente)');
+    return r.json();
+  }).then(rows => {
+    const tb = document.getElementById('sources-body');
+    tb.innerHTML = '';
+    if (!rows.length) {
+      tb.innerHTML = '<tr><td colspan="6">nenhuma fonte cadastrada — ' +
+        'rode <code>alembic upgrade head</code> para o seed dos 10 conectores</td></tr>';
+      return;
+    }
+    for (const s of rows) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td><code>${escapeHtml(s.interface_type)}</code></td>
+        <td>${escapeHtml(s.tech_term)}</td>
+        <td><code>${escapeHtml(s.site_filter)}</code></td>
+        <td>${s.enabled ? 'sim' : 'não'}</td>
+        <td>${escapeHtml(s.notes || '—')}</td>
+        <td>
+          <button onclick="editSource('${s.id}')">editar</button>
+          <button onclick="toggleSource('${s.id}', ${s.enabled ? 'false' : 'true'})">
+            ${s.enabled ? 'desabilitar' : 'habilitar'}</button>
+          <button onclick="delSource('${s.id}')">remover</button>
+        </td>`;
+      tb.appendChild(tr);
+    }
+  }).catch(e => document.getElementById('msg').textContent = e.message);
+}
+function editSource(id) {
+  const f = document.getElementById('edit-form');
+  f.dataset.id = id;
+  f.querySelector('[name=tech_term]').value = '';
+  f.querySelector('[name=site_filter]').value = '';
+  f.querySelector('[name=notes]').value = '';
+  f.querySelector('[name=tech_term]').placeholder =
+    'novo tech_term — vazio mantém o atual';
+  document.getElementById('edit-id').textContent = id;
+  document.getElementById('edit').hidden = false;
+}
+function cancelEdit() {
+  document.getElementById('edit').hidden = true;
+}
+function saveEdit(e) {
+  e.preventDefault();
+  const f = e.target;
+  const fd = new FormData(f);
+  const body = {};
+  for (const [k, v] of fd.entries()) if (v !== '') body[k] = v;
+  if (!Object.keys(body).length) { cancelEdit(); return false; }
+  adminFetch('/admin/api/web-search-sources/' + f.dataset.id,
+    {method:'PATCH', body: JSON.stringify(body)})
+    .then(r => r.ok ? null : r.json().then(j => { throw new Error(j.detail); }))
+    .then(() => { cancelEdit(); return loadSources(); })
+    .catch(err => document.getElementById('msg').textContent = err.message);
+  return false;
+}
+function toggleSource(id, enabled) {
+  adminFetch('/admin/api/web-search-sources/' + id, {method:'PATCH', body: JSON.stringify({enabled})})
+    .then(() => loadSources()).catch(e => document.getElementById('msg').textContent = e.message);
+}
+function delSource(id) {
+  if (!confirm('Remover esta fonte? O conector volta a ficar sem busca web (fail-closed).')) return;
+  adminFetch('/admin/api/web-search-sources/' + id, {method:'DELETE'})
+    .then(() => loadSources()).catch(e => document.getElementById('msg').textContent = e.message);
+}
+function addSource(e) {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const body = Object.fromEntries([...f.entries()].map(([k,v]) => [k, v === '' ? null : v]));
+  body.enabled = true;
+  adminFetch('/admin/api/web-search-sources', {method:'POST', body: JSON.stringify(body)})
+    .then(r => r.ok ? loadSources() : r.json().then(j => { throw new Error(j.detail); }))
+    .then(() => e.target.reset())
+    .catch(err => document.getElementById('msg').textContent = err.message);
+  return false;
+}
+loadSources();
+</script>
+{% endblock %}

@@ -726,6 +726,19 @@ def _dict_keys(bloco: str, nome: str) -> set[str]:
     return set(re.findall(r"""['"]([a-z_]+)['"]\s*:""", match.group(1)))
 
 
+def _registry_pairs(root: Path) -> dict[str, str]:
+    """Chave de registro -> nome da classe, lidos do proprio `_REGISTRY`.
+
+    Derivar a classe da chave nao funciona: `apim` -> `ApimManagement...`
+    e nao `APIManagementConnector`. O registry ja declara o par certo.
+    """
+    fonte = (root / CONNECTORS_SOURCE).read_text(encoding="utf-8")
+    match = re.search(r"^_REGISTRY[^=\n]*=\s*\{(.*?)^\}", fonte, flags=re.MULTILINE | re.DOTALL)
+    if match is None:
+        raise ValueError(f"_REGISTRY nao encontrado em {CONNECTORS_SOURCE}")
+    return dict(re.findall(r"""["']([a-z_]+)["']\s*:\s*(\w+)\s*,""", match.group(1)))
+
+
 def _registered_connectors(root: Path) -> set[str]:
     fonte = (root / CONNECTORS_SOURCE).read_text(encoding="utf-8")
     conectores = _dict_keys(fonte, "_REGISTRY")
@@ -895,7 +908,69 @@ def check_connector_reachable(root: Path = REPO_ROOT) -> list[Finding]:
     return _ok(check)
 
 
+def check_connector_validation_matrix(root: Path = REPO_ROOT) -> list[Finding]:
+    """Todo conector registrado precisa de linha na matriz de validacao, e
+    nenhuma linha pode sobreviver a um conector removido do registro.
+
+    A matriz em `docs/ARCHITECTURE.md` e' a unica fonte de verdade sobre
+    "isto foi testado contra um sistema de verdade?". O
+    `SuccessFactorsConnector` (DA-34) ficou meses sem linha nenhuma — o
+    Literal aceitava, o supervisor roteava, a UI oferecia, e a matriz
+    (a unica que responderia a pergunta) nao falava nele. Nenhum gate
+    acusava, porque nenhum gate lia a matriz.
+
+    O gate tambem segura o outro lado: linha sem conector registrado e'
+    documentation de um conector que nao existe, que e' como prosa
+    "sabia" e herda: ler "RFCConnector foi validado contra ABAP real" e
+    nao perguntar se o RFCCONNECTOR ainda existe.
+    """
+    check = "connector_validation_matrix"
+    try:
+        conectores = _registered_connectors(root)
+    except ValueError as exc:
+        return _fail(check, str(exc))
+
+    arquitetura = (root / ARCHITECTURE_DOC).read_text(encoding="utf-8")
+    # So a tabela da matriz: linhas `| `XConnector` | ... |`. Sem o nome da
+    # classe, a prosa do documento (que menciona conectores de passagem)
+    # contaria como documentacao.
+    linhas = [
+        linha for linha in arquitetura.splitlines() if re.match(r"^\|\s*`\w*Connector`", linha)
+    ]
+    if not linhas:
+        return _fail(
+            check, f"{ARCHITECTURE_DOC}: nenhuma linha de matriz de conectores reconhecida"
+        )
+    documentados = {re.match(r"^\|\s*`(\w*Connector)`", linha).group(1) for linha in linhas}
+
+    # A ligacao chave->classe vem do registry (ver `_registry_pairs`): o
+    # nome da classe e' a identidade que a matriz documenta.
+    try:
+        pares = _registry_pairs(root)
+    except ValueError as exc:
+        return _fail(check, str(exc))
+    faltando = sorted(
+        (chave, pares[chave]) for chave in sorted(conectores) if pares[chave] not in documentados
+    )
+    if faltando:
+        return _fail(
+            check,
+            f"{ARCHITECTURE_DOC}: conectores registrados sem linha na matriz de validacao "
+            f"{[classe for _, classe in faltando]} — a matriz e' a unica fonte de "
+            f"verdade sobre o que foi testado contra instancia real",
+        )
+    orfas = sorted(d for d in documentados if d not in set(pares.values()))
+    if orfas:
+        return _fail(
+            check,
+            f"{ARCHITECTURE_DOC}: linha de matriz para conector nao registrado {orfas} "
+            f"({CONNECTORS_SOURCE})",
+        )
+    return _ok(check)
+
+
 GATES = {
+    "connector_validation_matrix": check_connector_validation_matrix,
     "rag_dataset_schema": check_rag_dataset,
     "corpus_coverage": check_corpus_coverage,
     "dataset_difficulty_mix": check_difficulty_mix,

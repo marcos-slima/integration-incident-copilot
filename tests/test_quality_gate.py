@@ -7,6 +7,7 @@ from app.evaluation.gates import (
     Thresholds,
     check_candidate_das,
     check_connector_reachable,
+    check_connector_validation_matrix,
     check_corpus_coverage,
     check_difficulty_mix,
     check_docs_code_references,
@@ -711,6 +712,7 @@ def _connector_root(
     cli: str | None = None,
     ui: str | None = None,
     admin: str | None = None,
+    matriz: str | None = None,
 ) -> Path:
     (tmp_path / "app/connectors").mkdir(parents=True)
     (tmp_path / "app/agent").mkdir(parents=True)
@@ -727,6 +729,8 @@ def _connector_root(
     (tmp_path / "frontend/src/components/DiagnoseView.tsx").write_text(
         ui or _SANE_UI, encoding="utf-8"
     )
+    (tmp_path / "docs").mkdir(exist_ok=True)
+    (tmp_path / "docs/ARCHITECTURE.md").write_text(matriz or _SANE_MATRIZ, encoding="utf-8")
     return tmp_path
 
 
@@ -872,3 +876,83 @@ def test_repositorio_real_tem_todo_conector_alcancavel() -> None:
         assert get_connector(nome) is not None
 
     assert not [f for f in check_connector_reachable() if f.is_failure]
+
+
+# ── gate connector_validation_matrix: a matriz de docs nao pode apodrecer ───
+_SANE_MATRIZ = """| Conector | Estado hoje | Falta so |
+|---|---|---|
+| `ODataConnector` | Real | tenant CPI |
+| `SFSFConnector` | Real | tenant SuccessFactors |
+| `APIManagementConnector` | schema ESPECULATIVO | validar contrato |
+"""
+
+
+def test_connector_validation_matrix_pass_quando_tem_linha_para_cada(tmp_path: Path) -> None:
+    root = _connector_root(tmp_path, _SANE_REGISTRY, _literal_fiel(), _SANE_SUPERVISOR)
+    assert not [f for f in check_connector_validation_matrix(root) if f.is_failure]
+
+
+def test_connector_validation_matrix_acusa_conector_sem_linha(tmp_path: Path) -> None:
+    """O defeito que durou meses: `SuccessFactorsConnector` (DA-34) nao tinha
+    linha nenhuma na matriz. O Literal aceitava, o supervisor roteava, a UI
+    oferecia — e a unica fonte de verdade sobre "foi testado contra um sistema
+    de verdade?" nao falava nele. Nenhum gate lia a matriz, entao o verde nao
+    dizia nada."""
+    sem_sfsf = "\n".join(
+        linha for linha in _SANE_MATRIZ.splitlines() if "SFSFConnector" not in linha
+    )
+    root = _connector_root(
+        tmp_path, _SANE_REGISTRY, _literal_fiel(), _SANE_SUPERVISOR, matriz=sem_sfsf
+    )
+    falhas = [f for f in check_connector_validation_matrix(root) if f.is_failure]
+    assert falhas
+    assert "SFSFConnector" in falhas[0].message
+
+
+def test_connector_validation_matrix_acusa_conector_novo_sem_documentar(tmp_path: Path) -> None:
+    """Direcao que impede a reincidencia: registrar um conector novo e' o
+    caminho feliz, e o gate tem de cobrar a documentacao no mesmo commit."""
+    # O par precisa entrar nos DOIS dicts: `_registered_connectors` ja falha
+    # quando _REGISTRY e _REAL_MODE_SETTING divergem, entao ancorar num so
+    # faria o gate acusar a divergencia em vez da falta de documentacao.
+    registry_com_mq = _SANE_REGISTRY.replace(
+        "    'apim': APIManagementConnector,\n",
+        "    'apim': APIManagementConnector,\n    'mq': MQConnector,\n",
+    ).replace(
+        "    'apim': 'apim_analytics_url',\n",
+        "    'apim': 'apim_analytics_url',\n    'mq': 'mq_base_url',\n",
+    )
+    assert registry_com_mq != _SANE_REGISTRY
+    root = _connector_root(tmp_path, registry_com_mq, _literal_fiel(), _SANE_SUPERVISOR)
+    falhas = [f for f in check_connector_validation_matrix(root) if f.is_failure]
+    assert falhas
+    assert "MQConnector" in falhas[0].message
+
+
+def test_connector_validation_matrix_acusa_linha_orfa(tmp_path: Path) -> None:
+    """Linha de conector que nao existe no registro e' documentacao que
+    'sabe': herda a validacao de um conector que foi removido."""
+    com_orfa = _SANE_MATRIZ + "| `HyperledgerConnector` | **Real, validado** | Nada |\n"
+    root = _connector_root(
+        tmp_path, _SANE_REGISTRY, _literal_fiel(), _SANE_SUPERVISOR, matriz=com_orfa
+    )
+    falhas = [f for f in check_connector_validation_matrix(root) if f.is_failure]
+    assert falhas
+    assert "HyperledgerConnector" in falhas[0].message
+
+
+def test_connector_validation_matrix_ignora_prosa_que_mentiona_conector(tmp_path: Path) -> None:
+    """So conta linha de tabela. Um conector citado de passagem no texto do
+    documento (a secao da DA-XX, a lista de limitacoes) nao documenta a
+    matriz — se contasse, apagar a tabela inteira deixaria o gate verde."""
+    sem_tabela = _SANE_MATRIZ.splitlines()[2]  # nada alem do cabecalho e o separador
+    prosa = "# Connectores\n\nO `SuccessFactorsConnector` foi implementado na DA-34.\n"
+    root = _connector_root(
+        tmp_path,
+        _SANE_REGISTRY,
+        _literal_fiel(),
+        _SANE_SUPERVISOR,
+        matriz=sem_tabela + "\n" + prosa,
+    )
+    falhas = [f for f in check_connector_validation_matrix(root) if f.is_failure]
+    assert falhas

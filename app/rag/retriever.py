@@ -77,6 +77,14 @@ class _FastEmbedWrapper:
     def embed_query(self, text: str) -> list[float]:
         return list(next(self._model.embed([text])))
 
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        # DA-38: a ingestao (`app.rag.ingest`) indexa com o MESMO embedder da
+        # consulta, entao o adaptador tambem precisa saber indexar em lote.
+        # Sem este metodo, `ingest` falhava com
+        # "'_FastEmbedWrapper' object has no attribute 'embed_documents'" e o
+        # job `rag-quality` do CI nao conseguia popular a collection.
+        return [list(vector) for vector in self._model.embed(texts)]
+
 
 @lru_cache(maxsize=1)
 def _get_embeddings() -> "OllamaEmbeddings | _FastEmbedWrapper":

@@ -97,4 +97,9 @@ def is_loopback_origin(origin: str) -> bool:
         host = urlsplit(origin).hostname or ""
     except ValueError:
         return False
-    return host in {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+    # Isto nao e' bind: e' um conjunto de comparacao que classifica
+    # uma origem como loopback, para validar `require_loopback` na auditoria de
+    # rotas (DA-45). "0.0.0.0" aparece como *alvo a rejeitar* (apontar rota
+    # enterprise para 0.0.0.0 e' exatamente o que o gate recusa), nunca como
+    # endereco de escuta. O bandit le "0.0.0.0" e nao ve o uso.
+    return host in {"localhost", "127.0.0.1", "::1", "0.0.0.0"}  # nosec B104

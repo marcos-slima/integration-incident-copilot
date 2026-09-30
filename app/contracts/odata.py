@@ -21,6 +21,9 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 from collections.abc import Mapping
 
+from defusedxml import ElementTree as defused_element_tree
+from defusedxml.common import DefusedXmlException
+
 from app.contracts.model import KIND_ODATA, Contract, Entity, Property
 
 #: Tag que carrega a chave de uma entity type no EDMX 4.0. Em EDMX legado
@@ -160,9 +163,15 @@ def parse_odata_metadata(xml_text: str) -> Contract:
     que este detector pode fazer.
     """
     try:
-        root = ET.fromstring(xml_text)
+        root = defused_element_tree.fromstring(xml_text)
     except ET.ParseError as exc:
         raise MetadataError(f"$metadata nao e XML valido: {exc}") from exc
+    except DefusedXmlException as exc:
+        # DOCTYPE/DTD/entidades no $metadata. O texto vem de um host remoto
+        # configurado, entao e' entrada nao confiavel de qualquer jeito; aqui
+        # ele vira MetadataError (falhado limpo, que a DA-52 ja exige) em vez
+        # de estourar uma excecao de biblioteca pelo grafo.
+        raise MetadataError(f"$metadata com XML nao permitido (DTD/entidade): {exc}") from exc
 
     if _local(root.tag) not in {"Schema", "edmx", "Edmx"}:
         raise MetadataError(f"raiz inesperada em $metadata: {root.tag}")

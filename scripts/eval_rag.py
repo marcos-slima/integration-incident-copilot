@@ -80,16 +80,56 @@ def evaluate(dataset_path: str = "data/eval/rag_eval_dataset.json", top_k: int =
     print(f"MRR:         {mrr_total / n:.3f}")
     print(f"Precision@3: {precision_total / n:.3f}")
 
-    # Out-of-scope: verifica se score e baixo
+    # Out-of-scope: verifica se o pipeline NAO admite o caso.
+    #
+    # DA-42: medir isto no `score` (cosseno denso) estava errado por dois
+    # motivos, e o primeiro nao e' opiniao. Medido no corpus de avaliacao
+    # (fastembed, Qdrant limpo): o cosseno dos in-scope vai de 0.719 a 0.871 e
+    # o dos out-of-scope e' 0.753 e 0.779 — os grupos se SOBREPOEM. Nenhum
+    # limiar de cosseno separa os dois; o unico que faria (0.780) rejeitaria
+    # junto 4 dos 13 in-scope, trocando um falso reprovacao por uma perda
+    # real de recall. O limiar 0.7 antigo nao media "rejeicao": media
+    # similaridade de cosseno, que nao e a mesma coisa.
+    #
+    # O sinal que separa e' o cross-encoder reranqueado
+    # (`rerank_score_calibrated`, probabilidade DA-42): in-scope >= 0.975,
+    # out-of-scope <= 0.050. E' o mesmo numero que decide a admissao na
+    # pipeline (`_evidence_admission_score`) e na escalation, entao o gate
+    # passa a medir o comportamento real em vez de um proxy que nao
+    # discrimina.
+    #
+    # O threshold 0.5 e' o ponto neutro da sigmoid (sigma(0) = 0.50,
+    # documentado em `retriever._sigmoid_calibrate`), nao um numero
+    # ajustado para fazer o gate passar: ele fica a 0.45 do pior in-scope e a
+    # 0.45 do pior out-of-scope, ou seja, no meio da maior folga que existe
+    # entre os dois grupos. Um gate calibrado em cima do BERT precisao de
+    # re-medir a cada troca de reranker; o ponto neutro nao.
+    OOS_ADMISSION_MAX = 0.5
     print(f"\nOut-of-scope ({len(out_of_scope)} casos):")
     oos_ok = 0
     for case in out_of_scope:
         hits = retrieve(case["query"], target="incidents", top_k=1)
-        top_score = hits[0]["score"] if hits else 0.0
-        ok = top_score < 0.7
+        # Ausencia de hit e' rejeicao legitima; hit sem o campo calibrado NAO
+        # e' (significa que o rerank nao rodou, e tratar como 0.0 seria um
+        # falso verde — a liacao 2 de QUALITY_GATES.md).
+        if not hits:
+            admission = 0.0
+        else:
+            admission = hits[0].get("rerank_score_calibrated")
+            if admission is None:
+                raise RuntimeError(
+                    f"out-of-scope '{case['query'][:50]}': hit sem "
+                    f"rerank_score_calibrated; o gate nao pode medir rejeicao "
+                    f"neste estado (falso verde)"
+                )
+        ok = admission < OOS_ADMISSION_MAX
         oos_ok += int(ok)
         status = "✅" if ok else "❌"
-        print(f"  {status} score={top_score:.3f} query='{case['query'][:50]}'")
+        print(
+            f"  {status} admissao={admission:.3f} "
+            f"cosseno={hits[0]['score'] if hits else 0.0:.3f} "
+            f"query='{case['query'][:50]}'"
+        )
 
     print(f"\nOut-of-scope corretamente rejeitados: {oos_ok}/{len(out_of_scope)}")
 

@@ -204,7 +204,24 @@ class LlmUsage(Base):
 # Literal fechado dos conectores — o MESMO conjunto de interface_type do
 # pipeline (app/models.py::IncidentRequest) para o sistema poder ser
 # relacionado ao incidente via connector_type.
-CONNECTOR_TYPES = ("odata", "rfc", "servicenow", "salesforce", "workday", "ariba", "cap", "apim")
+# DA-56: `successfactors` faltava aqui. O Literal do pipeline aceitava, o
+# supervisor roteava, o CLI e a UI ofereciam — e a correlacao DA-50, que
+# resolve incidente->sistema por `connector_type`, nao tinha por onde casar
+# um incidente de SuccessFactors com o catalogo. Um conector aceito em todo
+# resto do produto e invisivel na unica tela que responde qual sistema e,
+# e um conector morto onde a pergunta e feita.
+CONNECTOR_TYPES = (
+    "odata",
+    "rfc",
+    "servicenow",
+    "salesforce",
+    "workday",
+    "ariba",
+    "successfactors",
+    "cap",
+    "apim",
+    "po",
+)
 
 SYSTEM_STATUSES = ("active", "degraded", "offline", "trial")
 SYSTEM_ENVIRONMENTS = ("prod", "stage", "dev", "test")

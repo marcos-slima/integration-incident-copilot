@@ -234,6 +234,30 @@ class Settings(BaseSettings):
     sfsf_client_id: str = ""
     sfsf_client_secret: str = ""
 
+    # SAP Process Orchestration / Process Integration, on-premise
+    # (app/connectors/po_connector.py, DA-56) - middleware A2A/B2B muito
+    # adotado em LATAM/Europa, onde incidentes de integracao nascem
+    # Messages FAILED/HOLDING. Autenticacao NATIVA do PO/PI e' Basic Auth
+    # (usuario/senha do stack ABAP): nao existe OAuth2 no PO/PI. O modo
+    # OAuth2 existe para o caso de um API Management na FRENTE dele
+    # reescrever a autenticacao (ver `po_auth_mode`).
+    #
+    # A URL nunca deve apontar direto para o PO/PI em producao - o
+    # conector e'agnesico quanto a forma de exposicao (proxy/WAF, SAP Web
+    # Dispatcher, ADC, APIM): informe o endpoint do FACHADA, e ele fala
+    # com o PO/PI por tras. `po_base_url` vazio = modo demo/mock, mesmo
+    # criterio dos demais conectores.
+    po_base_url: str = ""  # ex: https://wd-dmz.corp.example/po  (fachada, nao o PO/PI)
+    po_username: str = ""  # Basic Auth nativo (padrao)
+    po_password: str = ""
+    # "basic" = padrao nativo do PO/PI; "oauth2" = APIM na frente
+    # traduzindo Basic -> OAuth2 Client Credentials (mesmo padrao de
+    # `odata_connector`/`ariba_connector`, por isso a reutilizacao).
+    po_auth_mode: Literal["basic", "oauth2"] = "basic"
+    po_oauth_token_url: str = ""  # obrigatorio quando po_auth_mode="oauth2"
+    po_oauth_client_id: str = ""
+    po_oauth_client_secret: str = ""
+
     # SAP Ariba / Business Network (app/connectors/ariba_connector.py) -
     # OAuth2 Client Credentials contra o token endpoint da Ariba, REST
     # sobre o status de pedido de compra na rede. Representa o cenario

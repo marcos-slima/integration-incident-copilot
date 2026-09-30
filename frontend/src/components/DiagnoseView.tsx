@@ -37,6 +37,7 @@ const SYSTEMS: Array<[string, string]> = [
   ['successfactors', 'SAP SuccessFactors EC'],
   ['cap', 'SAP CAP / BTP'],
   ['apim', 'SAP API Management'],
+  ['po', 'SAP PO/PI (on-premise)'],
 ];
 
 // Limite de tamanho de arquivo p/ upload - alinhado ao limite do backend

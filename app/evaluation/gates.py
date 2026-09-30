@@ -19,6 +19,7 @@ PIPELINE_INTERFACE_TYPES = frozenset(
         "successfactors",
         "cap",
         "apim",
+        "po",
     }
 )
 DIFFICULTIES = frozenset({"easy", "medium", "hard", "out_of_scope"})
@@ -765,12 +766,26 @@ def check_connector_reachable(root: Path = REPO_ROOT) -> list[Finding]:
     # arquivo, e isso tambem e verificado.
     fonte_models = (root / PIPELINE_MODEL_SOURCE).read_text(encoding="utf-8")
     literais: set[str] = set()
-    for corpo in re.findall(
+    # Cada Literal e' conferido SEPARADAMENTE antes da uniao. `app/models.py`
+    # tem dois `interface_type` (IncidentRequest e o envelope de resposta) e a
+    # uniao mascararia a queda de um deles: o conector continuaria no conjunto
+    # pelo outro, o gate passaria, e o envelope voltaria a rejeitar 422 o que a
+    # request aceita. A union so serve para o espelho da constante abaixo.
+    corpos = re.findall(
         r"^\s*interface_type:?\s*(?:\(\s*)?Literal\[([^\]]*)\]", fonte_models, re.MULTILINE
-    ):
+    )
+    for corpo in corpos:
         literais |= set(re.findall(r"""['"]([a-z_]+)['"]""", corpo))
     if not literais:
         problemas.append(f"{PIPELINE_MODEL_SOURCE}: nenhum Literal de interface_type encontrado")
+    else:
+        for indice, corpo in enumerate(corpos, start=1):
+            faltando_aqui = sorted(conectores - set(re.findall(r"""['"]([a-z_]+)['"]""", corpo)))
+            if faltando_aqui:
+                problemas.append(
+                    f"{PIPELINE_MODEL_SOURCE}: Literal #{indice} de interface_type nao aceita "
+                    f"{faltando_aqui} (aceito pelo outro Literal, rejeitado por este)"
+                )
 
     faltando = sorted(conectores - literais)
     if faltando:
@@ -849,6 +864,31 @@ def check_connector_reachable(root: Path = REPO_ROOT) -> list[Finding]:
         ausentes = sorted(conectores - ui_valores)
         if ausentes:
             problemas.append(f"{UI_DROPDOWN_SOURCE}: dropdown nao oferece {ausentes} ao usuario")
+
+    # A sexta superficie e' o catalogo de sistemas do admin (DA-49), que
+    # mantem a propria tupla `CONNECTOR_TYPES` para poder casar incidente
+    # com sistema na correlacao (DA-50). Caso real (achado no DA-56):
+    # `successfactors` era aceito pelo Literal, coberto pelo supervisor,
+    # oferecido pelo CLI e pelo dropdown — e nao estava em `CONNECTOR_TYPES`,
+    # onde a propria prosa deste arquivo dizia que estava. A correlacao
+    # incident->system nao tinha por onde casar um SuccessFactors, e nenhuma
+    # das cinco checagens acima via isso: o gate afirmava cobrir o catalogo
+    # sem nunca le-lo.
+    try:
+        admin_fonte = (root / ADMIN_SYSTEMS_SOURCE).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return _fail(check, f"{ADMIN_SYSTEMS_SOURCE} nao existe — catalogo admin sem checagem")
+    m_cat = re.search(r"CONNECTOR_TYPES\s*=\s*\(([^)]*)\)", admin_fonte, re.DOTALL)
+    if m_cat is None:
+        problemas.append(f"{ADMIN_SYSTEMS_SOURCE}: CONNECTOR_TYPES nao encontrado")
+    else:
+        cat = set(re.findall(r"""['"]([a-z_]+)['"]""", m_cat.group(1)))
+        fora = sorted(conectores - cat)
+        if fora:
+            problemas.append(
+                f"{ADMIN_SYSTEMS_SOURCE}: CONNECTOR_TYPES nao cobre {fora} — a correlacao "
+                "incidente->sistema (DA-50) nao tem por onde casar esses conectores"
+            )
 
     if problemas:
         return _fail(check, "; ".join(problemas[:6]))

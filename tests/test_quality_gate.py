@@ -710,6 +710,7 @@ def _connector_root(
     supervisor: str,
     cli: str | None = None,
     ui: str | None = None,
+    admin: str | None = None,
 ) -> Path:
     (tmp_path / "app/connectors").mkdir(parents=True)
     (tmp_path / "app/agent").mkdir(parents=True)
@@ -717,7 +718,10 @@ def _connector_root(
     (tmp_path / "frontend/src/components").mkdir(parents=True)
     (tmp_path / "app/connectors/__init__.py").write_text(registry, encoding="utf-8")
     (tmp_path / "app/models.py").write_text(literal, encoding="utf-8")
-    (tmp_path / "app/admin/models.py").write_text(literal, encoding="utf-8")
+    # O catalogo admin (DA-49) tem a PROPRIA tupla `CONNECTOR_TYPES` — e' a
+    # sexta superficie do gate. O fixture precisa fornecer uma de verdade:
+    # o arquivo do admin nao e' o Literal do pipeline.
+    (tmp_path / "app/admin/models.py").write_text(admin or _SANE_ADMIN, encoding="utf-8")
     (tmp_path / "app/agent/supervisor.py").write_text(supervisor, encoding="utf-8")
     (tmp_path / "app/agent/graph.py").write_text(cli or _SANE_CLI, encoding="utf-8")
     (tmp_path / "frontend/src/components/DiagnoseView.tsx").write_text(
@@ -738,6 +742,9 @@ _SANE_REGISTRY = (
 
 _SANE_SUPERVISOR = "_SAP_INTERFACE_TYPES = {'odata'}\n_SAAS_INTERFACE_TYPES = {'successfactors'}\n"
 
+# Catalogo de sistemas do admin (DA-49) cobrindo o registro sane acima.
+_SANE_ADMIN = 'CONNECTOR_TYPES = ("odata", "successfactors", "apim")\n'
+
 _SANE_CLI = (
     'parser.add_argument("--interface", choices=["odata", "successfactors", "apim"],'
     " default=None)\n"
@@ -756,6 +763,23 @@ _SANE_UI = (
 def test_connector_reachable_pass_quando_tem_camada(tmp_path: Path) -> None:
     root = _connector_root(tmp_path, _SANE_REGISTRY, _literal_fiel(), _SANE_SUPERVISOR)
     assert not [f for f in check_connector_reachable(root) if f.is_failure]
+
+
+def test_connector_reachable_acusa_conector_ausente_no_catalogo_admin(tmp_path: Path) -> None:
+    """Sexta superficie (DA-56): o Literal aceita, o supervisor cobre, o CLI e a
+    UI oferecem — e o `CONNECTOR_TYPES` do catalogo admin (onde a correlacao
+    DA-50 resolve incidente->sistema) nao tem o conector. Era exatamente o
+    estado em que `successfactors` estava, com o gate verde."""
+    root = _connector_root(
+        tmp_path,
+        _SANE_REGISTRY,
+        _literal_fiel(),
+        _SANE_SUPERVISOR,
+        admin='CONNECTOR_TYPES = ("odata", "apim")\n',
+    )
+    falhas = [f for f in check_connector_reachable(root) if f.is_failure]
+    assert falhas
+    assert "CONNECTOR_TYPES" in falhas[0].message
 
 
 def test_connector_reachable_acusa_conector_inalcancavel(tmp_path: Path) -> None:

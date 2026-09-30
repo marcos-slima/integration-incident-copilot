@@ -78,7 +78,14 @@ class TestLogin:
     def test_login_certo_devolve_cookie_httponly(self, user_env: None) -> None:
         res = client.post("/auth/login", json={"username": "marcos", "password": "senha-correta"})
         assert res.status_code == 200
-        assert res.json() == {"ok": True, "username": "marcos"}
+        # mesmo shape de /auth/session — o campo `authenticated` e o que
+        # a UI usa para navegar; sem ele, login certo ainda prende o app
+        # na tela de login (bug real da homologacao)
+        assert res.json() == {
+            "authenticated": True,
+            "username": "marcos",
+            "ttl_hours": settings.session_ttl_hours,
+        }
         set_cookie = res.headers["set-cookie"].lower()
         assert "iic_session=" in set_cookie
         assert "httponly" in set_cookie

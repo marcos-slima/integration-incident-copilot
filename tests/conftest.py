@@ -21,6 +21,13 @@ import socket
 os.environ["API_KEY"] = ""
 os.environ["A2A_API_KEY"] = ""
 os.environ["ADMIN_API_KEY"] = ""  # DA-46/47/48: superficie admin no mesmo regime de isolamento
+# DA-55: mesmo motivo, agora para o banco. Com DATABASE_URL real no .env da
+# maquina (homologacao aponta para o postgres do compose), os testes que
+# esperam "sem banco" (test_admin_routes::test_models_list_sem_banco_503,
+# login sem usuarios, etc.) passavam a depender do host `postgres` do
+# compose — que nao resolve fora dele (socket.gaierror). Testes que
+# precisam de banco usam fixture SQLite em memoria (padrao test_admin_*).
+os.environ["DATABASE_URL"] = ""
 
 import pytest
 

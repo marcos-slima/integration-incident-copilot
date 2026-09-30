@@ -47,13 +47,21 @@ import hmac
 import logging
 import secrets
 import time
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.db import get_db_session
 from app.rate_limit import limiter
+from app.webusers import verify_login_db
+
+# Padrao da casa (padrao do admin desde DA-46): Annotated evita B008 de
+# Depends em default de argumento e deixa a assinatura legivel.
+DbDep = Annotated[AsyncSession | None, Depends(get_db_session)]
 
 logger = logging.getLogger(__name__)
 
@@ -213,22 +221,48 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=256)
 
 
+class VerifyEmailRequest(BaseModel):
+    """Etapa 1 da ativacao (DA-55): token recebido por e-mail."""
+
+    username: str = Field(min_length=1, max_length=64)
+    token: str = Field(min_length=1, max_length=256)
+
+
+class VerifyPhoneRequest(BaseModel):
+    """Etapa 2 da ativacao (DA-55): codigo de 6 digitos recebido por telefone."""
+
+    username: str = Field(min_length=1, max_length=64)
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
 def _users() -> dict[str, WebUser]:
     return parse_web_users(settings.web_ui_users)
 
 
 @router.post("/login")
 @limiter.limit("5/minute")
-def login(request: Request, body: LoginRequest, response: Response) -> dict[str, str | bool | int]:
+async def login(
+    request: Request,
+    body: LoginRequest,
+    response: Response,
+    db: DbDep,
+) -> dict[str, str | bool | int]:
     """Troca usuario+senha por cookie de sessao HttpOnly.
 
-    Fail-closed: sem WEB_UI_USERS configurado, responde 401 sempre —
-    nao existe "login aberto". Rate limit 5/min por IP — mais apertado
-    que o 10/min de /diagnose, porque aqui se testa senha.
+    DA-55: duas fontes de usuario, em ordem —
+    1. .env (WEB_UI_USERS, DA-54): bootstrap do operador, nunca desliga;
+    2. banco (web_users, status=active): mantido pelo admin, com ativacao
+       por e-mail+telefone concluida (DA-55).
+    Mesma resposta para usuario inexistente e senha errada (enumeracao);
+    fail-closed: sem nenhuma fonte configurada, 401 sempre. Rate limit
+    5/min por IP — mais apertado que o 10/min de /diagnose, porque aqui
+    se testa senha.
     """
     users = _users()
-    if not users or not verify_password(users, body.username, body.password):
-        # Mesma resposta para usuario inexistente e senha errada.
+    senha_ok = bool(users) and verify_password(users, body.username, body.password)
+    if not senha_ok:
+        senha_ok = await verify_login_db(db, username=body.username, password=body.password)
+    if not senha_ok:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="usuario ou senha invalidos",
@@ -269,6 +303,66 @@ def whoami(request: Request) -> dict[str, str | bool | int]:
         # que assina o cookie (settings.session_ttl_hours)
         "ttl_hours": settings.session_ttl_hours,
     }
+
+
+# ---------------------------------------------------------------------------
+# DA-55: ativacao de conta em duas etapas (rotas PUBLICAS, rate-limited)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/verify/email")
+@limiter.limit("5/minute")
+async def verify_email(
+    request: Request, body: VerifyEmailRequest, db: DbDep
+) -> dict[str, str | bool | int]:
+    """Etapa 1: token por e-mail. Resposta GENERICA para tudo que nao
+    fecha (usuario inexistente == token errado — enumeracao); 503 se o
+    banco nao esta configurado (ativacao e' do banco, nao do .env)."""
+    from app.webusers import confirm_email  # lazy: ciclo com app.auth
+
+    if db is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="ativacao de conta exige persistencia configurada",
+        )
+    try:
+        tokens = await confirm_email(db, username=body.username, token=body.token)
+    except LookupError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="token invalido ou usuario inexistente",
+        ) from None
+    # out-of-band: o codigo da etapa 2 volta SÓ na resposta de ADMIN
+    # (regeneracao), nunca aqui — rota publica
+    return {
+        "ok": True,
+        "next_step": "phone",
+        "phone_code_delivered": tokens.phone_delivered,
+    }
+
+
+@router.post("/verify/phone")
+@limiter.limit("5/minute")
+async def verify_phone(
+    request: Request, body: VerifyPhoneRequest, db: DbDep
+) -> dict[str, str | bool | int]:
+    """Etapa 2: codigo de 6 digitos. Unico-uso; sucesso ativa a conta
+    (login vale dali em diante). Mesma resposta generica de /verify/email."""
+    from app.webusers import confirm_phone  # lazy: ciclo com app.auth
+
+    if db is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="ativacao de conta exige persistencia configurada",
+        )
+    try:
+        user = await confirm_phone(db, username=body.username, code=body.code)
+    except LookupError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="codigo invalido ou usuario inexistente",
+        ) from None
+    return {"ok": True, "username": user.username, "status": user.status}
 
 
 # ---------------------------------------------------------------------------

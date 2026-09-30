@@ -16,6 +16,14 @@ esta configurada — mesmo padrao de app/services/incident_repository.py):
                       Salesforce, Workday, Ariba, CAP, APIM) que aparece
                       como connector_source_system/interface_type nos
                       incidentes. Fase B da superficie admin.
+    web_users          USUARIOS DA UI WEB (DA-55): manutencao pelo admin
+                      (CRUD em /admin/api/users + tela /admin/users) com
+                      ativacao em duas etapas — token por e-mail, depois
+                      codigo por telefone — antes do login valer. O hash
+                      e' PBKDF2 do mesmo formato da DA-54 (ponto como
+                      separador, por causa da interpolacao `$` do compose);
+                      login verifica AQUI primeiro e cai no WEB_UI_USERS
+                      do .env como bootstrap (mesma chave da DA-54).
 
 Colunas foram escolhidas compativeis com PostgreSQL E SQLite de teste
 (dialeto async aiosqlite): `Uuid` nativo-driver, sem JSONB, sem tipos
@@ -254,3 +262,56 @@ def percent_consumed(
         return None
     total = (tokens_in or 0) + (tokens_out or 0)
     return int(round(total * 100.0 / monthly_limit_tokens, ndigits=0))
+
+
+class WebUser(Base):
+    """Usuario da UI web mantido pelo admin (DA-55).
+
+    Maquina de status (append-descending, sem pulos):
+
+        pending_email -> (token por e-mail) -> pending_phone
+        pending_phone -> (codigo por telefone) -> active
+        active <-> disabled (pelo admin, reversivel)
+
+    `password_hash` e' o MESMO formato da DA-54 (pbkdf2_sha256.iter.salt
+    .hash, ponto como separador). O login (app/auth.py) verifica AQUI
+    primeiro e cai no WEB_UI_USERS do .env como bootstrap — o operador
+    nunca fica trancado fora por causa do banco.
+
+    `phone_code_hash` guarda so' o HASH do codigo de 6 digitos (nunca o
+    codigo), com `phone_code_expires_at`: codigo e' de unica usage e curto
+    (10 min). O token de e-mail e' assinado HMAC como o de sessao, com
+    namespace proprio ("verify-email:") para nunca colidir com um token
+    de sessao.
+    """
+
+    __tablename__ = "web_users"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    username: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(256), nullable=False)
+    email: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    phone: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pending_email", index=True
+    )
+    email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    phone_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    phone_code_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    phone_code_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_by: Mapped[str] = mapped_column(String(64), nullable=False, default="bootstrap")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_now, onupdate=_now
+    )
+
+    def __repr__(self) -> str:
+        return f"<WebUser {self.username} status={self.status}>"

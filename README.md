@@ -152,6 +152,7 @@ final.
 | 52 | [37](#decisoes-de-arquitetura) | Detecção de drift de contrato SAP: probe `$metadata` (interface se |
 | 53 | [38](#decisoes-de-arquitetura) | Prompt de diagnóstico como artefato versionado: `PromptSpec` (vers |
 | 54 | [39](#decisoes-de-arquitetura) | Login de sessão para a UI web (`/auth/login` + cookie HttpOnly; X-API-Key segue para máquinas) |
+| 55 | [40](#decisoes-de-arquitetura) | Manutenção de usuários pelo admin com ativação em duas etapas: token por e-mail → código por telefone (out-of-band até haver SMTP/SMS) |
 
 ### 1. Alucinação por mistura de contexto (DA-1)
 
@@ -1911,3 +1912,61 @@ malformada pulada sem abrir auth, iterações fracas rejeitadas). Achado real
 do processo: o cookie jar do httpx persiste entre testes no client
 module-level — um login de teste anterior autenticava um teste que devia
 provar o 401; o fixture agora limpa o jar.
+
+
+### 40. Manutenção de usuários pelo admin, com ativação por e-mail e telefone (DA-55)
+
+**O problema.** A DA-54 resolveu o login humano com usuário+senha, mas a
+manutenção de usuários seguia no `.env` (`WEB_UI_USERS`): criar um usuário
+era editar arquivo de infraestrutura e reiniciar o container — e não havia
+verificação de posse do e-mail nem do telefone: quem tivesse a senha inicial
+entrava, mesmo que o e-mail cadastrado não fosse da pessoa.
+
+**A solução.** Tabela `web_users` (migration 007) + CRUD na superfície admin
+(DA-46, `X-Admin-Api-Key`: `/admin/api/users`, tela `/admin/users`) +
+**ativação em duas etapas antes do login valer**:
+
+    admin cria usuário → status=pending_email, token HMAC por e-mail (24h)
+    /auth/verify/email (pública, 5/min) → status=pending_phone, código de
+    6 dígitos por telefone (10 min, só o HASH guardado)
+    /auth/verify/phone (pública, 5/min) → status=active — login vale
+
+Logins seguintes seguem usuário+senha (DA-54, decisão do dono: ativação é
+uma vez, não 2FA diário).
+
+**Entrega out-of-band, com adaptador real depois** (decisão do dono): sem
+SMTP/provedor de SMS configurados, o token/código **não** é publicado em
+rota nenhuma pública — volta **só** na resposta da API de admin, com
+WARNING no log. `deliver_email`/`deliver_sms` (`app/webusers.py`) são o
+ponto de extensão: quando houver credencial, o envio real desliga o modo
+out-of-band sozinho, porque o retorno é o único contrato.
+
+**Segurança, no padrão da casa:** senha PBKDF2 no formato DA-54 (ponto como
+separador); token de e-mail com namespace `verify-email:` — **nunca** colide
+com token de sessão; código de telefone guardado só como hash, único-uso
+(hash apagado na validação); usuário inexistente == token/código errado
+(mesma resposta, sem enumerar quem existe); rate limit 5/min nas rotas
+públicas; `_user_out` nunca expõe hash; admin pode desativar/reativar
+(hash e código zerados no desativar).
+
+**O bootstrap nunca desliga:** o login verifica `web_users` (status=active)
+**e** o `WEB_UI_USERS` do `.env` (DA-54) — o operador nunca fica trancado
+fora por causa do banco. Sem `DATABASE_URL`, a ativação responde 503 (é do
+banco), mas o login pelo `.env` segue valendo.
+
+**Validação.** 19 testes novos (`tests/test_webusers.py`): fluxo completo,
+pendente não entra, desativado não entra, senha errada não entra, token
+expirado/errado/de-outro-usuário, código expirado/errado/genérico, rotas
+admin sem chave 401, `_user_out` sem hash, reemissão só para o status certo,
+bootstrap do `.env` com banco vazio. Achados reais do processo: SQLite
+devolve datetime **naive** (a comparação aware-vs-naive explodia —
+normalizado no domínio, vale pros dois dialetos); o `create_all` do metadata
+inteiro do admin carrega JSONB PG-only (cria-se só a tabela do teste —
+padrão já documentado); e o `.env` da homologação ganhou `DATABASE_URL`,
+que fez a suíte depender da máquina — o conftest agora isola
+`DATABASE_URL` como já fazia com `API_KEY` (mesma classe, mesma solução).
+
+**Verificado de ponta a ponta na homologação** (`:8000`, com Postgres da
+stack + migration 007): admin cria → token out-of-band → `/auth/verify/email`
+→ admin reemite código → `/auth/verify/phone` → **login do usuário ativado
+com cookie de sessão** → `/diagnose` 200; senha errada 401.

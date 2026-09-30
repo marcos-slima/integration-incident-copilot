@@ -26,6 +26,7 @@ verificadas à mão, uma vez, e nunca mais.
 | `docs_code_references` | referências `app/x.py::símbolo` e `app/x.py:N` citadas na documentação existem no código e na linha, e toda citação de arquivo .md em backticks existe em lugar real (raiz, `docs/`, `data/sample_docs/` ou ao lado do doc) | instantâneo | todo push/PR |
 | `connector_reachable` | todo conector registrado em `app/connectors/__init__.py` é aceito pelo Literal de `interface_type`, pelas choices do `--interface` do CLI, pelo dropdown da UI web (`SYSTEMS` em `frontend/src/components/DiagnoseView.tsx`), é documentado em `app/models.py`/`app/admin/models.py`, e é coberto por `_SAP_INTERFACE_TYPES` ou `_SAAS_INTERFACE_TYPES` (exceto `apim`, cross-vendor por decisão) | instantâneo | todo push/PR |
 | `connector_validation_matrix` | todo conector registrado em `app/connectors/__init__.py` tem linha na matriz de validação de `docs/ARCHITECTURE.md` — a única fonte de verdade sobre o que foi testado contra instância real — e nenhuma linha órfã sobrou para conector removido. Apodreceu em silêncio uma vez: `successfactors` ficou meses sem linha, com todos os gates verdes | instantâneo | todo push/PR |
+| `connector_coverage` | o mapa de cobertura (DA-58) ainda corresponde ao código: todo conector registrado tem linha em `data/connector_coverage.yaml` (9ª superfície da invariante 23), nenhuma declaração aponta para produto ou conector inexistente, e `docs/COVERAGE_MAP.md` — que é **gerado**, não editado — está em dia com os dados. Reprova por **incoerência**, nunca por lacuna: exigir cobertura completa seria exigir 76 conectores novos para o CI ficar verde | instantâneo | todo push/PR |
 | `migrations_and_dashboards` (job) | `alembic upgrade head` em banco limpo + as 45 queries dos 4 dashboards | ~1 min | todo push/PR |
 | `llm_eval` (job) | promptfoo contra o baseline; falha em regressão de caso | depende do provider | agendado 03:17 UTC + manual |
 
@@ -135,8 +136,19 @@ recusado com exit 1 — nunca interpretado como "zero regressões".
 - **Identificadores citados dentro de bloco de código.** O gate procura
   `app/…py::símbolo` em qualquer lugar do markdown, inclusive dentro de
   blocos ``` ; um exemplo ilustrativo num fence pode ser acusado.
-- **Se o conector funciona contra um tenant real.** `connector_reachable` e
-  `connector_validation_matrix` conferem presença e coerência: que todo
+- **Se a matriz de capacidade do produto SAP está certa.** `connector_coverage`
+  (DA-58) confere que o mapa é **coerente com o código** — conector registrado
+  tem declaração, produto declarado existe, doc gerado em dia. Não confere
+  nada sobre a matriz de capacidade: ela foi transcrita de uma fonte de
+  referência **sem citação publicada e sem release SAP** (`data/sap_products.yaml`),
+  e a tradução dos glifos (`✓✓`→`native`, `✓/cenários`→`conditional`) é
+  interpretação nossa. O gate garante que o mapa não envelheceu; ele não sabe
+  se a afirmação de fundo é verdadeira. O mesmo limite de
+  `connector_validation_matrix`: exige que a matriz *exista* e cubra os
+  conectores, não que a afirmação dela seja verdadeira.
+- **Se o conector funciona contra um tenant real.** `connector_reachable`,
+  `connector_validation_matrix` e `connector_coverage` conferem presença e
+  coerência: que todo
   conector registrado tem linha na matriz de
   [docs/ARCHITECTURE.md](ARCHITECTURE.md#conectores---mock-vs-real-hoje)
   e que nenhuma linha órfã sobrou. Nenhum dos dois confere a **verdade** da

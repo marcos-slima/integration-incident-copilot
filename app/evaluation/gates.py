@@ -674,6 +674,7 @@ CLI_SOURCE = Path("app/agent/graph.py")
 UI_DROPDOWN_SOURCE = Path("frontend/src/components/DiagnoseView.tsx")
 WEB_SEARCH_SEED_SOURCE = Path("alembic/versions/008_create_web_search_sources.py")
 ADMIN_SYSTEMS_FORM = Path("app/admin/templates/systems.html")
+COVERAGE_MAP_DOC = Path("docs/COVERAGE_MAP.md")
 
 
 def _iter_docs(root: Path) -> list[Path]:
@@ -815,6 +816,19 @@ def _registry_pairs(root: Path) -> dict[str, str]:
     if match is None:
         raise ValueError(f"_REGISTRY nao encontrado em {CONNECTORS_SOURCE}")
     return dict(re.findall(r"""["']([a-z_]+)["']\s*:\s*(\w+)\s*,""", match.group(1)))
+
+
+def registered_connectors(root: Path = REPO_ROOT) -> set[str]:
+    """Conectores de `_REGISTRY`, com `_REAL_MODE_SETTING` espelhado.
+
+    Publico porque `scripts/coverage_map.py` (DA-58) precisa da lista para
+    conferir a coerencia ANTES de gravar o mapa, e nao pode usar o gate
+    completo: o gate tambem exige que `docs/COVERAGE_MAP.md` exista, e no
+    primeiro uso ele nao existe — o `--write` que cria o arquivo seria
+    bloqueado pela verificacao que ele satisfaz. Entregar a lista e deixar
+    o script decidir sobre o arquivo quebra o impasse sem duplicar regra.
+    """
+    return _registered_connectors(root)
 
 
 def _registered_connectors(root: Path) -> set[str]:
@@ -1108,8 +1122,92 @@ def check_connector_validation_matrix(root: Path = REPO_ROOT) -> list[Finding]:
     return _ok(check)
 
 
+def check_connector_coverage(root: Path = REPO_ROOT) -> list[Finding]:
+    """O mapa de cobertura (DA-58) tem de refletir o registro de conectores.
+
+    Este gate e' a **nona superficie** da invariante 23, mas mora aqui em
+    vez de virar mais uma checagem dentro de `connector_reachable`: a
+    resposta ali e' generica ("esse conector nao aparece nessa
+    superficie") e aqui a falha tem nome proprio — conector registrado sem
+    declaracao de cobertura e' um conector que o mapa mostra como ausente,
+    sem nenhum sinal. E' o mesmo modo de morte silenciosa que a invariante
+    23 descreve, com um sintoma proprio.
+
+    Reprova por INCOERENCIA, nunca por lacuna. Exigir cobertura completa
+    seria exigir 76 conectores novos para o CI ficar verde, e o gate
+    deixaria de medir a unica coisa que importa. A lacuna e' o relatorio;
+    a incoerencia e' o defeito.
+
+    Cobre tres coisas: todo conector registrado tem linha em
+    `data/connector_coverage.yaml` (e vice-versa), nenhum produto/mecanismo
+    declarado e' fantasma, e `docs/COVERAGE_MAP.md` versionado ainda
+    corresponde ao que os dados produzem.
+    """
+    check = "connector_coverage"
+    # Import local, como o `import yaml` de `check_promptfoo_configs`: se o
+    # calculo de cobertura ganhar dependencia pesada no futuro, so este
+    # gate e' afetado. Os outros 16 continuam rodando sem importa-la.
+    from app.evaluation.coverage import (
+        GENERATED_NOTE,
+        CoverageError,
+        build_matrix,
+        check_consistency,
+        load_all,
+        render_markdown,
+    )
+
+    try:
+        conectores = _registered_connectors(root)
+    except FileNotFoundError:
+        return _fail(check, f"{CONNECTORS_SOURCE} nao existe")
+    except ValueError as exc:
+        return _fail(check, str(exc))
+
+    try:
+        produtos, mecanismos, cobertura, labels = load_all(root)
+    except CoverageError as exc:
+        return _fail(check, f"dado de cobertura invalido: {exc}")
+
+    problemas = check_consistency(conectores, produtos, cobertura)
+    if problemas:
+        return _fail(check, "; ".join(problemas))
+
+    doc = root / COVERAGE_MAP_DOC
+    if not doc.exists():
+        return _fail(
+            check,
+            f"{COVERAGE_MAP_DOC} nao existe — rode `uv run python scripts/coverage_map.py --write`",
+        )
+
+    esperado = render_markdown(
+        build_matrix(produtos, cobertura, mecanismos), mecanismos, labels, GENERATED_NOTE
+    )
+    if doc.read_text(encoding="utf-8") != esperado:
+        return _fail(
+            check,
+            f"{COVERAGE_MAP_DOC} desatualizado em relacao a {len(produtos)} linhas de "
+            f"dado — rode `uv run python scripts/coverage_map.py --write`. O doc e' "
+            "gerado: editar a mao desfaz a proxima regeneracao silenciosamente",
+        )
+
+    linhas = build_matrix(produtos, cobertura, mecanismos)
+    lacunas = sum(len(l.lacunas) for l in linhas)
+    return [
+        Finding(
+            check=check,
+            severity="pass",
+            message=(
+                f"{len(produtos)} linhas x {len(mecanismos)} mecanismos, "
+                f"{len(conectores)} conectores declarados, {lacunas} lacunas "
+                "(informativo, nao reprova)"
+            ),
+        )
+    ]
+
+
 GATES = {
     "connector_validation_matrix": check_connector_validation_matrix,
+    "connector_coverage": check_connector_coverage,
     "rag_dataset_schema": check_rag_dataset,
     "corpus_coverage": check_corpus_coverage,
     "dataset_difficulty_mix": check_difficulty_mix,

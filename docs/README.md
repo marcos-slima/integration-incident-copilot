@@ -41,6 +41,7 @@ deste documento.
 | [`INGEST_REFERENCE.md`](INGEST_REFERENCE.md) | Referência do `app.rag.ingest` — indexação da base de conhecimento |
 | [`QUALITY_GATES.md`](QUALITY_GATES.md) | O que os gates de qualidade verificam a cada build — **e o que eles não verificam** |
 | [`RERANKER_BENCHMARK.md`](RERANKER_BENCHMARK.md) | Benchmark que fixou o reranker canônico (DA-29) |
+| [`COVERAGE_MAP.md`](COVERAGE_MAP.md) | Mapa produto SAP × mecanismo: o que tem conector e o que é só cliente genérico (**gerado** — não editar à mão) |
 
 ## Processo e contexto
 

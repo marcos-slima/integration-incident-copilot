@@ -103,7 +103,7 @@ uv run uvicorn app.main:app --reload
 ```
 
 Pré-requisitos da Opção 2: Qdrant e Ollama acessíveis (localmente ou
-via `~/ai-stack`, que também traz Neo4j reservado para uso futuro e o
+via o stack pessoal `ai-stack`, que também traz Neo4j reservado para uso futuro e o
 stack completo do Langfuse — ver nota em
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)).
 

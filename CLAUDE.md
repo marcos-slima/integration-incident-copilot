@@ -50,11 +50,61 @@ uv run uvicorn app.main:app --reload
 uv run python -m app.rag.ingest --target incidents --reset
 ```
 
-**Infraestrutura local** (`~/ai-stack` via docker compose):
-- Qdrant → `localhost:6333`
-- Neo4j → `localhost:7474`
-- Langfuse → `localhost:3000`
-- Ollama → `localhost:11434`
+**Infraestrutura local** — tudo vem do `docker-compose.yml` **deste repo**.
+Não há diretório de infra externo; um stack pessoal que existiu foi
+removido e o compose passou a ser a única fonte:
+
+```bash
+docker compose --profile observability up -d qdrant postgres grafana redis
+docker compose --profile graphrag up -d neo4j      # opt-in
+```
+
+- Qdrant → `localhost:6333` (ou `:6335` se `QDRANT_HOST_PORT` no `.env`)
+- Postgres → `localhost:5432` (perfil `observability`)
+- Neo4j → `localhost:7474` (perfil `graphrag`, opt-in)
+- Grafana → `localhost:3001` (perfil `observability`)
+- Ollama → `localhost:11434` — **nativo**, `/usr/local/bin/ollama`, não em
+  container. O serviço `ollama` do compose existe (perfil
+  `container-ollama`) mas é opt-in; o compose aponta para o host via
+  `host.docker.internal`.
+
+> **`.env` é por modo, e o erro é fácil.** Os dois modos usam o mesmo
+> compose; muda só onde o processo Python roda. No modo **nativo** o `.env`
+> precisa de hosts de loopback — `DATABASE_URL=…@127.0.0.1:5432/iic` — e
+> `postgres` **não resolve na máquina** (é nome de serviço na rede do
+> compose). No modo **container** é o inverso: o compose injeta `postgres`,
+> `qdrant` e `neo4j` por default em `x-common-env`, então apontar o `.env`
+> para `127.0.0.1` quebra o container. Para apontar o container a um banco
+> externo, use `CONTAINER_DATABASE_URL` / `CONTAINER_NEO4J_URI`, que não
+> colidem com as variáveis do modo nativo.
+>
+> O `NEO4J_URI`/`NEO4J_USER`/`NEO4J_PASSWORD` faltavam do `x-common-env`
+> até este estado: o serviço `neo4j` existia no perfil `graphrag` mas a API
+> nunca recebia as credenciais, então o GraphRAG não tinha como alcançar o
+> banco nem no modo container.
+>
+> `NEO4J_AUTH` do Neo4j só vale na **primeira inicialização** do volume.
+> Trocar a senha no `.env` depois não troca a senha do banco — precisa
+> remover o volume `integration-incident-copilot_neo4j_data`. Sem
+> `NEO4J_PASSWORD` no `.env`, o serviço sobe com o placeholder
+> `neo4j/REQUIRED_SET_IN_ENV` e falha em `verify_connectivity()`.
+>
+> **`GRAPH_RAG_ENABLED=false` é o default** (`app/config.py`) e é a flag
+> real — o `CLAUDE.md` antigo citava `USE_GRAPH_RAG`, que não existe.
+>
+> **Dois Qdrant podem coexistir na mesma máquina.** O compose deste repo
+> publica em `${QDRANT_HOST_PORT:-6333}`. Se outro stack (ou um Qdrant
+> standalone) já usar a `6333`, defina `QDRANT_HOST_PORT=6335` — é o que
+> o `.env` local faz, e é por isso que `scripts/debug_matched_source.py`
+> existia com `6335` fixado. O acervo grande (~767k pontos em
+> `sap_reference_library`) fica no Qdrant do outro stack, não neste repo.
+>
+> armadilha correlata: `data/.ingest_state_reference.json` é **um arquivo por
+> target, sem URL dentro** (chave = `hash:filename`, `app/rag/ingest.py:167`).
+> Ele marca "já processado" sem registrar *onde*. Rodar a ingestão contra
+> um Qdrant e depois contra outro faz o segundo run **pular tudo** e o
+> destino ficar sem os 22 GB esperados — sem erro. Trocar de destino exige
+> `--reset-state` **e** gravar o estado contra a URL pretendida.
 
 ### MCP para agentes de IA (DA-19)
 

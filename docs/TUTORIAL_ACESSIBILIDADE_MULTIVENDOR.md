@@ -227,7 +227,7 @@ só o que for usar.
 ### 4.4 `docker-compose.yml` (novo arquivo, raiz do projeto)
 
 Sobe `api` + `ollama` + `qdrant` com um `docker compose up -d` só —
-self-contained, sem depender do `~/ai-stack` pessoal (que traz Neo4j
+self-contained, sem depender do stack pessoal do `ai-stack` (que traz Neo4j
 + Langfuse completo, úteis no dia a dia mas não necessários só para
 rodar/demonstrar o projeto uma vez). Langfuse continua opcional via
 variáveis de ambiente vazias.

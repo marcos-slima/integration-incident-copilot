@@ -327,11 +327,11 @@ diretamente (sem Ollama real, mesmo padrao de `test_llm_factory.py`).
 dois modos (GraphRAG ligado/desligado), confirmando os nodes esperados
 no grafo resultante.
 
-## Rodando sem depender do `~/ai-stack` pessoal
+## Rodando sem depender do stack pessoal do `ai-stack`
 
 O `docker-compose.yml` na raiz deste repositorio sobe Ollama + Qdrant +
 a API num unico `docker compose up -d`, sem depender do stack completo
-de observabilidade (`~/ai-stack`, com Langfuse/Postgres/ClickHouse/
+de observabilidade (stack pessoal do `ai-stack`, com Langfuse/Postgres/ClickHouse/
 Redis/MinIO) usado no ambiente de desenvolvimento pessoal. Isso importa
 porque este projeto tambem funciona como demonstracao para terceiros
 (cliente, entrevistador) - que nao tem, nem deveriam precisar montar,

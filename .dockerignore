@@ -12,3 +12,16 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .env
+
+# A reference library sao 22 GB de PDF/EPUB e NAO entra na imagem: o
+# Dockerfile so faz COPY de data/sample_docs/. Sem esta exclusao o
+# contexto de build era o repo inteiro (~22,7 GB) e o daemon receberia
+# tudo isso antes de o build comecar - o primeiro `docker build` de um
+# cliente demoraria horas e provavelmente estouraria disco, por um
+# arquivo que a imagem nunca usa. O corpus e ingerido contra o Qdrant
+# do ambiente (ver docs/DEPLOYMENT.md, cenario C.5), nao copiado.
+data/reference_library/
+
+# Idem: artefatos locais de execução, grandes e irrelevantes para a imagem.
+reports/
+*.log

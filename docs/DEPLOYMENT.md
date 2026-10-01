@@ -567,8 +567,9 @@ Bundle completo em `deploy/kyma/` (10 arquivos: `deployment.yaml`, `service.yaml
 `kustomization.yaml`, `secret.example.yaml`, `README.md`).
 
 > ⚠️ **Nenhum manifest foi aplicado a um cluster Kyma real.** Não há cluster acessível no
-> ambiente de desenvolvimento. Também **nenhum build/push de imagem Docker foi testado**.
-> Isto é uma configuração declarada, não uma implanta verificada.
+> ambiente de desenvolvimento. O **build** da imagem em si já foi validado (C.6); o que
+> não foi testado é o **push** para registry externo e o **apply** num cluster.
+> Isto é uma configuração declarada, não uma implantação verificada.
 
 ### E.1. Aplicar
 
@@ -582,7 +583,7 @@ kubectl apply -f /tmp/secret.yaml
 
 # 5. o resto
 kubectl apply -k deploy/kyma/
-kubectl rollout status deploy/<nome> -n <namespace>
+kubectl rollout status deploy/sap-integration-copilot -n sap-integration-copilot
 ```
 
 ### E.2. Pré-requisitos que o bundle **não** resolve
@@ -628,9 +629,9 @@ O bundle de `deploy/kyma/` é declaradamente Kyma (`APIRule` é um CRD do Kyma).
 EKS/AKS/GKE/ICP você reescreve: `APIRule` → `Ingress` ou `Gateway`, e
 `Service`/`Deployment`/`ConfigMap` são portables.
 
-O que **é** portable e vale reusar: o `Dockerfile` (multi-stage, não-root, sem
-dependência de runtime), o `HEALTHCHECK` (`/health`, com `--start-period` porque a
-primeira indexação é lenta) e a separação liveness/readiness.
+O que **é** portable e vale reusar: o `Dockerfile` (multi-stage, não-root, `HEALTHCHECK`
+em `/health` com `urllib` da stdlib — a imagem `slim` **não** tem `curl`/`wget`, então
+uma probe de script que os use quebraria) e a separação liveness/readiness.
 
 O `HPA` do bundle referencia métricas — confira se o cluster tem o metrics-server.
 

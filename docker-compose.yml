@@ -47,7 +47,7 @@ x-common-env: &common-env
   WEB_UI_USERS: ${WEB_UI_USERS:-}
   SESSION_SECRET: ${SESSION_SECRET:-}
   SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-8}
-  # DA-46: chave dedicada da superficie admin (X-Admin-Api-Key) — mesma
+  # DA-46: chave dedicada da superficie admin (X-API-Admin-Key) — mesma
   # regra das outras: vazio = efemera por processo com WARNING no log.
   ADMIN_API_KEY: ${ADMIN_API_KEY:-}
 

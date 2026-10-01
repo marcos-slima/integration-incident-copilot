@@ -112,7 +112,7 @@ nenhuma delas):
 | `/diagnose`, `/llm/policy`, `/incidents/{id}/verify`, `/mcp` | `X-API-Key` | `API_KEY` |
 | `/a2a` | `X-A2A-Api-Key` | `A2A_API_KEY` |
 | `POST /events/incident` | `X-Api-Key` (Event Mesh) | `EVENTS_API_KEY` |
-| `/admin` e `/admin/api/*` | `X-Admin-Api-Key` | `ADMIN_API_KEY` |
+| `/admin` e `/admin/api/*` | `X-API-Admin-Key` | `ADMIN_API_KEY` |
 
 Login de usuário (cookie de sessão): `POST /auth/login` (usuário+senha →
 cookie), `POST /auth/logout`, `GET /auth/session` (quem está logado). O
@@ -130,7 +130,7 @@ operador — o operador nunca fica trancado fora.
 
 O cookie de sessão **não** vale em MCP, A2A, Event Mesh ou admin — essas
 superfícies continuam exigindo as suas chaves dedicadas. O admin de
-usuários (`/admin/users`) usa a `X-Admin-Api-Key` (DA-46), não a sessão.
+usuários (`/admin/users`) usa a `X-API-Admin-Key` (DA-46), não a sessão.
 
 ### Interface web
 
@@ -265,7 +265,7 @@ informado.
 
 ### Administração
 
-A UI admin (`/admin`, header `X-Admin-Api-Key`) expõe:
+A UI admin (`/admin`, header `X-API-Admin-Key`) expõe:
 
 - **Models** — registro de modelos/credenciais por ORIGEM, com status
 - **Usage** — metering de tokens **reais** (usage_metadata), não estimativa

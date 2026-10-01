@@ -12,7 +12,7 @@ usuario+senha, sessao DA-54):
 
 Entrega OUT-OF-BAND na homologacao (decidida com o dono): sem SMTP/SMS
 configurados, o token/codigo NAO e' publicado em nenhum lugar publico —
-volta para o ADMIN na resposta da API de admin (superficie X-Admin-Api-Key)
+volta para o ADMIN na resposta da API de admin (superficie X-API-Admin-Key)
 com WARNING no log. Adaptador de entrega real (SMTP/provedor SMS) e' o
 ponto de extensao: `deliver_email`/`deliver_sms` — quando houver
 credencial, o modo out-of-band desliga sozinho.
@@ -71,14 +71,14 @@ def deliver_email(to: str, body: str) -> DeliveryResult:
 
     Hoje: out-of-band. Nao ha SMTP no ambiente (decisao da homologacao);
     o WARNING abaixo e' o rastro auditavel, e o token volta SÓ para o
-    admin (X-Admin-Api-Key), nunca para uma rota publica. Quando houver
+    admin (X-API-Admin-Key), nunca para uma rota publica. Quando houver
     credencial, este adaptador envia de verdade e o modo out-of-band
     desliga sozinho (o retorno e' o unico contrato).
     """
     logger.warning(
         "DA-55 out-of-band: token de e-mail para %s NAO foi enviado — SMTP nao "
         "configurado. O token segue na resposta da API de admin (canal "
-        "X-Admin-Api-Key). Configure o adaptador deliver_email para envio real.",
+        "X-API-Admin-Key). Configure o adaptador deliver_email para envio real.",
         to,
     )
     return DeliveryResult(delivered=False, channel="email")
@@ -93,7 +93,7 @@ def deliver_sms(to: str, body: str) -> DeliveryResult:
     logger.warning(
         "DA-55 out-of-band: codigo de telefone para %s NAO foi enviado — "
         "provedor de SMS nao configurado. O codigo segue na resposta da API "
-        "de admin (canal X-Admin-Api-Key).",
+        "de admin (canal X-API-Admin-Key).",
         to,
     )
     return DeliveryResult(delivered=False, channel="sms")

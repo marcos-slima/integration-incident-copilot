@@ -39,7 +39,10 @@ from qdrant_client.models import (
 )
 
 from app.config import settings
-from app.rag.embedding_guard import stamp_collection, verify_collection_embedding
+from app.rag.embedding_guard import (
+    stamp_collection,
+    verify_collection_embedding,
+)
 from app.rag.retriever import _FastEmbedWrapper
 from app.rag.retriever import _get_embeddings as get_query_embeddings
 
@@ -348,6 +351,44 @@ def ensure_collection(
                 pass  # índice já existe ou versão do Qdrant não suporta — não crítico
 
 
+def stamp_existing_collection(client: QdrantClient, collection_name: str, embeddings) -> None:
+    """DA-45: carimba a identidade de uma collection EXISTENTE, guard antes.
+
+    O aviso do guard promete "um reindex sem --reset gravara a identidade"
+    — o caminho de 'nada a fazer' do run_ingest devolvia ANTES do stamp e
+    quebrava a promessa: numa collection 100% indexada pre-DA-45 (tudo no
+    state), nenhum reincremental carimbava nada e o aviso aparecia para
+    sempre. Este e' exatamente o caminho de migracao que o aviso descreve.
+
+    Ordem deliberada: guard -> stamp (nunca o contrario). Divergencia
+    comprovada (fingerprint diferente ou dimensao incompativel) levanta
+    ANTES de gravar — carimbar por cima de divergencia comprovada seria
+    inventar identidade. O stamp acontece so em identidade ausente
+    (migracao pre-DA-45) ou identidade igual (reescreve o mesmo valor).
+    A collection e' criada em lugar nenhum aqui: no-op run nao cria
+    collection vazia.
+
+    Args:
+        client: QdrantClient pronto para uso.
+        collection_name: nome da collection a ser carimbada.
+        embeddings: embedder instanciado (para probe de tamanho).
+    """
+    existing = {c.name for c in client.get_collections().collections}
+    if collection_name not in existing:
+        return
+    vector_size = probe_vector_size(embeddings)
+    aviso = verify_collection_embedding(
+        client, collection_name, expected_model=EMBEDDING_MODEL, expected_size=vector_size
+    )
+    if aviso:
+        print(f"AVISO: {aviso}")
+        print(
+            f"[DA-45] {collection_name}: gravando identidade do embedding corrente "
+            f"('{EMBEDDING_MODEL}') — migracao de collection pre-DA-45."
+        )
+    stamp_collection(client, collection_name, EMBEDDING_MODEL)
+
+
 def deterministic_point_id(document_id: str, chunk_index: int) -> str:
     """UUID estavel e aceito pelo Qdrant para um chunk do documento -
     ver docstring de `deterministic_document_id` para por que isso
@@ -460,6 +501,11 @@ def run_ingest(
             print(f"Collection '{cfg['collection']}' removida por --reset-collection.")
 
     if not pending:
+        # DA-45: o early-exit de 'nada a fazer' devolvia antes do stamp e
+        # quebrava a promessa do aviso do guard. Chama stamp_existing_collection
+        # para carimbar a identidade (se existir) e fechar o buraco.
+        embeddings = get_query_embeddings()
+        stamp_existing_collection(client, cfg["collection"], embeddings)
         print(f"[{target}] Nada a fazer.")
         return 0
 

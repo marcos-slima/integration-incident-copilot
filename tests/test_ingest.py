@@ -17,6 +17,8 @@ app/rag/ingest.py). Estes testes provam que:
    lugar, sem precisar de delete previo nem deixar pontos orfaos para
    os indices que continuam existindo."""
 
+import pytest
+
 from app.rag.ingest import (
     deterministic_document_id,
     deterministic_point_id,
@@ -113,6 +115,10 @@ def test_run_ingest_returns_zero_when_nothing_pending(tmp_path, monkeypatch):
     monkeypatch.setattr(ingest_module, "find_files", lambda src, excl: [])
     monkeypatch.setattr(ingest_module, "load_state", lambda _: {})
     monkeypatch.setattr(ingest_module, "resolve_source_dir", lambda cfg: tmp_path)
+    # DA-45: stamp_existing_collection e' chamada no no-op para carimbar a
+    # identidade (se a collection existir), mas e' ruido para este teste
+    # (queremos medir so o return code). Stub para no-op tambem.
+    monkeypatch.setattr(ingest_module, "stamp_existing_collection", lambda *a, **kw: None)
 
     result = ingest_module.run_ingest(
         "incidents", limit=None, excludes=[], reset_state=False, reset_collection=False
@@ -173,6 +179,165 @@ def test_run_ingest_returns_error_count_on_failure(tmp_path, monkeypatch):
         "incidents", limit=None, excludes=[], reset_state=False, reset_collection=False
     )
     assert result == 1
+
+
+# --- DA-45: stamp_existing_collection no no-op ------------------------------
+# Testes que o early-exit 'nada a fazer' chama stamp_existing_collection e
+# o guarda funciona corretamente (protege contra divergencia comprovada).
+
+
+class _FakeEmbeddingsWithSize:
+    def __init__(self, size: int):
+        self._size = size
+
+    def embed_query(self, text: str) -> list[float]:
+        return [0.0] * self._size
+
+
+class _FakeIdentityCollection:
+    def __init__(self, fingerprint: str | None = None):
+        self.fingerprint = fingerprint
+
+    def read_fingerprint(self, client, collection_name: str) -> str | None:
+        return self.fingerprint
+
+
+def test_run_ingest_noop_stamps_existing_collection(tmp_path, monkeypatch):
+    """DA-45: no-op run (pending==0) chama stamp_existing_collection na
+    collection existente, que carimba a identidade (se ausente ou igual)."""
+    import app.rag.ingest as ingest_module
+
+    # Fake que simula collection existente (fingerprint ausente = pre-DA-45)
+    monkeypatch.setattr(ingest_module, "QDRANT_URL", "http://localhost:6333")
+    monkeypatch.setattr(ingest_module, "find_files", lambda src, excl: [])
+    monkeypatch.setattr(ingest_module, "load_state", lambda _: {})
+    monkeypatch.setattr(ingest_module, "resolve_source_dir", lambda cfg: tmp_path)
+
+    # Fake Qdrant: collection existe
+    class _FakeQdrant:
+        def get_collections(self):
+            class _R:
+                collections = [type("C", (), {"name": "iic_incidents"})()]  # noqa: RUF012
+
+            return _R()
+
+        def get_collection(self, *a, **kw):
+            # Simula collection real com schema OK
+            class _Config:
+                class _Params:
+                    vectors = {"dense": type("V", (), {"size": 768})()}  # noqa: RUF012
+                    sparse_vectors = None
+
+                params = _Params()
+
+            return type("Info", (), {"config": _Config})()
+
+    monkeypatch.setattr(ingest_module, "QdrantClient", lambda **kw: _FakeQdrant())
+
+    # Fake embeddings (probe vai usar este size)
+    monkeypatch.setattr(ingest_module, "get_query_embeddings", lambda: _FakeEmbeddingsWithSize(768))
+    monkeypatch.setattr(ingest_module, "probe_vector_size", lambda emb: 768)
+
+    # Mock da collection lateral ( identity ) para retorno ausente
+    monkeypatch.setattr(
+        ingest_module, "verify_collection_embedding", lambda *a, **kw: "[AVISO] identidade ausente"
+    )
+
+    # Conta chamadas de stamp_existing_collection (não stamp_collection)
+    stamp_existing_calls = []
+    monkeypatch.setattr(
+        ingest_module,
+        "stamp_existing_collection",
+        lambda *a, **kw: stamp_existing_calls.append((a, kw)),
+    )
+
+    result = ingest_module.run_ingest(
+        "incidents", limit=None, excludes=[], reset_state=False, reset_collection=False
+    )
+
+    assert result == 0
+    assert len(stamp_existing_calls) == 1
+    assert stamp_existing_calls[0][0][1] == "sap_incident_docs"  # collection_name
+
+
+def test_run_ingest_noop_raises_on_proven_divergence(tmp_path, monkeypatch):
+    """DA-45: no-op run levanta EmbeddingMismatchError quando ha divergencia
+    comprovada (fingerprint diferente) ANTES de carimbar."""
+    import app.rag.ingest as ingest_module
+    from app.rag.embedding_guard import EmbeddingMismatchError
+
+    monkeypatch.setattr(ingest_module, "QDRANT_URL", "http://localhost:6333")
+    monkeypatch.setattr(ingest_module, "find_files", lambda src, excl: [])
+    monkeypatch.setattr(ingest_module, "load_state", lambda _: {})
+    monkeypatch.setattr(ingest_module, "resolve_source_dir", lambda cfg: tmp_path)
+
+    class _FakeQdrant:
+        def get_collections(self):
+            class _R:
+                collections = [type("C", (), {"name": "iic_incidents"})()]  # noqa: RUF012
+
+            return _R()
+
+        def get_collection(self, *a, **kw):
+            class _Config:
+                class _Params:
+                    vectors = {"dense": type("V", (), {"size": 768})()}  # noqa: RUF012
+                    sparse_vectors = None
+
+                params = _Params()
+
+            return type("Info", (), {"config": _Config})()
+
+    monkeypatch.setattr(ingest_module, "QdrantClient", lambda **kw: _FakeQdrant())
+    monkeypatch.setattr(ingest_module, "get_query_embeddings", lambda: _FakeEmbeddingsWithSize(768))
+    monkeypatch.setattr(ingest_module, "probe_vector_size", lambda emb: 768)
+
+    # stamp_existing_collection levanta EmbeddingMismatchError simulando divergencia
+    def _raise_divergence(*a, **kw):
+        raise EmbeddingMismatchError("fingerprint divergente")
+
+    monkeypatch.setattr(ingest_module, "stamp_existing_collection", _raise_divergence)
+
+    with pytest.raises(EmbeddingMismatchError):
+        ingest_module.run_ingest(
+            "incidents", limit=None, excludes=[], reset_state=False, reset_collection=False
+        )
+
+
+def test_run_ingest_noop_does_not_create_missing_collection(tmp_path, monkeypatch):
+    """DA-45: no-op run com collection ausente NAO a cria (nem carimba)."""
+    import app.rag.ingest as ingest_module
+
+    monkeypatch.setattr(ingest_module, "QDRANT_URL", "http://localhost:6333")
+    monkeypatch.setattr(ingest_module, "find_files", lambda src, excl: [])
+    monkeypatch.setattr(ingest_module, "load_state", lambda _: {})
+    monkeypatch.setattr(ingest_module, "resolve_source_dir", lambda cfg: tmp_path)
+
+    # Fake Qdrant: NENHUMA collection existe
+    class _FakeQdrant:
+        def get_collections(self):
+            class _R:
+                collections = []  # noqa: RUF012
+
+            return _R()
+
+    monkeypatch.setattr(ingest_module, "QdrantClient", lambda **kw: _FakeQdrant())
+    monkeypatch.setattr(ingest_module, "get_query_embeddings", lambda: _FakeEmbeddingsWithSize(768))
+    monkeypatch.setattr(ingest_module, "probe_vector_size", lambda emb: 768)
+    monkeypatch.setattr(ingest_module, "verify_collection_embedding", lambda *a, **kw: None)
+
+    # Conta chamadas de stamp_collection
+    stamp_calls = []
+    monkeypatch.setattr(
+        ingest_module, "stamp_collection", lambda *a, **kw: stamp_calls.append((a, kw))
+    )
+
+    result = ingest_module.run_ingest(
+        "incidents", limit=None, excludes=[], reset_state=False, reset_collection=False
+    )
+
+    assert result == 0
+    assert len(stamp_calls) == 0  # NAO chamado: collection ausente
 
 
 # --- infer_category: casamento por TOKEN, nunca por substring -------------

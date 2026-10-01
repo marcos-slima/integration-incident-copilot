@@ -38,6 +38,14 @@ HYBRID_PREFETCH_LIMIT = 20  # candidatos por perna (dense/sparse) antes da fusao
 RERANKER_MODEL = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"  # DA-29: mmarco supera baseline em +7pp Hit@1, +4pp MRR@5, 3.5x mais rapido
 RERANKER_TOP_K = 3  # quantos candidatos retornar apos o reranking
 
+# DA-17: gate denso do fallback para `sap_reference_library` — so consulta a
+# reference quando `incidents` (curado) nao tem match forte. Constante de
+# MODULO (nao local de _retrieve_unified) para o script de recalibracao
+# conseguir ler o valor em uso: scripts/calibrate_reference_fallback.py.
+# Historico completo da medicao e a decisao ficam no comentario de
+# _retrieve_unified, junto da logica que o aplica.
+REFERENCE_FALLBACK_THRESHOLD = 0.665
+
 # DA-25: piso baixo aplicado ANTES do reranker - so descarta ruido
 # semantico extremo (candidato sem nenhuma relacao com a query), nunca
 # a decisao real de confianca. Antes, DEFAULT_SCORE_THRESHOLD (0.5) era
@@ -383,7 +391,8 @@ def _retrieve_unified(
     # motivo de a DA-45 existir. Com corpus maior (o ingest estava em 26%
     # quando medido), reavalie: mais documentos quase synonymous empurram
     # o max dos falsos para cima, e 0.665 pode voltar a vazar.
-    REFERENCE_FALLBACK_THRESHOLD = 0.665
+    # A reavaliacao e' scripts/calibrate_reference_fallback.py (queries
+    # versionadas — sem ele esta medicao nao era reproduzivel).
 
     incidents_hits = _retrieve_hybrid(query, COLLECTIONS["incidents"], top_k)
     all_hits: list[dict] = list(incidents_hits)

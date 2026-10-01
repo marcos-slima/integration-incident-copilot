@@ -5,9 +5,10 @@ Python, roda inteiramente em processo, sem precisar de servico
 nenhum no ar. Serve para validar a MECANICA (schema dense+sparse,
 ingest, fusao RRF) antes de depender da stack Docker completa.
 
-Nao substitui o teste real contra o Qdrant de producao (~/ai-stack)
-- e um teste de fumaca rapido, isolado, para debugar a logica sem
-depender de infraestrutura externa.
+Nao substitui o teste real contra o Qdrant de producao (via
+'docker compose up -d' na raiz do projeto) - e um teste de fumaca
+rapido, isolado, para debugar a logica sem depender de
+infraestrutura externa.
 
 Uso:
     uv run python scripts/test_hybrid_local.py
@@ -135,7 +136,9 @@ def main() -> None:
 
     print("=== Teste concluido. Se cada query trouxe o documento certo em 1o lugar, ===")
     print("=== a MECANICA do hybrid retriever esta correta. Isso NAO substitui   ===")
-    print("=== rodar contra a stack real (~/ai-stack) + a suite pytest completa. ===")
+    print(
+        "=== rodar contra a stack real ('docker compose up -d' na raiz) + a suite pytest completa. ==="
+    )
 
 
 if __name__ == "__main__":

@@ -102,10 +102,10 @@ uv sync
 uv run uvicorn app.main:app --reload
 ```
 
-Pré-requisitos da Opção 2: Qdrant e Ollama acessíveis (localmente ou
-via o stack pessoal `ai-stack`, que também traz Neo4j reservado para uso futuro e o
-stack completo do Langfuse — ver nota em
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)).
+Pré-requisitos da Opção 2: Qdrant e Ollama acessíveis (localmente — o
+projecto é autocontido com `docker-compose.yml` incluindo Neo4j opcional
+para GraphRAG e stack completo do Langfuse para observabilidade — ver
+nota em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)).
 
 ## Status
 

@@ -151,6 +151,17 @@
       "module": "app.config",
       "console": "integratedTerminal",
       "justMyCode": true
+    },
+    {
+      "name": "Debug: Frontend (React) + Backend",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "cd frontend && npm run dev",
+      "serverReadyAction": {
+        "pattern": "Local:\\s+(https?://[^\\s]+)",
+        "uriFormat": "$1",
+        "action": "openExternally"
+      }
     }
   ],
   "inputs": [

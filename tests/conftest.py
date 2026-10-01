@@ -83,7 +83,7 @@ def pytest_collection_modifyitems(config, items):
         return
     skip_marker = pytest.mark.skip(
         reason="Stack local (Qdrant/Ollama) indisponivel em 127.0.0.1 - "
-        "rode 'docker compose up -d' em ~/ai-stack e confirme o Ollama ativo"
+        "rode 'docker compose up -d' na raiz do projeto e confirme o Ollama ativo"
     )
     for item in items:
         if "integration" in item.keywords:

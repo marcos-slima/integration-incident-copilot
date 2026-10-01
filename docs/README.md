@@ -17,7 +17,7 @@ automaticamente a cada build.
 | Você quer… | Leia, nesta ordem |
 |---|---|
 | Rodar pela primeira vez | [`GETTING_STARTED.md`](GETTING_STARTED.md) → [`USER_GUIDE.md`](USER_GUIDE.md) |
-| Levar para um ambiente novo | [`DEPLOY.md`](DEPLOY.md) → [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) |
+| Levar para um ambiente novo | [`DEPLOYMENT.md`](DEPLOYMENT.md) (todos os cenários, passo a passo) → [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) |
 | Entender o que existe hoje | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
 | Entender *por que* foi feito assim | [`README.md` da raiz](../README.md) (índice de DAs) |
 | Debugar um incidente real | [`TUTORIAL_ARQUITETURA_DEBUG.md`](TUTORIAL_ARQUITETURA_DEBUG.md) |
@@ -35,7 +35,8 @@ deste documento.
 |---|---|
 | [`GETTING_STARTED.md`](GETTING_STARTED.md) | Do zero ao primeiro diagnóstico em menos de 10 minutos |
 | [`USER_GUIDE.md`](USER_GUIDE.md) | Guia de operação: autenticação, todas as superfícies (REST, UI, CLI, MCP, A2A, eventos), leitura do resultado, loop de verificação e onde ficam os logs por camada |
-| [`DEPLOY.md`](DEPLOY.md) | Deploy em outro ambiente com Docker Compose |
+| [`DEPLOYMENT.md`](DEPLOYMENT.md) | **Documento único de implantação**: avaliação local para interessados, dev local, container, produção com auth obrigatória, Kyma, e o que **não** é implementado — cada cenário com o próprio passo a passo |
+| [`DEPLOY.md`](DEPLOY.md) | Detalhe do caminho Docker Compose (complemento do `DEPLOYMENT.md`) |
 | [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) | Diagnóstico de falha por sintoma (startup, AMQP, RAG, LLM, Kyma) |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Visão técnica do que existe no código. Local alternativo declarado para a prosa das DA-32/33/34/35 |
 | [`INGEST_REFERENCE.md`](INGEST_REFERENCE.md) | Referência do `app.rag.ingest` — indexação da base de conhecimento |

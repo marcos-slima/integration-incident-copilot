@@ -1,93 +1,176 @@
 {% extends "base.html" %}
 {% block title %}Modelos · Admin{% endblock %}
 {% block content %}
-<h2>Modelos registrados (por origem)</h2>
-<button onclick="loadModels()">Recarregar</button>
-<table id="models">
-  <thead><tr>
-    <th>Origem</th><th>Modelo</th><th>base_url</th><th>$ in/1M</th><th>$ out/1M</th>
-    <th>limite/mês</th><th>%</th><th>default</th><th>on</th><th>Ações</th>
-  </tr></thead>
-  <tbody id="models-body"><tr><td colspan="10">carregando…</td></tr></tbody>
-</table>
+<main>
+  <h2>Modelos registrados (por origem)</h2>
+  <p style="color: var(--text); margin-bottom: 1.5rem;">Gerencie chaves, preços e limites de uso</p>
 
-<h3>Novo modelo</h3>
-<form id="newmodel" onsubmit="return addModel(event)">
-  <input name="provider_origin" placeholder="origin (ex: api.groq.com)" required>
-  <input name="model_id" placeholder="model_id (ex: openai/gpt-oss-120b)" required>
-  <input name="base_url" placeholder="base_url (vazio = padrão do provider)">
-  <input name="price_in_per_1m" type="number" placeholder="$ in/1M">
-  <input name="price_out_per_1m" type="number" placeholder="$ out/1M">
-  <input name="monthly_limit_tokens" type="number" placeholder="limite tokens/mês">
-  <label><input name="is_default" type="checkbox"> default</label>
-  <button type="submit">Adicionar</button>
-</form>
+  <div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3 style="margin: 0; color: var(--text);">Lista de Modelos</h3>
+      <button class="btn btn-primary" onclick="loadModels()">🔄 Recarregar</button>
+    </div>
 
-<p class="warn" id="msg"></p>
+    <div style="overflow-x: auto;">
+      <table id="models">
+        <thead>
+          <tr>
+            <th style="width: 120px;">Origem</th>
+            <th>Modelo</th>
+            <th>base_url</th>
+            <th style="width: 80px;">$ in/1M</th>
+            <th style="width: 80px;">$ out/1M</th>
+            <th style="width: 90px;">Limite/mês</th>
+            <th style="width: 60px;">%</th>
+            <th style="width: 60px;">Padrão</th>
+            <th style="width: 60px;">Ativo</th>
+            <th style="width: 100px;">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="models-body">
+          <tr><td colspan="10" style="text-align: center; padding: 2rem;">Carregando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--text);">Novo Modelo</h3>
+  <div class="card">
+    <form id="newmodel" onsubmit="return addModel(event)">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+        <div class="form-group">
+          <label>Origem *</label>
+          <input name="provider_origin" placeholder="Ex: api.groq.com" required>
+        </div>
+        <div class="form-group">
+          <label>Modelo *</label>
+          <input name="model_id" placeholder="Ex: openai/gpt-oss-120b" required>
+        </div>
+        <div class="form-group">
+          <label>base_url</label>
+          <input name="base_url" placeholder="Vazio = padrão do provider">
+        </div>
+        <div class="form-group">
+          <label>$ in/1M</label>
+          <input name="price_in_per_1m" type="number" step="0.0001" placeholder="Preço de input">
+        </div>
+        <div class="form-group">
+          <label>$ out/1M</label>
+          <input name="price_out_per_1m" type="number" step="0.0001" placeholder="Preço de output">
+        </div>
+        <div class="form-group">
+          <label>Limite/mês</label>
+          <input name="monthly_limit_tokens" type="number" placeholder="Tokens/mês">
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; padding: 1rem; background: var(--border); border-radius: 8px;">
+        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+          <input name="is_default" type="checkbox" style="width: auto;">
+          <span style="color: var(--text);">Definir como padrão para esta origem</span>
+        </label>
+      </div>
+
+      <button type="submit" class="btn btn-primary">➕ Adicionar modelo</button>
+    </form>
+  </div>
+
+  <p class="alert" id="msg" style="background: #fee2e2; border-color: #fecaca; color: #991b1b; display: none;"></p>
+</main>
 
 <script>
 function loadModels() {
+  const btn = document.querySelector('#models + h3 + .card button');
+  const originalText = btn.textContent;
+  btn.textContent = 'Carregando...';
+  btn.disabled = true;
+
   adminFetch('/admin/api/models').then(r => {
-    if (r.status === 401) throw new Error('chave admin inválida — insira em cima');
+    if (r.status === 401) throw new Error('Chave admin inválida — insira acima');
     if (r.status === 503) throw new Error('DB não configurado (DATABASE_URL ausente)');
     return r.json();
   }).then(rows => {
     const tb = document.getElementById('models-body');
     tb.innerHTML = '';
-    if (!rows.length) { tb.innerHTML = '<tr><td colspan="10">nenhum modelo registrado</td></tr>'; return; }
+    if (!rows.length) {
+      tb.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 2rem; color: var(--text); opacity: 0.7;">Nenhum modelo registrado</td></tr>';
+      btn.textContent = originalText;
+      btn.disabled = false;
+      return;
+    }
     for (const m of rows) {
       const pct = m.usage.percent == null ? '—' : m.usage.percent + '%';
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${escapeHtml(m.provider_origin)}</td>
-        <td>${escapeHtml(m.model_id)}${credBadge(m.provider_origin)}</td>
-        <td>${escapeHtml(m.base_url || '—')}</td>
-        <td>${m.price_in_per_1m ?? '—'}</td>
-        <td>${m.price_out_per_1m ?? '—'}</td>
-        <td>${m.monthly_limit_tokens ?? '—'}</td>
-        <td>${pct}</td>
-        <td>${m.is_default ? 'sim' : ''}</td>
-        <td>${m.enabled ? 'sim' : 'off'}</td>
+      tr.innerHTML = `
+        <td style="font-family: monospace; font-size: 0.9rem;">${escapeHtml(m.provider_origin)}</td>
+        <td style="font-weight: 500;"><span style="font-size: 0.85rem; opacity: 0.6; margin-right: 0.25rem;">🔑</span>${escapeHtml(m.model_id)}</td>
+        <td style="font-family: monospace; font-size: 0.9rem;">${escapeHtml(m.base_url || '—')}</td>
+        <td style="font-family: monospace; font-size: 0.9rem;">${m.price_in_per_1m ?? '—'}</td>
+        <td style="font-family: monospace; font-size: 0.9rem;">${m.price_out_per_1m ?? '—'}</td>
+        <td style="font-family: monospace; font-size: 0.9rem;">${m.monthly_limit_tokens ?? '—'}</td>
+        <td style="font-family: monospace; font-size: 0.9rem;">${pct}</td>
+        <td>${m.is_default ? '<span style="color: var(--success);">✓</span>' : '—'}</td>
+        <td>${m.enabled ? '<span class="status-badge status-active">Sim</span>' : '<span class="status-badge status-degraded">Não</span>'}</td>
         <td>
-          <button onclick="setCredential('${m.provider_origin}')">chave</button>
-          <button onclick="toggleModel('${m.id}', ${!m.enabled})">${m.enabled ? 'desativar' : 'ativar'}</button>
-          <button onclick="delModel('${m.id}')">remover</button>
+          <button onclick="setCredential('${m.provider_origin}')" class="btn" style="padding: 0.4rem 0.8rem; background: var(--border);">🔐</button>
+          <button onclick="toggleModel('${m.id}', ${!m.enabled})" class="btn" style="padding: 0.4rem 0.8rem; background: var(--border);">🔄</button>
+          <button onclick="delModel('${m.id}')" class="btn btn-danger" style="padding: 0.4rem 0.8rem;">🗑️</button>
         </td>`;
       tb.appendChild(tr);
     }
-  }).catch(e => document.getElementById('msg').textContent = e.message);
+    btn.textContent = originalText;
+    btn.disabled = false;
+  }).catch(e => {
+    const msg = document.getElementById('msg');
+    msg.textContent = e.message;
+    msg.style.display = 'block';
+    btn.textContent = originalText;
+    btn.disabled = false;
+  });
 }
-function credBadge(origin) {
-  return ' <span class="pill" style="opacity:.6" title="ver detalhes da chave em /admin/api/credentials">🔑</span>';
-}
+
 function setCredential(origin) {
   const key = prompt('Chave de API para ' + origin + ' (grava CIFRADA, DA-47):');
   if (!key) return;
   adminFetch('/admin/api/credentials/' + encodeURIComponent(origin), {method:'PUT', body: JSON.stringify({key})})
     .then(r => r.json())
     .then(() => loadModels())
-    .catch(e => document.getElementById('msg').textContent = 'erro na chave: ' + e.message);
+    .catch(e => document.getElementById('msg').textContent = 'Erro na chave: ' + e.message);
 }
+
 function toggleModel(id, target) {
+  if (!confirm(target ? 'Ativar este modelo?' : 'Desativar este modelo?')) return;
   adminFetch('/admin/api/models/' + id, {method:'PATCH', body: JSON.stringify({enabled: target})})
     .then(() => loadModels()).catch(e => document.getElementById('msg').textContent = e.message);
 }
+
 function delModel(id) {
-  if (!confirm('Remover este modelo?')) return;
+  if (!confirm('Remover este modelo permanentemente?')) return;
   adminFetch('/admin/api/models/' + id, {method:'DELETE'})
     .then(() => loadModels()).catch(e => document.getElementById('msg').textContent = e.message);
 }
+
 function addModel(e) {
   e.preventDefault();
   const f = new FormData(e.target);
   const body = Object.fromEntries([...f.entries()].map(([k,v]) => [
     k, (k === 'is_default') ? !!v : (v === '' ? null : v)
   ]));
+
+  const btn = e.target.querySelector('button[type="submit"]');
+  const originalText = btn.textContent;
+  btn.textContent = 'Adicionando...';
+  btn.disabled = true;
+
   adminFetch('/admin/api/models', {method:'POST', body: JSON.stringify(body)})
     .then(r => r.ok ? loadModels() : r.json().then(j => { throw new Error(j.detail); }))
     .then(() => e.target.reset())
-    .catch(err => document.getElementById('msg').textContent = err.message);
+    .catch(err => document.getElementById('msg').textContent = err.message)
+    .finally(() => { btn.textContent = originalText; btn.disabled = false; });
+
   return false;
 }
+
 loadModels();
 </script>
 {% endblock %}

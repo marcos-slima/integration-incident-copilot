@@ -346,22 +346,44 @@ def _retrieve_unified(
     # reavalia o texto e pode preferir o manual de qualquer forma. A
     # regra objetiva e mais forte: so consulta reference_library quando
     # incidents NAO retornou nada acima do score_threshold.
-    # A reference_library nao e curada por incidente (28.962 chunks de
-    # manuais tecnicos genericos, medido em 2026-09-28) - qualquer query
-    # relacionada a SAP
-    # tende a achar ALGO semanticamente proximo nela, mesmo quando o
-    # incidente reportado nao tem relacao real com nenhum documento
-    # conhecido (caso out-of-scope). Por isso o fallback exige um
-    # score bem mais alto que o usado em incidents (documentos feitos
-    # sob medida): 0.85 filtra "vagamente parecido" e so deixa passar
-    # match forte o suficiente para ser confiavel como fallback.
+    # A reference_library nao e curada por incidente (manuais tecnicos
+    # genericos) - qualquer query relacionada a SAP tende a achar ALGO
+    # semanticamente proximo nela, mesmo quando o incidente reportado nao
+    # tem relacao real com nenhum documento conhecido (caso out-of-scope).
+    # Por isso o fallback exige um score mais alto que o de incidents
+    # (documentos feitos sob medida).
     #
-    # ATENCAO: o comentario original dizia "766k+ chunks", cifra que
-    # NUNCA correspondeu a este corpus (o real e' 28.962, 26x menor).
-    # O 0.85 foi portanto justificado contra um volume que nao existe e
-    # precisa ser re-calibrado contra os 28.962 reais antes de ser
-    # tratado como definitivo. Ver DA-44 "Limitacoes".
-    REFERENCE_FALLBACK_THRESHOLD = 0.85
+    # RECALIBRADO 2026-10-01 contra o corpus REAL (medido, nao estimado).
+    # O valor anterior era 0.85, justificado por um comentario que citava
+    # "766k+ chunks" - corpus que nunca existiu aqui. O proprio codigo
+    # registrava que o limiar estava por recalibrar (DA-44 "Limitacoes",
+    # item 2).
+    #
+    # Medicao (embeddings `nomic-embed-text` via Ollama, 552 docs /
+    # 100.805 chunks em `sap_reference_library`):
+    #
+    #   - 20 queries VERDADEIRAS (a resposta existe no acervo): score do
+    #     top-1 min=0.672, p50=0.762, max=0.886
+    #   - 15 queries FALSAS (sem relacao com integracao SAP): max=0.658
+    #
+    # Os intervalos NAO se sobrepoem: max dos falsos 0.658 < min dos
+    # verdadeiros 0.672. Um threshold no meio da faixa (0.665) separa os
+    # dois grupos com folga dos dois lados.
+    #
+    # O 0.85 rejeitava 20 de 20 verdadeiros e aceitava 0 de 15 falsos.
+    # Isso nao e' um limiar conservador demais, e' um limiar que DESLIGAVA
+    # o fallback inteiro: a reference_library era 21 GB indexados para
+    # nunca entrar em resposta nenhuma. Medido no caminho real do produto
+    # (nao na busca direta, onde o default e' 0.5), 1 de 12 consultas de
+    # diagnostico disparava o fallback.
+    #
+    # CUIDADO ao recalibrar de novo: os numeros acima valem para
+    # `nomic-embed-text` neste corpus. Trocar o modelo de embedding
+    # desloca a escala de cosseno e invalidaria esta medicao - o mesmo
+    # motivo de a DA-45 existir. Com corpus maior (o ingest estava em 26%
+    # quando medido), reavalie: mais documentos quase synonymous empurram
+    # o max dos falsos para cima, e 0.665 pode voltar a vazar.
+    REFERENCE_FALLBACK_THRESHOLD = 0.665
 
     incidents_hits = _retrieve_hybrid(query, COLLECTIONS["incidents"], top_k)
     all_hits: list[dict] = list(incidents_hits)

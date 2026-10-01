@@ -111,7 +111,7 @@ nenhuma delas):
 |---|---|---|
 | `/diagnose`, `/llm/policy`, `/incidents/{id}/verify`, `/mcp` | `X-API-Key` | `API_KEY` |
 | `/a2a` | `X-A2A-Api-Key` | `A2A_API_KEY` |
-| `POST /events/incident` | `X-Api-Key` (Event Mesh) | `EVENTS_API_KEY` |
+| `POST /events/incident` | `X-Event-Mesh-Api-Key` | `EVENT_MESH_API_KEY` |
 | `/admin` e `/admin/api/*` | `X-API-Admin-Key` | `ADMIN_API_KEY` |
 
 Login de usuário (cookie de sessão): `POST /auth/login` (usuário+senha →

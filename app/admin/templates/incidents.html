@@ -1,56 +1,87 @@
 {% extends "base.html" %}
 {% block title %}Incidentes · Admin{% endblock %}
 {% block content %}
-<h2>Incidentes diagnosticados (DA-50)</h2>
-<p>Cada linha traz o sistema integrado correlacionado: <code>system_key</code>
-informado pelo cliente tem precedência; na ausencia dele, o conector
-(<code>interface_type</code>) resolve o sistema — quando o mesmo conector
-existe em mais de um sistema no catálogo, a linha é marcada
-<strong>ambígua</strong> em vez de escolher um sistema por conta própria.</p>
+<main>
+  <h2>Incidentes diagnosticados (DA-50)</h2>
+  <p style="color: var(--text); margin-bottom: 1.5rem; line-height: 1.6;">
+    Cada linha traz o sistema integrado correlacionado. Na ausência de
+    <code>system_key</code>, resolve pelo <code>interface_type</code>. Quando há ambiguidade,
+    a linha é marcada como <strong>ambígua</strong>.
+  </p>
 
-<div>
-  <input id="f-system" placeholder="system_key (ex: cap_prod)">
-  <input id="f-interface" placeholder="interface_type (ex: cap)">
-  <select id="f-verified">
-    <option value="">veredito: todos</option>
-    <option value="false">veredito: ainda sem veredito</option>
-    <option value="true">veredito: com veredito</option>
-  </select>
-  <button onclick="loadIncidents()">Filtrar</button>
-  <button onclick="clearFilters()">Limpar</button>
-</div>
+  <div class="card">
+    <h3 style="margin-top: 0; margin-bottom: 1rem; color: var(--text);">Filtros</h3>
+    <div class="filters">
+      <input id="f-system" placeholder="system_key (ex: cap_prod)">
+      <input id="f-interface" placeholder="interface_type (ex: cap)">
+      <select id="f-verified">
+        <option value="">veredito: todos</option>
+        <option value="false">veredito: sem veredito</option>
+        <option value="true">veredito: com veredito</option>
+      </select>
+      <button class="btn btn-primary" onclick="loadIncidents()">🔍 Filtrar</button>
+      <button class="btn btn-secondary" onclick="clearFilters()">🗑️ Limpar</button>
+    </div>
+  </div>
 
-<table id="incidents">
-  <thead><tr>
-    <th>Criado</th><th>id</th><th>Interface</th><th>Origem (connector_source_system)</th>
-    <th>Sistema correlacionado</th><th>Causa raiz provável</th>
-    <th>Conf. diag.</th><th>Evidência</th><th>Provider</th><th>Lat.</th>
-    <th>Verificação</th><th></th>
-  </tr></thead>
-  <tbody id="incidents-body"><tr><td colspan="12">carregando…</td></tr></tbody>
-</table>
+  <div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3 style="margin: 0; color: var(--text);">Incidentes</h3>
+      <span style="font-size: 0.9rem; color: var(--text); opacity: 0.7;" id="count">0 incidentes</span>
+    </div>
 
-<h3>Detalhe do incidente</h3>
-<div id="detail"><p class="err" style="display:none"></p></div>
+    <div style="overflow-x: auto;">
+      <table id="incidents">
+        <thead>
+          <tr>
+            <th style="width: 140px;">Criado</th>
+            <th style="width: 100px;">ID</th>
+            <th style="width: 100px;">Interface</th>
+            <th style="width: 140px;">Origem</th>
+            <th>Sistema correlacionado</th>
+            <th style="min-width: 150px;">Causa raiz provável</th>
+            <th style="width: 80px;">Conf.</th>
+            <th style="width: 80px;">Evidência</th>
+            <th style="width: 100px;">Provider</th>
+            <th style="width: 70px;">Lat.</th>
+            <th style="width: 100px;">Verificação</th>
+            <th style="width: 80px;">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="incidents-body">
+          <tr><td colspan="12" style="text-align: center; padding: 2rem;">Carregando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 
-<p class="warn" id="msg"></p>
+  <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--text);">Detalhe do Incidente</h3>
+  <div class="card">
+    <div id="detail">
+      <p style="color: var(--text); opacity: 0.7; margin: 0;">Clique em "detalhe" em qualquer linha para ver informações completas</p>
+    </div>
+  </div>
+
+  <p class="alert" id="msg" style="background: #fee2e2; border-color: #fecaca; color: #991b1b; display: none;"></p>
+</main>
 
 <script>
-const COLS = 12;
 function systemCell(sys) {
-  if (!sys || sys.match === 'none') return '<span class="pill err">sem correspondência</span>';
+  if (!sys || sys.match === 'none') return '<span class="status-badge status-offline">Sem correspondência</span>';
   if (sys.match === 'ambiguous') {
-    return `<span class="pill warn">ambíguo</span> <code>${escapeHtml((sys.candidates || []).join(', '))}</code>`;
+    return `<span class="status-badge status-degraded">Ambíguo</span> <code style="font-size: 0.85rem; margin-left: 0.5rem;">${escapeHtml((sys.candidates || []).join(', '))}</code>`;
   }
   const label = sys.system_key + ' · ' + (sys.name || '-');
-  return `${pill(sys.status)} ${escapeHtml(label)} <span class="muted">(${escapeHtml(sys.match)})</span>`;
+  return `${pill(sys.status)} <span style="font-family: monospace; font-size: 0.9rem;">${escapeHtml(sys.system_key)}</span> <span style="opacity: 0.7;">(${escapeHtml(sys.match)})</span>`;
 }
+
 function verifiedCell(i) {
-  if (i.verified_at == null) return '<span class="pill">⏳ pendente</span>';
-  if (i.diagnosis_correct === true) return '<span class="pill ok">✅ correto</span>';
-  if (i.diagnosis_correct === false) return '<span class="pill err">❌ incorreto</span>';
-  return '<span class="pill warn">verificado (sem veredito)</span>';
+  if (i.verified_at == null) return '<span class="status-badge status-degraded">⏳ Pendente</span>';
+  if (i.diagnosis_correct === true) return '<span class="status-badge status-active">✅ Correto</span>';
+  if (i.diagnosis_correct === false) return '<span class="status-badge status-offline">❌ Incorreto</span>';
+  return '<span class="status-badge" style="background: var(--border); color: var(--text);">Verificado</span>';
 }
+
 function loadIncidents() {
   const params = new URLSearchParams();
   const sys = document.getElementById('f-system').value.trim();
@@ -59,56 +90,94 @@ function loadIncidents() {
   if (sys) params.set('system_key', sys);
   if (itf) params.set('interface_type', itf);
   if (ver) params.set('verified', ver);
-  adminFetch('/admin/api/incidents?' + params.toString()).then(r => {
-    if (r.status === 401) throw new Error('chave admin inválida — insira em cima');
+
+  const url = '/admin/api/incidents?' + params.toString();
+  adminFetch(url).then(r => {
+    if (r.status === 401) throw new Error('Chave admin inválida — insira acima');
     if (r.status === 503) throw new Error('DB não configurado (DATABASE_URL ausente)');
     return r.json();
   }).then(rows => {
     const tb = document.getElementById('incidents-body');
     tb.innerHTML = '';
-    if (!rows.length) { tb.innerHTML = `<tr><td colspan="${COLS}">nenhum incidente para o filtro</td></tr>`; return; }
+    const count = document.getElementById('count');
+
+    if (!rows.length) {
+      tb.innerHTML = '<tr><td colspan="12" style="text-align: center; padding: 2rem; color: var(--text); opacity: 0.7;">Nenhum incidente para o filtro atual</td></tr>';
+      count.textContent = '0 incidentes';
+      return;
+    }
+    count.textContent = `${rows.length} incidentes`;
+
     for (const i of rows) {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${escapeHtml((i.created_at || '').replace('T', ' ').slice(0, 19))}</td>
-        <td><code>${escapeHtml(String(i.id).slice(0, 8))}</code></td>
-        <td>${escapeHtml(i.interface_type || '—')}</td>
+      tr.innerHTML = `
+        <td style="font-family: monospace; font-size: 0.9rem;">${escapeHtml((i.created_at || '').replace('T', ' ').slice(0, 19))}</td>
+        <td><span style="font-family: monospace; font-size: 0.9rem;">${escapeHtml(String(i.id).slice(0, 8))}</span></td>
+        <td style="font-family: monospace; font-size: 0.9rem;">${escapeHtml(i.interface_type || '—')}</td>
         <td>${escapeHtml(i.connector_source_system || '—')}</td>
         <td>${systemCell(i.system)}</td>
-        <td>${escapeHtml((i.probable_root_cause || '—').slice(0, 90))}</td>
+        <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(i.probable_root_cause || '')}">${escapeHtml((i.probable_root_cause || '—').slice(0, 60))}</td>
         <td>${i.diagnosis_confidence == null ? '—' : escapeHtml(i.diagnosis_confidence)}</td>
         <td>${i.evidence_strength == null ? '—' : escapeHtml(i.evidence_strength)}</td>
-        <td>${escapeHtml(i.llm_provider_used || '—')}</td>
-        <td>${escapeHtml(i.latency_ms == null ? '—' : i.latency_ms + ' ms')}</td>
+        <td style="font-family: monospace; font-size: 0.9rem;">${escapeHtml(i.llm_provider_used || '—')}</td>
+        <td style="font-family: monospace; font-size: 0.9rem;">${escapeHtml(i.latency_ms == null ? '—' : i.latency_ms + ' ms')}</td>
         <td>${verifiedCell(i)}</td>
-        <td><button onclick="loadDetail('${i.id}')">detalhe</button></td>`;
+        <td><button onclick="loadDetail('${i.id}')" class="btn btn-primary" style="padding: 0.4rem 0.8rem;">📋</button></td>`;
       tb.appendChild(tr);
     }
-  }).catch(e => document.getElementById('msg').textContent = e.message);
+  }).catch(e => {
+    const msg = document.getElementById('msg');
+    msg.textContent = e.message;
+    msg.style.display = 'block';
+  });
 }
+
 function loadDetail(id) {
   adminFetch('/admin/api/incidents/' + encodeURIComponent(id)).then(r => {
-    if (r.status === 404) throw new Error('incidente não encontrado');
+    if (r.status === 404) throw new Error('Incidente não encontrado');
     return r.json();
   }).then(i => {
     const el = document.getElementById('detail');
-    const ev = (i.evidence || []).map(e => `- [${e.trust_level || '?'}] ${e.source || e.description || JSON.stringify(e)}`).join('\n');
-    el.innerHTML = `<p><strong>${escapeHtml(i.id)}</strong> · ${systemCell(i.system)}</p>
-      <pre>${escapeHtml(i.description || '(sem descrição)')}</pre>
-      <p>Causa provável: ${escapeHtml(i.probable_root_cause || '—')}</p>
-      <p>Causa confirmada: ${escapeHtml(i.verified_root_cause || '—')}
-        (por ${escapeHtml(i.verified_by || '—')})</p>
-      <p>Códigos de erro: ${escapeHtml((i.error_codes || []).join(', ') || '—')}</p>
-      <p>Evidências (${(i.evidence || []).length}):</p>
-      <pre>${escapeHtml(ev || '(nenhuma)')}</pre>`;
+    const ev = (i.evidence || []).map(e => `- <strong>[${e.trust_level || '?'}]</strong> ${e.source || e.description || JSON.stringify(e)}`).join('<br>\n');
+    el.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+        <span style="font-size: 1.2rem; font-weight: 700;">${escapeHtml(i.id)}</span>
+        ${systemCell(i.system)}
+      </div>
+
+      <div style="background: var(--border); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+        <strong style="color: var(--text); margin-bottom: 0.5rem; display: block;">Descrição:</strong>
+        <pre style="margin: 0; white-space: pre-wrap;">${escapeHtml(i.description || '(sem descrição)')}</pre>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+        <div class="card" style="padding: 1rem;">
+          <strong style="color: var(--text); margin-bottom: 0.5rem; display: block;">Causa raiz provável:</strong>
+          <p style="margin: 0; color: var(--text);">${escapeHtml(i.probable_root_cause || '—')}</p>
+        </div>
+        <div class="card" style="padding: 1rem;">
+          <strong style="color: var(--text); margin-bottom: 0.5rem; display: block;">Causa confirmada:</strong>
+          <p style="margin: 0; color: var(--text);">${escapeHtml(i.verified_root_cause || '—')}
+            <span style="opacity: 0.7;">(por ${escapeHtml(i.verified_by || '—')})</span></p>
+        </div>
+      </div>
+
+      <div class="card" style="padding: 1rem; margin-top: 1rem;">
+        <strong style="color: var(--text); margin-bottom: 0.5rem; display: block;">Códigos de erro:</strong>
+        <p style="margin: 0; color: var(--text); font-family: monospace;">${escapeHtml((i.error_codes || []).join(', ') || '—')}</p>
+      </div>
+
+      <div class="card" style="padding: 1rem; margin-top: 1rem;">
+        <strong style="color: var(--text); margin-bottom: 0.5rem; display: block;">Evidências (${(i.evidence || []).length}):</strong>
+        <pre style="margin: 0;">${escapeHtml(ev || '(nenhuma)')}</pre>
+      </div>
+    `;
   }).catch(e => {
     const el = document.getElementById('detail');
-    el.innerHTML = '';
-    const p = document.createElement('p');
-    p.className = 'err';
-    p.textContent = e.message;
-    el.appendChild(p);
+    el.innerHTML = `<p style="color: var(--error);">Erro: ${escapeHtml(e.message)}</p>`;
   });
 }
+
 function clearFilters() {
   document.getElementById('f-system').value = '';
   document.getElementById('f-interface').value = '';
@@ -116,7 +185,7 @@ function clearFilters() {
   history.replaceState(null, '', '/admin/incidents');
   loadIncidents();
 }
-// Drill-down a partir de /admin/systems: /admin/incidents?system_key=...
+
 (function initFromUrl() {
   const sys = new URLSearchParams(location.search).get('system_key');
   if (sys) document.getElementById('f-system').value = sys;

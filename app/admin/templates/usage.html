@@ -1,46 +1,110 @@
 {% extends "base.html" %}
 {% block title %}Metering · Admin{% endblock %}
 {% block content %}
-<h2>Consumo real de tokens (período aberto)</h2>
-<button onclick="loadUsage()">Recarregar</button>
-<table id="usage">
-  <thead><tr>
-    <th>Origem</th><th>Modelo</th><th>tokens in</th><th>tokens out</th><th>total</th>
-    <th>requests</th><th>falhas</th><th>custo USD</th><th>limite/mês</th><th>consumido</th><th></th>
-  </tr></thead>
-  <tbody id="usage-body"><tr><td colspan="11">carregando…</td></tr></tbody>
-</table>
-<p class="warn" id="msg"></p>
-<p>Percentual = (tokens in+out) / limite mensal cadastrado em <em>Modelos</em>.
-  Sem limite cadastrado, o percentual fica em branco.</p>
+<main>
+  <h2>Consumo real de tokens (período aberto)</h2>
+  <p style="color: var(--text); margin-bottom: 1.5rem; line-height: 1.6;">
+    Acompanhe o uso de tokens por modelo com limite mensal e custo em USD.
+  </p>
+
+  <div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3 style="margin: 0; color: var(--text);">Consumo por Modelo</h3>
+      <button class="btn btn-primary" onclick="loadUsage()">🔄 Recarregar</button>
+    </div>
+
+    <div style="overflow-x: auto;">
+      <table id="usage">
+        <thead>
+          <tr>
+            <th style="width: 120px;">Origem</th>
+            <th>Modelo</th>
+            <th style="width: 90px;">Tokens in</th>
+            <th style="width: 90px;">Tokens out</th>
+            <th style="width: 90px;">Total</th>
+            <th style="width: 80px;">Requests</th>
+            <th style="width: 70px;">Falhas</th>
+            <th style="width: 80px;">Custo USD</th>
+            <th style="width: 90px;">Limite/mês</th>
+            <th style="width: 70px;">Consumido</th>
+            <th style="width: 70px;">Ação</th>
+          </tr>
+        </thead>
+        <tbody id="usage-body">
+          <tr><td colspan="11" style="text-align: center; padding: 2rem;">Carregando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <p style="color: var(--text); margin: 0;">
+      <strong>Percentual =</strong> (tokens in+out) / limite mensal cadastrado em <em>Modelos</em>.
+      Sem limite cadastrado, o percentual fica em branco.
+    </p>
+  </div>
+
+  <p class="alert" id="msg" style="background: #fee2e2; border-color: #fecaca; color: #991b1b; display: none;"></p>
+</main>
 
 <script>
 function loadUsage() {
+  const btn = document.querySelector('#usage + .card + p + p button');
+  const originalText = btn.textContent;
+  btn.textContent = 'Carregando...';
+  btn.disabled = true;
+
   adminFetch('/admin/api/usage').then(r => {
-    if (r.status === 401) throw new Error('chave admin inválida — insira em cima');
+    if (r.status === 401) throw new Error('Chave admin inválida — insira acima');
     if (r.status === 503) throw new Error('DB não configurado (DATABASE_URL ausente)');
     return r.json();
   }).then(rows => {
     const tb = document.getElementById('usage-body');
     tb.innerHTML = '';
-    if (!rows.length) { tb.innerHTML = '<tr><td colspan="11">sem modelos registrados</td></tr>'; return; }
+    if (!rows.length) {
+      tb.innerHTML = '<tr><td colspan="11" style="text-align: center; padding: 2rem; color: var(--text); opacity: 0.7;">Sem modelos registrados</td></tr>';
+      btn.textContent = originalText;
+      btn.disabled = false;
+      return;
+    }
     for (const u of rows) {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${escapeHtml(u.provider_origin)}</td><td>${escapeHtml(u.model_id)}</td>
-        <td>${u.tokens_in}</td><td>${u.tokens_out}</td><td><strong>${u.tokens_total}</strong></td>
-        <td>${u.requests}</td><td>${u.failures}</td><td>${u.cost_usd}</td>
-        <td>${u.monthly_limit_tokens ?? '—'}</td>
-        <td>${u.percent == null ? '—' : `<span class="pill ${u.percent >= 80 ? 'warn' : 'ok'}">${u.percent}%</span>`}</td>
-        <td><button onclick="resetUsage('${u.provider_origin}','${u.model_id}')">reset</button></td>`;
+      const pctClass = u.percent != null && u.percent >= 80 ? 'status-degraded' : 'status-active';
+      tr.innerHTML = `
+        <td style="font-family: monospace; font-size: 0.9rem;">${escapeHtml(u.provider_origin)}</td>
+        <td style="font-weight: 500;"><span style="font-size: 0.85rem; opacity: 0.6; margin-right: 0.25rem;">🤖</span>${escapeHtml(u.model_id)}</td>
+        <td style="font-family: monospace; font-size: 0.9rem;">${u.tokens_in}</td>
+        <td style="font-family: monospace; font-size: 0.9rem;">${u.tokens_out}</td>
+        <td style="font-weight: 600; font-family: monospace; font-size: 0.9rem;">${u.tokens_total}</td>
+        <td style="font-family: monospace; font-size: 0.9rem;">${u.requests}</td>
+        <td style="font-family: monospace; font-size: 0.9rem;">${u.failures}</td>
+        <td style="font-family: monospace; font-size: 0.9rem;">${u.cost_usd}</td>
+        <td style="font-family: monospace; font-size: 0.9rem;">${u.monthly_limit_tokens ?? '—'}</td>
+        <td>${u.percent == null ? '—' : `<span class="status-badge ${pctClass}">${u.percent}%</span>`}</td>
+        <td><button onclick="resetUsage('${u.provider_origin}','${u.model_id}')" class="btn btn-danger" style="padding: 0.4rem 0.8rem;">🗑️</button></td>`;
       tb.appendChild(tr);
     }
-  }).catch(e => document.getElementById('msg').textContent = e.message);
+    btn.textContent = originalText;
+    btn.disabled = false;
+  }).catch(e => {
+    const msg = document.getElementById('msg');
+    msg.textContent = e.message;
+    msg.style.display = 'block';
+    btn.textContent = originalText;
+    btn.disabled = false;
+  });
 }
+
 function resetUsage(origin, model) {
   if (!confirm('Fechar o período atual e zerar o contador de ' + escapeHtml(model) + '?')) return;
   adminFetch('/admin/api/usage/' + encodeURIComponent(origin) + '/' + encodeURIComponent(model) + '/reset',
-    {method:'POST'}).then(() => loadUsage()).catch(e => document.getElementById('msg').textContent = e.message);
+    {method:'POST'}).then(() => loadUsage()).catch(e => {
+      const msg = document.getElementById('msg');
+      msg.textContent = e.message;
+      msg.style.display = 'block';
+    });
 }
+
 loadUsage();
 </script>
 {% endblock %}

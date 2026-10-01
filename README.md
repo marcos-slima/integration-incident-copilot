@@ -173,6 +173,7 @@ final.
 | 56 | [41](#decisoes-de-arquitetura) | Conector SAP PO/PI on-premise: Basic Auth nativo contra o Message Monitor, com OAuth2 opcional para quando há API Management na frente |
 | 57 | [43](#decisoes-de-arquitetura) | Fontes de busca web como configuração (`web_search_sources`): `WEB_SEARCH_POLICY=approved` deixa de ser no-op |
 | 58 | [44](#decisoes-de-arquitetura) | Mapa de cobertura produto SAP × mecanismo, calculado de dados versionados: 3 níveis (`dedicated` / `generic` / `absent`) em vez de um booleano |
+| 59 | [45](#decisoes-de-arquitetura) | Conectores multi-vendor: fluxo completo, padrão comum, checklist de 8 superfícies ao adicionar conector, documento consolidado `/docs/CONNECTORS.md` |
 
 ### 1. Alucinação por mistura de contexto (DA-1)
 
@@ -2433,3 +2434,95 @@ inexistente, ou quando `docs/COVERAGE_MAP.md` está desatualizado — este
   docstring do conector cita Service Cloud como exemplo de caso, mas o
   conector fala com a plataforma Salesforce. Declarar ambos seria afirmar
   escopo que ninguém verificou; fica como questão aberta, não como omissão.
+
+### 45. Conectores multi-vendor: fluxo completo, padrão comum e documentação (DA-59)
+
+**O problema.** O repositório tem 10 conectores implementados, mas a
+documentação existente não respondia a três perguntas-chave para quem quer
+usar ou contribuir:
+
+1. *Qual é o fluxo completo que conecta um `IncidentRequest` com um dado em tempo
+   real?* — O pipeline (`supervisor_node → connector_node → retrieve_node → *diagnosis_node →
+   report_node`) é documentado, mas cada passo do `connector_node` (como o
+   conector decide entre mock/real, como o `fetch(identifier)` gera um
+   `ConnectorResult`, como o resultado se integra ao repositório) precisava
+   ser inferido do código.
+2. *Como adicionar um novo conector?* — O registry e os `Literal`s nos
+   modelos eram mencionados, mas não havia checklist de todas as superfícies
+   que precisam ser atualizadas (**8** no total: registry, Literals `IncidentRequest.interface_type`
+   e `IncidentEventData.interface_type`, supervisor, CLI, UI admin,
+   `CONNECTOR_TYPES` do catálogo admin, seed de `web_search_sources` DA-57,
+   `data/connector_coverage.yaml` DA-58).
+3. *Como testar efetivamente?* — A distinção entre modo mock/real e os
+   identificadores de demo (`-DEMO`) eram documentados no docstring de cada
+   conector, mas não havia um guia consolidado com as estratégias de teste
+   (mock via `httpx.MockTransport`, teste de erro 401/timeout simulado,
+   invocação real com credenciais `.env`).
+
+**A solução.** Documentação consolidada em `/docs/CONNECTORS.md` (348 linhas),
+com seções:
+
+| Seção | Conteúdo |
+|---|---|
+| Visão Geral | Resumo de 10 conectores, modo mock/real, circuit breaker |
+| Fluxo de Uso no Pipeline | DiagramaMermaid com 5 passos (supervisor → connector → retrieve → diagnosis → report) |
+| Conectores Suportados | 10 tabelas com: sistamas, API, identificador, credenciais `.env`, modo mock, validação |
+| Configuração de Credenciais | `.env` padrão com exemplos para todos os conectores, verificação pelo health check |
+| Adicionando Um Novo Conector | Checklist de 8 superfícies + exemplo de código |
+| Testes de Conector | Modo mock (padrão), modo real, teste unitário com mock |
+| Erros Comuns | Tabela de erros e soluções |
+| Limitações | Nenhum conector possui polling/webhook/retry automático |
+
+**O que foi documentado (10 conectores):**
+
+| Conector | Sistemas | Identificadores | Modo real | Validado |
+|---|---|---|---|---|
+| `odata` | CPI, Integration Suite | Nome iFlow, MPL ID | ✅ OAuth2 | ✅ Mock |
+| `rfc` | ECC, S/4HANA | RFC destination, IDoc | ✅ pyrfc | ✅ Mock |
+| `servicenow` | ServiceNow ITSM | `INCxxxxx` | ✅ REST | ✅ Mock |
+| `salesforce` | Salesforce | Case Number (`00847`) | ✅ SOQL | ✅ Mock |
+| `workday` | Workday HCM | Event ID | ✅ REST WWS | ✅ Mock |
+| `ariba` | SAP Ariba | PO Number | ✅ Open API | ✅ Mock |
+| `successfactors` | SuccessFactors EC | Person ID External | ✅ OData v2 | ✅ Mock |
+| `po` | SAP PO/PI | Message ID (`FAILED`, `HOLDING`, `ALL`) | ✅ Message Monitor | ⚠️ Mock (API não pública) |
+| `cap` | SAP CAP | Entity ID via `$filter` | ✅ OData v4 | ✅ Mock |
+| `apim` | API Management / Integration Suite (analytics) | Proxy name | ✅ OAuth2 | ⚠️ Especulativo |
+
+**Superfícies atualizadas ao adicionar um conector (DA-58/DA-59):**
+
+1. `app/connectors/__init__.py` — registry + mapping `.env` settings
+2. `app/models.py` — `Literal` em `IncidentRequest.interface_type`
+3. `app/models.py` — `Literal` em `IncidentEventData.interface_type`
+4. `app/agent/supervisor.py` — classificação por domínio (`sap/saas/generic`)
+5. `app/cli/diagnose.py` — opção de seleção para `interface_type`
+6. `app/admin/templates/systems.html` — dropdown `<select name="connector_type">`
+7. `app/admin/models.py` — seed `WebSearchSource` DA-57
+8. `data/connector_coverage.yaml` — `dedicated/generic/absent` + mecanismos DA-58
+
+**Validação (sem novos testes):**
+
+- Todo conector segue o padrão `fetch(identifier) → ConnectorResult`
+- `connector_node` usa `get_connector(interface_type).fetch(identifier)` (DA-22)
+- Modo mock ativo quando `.env` não tem as credenciais; senão, modo real
+- Health check (`GET /health`) reporta estado de cada conector (`real`/`mock`/`misconfigured`)
+
+**Limitações (deliberadamente registradas):**
+
+- **Nenhum conector implementa polling** — somente fetch por identificador
+- **Sem webhook subscriptions** — o copilot não recebe eventos em tempo real
+- **Retry manual** — o caller decide quando retryar em caso de falha
+- **Credenciais por conector** — cada conector tem seu próprio conjunto `.env`
+
+**Bugs encontrados no caminho:**
+
+- **DA-57**: `interface_type` em `app/models.py` estava incompleto (`po` e `successfactors` faltavam), o que causava falha silenciosa no dropdown da UI. O gate `connector_reachable` detecta agora as **8** superfícies.
+- **DA-58**: `connector_coverage.yaml` tinha lacunas (`po`, `successfactors` ausentes). O gate `connector_coverage` detecta agora as linhas faltantes.
+- **DA-59**: antes desta documentação, cada conector tinha seu próprio docstring com detalhes de API; agora há um guia consolidado com o fluxo completo e checklist de adição.
+
+**Por que esta DA não tem testes novos.** A validação já existia nos testes de
+cada conector (`tests/test_ota*.py`, `tests/test_rfc*.py`, etc). Esta DA
+adiciona **documentação**, não código. O gate `connector_reachable` (DA-51)
+e `connector_coverage` (DA-51) já cobrem as superfícies 7 e 8; o resto é
+convenção de código (padrão `ConnectorResult`) e testes unitários individuais.
+
+---

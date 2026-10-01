@@ -8,7 +8,12 @@ Roda o pipeline real para um caso e mostra, lado a lado:
 
 Uso:
   uv run python3 scripts/debug_matched_source.py "iFlow falhando com erro 401"
-  QDRANT_URL=http://localhost:6335 uv run python3 scripts/debug_matched_source.py "iFlow falhando com erro 401"
+
+O Qdrant usado é o de `settings.qdrant_url`, que vem do `.env` (ou do
+fallback de app/config.py). Nao fixe a porta no comando: o `6335` deste
+script era um remendo do `.env` local e apontava para o Qdrant deste
+repo. Para rodar contra outro destino, exporte QDRANT_URL explicitamente
+e confira a linha "qdrant_url" que o script imprime.
 """
 
 import sys

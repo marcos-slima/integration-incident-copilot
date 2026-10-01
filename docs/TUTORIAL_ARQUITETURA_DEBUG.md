@@ -5,7 +5,8 @@
 > analogias com ABAP como ponte, não como substituto de entender o
 > código Python real.
 >
-> Pré-requisito: stack local no ar (`~/ai-stack` via `docker compose
+> Pré-requisito: stack local no ar (`ai-stack` em
+> `/home/marcos-lima/MyProjects/GitHub/ai-stack` via `docker compose
 > up -d`, Ollama ativo) e o projeto aberto no VS Code com o
 > `.vscode/launch.json` já configurado (ver Fase 4 do
 > `docs/PROCESSO_DESENVOLVIMENTO.md`).

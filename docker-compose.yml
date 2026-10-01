@@ -19,10 +19,23 @@ x-common-env: &common-env
   # em memoria (§3.7: degradacao graciosamente).
   REDIS_URL: ${REDIS_URL:-}
   # Persistência de incidentes (Fase 1 Observabilidade Grafana)
-  # Opt-in: vazio = sem PostgreSQL (padrão). Configure DATABASE_URL
-  # no .env para ativar. Formato:
-  #   postgresql+asyncpg://iic:iic@postgres:5432/iic
-  DATABASE_URL: ${DATABASE_URL:-}
+  # Opt-in: vazio = sem PostgreSQL (padrão). Configure no .env para ativar.
+  #
+  # O host "postgres" é o nome do serviço dentro da rede do compose e
+  # NÃO resolve na máquina — é por isso que o .env documenta o
+  # DATABASE_URL com 127.0.0.1 (ver .env.example). Aqui o container
+  # recebe o valor interno por default, sem depender do .env:
+  # mesma estrategia de QDRANT_URL acima, que tambem hardcodeia "qdrant".
+  # Para apontar o container a um Postgres externo (RDS, BTP,
+  # Cloud SQL), defina CONTAINER_DATABASE_URL em vez de mexer aqui.
+  DATABASE_URL: ${CONTAINER_DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-iic}:${POSTGRES_PASSWORD:-REQUIRED_SET_IN_ENV}@postgres:5432/${POSTGRES_DB:-iic}}
+  # Neo4j / GraphRAG (opt-in, perfil "graphrag"). O serviço "neo4j"
+  # existia no compose mas estas variaveis NAO eram passadas a api,
+  # entao o GraphRAG nao tinha como alcancar o banco nem no modo
+  # container. Sem NEO4J_URI, app/rag/graph_store.py fica inerte.
+  NEO4J_URI: ${CONTAINER_NEO4J_URI:-bolt://neo4j:7687}
+  NEO4J_USER: ${NEO4J_USER:-neo4j}
+  NEO4J_PASSWORD: ${NEO4J_PASSWORD:-}
   # Autenticacao da API (header X-API-Key) e do servidor A2A.
   # Vazio = o app gera uma chave aleatoria no startup (DA-18).
   API_KEY: ${API_KEY:-}

@@ -758,7 +758,7 @@ async def create_user(payload: UserCreate, session: SessionReq) -> dict[str, Any
     (mesmo formato DA-54) — nunca em claro em lugar nenhum.
 
     Out-of-band (SMTP nao configurado): o token de ativacao volta AQUI,
-    na resposta de admin (canal X-Admin-Api-Key), com WARNING no log.
+    na resposta de admin (canal X-API-Admin-Key), com WARNING no log.
     Entrega real: `deliver_email` em app/webusers.py — token sai da
     resposta sozinho quando o canal entrega de verdade."""
     from app.webusers import create_user as domain_create_user

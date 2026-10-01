@@ -11,7 +11,7 @@ Cada promessa tem teste que a quebra de proposito:
 - login: usuario do banco ATIVO entra (mesma sessao DA-54); pendente e
   desativado NAO entram; sem banco, o .env (DA-54) segue valendo
   (bootstrap — o operador nunca fica trancado fora);
-- admin: CRUD + reemissoes exigem X-Admin-Api-Key; token/codigo
+- admin: CRUD + reemissoes exigem X-API-Admin-Key; token/codigo
   out-of-band voltam SO na resposta de admin; _user_out nunca expoe hash.
 """
 

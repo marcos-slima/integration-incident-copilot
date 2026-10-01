@@ -1943,7 +1943,7 @@ verificação de posse do e-mail nem do telefone: quem tivesse a senha inicial
 entrava, mesmo que o e-mail cadastrado não fosse da pessoa.
 
 **A solução.** Tabela `web_users` (migration 007) + CRUD na superfície admin
-(DA-46, `X-Admin-Api-Key`: `/admin/api/users`, tela `/admin/users`) +
+(DA-46, `X-API-Admin-Key`: `/admin/api/users`, tela `/admin/users`) +
 **ativação em duas etapas antes do login valer**:
 
     admin cria usuário → status=pending_email, token HMAC por e-mail (24h)

@@ -485,6 +485,13 @@ class Settings(BaseSettings):
     # Requires: pip install prometheus-fastapi-instrumentator
     prometheus_enabled: bool = False
 
+    # SMTP (DA-55: ativação de usuários via e-mail)
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -35,7 +35,7 @@ deste documento.
 |---|---|
 | [`GETTING_STARTED.md`](GETTING_STARTED.md) | Do zero ao primeiro diagnóstico em menos de 10 minutos |
 | [`USER_GUIDE.md`](USER_GUIDE.md) | Guia de operação: autenticação, todas as superfícies (REST, UI, CLI, MCP, A2A, eventos), leitura do resultado, loop de verificação e onde ficam os logs por camada |
-| [`DEPLOYMENT.md`](DEPLOYMENT.md) | **Documento único de implantação**: avaliação local para interessados, dev local, container, produção com auth obrigatória, Kyma, e o que **não** é implementado — cada cenário com o próprio passo a passo |
+| [`DEPLOYMENT.md`](DEPLOYMENT.md) | **Documento único de implantação**: 9 cenários (avaliação local, dev, container, produção com auth, Kyma, cloud gerenciado + soberania, on-premise com sizing do Ollama), cada um com passo a passo próprio e status explícito |
 | [`DEPLOY.md`](DEPLOY.md) | Detalhe do caminho Docker Compose (complemento do `DEPLOYMENT.md`) |
 | [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) | Diagnóstico de falha por sintoma (startup, AMQP, RAG, LLM, Kyma) |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Visão técnica do que existe no código. Local alternativo declarado para a prosa das DA-32/33/34/35 |

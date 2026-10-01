@@ -5,11 +5,10 @@
 > analogias com ABAP como ponte, não como substituto de entender o
 > código Python real.
 >
-> Pré-requisito: stack local no ar (`ai-stack` em
-> `/home/marcos-lima/MyProjects/GitHub/ai-stack` via `docker compose
-> up -d`, Ollama ativo) e o projeto aberto no VS Code com o
-> `.vscode/launch.json` já configurado (ver Fase 4 do
-> `docs/PROCESSO_DESENVOLVIMENTO.md`).
+> Pré-requisito: stack local no ar (via `docker compose up -d` na raiz
+do projeto, Ollama ativo) e o projeto aberto no VS Code com o
+`.vscode/launch.json` já configurado (ver Fase 4 do
+`docs/PROCESSO_DESENVOLVIMENTO.md`).
 
 > **Nota de atualização:** este tutorial foi escrito quando o projeto
 > tinha só 2 conectores (OData/RFC, ambos mock) e 4 nodes no grafo. Hoje
@@ -21,6 +20,13 @@
 > O roteiro de debug abaixo continua correto para o caso RFC guiado na
 > Seção 5, mas nao cobre os nodes/conectores novos — ver
 > `docs/ARCHITECTURE.md` para o estado completo e atual.
+>
+> **Debug full stack (UI + backend):** a UI React roda via `npm run dev`
+> (porta 5173) com proxy `/diagnose` → FastAPI (porta 8000). Use
+> "Debug: Frontend (React) + Backend" no `.vscode/launch.json` para
+> iniciar o Vite e abrir o navegador automaticamente. Breakpoints em
+> componentes React (Chrome DevTools) + backend (VS Code debugpy) rodam
+> simultaneamente.
 
 ---
 

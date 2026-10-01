@@ -327,17 +327,17 @@ diretamente (sem Ollama real, mesmo padrao de `test_llm_factory.py`).
 dois modos (GraphRAG ligado/desligado), confirmando os nodes esperados
 no grafo resultante.
 
-## Rodando sem depender do stack pessoal do `ai-stack`
+## Rodando sem depender de infra externa
 
 O `docker-compose.yml` na raiz deste repositorio sobe Ollama + Qdrant +
-a API num unico `docker compose up -d`, sem depender do stack completo
-de observabilidade (stack pessoal do `ai-stack`, com Langfuse/Postgres/ClickHouse/
-Redis/MinIO) usado no ambiente de desenvolvimento pessoal. Isso importa
-porque este projeto tambem funciona como demonstracao para terceiros
-(cliente, entrevistador) - que nao tem, nem deveriam precisar montar,
-o ambiente pessoal do autor so para rodar o projeto uma vez. Langfuse
-continua opcional: sem as chaves configuradas, o app roda normalmente,
-so sem tracing.
+a API num unico `docker compose up -d`, sem depender de infra externa
+(incluindo Neo4j opcional para GraphRAG e stack completo do Langfuse
+para observabilidade). Isso importa porque este projeto tambem funciona
+como demonstracao para terceiros (cliente, entrevistador) - que nao
+têm, nem deveriam precisar montar, o ambiente de desenvolvimento so
+para rodar o projeto uma vez. Langfuse, Neo4j e infra opcional:
+sem as chaves/configuracao, o app roda normalmente, so sem tracing/
+GraphRAG.
 
 ## A2A (Agent2Agent) - interoperabilidade externa
 

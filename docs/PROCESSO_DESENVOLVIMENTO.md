@@ -42,7 +42,7 @@ orquestração.
 - Prova de conceito do RAG com 4 documentos de exemplo — validação
   isolada do retriever antes de integrar a qualquer agente
 
-**Artefatos:** `~/ai-lab`, stack de infraestrutura `ai-stack`, repositório inicial,
+**Artefatos:** `~/ai-lab`, repositório inicial,
 `app/rag/ingest.py`/`retriever.py` (v1)
 
 **Critério de saída:** retriever encontrando o documento certo com
@@ -195,8 +195,7 @@ conector não-SAP genuinamente funcional.
 - `RFCConnector.use_real` — caminho real via `pyrfc`/`BAPI_IDOC_STATUS`,
   com detecção de feature e `ConfigurationError` claro na ausência do
   SDK
-- `docker-compose.yml` self-contained (Ollama + Qdrant + API, sem
-  depender do stack pessoal do `ai-stack`)
+- `docker-compose.yml` self-contained (Ollama + Qdrant + API)
 - Documentação: `ARCHITECTURE.md` preenchido, `TCO_SAP_AI_CORE_VS_SELF_HOSTED.md`,
   tutorial completo da fase
 

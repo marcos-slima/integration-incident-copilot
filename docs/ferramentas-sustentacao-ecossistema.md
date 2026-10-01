@@ -126,7 +126,7 @@ Itens já cobertos nas seções anteriores (`uv`, `ruff`, `pytest`,
 | **VS Code** | ✅ já instalado na máquina | Editor principal — extensões recomendadas abaixo |
 | Extensão **Python** + **Pylance** | ⬜ gap | Autocomplete, navegação de código, checagem de tipos inline |
 | Extensão **Ruff** | ⬜ gap | Lint/format em tempo real no editor, usando o mesmo Ruff já configurado no projeto |
-| Extensão **Docker** | ⬜ gap | Ver/gerenciar containers da stack (`ai-stack` em `/home/marcos-lima/MyProjects/GitHub/ai-stack`) direto no VS Code |
+| Extensão **Docker** | ⬜ gap | Ver/gerenciar containers (`docker compose up -d` na raiz do projeto) direto no VS Code |
 | Extensão **GitLens** | ⬜ gap | Blame inline, histórico de arquivo, navegação de branches sem sair do editor |
 | Extensão **Even Better TOML** | ⬜ gap | Syntax highlighting/validação pro `pyproject.toml` |
 | Claude Code (dentro do Claude Desktop) | ✅ já instalado | Par de programação com acesso real ao repositório |
@@ -249,7 +249,7 @@ a investigação manual de hoje:
    os modelos não vão junto com o `git clone`, precisam ser
    documentados como pré-requisito (candidato a entrar no `README`
    ou num script `bootstrap.sh`)
-3. `docker compose up -d` em `/home/marcos-lima/MyProjects/GitHub/ai-stack` — stack de infraestrutura
+3. `docker compose up -d` na raiz do projeto — stack de infraestrutura
 4. Copiar `.env.example` (**ainda não existe** — vale criar um,
    com os nomes das variáveis mas sem valores reais) para `.env` e
    preencher

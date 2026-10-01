@@ -5,7 +5,7 @@ description: Build/launch/drive recipe for verifying changes in the Integration 
 
 # Verify — Integration Incident Copilot
 
-## Launch (isolated port, uses host infra from ~/ai-stack)
+## Launch (isolated port, host infra via 'docker compose up -d')
 ```bash
 uv run uvicorn app.main:app --port 8765 > server.log 2>&1 &
 until curl -s -o /dev/null localhost:8765/health; do sleep 1; done

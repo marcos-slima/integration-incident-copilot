@@ -273,9 +273,9 @@ def ensure_collection(
         # mais comum do ecossistema) e produzem espacos vetoriais
         # incomparaveis - a busca passaria a devolver respostas
         # plausiveis e erradas em vez de erro. Aqui a identidade do
-        # modelo e' conferida contra o metadata da collection.
+        # modelo e' conferida contra a collection lateral de identidade.
         aviso_embedding = verify_collection_embedding(
-            info,
+            client,
             collection_name,
             expected_model=embedding_model,
             expected_size=vector_size,
@@ -486,6 +486,16 @@ def run_ingest(
         embedding_model=EMBEDDING_MODEL,
         allow_recreate=reset_collection,
     )
+    # DA-45: reaffirma a identidade a CADA run, nao so na criacao da
+    # collection. `ensure_collection` so grava quando cria; num reindex
+    # incremental (o caso normal deste corpus) a collection ja existia e
+    # o stamp nunca acontecia - a identidade ficava ausente para sempre,
+    # que e' o estado que o guard trata como "nao sei". Como o guard
+    # acima ja falha duro quando ha divergencia comprovada, chegar
+    # aqui significa que a identidade ausente NAO era divergencia: e
+    # collection pre-DA-45 no embedding corrente, ou nao gravada. Nos
+    # dois casos o gravar agora e' a acao que fecha o buraco.
+    stamp_collection(client, cfg["collection"], EMBEDDING_MODEL)
 
     # Carrega o BM25 antes do paralelismo; o acesso posterior e somente para
     # gerar vetores, nao para inicializar/downloadar o modelo em varias threads.

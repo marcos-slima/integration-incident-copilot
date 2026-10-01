@@ -147,6 +147,11 @@ def test_run_ingest_returns_error_count_on_failure(tmp_path, monkeypatch):
         def create_collection(self, *a, **kw):
             pass
 
+        # DA-45: `stamp_collection` roda a CADA ingest (nao so na criacao
+        # da collection) para gravar a identidade do embedding. Este teste
+        # isola `process_one`, entao o stamp e' ruido - e' stubado aqui
+        # para o teste continuar medindo so o que ele diz medir.
+
     monkeypatch.setattr(ingest_module, "QdrantClient", lambda **kw: _FakeQdrant())
 
     # embed_and_upsert e o ponto onde o erro de verdade ocorreria
@@ -162,6 +167,7 @@ def test_run_ingest_returns_error_count_on_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(ingest_module, "OllamaEmbeddings", lambda model: _FakeEmbeddings())
     monkeypatch.setattr(ingest_module, "probe_vector_size", lambda emb: 768)
     monkeypatch.setattr(ingest_module, "ensure_collection", lambda *a, **kw: None)
+    monkeypatch.setattr(ingest_module, "stamp_collection", lambda *a, **kw: None)
 
     result = ingest_module.run_ingest(
         "incidents", limit=None, excludes=[], reset_state=False, reset_collection=False

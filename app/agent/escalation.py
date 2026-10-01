@@ -84,9 +84,16 @@ LIMITACOES CONHECIDAS
    (DA-42), e precisam ser substituidos por medicao no re-baseline.
    Tratar como hipotese, nao como constante validada.
 
-2. `REFERENCE_FALLBACK_THRESHOLD = 0.85` (retriever.py) e justificado
-   num commentario que citava "766k+ chunks" - corpus que nunca existiu
-   aqui. O corpus real tem 28.962. O limiar precisa de re-calibracao.
+2. `REFERENCE_FALLBACK_THRESHOLD` (retriever.py) foi recalibrado em
+   2026-10-01 contra o corpus real: 0.665, no meio da faixa de
+   separacao medida entre queries verdadeiras (min 0.672) e falsas
+   (max 0.658). O valor anterior, 0.85, era justificado por um
+   comentario que citava "766k+ chunks" - corpus que nunca existiu aqui
+   - e media empiricamente 20 de 20 verdadeiros rejeitados, ou seja,
+   desligava o fallback inteiro. A medicao vale para
+   `nomic-embed-text`: trocar o modelo de embedding desloca a escala
+   de cosseno e a invalida. O corpus ainda estava incompleto (26%)
+   quando a medicao foi feita.
 
 3. O tier 3 (invocacao do modelo pago) NAO faz parte desta DA. Este
    modulo decide APENAS se ha caso para escalar. Quem invoca passa

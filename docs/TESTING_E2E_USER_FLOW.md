@@ -85,8 +85,8 @@ Este cenário valida o **fluxo completo de onboarding de usuário** (criação �
 
 ```python
 # Código usado para inspeção
-msgs = json.loads(curl("http://127.0.0.1:8025/api/v1/messages"))['messages']
-e2e_msg = [m for m in msgs if 'e2e_test' in m['To'][0]['Address']][0]
+msgs = json.loads(curl("http://127.0.0.1:8025/api/v1/messages"))["messages"]
+e2e_msg = [m for m in msgs if "e2e_test" in m["To"][0]["Address"]][0]
 ```
 
 **Resposta (e-mail de ativação)**:

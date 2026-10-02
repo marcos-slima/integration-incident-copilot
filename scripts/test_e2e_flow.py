@@ -17,11 +17,19 @@ import os
 import sys
 import time
 import uuid
-from dataclasses import dataclass
-from typing import Any
+from pathlib import Path
 
 import requests
+from dotenv import load_dotenv
 from requests.exceptions import RequestException
+
+# Carregar variáveis do .env (se existir)
+env_path = Path(__file__).parent.parent / ".env"
+if env_path.exists():
+    load_dotenv(env_path)
+
+from dataclasses import dataclass
+from typing import Any
 
 BACKEND_URL = os.environ.get("BACKEND_URL", "http://127.0.0.1:8000")
 MAILPIT_URL = os.environ.get("MAILPIT_URL", "http://127.0.0.1:8025")
@@ -102,7 +110,7 @@ def main() -> int:
         user_id = user_data["id"]
         log_pass(f"Usuário criado: {username} (id={user_id})")
         results.append(TestResult("create_user", True, f"status={user_data['status']}"))
-    except Exception as exc:  # noqa: BLE001  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         log_fail(f"Falha ao criar usuário: {exc}")
         results.append(TestResult("create_user", False, str(exc)))
         return 1
@@ -119,7 +127,7 @@ def main() -> int:
             email_msg = next((m for m in messages if email in str(m.get("To", []))), None)
             if email_msg:
                 break
-        except Exception as exc:  # noqa: BLE001  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             print(f"  Aguardando Mailpit (erro: {exc})...")
         time.sleep(1)
         elapsed += 1
@@ -160,7 +168,7 @@ def main() -> int:
         )
         log_pass("E-mail confirmado, próximo passo: phone")
         results.append(TestResult("confirm_email", True, f"next_step={email_result['next_step']}"))
-    except Exception as exc:  # noqa: BLE001  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         log_fail(f"Falha ao confirmar e-mail: {exc}")
         results.append(TestResult("confirm_email", False, str(exc)))
         return 1
@@ -179,7 +187,7 @@ def main() -> int:
         assert sms_code.isdigit() and len(sms_code) == 6, f"Código SMS inválido: {sms_code}"
         log_pass(f"Código SMS retornado (out-of-band): {sms_code}")
         results.append(TestResult("sms_code_emitted", True, f"sms_code={sms_code}"))
-    except Exception as exc:  # noqa: BLE001  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         log_fail(f"Falha ao reemitir código SMS: {exc}")
         results.append(TestResult("sms_code_emitted", False, str(exc)))
         return 1
@@ -198,7 +206,7 @@ def main() -> int:
         )
         log_pass("Código SMS confirmado, usuário ativo")
         results.append(TestResult("confirm_sms", True, f"status={phone_result['status']}"))
-    except Exception as exc:  # noqa: BLE001  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         log_fail(f"Falha ao confirmar código SMS: {exc}")
         results.append(TestResult("confirm_sms", False, str(exc)))
         return 1
@@ -271,7 +279,7 @@ def main() -> int:
             )
         )
 
-    except Exception as exc:  # noqa: BLE001  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         log_fail(f"Falha no login ou diagnóstico: {exc}")
         results.append(TestResult("login_or_diagnosis", False, str(exc)))
         return 1

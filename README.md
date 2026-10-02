@@ -1955,8 +1955,18 @@ entrava, mesmo que o e-mail cadastrado não fosse da pessoa.
 Logins seguintes seguem usuário+senha (DA-54, decisão do dono: ativação é
 uma vez, não 2FA diário).
 
+**Provedores de notificação unificados com MessagePit** (DA-55, evolução):
+para ambientes de desenvolvimento e local, o projeto agora usa **MessagePit**
+como provedor único — ele substitui Mailpit (SMTP para e-mail) e adiciona
+compatibilidade Twilio para SMS via HTTP (`:8200`). O contrato de entrega é
+absolutamente o mesmo: `deliver_email(token, email, subject)` e
+`deliver_sms(phone, code)` (`app/webusers.py`) —provedores específicos nunca
+aparecem no domínio (padrão Factory Method + Strategy em
+`app/notifications/providers.py`). Sem provedor configurado, o fallback
+out-of-band (token/código na resposta admin) continua valendo.
+
 **Entrega out-of-band, com adaptador real depois** (decisão do dono): sem
-SMTP/provedor de SMS configurados, o token/código **não** é publicado em
+SMTP/provider configurados, o token/código **não** é publicado em
 rota nenhuma pública — volta **só** na resposta da API de admin, com
 WARNING no log. `deliver_email`/`deliver_sms` (`app/webusers.py`) são o
 ponto de extensão: quando houver credencial, o envio real desliga o modo

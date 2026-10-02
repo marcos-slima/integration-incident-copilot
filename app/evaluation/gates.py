@@ -781,6 +781,7 @@ def check_docs_code_references(root: Path = REPO_ROOT) -> list[Finding]:
                     )
 
         for citacao in set(_MD_CITACAO.findall(texto)):
+            citacao = citacao.lstrip("/")
             bases = (root, root / "docs", root / "data" / "sample_docs", doc.parent)
             if not any((base / citacao).exists() for base in bases):
                 problemas.append(

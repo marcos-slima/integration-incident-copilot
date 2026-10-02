@@ -62,6 +62,8 @@ services:
     build:
       context: .
       target: final
+    env_file:
+      - .env
     ports:
       - "8000:8000"
     environment:
@@ -80,6 +82,7 @@ services:
         condition: service_healthy
     volumes:
       - ./data/sample_docs:/app/data/sample_docs:ro
+      - ./.env:/app/.env:ro
 
   # Ollama em container (opt-in) - NAO sobe com "docker compose up"
   # default. Por padrao o projeto usa o Ollama do host, via
@@ -169,6 +172,21 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  # Mailpit — SMTP testing local (zero custo, total offline)
+  # Permite visualizar e-mails enviados via http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:latest
+    profiles: ["mailpit"]
+    restart: unless-stopped
+    ports:
+      - "8025:8025"  # Web UI
+      - "1025:1025"  # SMTP
+    environment:
+      MP_MAX_MESSAGES: "1000"
+      MP_DATABASE: "/data/mailpit.db"
+    volumes:
+      - mailpit_data:/data
 
   # GraphRAG (opt-in) - NAO sobe com "docker compose up" default, so
   # com "docker compose --profile graphrag up -d neo4j" (decisao
@@ -287,6 +305,27 @@ services:
 
 
   # ---------------------------------------------------------------------------
+  # Fase 5 — Notificações (DA-55: email/SMS via MessagePit)
+  # ---------------------------------------------------------------------------
+
+  # MessagePit — SMTP email + Twilio-compatible SMS testing local
+  # Fork do Mailpit com SMS Twilio-compatible ingest (porta 8200)
+  # Permite visualizar emails e SMS via http://localhost:8025
+  messagepit:
+    image: ghcr.io/coreydaley/messagepit:latest
+    profiles: ["messagepit"]
+    restart: unless-stopped
+    ports:
+      - "8025:8025"  # Web UI (email + SMS)
+      - "1025:1025"  # SMTP (email)
+      - "8200:8200"  # Twilio-compatible SMS ingest
+    environment:
+      MP_MAX_MESSAGES: "1000"
+      MP_DATABASE: "/data/messagepit.db"
+    volumes:
+      - messagepit_data:/data
+
+  # ---------------------------------------------------------------------------
   # Fase 4 — Relatórios agendados (COI/IOC, SOC, iPaaS)
   # ---------------------------------------------------------------------------
   # Gera relatórios diários e semanais em Excel + Markdown.
@@ -325,3 +364,5 @@ volumes:
   redis_data:
   postgres_data:
   grafana_data:
+  mailpit_data:
+  messagepit_data:

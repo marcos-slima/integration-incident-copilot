@@ -76,7 +76,9 @@ def test_credentials_put_sem_banco_503():
 def test_ui_index_ok():
     r = client.get("/admin")
     assert r.status_code == 200
-    assert "Superfície admin" in r.text
+    assert "Dashboard" in r.text
+    assert "Modelos" in r.text
+    assert "Sistemas" in r.text
 
 
 def test_ui_models_ok():

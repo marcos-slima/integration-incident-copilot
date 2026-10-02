@@ -486,11 +486,23 @@ class Settings(BaseSettings):
     prometheus_enabled: bool = False
 
     # SMTP (DA-55: ativação de usuários via e-mail)
+    email_provider: Literal["mailpit", "resend", ""] = ""
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_from: str = ""
+
+    # SMS (DA-55: ativação de usuários via SMS)
+    # Nota: MessagePit/SMS não disponível atualmente (não há servidor HTTP
+    # Twilio-compatible no Mailpit). Manter configuração comentada para
+    # quando suporte for adicionado.
+    sms_provider: Literal[""] = ""
+    # messagepit_sms_host: str = "127.0.0.1"
+    # messagepit_sms_port: int = 8200
+    # messagepit_sms_account_sid: str = "test"
+    # messagepit_sms_auth_token: str = "test"
+    # messagepit_sms_from: str = "+15550000000"
 
     model_config = SettingsConfigDict(
         env_file=".env",

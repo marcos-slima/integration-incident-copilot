@@ -9,6 +9,14 @@ de infraestrutura que so existe localmente.
 
 import os
 import socket
+from pathlib import Path
+
+# Carregar variáveis do .env se existir (antes de qualquer import)
+env_path = Path(__file__).parent.parent / ".env"
+if env_path.exists():
+    from dotenv import load_dotenv
+
+    load_dotenv(env_path)
 
 # Isolamento do .env local: os testes de tests/test_api.py usam um
 # TestClient sem header X-API-Key e dependem de API_KEY/A2A_API_KEY
@@ -44,8 +52,12 @@ def _port_open(host: str, port: int, timeout: float = 1.0) -> bool:
         return False
 
 
+def _qdrant_port() -> int:
+    return int(os.environ.get("QDRANT_HOST_PORT", "6333"))
+
+
 def _stack_available() -> bool:
-    qdrant_up = _port_open("127.0.0.1", 6333)
+    qdrant_up = _port_open("127.0.0.1", _qdrant_port())
     ollama_up = _port_open("127.0.0.1", 11434)
     return qdrant_up and ollama_up
 

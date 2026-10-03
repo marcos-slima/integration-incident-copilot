@@ -389,5 +389,5 @@ uv run alembic current
 ---
 
 **Status:** Concluído (2026-10-02)
-**Próxima Aula:** DA_AULA_22_MONITORING.md (Alerting & Dashboards)
+**Próxima Aula:** DA_AULA_22_TESTING.md (Testing & Validation)
 **Relacionados:** DA-01, DA-05, DA-20, DA-25, DA-35, DA-46/47/48, DA-49, DA-50, DA-52, DA-53, DA-55, DA-57

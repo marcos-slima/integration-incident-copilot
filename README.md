@@ -40,13 +40,19 @@ flowchart TD
     B["Agente externo (A2A)"] -->|"JSON-RPC 2.0"| D["app/a2a/<br/>Agent Card + Task Manager"]
     C --> E["Orquestracao via LangGraph<br/>app/agent/graph.py"]
     D --> E
-    E --> F["<b>connector</b><br/>SAP + multi-vendor: OData - RFC - ServiceNow<br/>Salesforce - Workday - Ariba - CAP - APIManagement<br/><i>reais quando configurados, mock por default</i>"]
+    E --> S["<b>supervisor</b><br/>classify_domain() → sap / saas / generic<br/>deterministico, sem LLM (DA-22)"]
+    S --> F["<b>connector</b><br/>SAP + multi-vendor: OData - RFC - ServiceNow<br/>Salesforce - Workday - Ariba - SuccessFactors<br/>SAP PO - CAP - APIManagement<br/><i>reais quando configurados, mock por default</i>"]
     F --> G["<b>retrieve</b><br/>RAG hibrido dense+sparse BM25<br/>Qdrant, fusao RRF, score_threshold"]
     G --> H{"GraphRAG<br/>habilitado?"}
     H -->|"sim (opt-in)"| I["graph_enrich<br/>Neo4j"]
-    H -->|"nao (default)"| J["<b>diagnose</b><br/>LLM Gateway: Ollama - OpenAI - Azure OpenAI<br/>+ guardrails deterministicos"]
-    I --> J
-    J --> K{"GraphRAG<br/>habilitado?"}
+    H -->|"nao (default)"| R{"agent_domain?<br/>(DA-22)"}
+    I --> R
+    R -->|"sap"| J1["<b>sap_diagnose</b><br/>especialista SAP<br/>LLM Gateway + guardrails<br/><i>busca web via ReAct (DA-57)</i>"]
+    R -->|"saas"| J2["<b>saas_diagnose</b><br/>especialista multi-fornecedor<br/>LLM Gateway + guardrails<br/><i>busca web via ReAct (DA-57)</i>"]
+    R -->|"generic"| J3["<b>generic_diagnose</b><br/>especialista generico<br/>LLM Gateway + guardrails"]
+    J1 --> K{"GraphRAG<br/>habilitado?"}
+    J2 --> K
+    J3 --> K
     K -->|"sim (opt-in)"| L["graph_write<br/>Neo4j"]
     K -->|"nao (default)"| M["<b>report</b>"]
     L --> M
@@ -54,9 +60,13 @@ flowchart TD
 
     style H fill:#f5f5f5,stroke:#999
     style K fill:#f5f5f5,stroke:#999
+    style R fill:#f5f5f5,stroke:#999
+    style S fill:#fff3cd,stroke:#e0a800
     style F fill:#e8f0fe,stroke:#4285f4
     style G fill:#e8f0fe,stroke:#4285f4
-    style J fill:#e8f0fe,stroke:#4285f4
+    style J1 fill:#e8f0fe,stroke:#4285f4
+    style J2 fill:#e8f0fe,stroke:#4285f4
+    style J3 fill:#e8f0fe,stroke:#4285f4
 ```
 
 Ver [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) para o detalhamento

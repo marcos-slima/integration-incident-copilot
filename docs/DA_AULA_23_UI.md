@@ -105,7 +105,7 @@ graph TD
     DiagnoseView -->|read-markdown| ReactMarkdown
 
     HistoryView -->|Badge| Badge
-    HistoryView -->|Display| HistoryItem[]
+    HistoryView -->|Display| HistoryItem\[\]
     StatusView -->|GET /health| HealthResponse
 
     subgraph "State Management"

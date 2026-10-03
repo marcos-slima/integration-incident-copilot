@@ -138,7 +138,11 @@ def ready() -> Response:
     status_code = 200 if all_ok else 503
     return JSONResponse(
         status_code=status_code,
-        content={"status": "ok" if all_ok else "degraded", **_status_body(), "services": infra_probes},
+        content={
+            "status": "ok" if all_ok else "degraded",
+            **_status_body(),
+            "services": infra_probes,
+        },
     )
 ```
 
@@ -381,6 +385,7 @@ async def lifespan(app: FastAPI):
 async def custom_http_exception_handler(request: Request, exc: StarletteHTTPException):
     return await http_exception_handler(request, exc)
 
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     return JSONResponse(
@@ -391,6 +396,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             "body": exc.body,
         },
     )
+
 
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception):

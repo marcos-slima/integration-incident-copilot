@@ -65,11 +65,11 @@ Compreender o Rule Engine determinístico do Integration Incident Copilot: 21+ r
 ```python
 @dataclass
 class ErrorRule:
-    patterns: list[str]          # Regex list, re.IGNORECASE aplicado
-    probable_root_cause: str     # Explicação determinística
-    next_steps: list[str]        # Ações concretas para operador
-    category: str                # Agrupamento para logs/métricas
-    confidence: float = 0.90     # Alta certeza por pattern matching
+    patterns: list[str]  # Regex list, re.IGNORECASE aplicado
+    probable_root_cause: str  # Explicação determinística
+    next_steps: list[str]  # Ações concretas para operador
+    category: str  # Agrupamento para logs/métricas
+    confidence: float = 0.90  # Alta certeza por pattern matching
 ```
 
 **Objetivo:** Quando um padrão bate com `description` ou `connector_data.message`, devolve **diagnóstico completo sem LLM**.
@@ -120,7 +120,7 @@ text = "IDoc 456789 em status 51: WE19 mostrar erro"
     "confidence": 0.90,
     "rule_engine_category": "sap_idoc_status_51",
     "llm_provider_used": "rule_engine",
-    "evidence_strength": 0.95  # (has_connector_data=True)
+    "evidence_strength": 0.95,  # (has_connector_data=True)
 }
 ```
 
@@ -138,7 +138,7 @@ text = "HTTP 401 unauthorized, OAuth token expired"
     "confidence": 0.90,
     "rule_engine_category": "auth_oauth_expired",
     "llm_provider_used": "rule_engine",
-    "evidence_strength": 0.70  # (has_connector_data=False)
+    "evidence_strength": 0.70,  # (has_connector_data=False)
 }
 ```
 
@@ -157,17 +157,19 @@ def _run_diagnosis_agent(state: CopilotState, persona: str) -> dict:
     # DA-33: Rule Engine DETERMINÍSTICO (antes de LLM!)
     diagnosis = match_known_error(
         state.get("description", ""),
-        has_connector_data=bool(state.get("connector_data") and
-                               not state["connector_data"].is_mock and
-                               not state["connector_data"].is_fallback)
+        has_connector_data=bool(
+            state.get("connector_data")
+            and not state["connector_data"].is_mock
+            and not state["connector_data"].is_fallback
+        ),
     )
 
     if diagnosis:
         # Regra casou → devolve diagnosis SEMPARE LLM
         return {
             **diagnosis,
-            "prompt_version": None,   # NÃO tem prompt!
-            "prompt_digest": None,    # NÃO tem digest!
+            "prompt_version": None,  # NÃO tem prompt!
+            "prompt_digest": None,  # NÃO tem digest!
         }
 
     # Nenhuma regra casou → seguir para LLM (ReAct)

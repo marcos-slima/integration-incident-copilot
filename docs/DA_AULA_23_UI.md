@@ -1,10 +1,10 @@
 # Tutorial Completo: UI do Integration Incident Copilot
 
-> **Fonte:** apenas arquivos em `frontend/src/`  
-> **Fidelidade:** solução REAL existente, não genérico nem hipotético  
-> **Estrutura:** 22 seções desde stack até exercícios  
-> **Diagramas:** obrigatórios (Mermaid para arquitetura, fluxos, renderização)  
-> **Códigos:** completos, sem omissões  
+> **Fonte:** apenas arquivos em `frontend/src/`
+> **Fidelidade:** solução REAL existente, não genérico nem hipotético
+> **Estrutura:** 22 seções desde stack até exercícios
+> **Diagramas:** obrigatórios (Mermaid para arquitetura, fluxos, renderização)
+> **Códigos:** completos, sem omissões
 
 ---
 
@@ -316,10 +316,10 @@ const MAX_UPLOAD_BYTES = 50_000;
 function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
   const file = e.target.files?.[0];
   if (!file) return;
-  
+
   const ALLOWED = ['.txt', '.log', '.xml', '.json', '.csv', '.md'];
   const ext = '.' + file.name.split('.').pop()!.toLowerCase();
-  
+
   if (!ALLOWED.includes(ext)) { setError('Tipo não suportado...'); return; }
   if (file.size > MAX_UPLOAD_BYTES) { setError('Arquivo muito grande...'); return; }
 
@@ -375,7 +375,7 @@ async function submit() {
 
 ### 4.5 Xss Mitigation (DA-51)
 
-> **Antes:** `dangerouslySetInnerHTML` (executava `<img src=x onerror=...>` se usuário injetasse script na descrição)  
+> **Antes:** `dangerouslySetInnerHTML` (executava `<img src=x onerror=...>` se usuário injetasse script na descrição)
 > **Agora:** `react-markdown` sem plugin `rehype-raw` (HTML embutido vira texto escapado, só sintaxe Markdown é renderizada)
 
 ---
@@ -703,6 +703,7 @@ useEffect(() => {
 async def serve_frontend():
     return FileResponse("static/dist/index.html")
 
+
 @app.get("/static/dist/{path:path}")
 async def serve_static(path: str):
     return FileResponse(f"static/dist/{path}")
@@ -714,12 +715,12 @@ async def serve_static(path: str):
 
 ### 14.1 React hooks
 
-> **Regra:** `react/rules-of-hooks`  
+> **Regra:** `react/rules-of-hooks`
 > **Obrigatório:** Hooks só dentro de componentes React (não em funções auxiliares, loops, conditionals aninhados)
 
 ### 14.2 Exports
 
-> **Regra:** `react/only_export-components`  
+> **Regra:** `react/only_export-components`
 > **Obrigatório:** Only component functions (e.g., `export function DiagnoseView`) — no `export const x = () => {}`
 
 ---
@@ -1015,24 +1016,24 @@ uv run python scripts/quality_gate.py
 
 Este tutorial cobriu:
 
-✅ **Stack completa:** React 19, TypeScript 6, Vite 8, oxlint  
-✅ **Arquitetura detalhada:** Componentes, views, state management  
-✅ **Auth completa:** DA-54 (sessão HttpOnly), DA-55 (ativação em 2 passos)  
-✅ **Formulário completo:** Upload, preview, diagnose, markdown render (sem XSS)  
-✅ **Resultados:** Confidence badge, history (invertido), status (real-time)  
-✅ **CSS nativo:** Flexbox, scrollbar, tipografia (Inter + JetBrains Mono)  
-✅ **Integração com backend:** FastAPI proxy, endpoints `/diagnose`, `/health`, `/auth/*`  
-✅ **Erros e tratamento:** HTTP errors (401/422/429/500), network errors  
+✅ **Stack completa:** React 19, TypeScript 6, Vite 8, oxlint
+✅ **Arquitetura detalhada:** Componentes, views, state management
+✅ **Auth completa:** DA-54 (sessão HttpOnly), DA-55 (ativação em 2 passos)
+✅ **Formulário completo:** Upload, preview, diagnose, markdown render (sem XSS)
+✅ **Resultados:** Confidence badge, history (invertido), status (real-time)
+✅ **CSS nativo:** Flexbox, scrollbar, tipografia (Inter + JetBrains Mono)
+✅ **Integração com backend:** FastAPI proxy, endpoints `/diagnose`, `/health`, `/auth/*`
+✅ **Erros e tratamento:** HTTP errors (401/422/429/500), network errors
 ✅ **Exercícios:** 3 níveis (básico/intermediário/avançado)
 
-**Próximos passos:**  
-→ Implementar os exercícios (testar localmente com `npm run dev`)  
-→ Adicionar tests (jest/rtl) para componentes principais  
-→ Documentar `README.md` do frontend (no diretório `frontend/`)  
+**Próximos passos:**
+→ Implementar os exercícios (testar localmente com `npm run dev`)
+→ Adicionar tests (jest/rtl) para componentes principais
+→ Documentar `README.md` do frontend (no diretório `frontend/`)
 → Validar tutorial com `uv run python scripts/quality_gate.py`
 
 ---
 
-**Fonte:** tudo derivado de `frontend/src/`  
-**Validação:**_quality_gate.py (DA-51), oxlint, manual testing  
+**Fonte:** tudo derivado de `frontend/src/`
+**Validação:**_quality_gate.py (DA-51), oxlint, manual testing
 **Cobertura:** 100% dos componentes principais (`DiagnoseView`, `HistoryView`, `StatusView`, `LoginView`, `Sidebar`, `Badge`)

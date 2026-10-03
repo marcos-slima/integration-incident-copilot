@@ -22,7 +22,7 @@ async def receive_cloudevent(cloudevent: CloudEvent):
         interface_type=data.get("interface_type"),
         identifier=data.get("identifier"),
         logs=data.get("logs", []),
-        payload=data.get("payload", {})
+        payload=data.get("payload", {}),
     )
 
     # Processa diagnóstico
@@ -32,7 +32,7 @@ async def receive_cloudevent(cloudevent: CloudEvent):
     return {
         "incident_id": response.incident_id,
         "status": "processed",
-        "latency_ms": response.latency_ms
+        "latency_ms": response.latency_ms,
     }
 ```
 
@@ -109,6 +109,7 @@ ServiceNow → webhook → /events/webhook → run_diagnosis
 # app/events/amqp_consumer.py (DA-40)
 from qpid_proton import Connection, Session, Receiver
 
+
 class AMQPConsumer:
     async def connect(self):
         loop = asyncio.get_event_loop()
@@ -150,8 +151,7 @@ class AMQPConsumer:
 async def receive_cloudevent(cloudevent: CloudEvent):
     # Check if already processed
     existing = await db.fetchrow(
-        "SELECT id FROM cloudevent_processed WHERE event_id = $1",
-        cloudevent.id
+        "SELECT id FROM cloudevent_processed WHERE event_id = $1", cloudevent.id
     )
     if existing:
         return {"status": "already_processed", "incident_id": existing["incident_id"]}
@@ -160,7 +160,8 @@ async def receive_cloudevent(cloudevent: CloudEvent):
     response = run_diagnosis(request)
     await db.execute(
         "INSERT INTO cloudevent_processed (event_id, incident_id, timestamp) VALUES ($1, $2, NOW())",
-        cloudevent.id, response.incident_id
+        cloudevent.id,
+        response.incident_id,
     )
     return response
 ```

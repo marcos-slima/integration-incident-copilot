@@ -163,8 +163,8 @@ def ensure_session_secret_configured() -> None:
     logger.warning(
         "SESSION_SECRET nao configurada no .env - gerada automaticamente "
         "para esta execucao (cookies de sessao da UI expiram a cada "
-        "restart): %s",
-        settings.session_secret,
+        "restart); fingerprint: %s",
+        settings.session_secret[:8],
     )
 
 

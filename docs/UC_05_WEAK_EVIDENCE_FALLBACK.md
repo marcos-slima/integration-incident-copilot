@@ -79,11 +79,7 @@ state = {
 # app/agent/nodes.py::retrieve_node()
 if not state.get("retrieved_context") or top_score < 0.3:
     # fallback para reference_library (documentation pura, não incidentes)
-    reference_hits = retrieve(
-        query,
-        target="reference_library",
-        top_k=3
-    )
+    reference_hits = retrieve(query, target="reference_library", top_k=3)
     return {"retrieved_context": reference_hits}
 ```
 

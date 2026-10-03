@@ -54,10 +54,8 @@ def _web_search_allowed(state: CopilotState) -> bool:
 state = {
     "interface_type": "custom_http",
     "description": "API request timeout after 30s",
-    "retrieved_context": [
-        {"source": "generic_timeout.md", "rerank_score_calibrated": 0.42}
-    ],
-    "web_search_results": []  # ainda não executada
+    "retrieved_context": [{"source": "generic_timeout.md", "rerank_score_calibrated": 0.42}],
+    "web_search_results": [],  # ainda não executada
 }
 ```
 

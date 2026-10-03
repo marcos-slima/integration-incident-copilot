@@ -103,10 +103,10 @@ interface_type = "generic-webhook"  # → agent_domain = "generic"
 {
     "source": "odata_timeout_cpi.md",
     "text": "Timeout ao chamar... [chunk completo]",
-    "score": 0.82,              # dense+sparse hybrid
-    "rerank_score": 0.71,       # cross-encoder
+    "score": 0.82,  # dense+sparse hybrid
+    "rerank_score": 0.71,  # cross-encoder
     "rerank_score_calibrated": 0.68,  # DA-42: sigmoid
-    "collection": "sap_incident_docs"
+    "collection": "sap_incident_docs",
 }
 ```
 
@@ -257,7 +257,7 @@ def match_known_error(text: str, has_connector_data: bool = True) -> dict | None
                     "confidence": 0.90,
                     "llm_provider_used": "rule_engine",
                     "prompt_version": None,  # NÃO tem prompt!
-                    "prompt_digest": None,   # NÃO tem digest!
+                    "prompt_digest": None,  # NÃO tem digest!
                 }
     return None  # Nenhuma regra casou → LLM necessário
 ```
@@ -296,10 +296,10 @@ def match_known_error(text: str, has_connector_data: bool = True) -> dict | None
 
 **Sinais observáveis:**
 ```python
-- data.is_mock / data.is_fallback  # conector real?
-- hit["collection"]                # curated (sap_incident_docs) ou floor (sap_reference_library)?
-- hit["rerank_score_calibrated"]   # DA-42: score pós-reranker, calibrado por sigmoid
-- diagnosis["matched_source"] is None  # guardrail anulou fonte? (DA-16)
+-data.is_mock / data.is_fallback  # conector real?
+-hit["collection"]  # curated (sap_incident_docs) ou floor (sap_reference_library)?
+-hit["rerank_score_calibrated"]  # DA-42: score pós-reranker, calibrado por sigmoid
+-diagnosis["matched_source"] is None  # guardrail anulou fonte? (DA-16)
 ```
 
 **Decisão:** `compute_escalation_signal(state) -> EscalationDecision`
@@ -442,7 +442,7 @@ state = {
     "connector_identifier": "MAT-12345",
     "description": "Timeout ao criar material",
     "logs": "...",
-    "payload": "{...}"
+    "payload": "{...}",
 }
 ```
 
@@ -484,12 +484,10 @@ state = {
             "collection": "sap_reference_library",
             "rerank_score_calibrated": 0.58,
             "rerank_score": 0.72,
-            "score": 0.69
+            "score": 0.69,
         }
     ],
-    "diagnosis": {
-        "matched_source": "odata_timeout_cpi.md"
-    }
+    "diagnosis": {"matched_source": "odata_timeout_cpi.md"},
 }
 ```
 
@@ -507,7 +505,7 @@ state = {
     "tier": "floor",
     "abstained": False,
     "top_evidence": 0.58,
-    "connector_real": False
+    "connector_real": False,
 }
 ```
 
@@ -522,17 +520,10 @@ state = {
         "is_fallback": False,
         "source_system": "odata_sap",
         "message": "Timeout ao conectar",
-        "error_code": "504"
+        "error_code": "504",
     },
-    "retrieved_context": [
-        {
-            "source": "odata_timeout_cpi.md",
-            "rerank_score_calibrated": 0.68
-        }
-    ],
-    "diagnosis": {
-        "llm_provider_used": "ollama/qwen3-coder-next:latest"
-    }
+    "retrieved_context": [{"source": "odata_timeout_cpi.md", "rerank_score_calibrated": 0.68}],
+    "diagnosis": {"llm_provider_used": "ollama/qwen3-coder-next:latest"},
 }
 ```
 
@@ -545,7 +536,7 @@ evidence = [
         "locator": "odata_sap",
         "excerpt": "Timeout ao conectar",
         "retrieval_score": None,
-        "rerank_score": None
+        "rerank_score": None,
     },
     {
         "source_type": "rag",
@@ -553,12 +544,12 @@ evidence = [
         "locator": "odata_timeout_cpi.md",
         "excerpt": "...[chunk]...",
         "rerank_score_calibrated": 0.68,  # DA-42
-        "retrieval_score": None
-    }
+        "retrieval_score": None,
+    },
 ]
 
 primary = [connector]  # system_observed
-supporting = [rag]     # retrieved_document
+supporting = [rag]  # retrieved_document
 ```
 
 ---

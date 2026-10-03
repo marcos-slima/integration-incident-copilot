@@ -587,18 +587,25 @@ def test_ready_degraded_when_required_qdrant_not_configured(monkeypatch):
 
 
 def test_ready_ignores_optional_services_not_configured(monkeypatch):
-    """B-07: Ollama so e obrigatorio quando e o provider primario; Redis e
-    opcional - "not_configured" nesses casos mantem o pod pronto."""
+    """B-07: Ollama so e obrigatorio quando e o provider primario; Redis, Langfuse
+    e Neo4j sao opcionais - "not_configured" nesses casos mantem o pod pronto."""
     import app.main as main_module
     from app.config import Settings
 
     def _probe():
-        return {"qdrant": "ok", "ollama": "not_configured", "redis": "not_configured"}
+        return {
+            "qdrant": "ok",
+            "ollama": "not_configured",
+            "redis": "not_configured",
+            "langfuse": "not_configured",
+            "neo4j": "not_applicable",
+        }
 
     monkeypatch.setattr(main_module, "_probe_infra_services", _probe)
-    monkeypatch.setattr(
-        main_module, "settings", Settings(llm_provider="openai", ollama_host="", redis_url="")
+    new_settings = Settings(
+        llm_provider="openai", ollama_host="", redis_url="", graph_rag_enabled=False
     )
+    monkeypatch.setattr(main_module, "settings", new_settings)
 
     response = client.get("/ready")
     assert response.status_code == 200
@@ -610,7 +617,13 @@ def test_ready_degraded_when_primary_ollama_not_configured(monkeypatch):
     from app.config import Settings
 
     def _probe():
-        return {"qdrant": "ok", "ollama": "not_configured", "redis": "not_configured"}
+        return {
+            "qdrant": "ok",
+            "ollama": "not_configured",
+            "redis": "not_configured",
+            "langfuse": "not_configured",
+            "neo4j": "not_applicable",
+        }
 
     monkeypatch.setattr(main_module, "_probe_infra_services", _probe)
     monkeypatch.setattr(main_module, "settings", Settings(llm_provider="ollama", ollama_host=""))

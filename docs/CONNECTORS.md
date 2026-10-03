@@ -28,7 +28,7 @@ sequenceDiagram
     participant Diagnosis
     participant Report
 
-    User->>Supervisor: IncidentRequest.<br/>interface_type + identifier
+    User->>Supervisor: IncidentRequest<br/>interface_type + identifier
     Supervisor->>Supervisor: classify_domain()<br/>sap / saas / generic
     Supervisor->>Connector: get_connector(interface_type).fetch(identifier)
     Connector->>Connector: Verifica modo <br/>mock vs real (.env)

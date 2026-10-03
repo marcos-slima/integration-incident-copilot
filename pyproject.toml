@@ -70,15 +70,14 @@ dependencies = [
     "rq>=2.12.0",
 ]
 
-# Opcional: so necessario se LLM_PROVIDER=openai ou azure_openai no
+[project.optional-dependencies]
+# DA-26: Opcional: so necessario se LLM_PROVIDER=openai ou azure_openai no
 # .env (default e "ollama", que nao precisa disso). Mantido fora das
 # dependencias principais de proposito - o caminho local-first nao
 # deve exigir instalar SDK de nenhum provedor de nuvem.
 openai = [
     "langchain-openai>=0.3",
 ]
-
-[project.optional-dependencies]
 # Observabilidade Prometheus (Fase 2): PROMETHEUS_ENABLED=true exige este extra.
 # pip install -e ".[prometheus]"
 reports = [
@@ -86,7 +85,6 @@ reports = [
     "jinja2>=3.1",        # templates Markdown/HTML
     "psycopg2-binary>=2.9",  # já em deps, mas declarado aqui p/ extra standalone
 ]
-
 prometheus = [
     "prometheus-fastapi-instrumentator>=7.0",
 ]

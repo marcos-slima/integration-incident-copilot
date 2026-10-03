@@ -185,6 +185,26 @@ final.
 | 58 | [44](#decisoes-de-arquitetura) | Mapa de cobertura produto SAP × mecanismo, calculado de dados versionados: 3 níveis (`dedicated` / `generic` / `absent`) em vez de um booleano |
 | 59 | [45](#decisoes-de-arquitetura) | Conectores multi-vendor: fluxo completo, padrão comum, checklist de 8 superfícies ao adicionar conector, documento consolidado `/docs/CONNECTORS.md` |
 
+## Auditoria de Processamento Ponta a Ponto
+
+Mapeamento completo dos 9 use cases reais (HTTP → response), com foco em rastreabilidade, encadeamento de módulos e identificação de lacunas/deficiências.
+
+| Use Case | Título | Documento | DAs Cobertas |
+|---|---|---|---|
+| UC-1 | IDoc Stuck SAP (Fluxo Completo) | [UC_01](docs/UC_01_SAP_IDOC_STUCK.md) | DA-1/2/3/5/12/15/18/20/21/22/23/24/25/26/27/28/29/30/32/33/34/35/38/39/40/41/42/43/44/45/46/47/48/49/50/51/52/53/54/55/56/57/58/59 |
+| UC-2 | ServiceNow (Multi-Vendor SaaS) | [UC_02](docs/UC_02_SERVICENOW.md) | DA-1/2/3/20/22/23/25/26/30/39/43/44/45/48/50/51/57/58/59 |
+| UC-3 | Generic + Web Search Fallback | [UC_03](docs/UC_03_GENERIC_WEB_SEARCH.md) | DA-1/2/3/25/26/30/39/43/50/51/57 |
+| UC-4 | Rule Engine (Sem LLM) | [UC_04](docs/UC_04_RULE_ENGINE.md) | DA-1/2/3/15/22/33/53 |
+| UC-5 | Evidence Fraca → Fallback | [UC_05](docs/UC_05_WEAK_EVIDENCE_FALLBACK.md) | DA-1/2/3/15/17/25/51 |
+| UC-6 | Cloud Fallback (Ollama Offline) | [UC_06](docs/UC_06_CLOUD_FALLBACK.md) | DA-1/2/3/20/26/30/40/41/43/48 |
+| UC-7 | CloudEvents Webhook | [UC_07](docs/UC_07_CLOUDEVENTS_WEBHOOK.md) | DA-20/22/23/26/32/40/43 |
+| UC-8 | GraphRAG Enabled (Neo4j) | [UC_08](docs/UC_08_GRAPHRAG_ENABLED.md) | DA-20/21/22/28/30/32/40/43 |
+| UC-9 | Contract Drift Breaking | [UC_09](docs/UC_09_CONTRACT_DRIFT_BREAKING.md) | DA-25/30/42/51/52 |
+
+**Status:** 9 use cases documentados, 1 lacuna identificada (DA-17: reference library fallback), 17/17 quality gates passaram.
+
+Para detalhes completos: [`docs/AUDITORIA_PONTA_A_PONTA.md`](docs/AUDITORIA_PONTA_A_PONTA.md) + [`docs/AUDITORIA_RESUMO_EXECUTIVO.md`](docs/AUDITORIA_RESUMO_EXECUTIVO.md).
+
 ### 1. Alucinação por mistura de contexto (DA-1)
 
 **Problema:** ao passar os 3 documentos mais relevantes (RAG top-3)

@@ -37,7 +37,7 @@ sequenceDiagram
     Retriever->>Retriever: RAG top-1 com <br/>query = incident_text
     Retriever->>Diagnosis: Evidence + context
     Diagnosis->>Diagnosis: invoke_via_gateway()<br/>prompt + schema
-    Diagnosis->>Report: DiagnosisModel (cause, solution, confidence)
+    Diagnosis->>Report: DiagnosisModel (cause, solution, model_confidence, diagnosis_confidence)
     Report->>User: Relatório + trace + evidence
 ```
 

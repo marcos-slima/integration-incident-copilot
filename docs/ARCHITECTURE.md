@@ -12,15 +12,16 @@ flowchart TD
     A["IncidentRequest<br/>FastAPI POST /diagnose<br/>OU A2A message/send"] --> S["<b>supervisor</b><br/>classifica o dominio (DA-22)<br/>deterministico, sem LLM"]
     S --> B["<b>connector</b><br/>SAP/nao-SAP (app/connectors/)<br/>mock ou real"]
     B --> C["<b>retrieve</b><br/>Qdrant hibrido dense+sparse BM25<br/>incidents + reference_library<br/>fusao RRF + reranker cross-encoder"]
-    C --> W["web_search<br/>SAP Community/GitHub (fallback)"]
-    W --> D{"GraphRAG<br/>opt-in?"}
+    C --> D{"GraphRAG<br/>opt-in?"}
     D -->|"sim"| E["graph_enrich<br/>historico da interface no Neo4j"]
     D -->|"nao (default)"| R{"agent_domain?<br/>(DA-22)"}
     E --> R
-    R -->|"sap"| F1["<b>sap_diagnose</b><br/>especialista SAP<br/>LLM Gateway + guardrails"]
-    R -->|"saas / generic"| F2["<b>saas_diagnose</b><br/>especialista multi-fornecedor<br/>LLM Gateway + guardrails"]
+    R -->|"sap"| F1["<b>sap_diagnose</b><br/>especialista SAP<br/>LLM Gateway + guardrails<br/><i>busca web via ReAct tool (DA-57)</i>"]
+    R -->|"saas"| F2["<b>saas_diagnose</b><br/>especialista multi-fornecedor<br/>LLM Gateway + guardrails<br/><i>busca web via ReAct tool (DA-57)</i>"]
+    R -->|"generic"| F3["<b>generic_diagnose</b><br/>especialista generico<br/>LLM Gateway + guardrails"]
     F1 --> G{"GraphRAG<br/>opt-in?"}
     F2 --> G
+    F3 --> G
     G -->|"sim"| H["graph_write<br/>grava no Neo4j"]
     G -->|"nao (default)"| I["<b>report</b><br/>monta o Markdown final"]
     H --> I
@@ -34,6 +35,7 @@ flowchart TD
     style C fill:#e8f0fe,stroke:#4285f4
     style F1 fill:#e8f0fe,stroke:#4285f4
     style F2 fill:#e8f0fe,stroke:#4285f4
+    style F3 fill:#e8f0fe,stroke:#4285f4
 ```
 
 Os nodes `graph_enrich`/`graph_write` (GraphRAG) so entram no grafo

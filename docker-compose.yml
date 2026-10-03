@@ -62,8 +62,8 @@ services:
     build:
       context: .
       target: final
-    env_file:
-      - .env
+    # DA-41: .env já montado via volume (line 85), então env_file removido.
+    # Sem isso, "docker compose config" falha em checkout limpo (.env ainda não criado).
     ports:
       - "8000:8000"
     environment:

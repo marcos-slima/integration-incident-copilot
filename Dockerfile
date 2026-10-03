@@ -48,7 +48,9 @@ COPY scripts/ scripts/
 
 COPY data/sample_docs/ data/sample_docs/
 
-COPY static/ static/
+# DA-24: static/ não e' versionado (esta no .gitignore), COPY static/ static/
+# quebra em checkout limpo. O stage "frontend-build" ja gera o dist/
+# com `npm run build` e o estagio "final" ja copia para `static/dist`.
 
 # DA-24: usuario nao-root - boa pratica de seguranca para rodar em
 # Kubernetes/Kyma (PodSecurityStandards de varios clusters bloqueiam

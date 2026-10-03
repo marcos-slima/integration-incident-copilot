@@ -3,8 +3,7 @@
 **Data da revisão:** 2026-10-03
 **Checkout:** `/home/marcos-lima/MyProjects/GitHub/integration-incident-copilot`
 **Branch:** `fix/local-stack-and-eval-2026-09-26`
-**HEAD:** `e535dcb2500ce5daca15389bca16a5772e311eb7` — `docs: ruff format .md files`
-**Estado Git antes desta revisão:** branch alinhada com `origin/fix/local-stack-and-eval-2026-09-26`; sem alterações staged/unstaged e sem arquivos não rastreados. O relatório será o único arquivo novo desta atividade.
+**HEAD:** `ef96b7a612b1b36ea9bd7390905d3c82684d6be6` — `fix(OP-01): adiciona checks Redis/Langfuse/Neo4j e ajusta probe requiredservices (DA-35/DA-41/DA-51/B-07)`
 
 > Revisão estática baseada no checkout acima. Não executei testes, CI, build, migrações, ingestão, chamadas a provedores ou serviços externos. Os achados são classificados como riscos sustentados pelo código/configuração, não como incidentes observados em produção. Prioridades P0 (bloqueante), P1 (corrigir antes de produção), P2 (corrigir no próximo ciclo), P3 (melhoria).
 
@@ -12,33 +11,37 @@
 
 O repositório tem um fluxo funcional e bem articulado de diagnóstico: FastAPI, LangGraph, conectores, recuperação híbrida no Qdrant, reranker, regras determinísticas, gateway de LLM, superfícies MCP/A2A/Event Mesh e persistência/observabilidade optativas. Há bom esforço de tornar decisões auditáveis: modelos Pydantic, testes com doubles, testes de integração dedicados para Qdrant/Neo4j/PostgreSQL, avaliação RAG e gates de documentação/dataset.
 
-A maturidade é de **protótipo avançado/homologação**, ainda não de serviço multi-tenant pronto para produção irrestrita. Os riscos mais imediatos são: credenciais efêmeras gravadas em logs; senhas sentinela aceitas em perfis Compose com portas publicadas; timeout global que não cancela trabalho e pode esgotar permanentemente o pool; e confiabilidade limitada por estado/breakers/rate limits distribuídos de maneira desigual. A documentação também contém auditorias históricas com afirmações já contraditas pela implementação atual.
+A maturidade é de **protótipo avançado/homologação**, ainda não de serviço multi-tenant pronto para produção irrestrita. A leitura do HEAD atual confirmou correções relevantes desde a revisão anterior (segredos completos removidos dos logs e variáveis Compose obrigatórias para algumas senhas), mas também encontrou regressões nos probes de Neo4j/Langfuse, admission control que libera capacidade antes do fim do trabalho, e configurações Kyma que não conectam as credenciais Redis/Neo4j ao Secret conforme os comentários prometem. A documentação contém auditorias históricas com afirmações já contraditas pela implementação atual.
 
 ### Achados prioritários
 
 | ID | Prioridade | Achado |
 |---|---|---|
-| SEC-01 | P1 | Segredos de API/admin/sessão são registrados em claro nos logs de startup. |
-| SEC-02 | P1 | Perfis Compose usam `REQUIRED_SET_IN_ENV` como senha efetiva, apesar de comentários dizerem que a execução falhará sem segredo; portas de Postgres, Grafana e Neo4j são publicadas no host. |
-| REL-01 | P1 | O timeout do diagnóstico não cancela a execução; quatro timeouts podem ocupar o pool fixo e deixar todas as chamadas novas na fila. |
-| REL-02 | P1 | O deploy Kyma escala a API para 2–6 réplicas, mas o fallback em memória de tarefas A2A, deduplicação e rate limiting pode divergir por pod. |
-| GOV-01 | P1 | A classificação de dados e a redação regex ajudam, mas não constituem DLP; campos de sensibilidade declarados na API não entram no estado/policy do gateway. |
-| OPS-01 | P2 | Readiness prova Qdrant/Ollama/Redis, mas não prova dependências ativas como provider cloud, PostgreSQL/migrações, Neo4j ou worker RQ. |
-| RAG-01 | P2 | A identidade de embedding registrada não distingue backend/modelo efetivo (FastEmbed BGE versus Ollama configurável). |
-| DOC-01 | P2 | Auditorias e guias em `docs/` contêm estado defasado, inclusive DA-17 declarada pendente apesar do fallback existir. |
-| CI-01 | P2 | O job de `pip-audit` é `continue-on-error`; vulnerabilidades não bloqueiam o pipeline. O gate de LLM pode ficar sem execução quando falta secret. |
-| ARC-01 | P2 | Os limites de camadas são pragmáticos, porém módulos centrais grandes e dependência de estado/configuração globais dificultam evolução e isolamento. |
-| PERF-01 | P2 | O pipeline de retrieval carrega cross-encoder local e roda sincronamente; limites de memória/CPU do manifesto Kyma são baixos e não há dimensionamento demonstrado. |
-| DATA-01 | P2 | A ingestão incremental não remove chunks antigos quando um documento encolhe; limpeza requer recriar collection e reindexar. |
-| TEST-01 | P2 | Os gates cobrem bons cenários, mas provas externas/reais por conector e cenários de carga/concorrência permanecem incompletos. |
+| SEC-01 | P3 | O log completo das chaves foi removido, mas fingerprints de oito caracteres ainda são registrados sem necessidade operacional. |
+| SEC-02 | P2 | Compose agora exige senhas, mas perfis ainda publicam portas de administração/banco em todos os interfaces do host. |
+| DEP-01 | P1 | Redis/Neo4j usam placeholders e credenciais no ConfigMap Kyma; o Secret não alimenta as URLs/campos usados pelo app. |
+| SEC-03 | P2 | O template Kyma desativa `Secure` no cookie de sessão mesmo para acesso TLS. |
+| REL-01 | P1 | O semáforo de admission control é liberado no timeout HTTP enquanto a thread do grafo continua executando. |
+| REL-02 | P1 | Estado de tarefa/idempotência e rate limit não têm garantia distribuída coerente em múltiplas réplicas. |
+| GOV-01 | P1 | A classificação declarada pela API não governa o roteamento; regex de redação não constitui DLP. |
+| OPS-01 | P1 | O probe Neo4j chama `driver.cursor()`, API inexistente no driver oficial usado pelo projeto; GraphRAG deixa `/ready` permanentemente degradado. |
+| OPS-02 | P1 | O probe Langfuse usa caminho/método inexistente e o marca como dependência obrigatória quando configurado. |
+| OPS-03 | P2 | `INFRA_PROBE_TIMEOUT` não é consumido; readiness ainda não verifica provider cloud, banco nem worker. |
+| RAG-01 | P2 | A identidade do embedding persistida não distingue backend/modelo efetivo (FastEmbed BGE versus Ollama configurável). |
+| DOC-01 | P2 | Auditorias/guias contêm estado defasado, inclusive DA-17 declarada pendente apesar do fallback existir. |
+| CI-01 | P2 | `pip-audit` segue como `continue-on-error`; avaliação de LLM pode não executar sem secret. |
+| ARC-01 | P2 | Módulos centrais grandes e dependência de singletons dificultam isolamento e evolução. |
+| PERF-01 | P2 | Cross-encoder local e execução síncrona não foram dimensionados frente aos limites do pod Kyma. |
+| DATA-01 | P2 | Reingestão não remove chunks antigos quando um documento encolhe. |
+| TEST-01 | P2 | Novos probes não têm testes reais por serviço; testes de `/ready` substituem o probe inteiro por mocks. |
 
 ## 2. Estado Git e escopo
 
-O checkout está limpo no commit `e535dcb` e na branch informada no cabeçalho. A verificação de status ocorreu antes de criar este relatório. O relatório aparecerá como arquivo não rastreado até ser versionado pelo usuário.
+O checkout está limpo no commit `ef96b7a`; a referência remota local aponta divergência de um commit em cada direção (sem `fetch` nesta revisão). O relatório já é rastreado desde esse commit. Após as edições desta revisão, o esperado é apenas `ARCHITECTURE_REVIEW.md` como modificado.
 
 ### Inventário de conteúdo
 
-O Git rastreia 352 arquivos: 94 sob `app/`, 78 sob `tests/`, 56 sob `docs/`, 30 sob `frontend/`, 21 sob `data/`, 16 sob `deploy/`, 11 sob `alembic/`, além de workflows, scripts, configurações e documentação na raiz. O inventário incluiu:
+O Git rastreia 353 arquivos (incluindo este relatório): 94 sob `app/`, 78 sob `tests/`, 56 sob `docs/`, 30 sob `frontend/`, 21 sob `data/`, 16 sob `deploy/`, 11 sob `alembic/`, além de workflows, scripts, configurações e documentação na raiz. O inventário incluiu:
 
 - API, modelos, autenticação, administração, agentes/LangGraph, prompts, regras, gateway e factories de LLM;
 - RAG, ingestão, embeddings, avaliação, GraphRAG, conectores SAP e SaaS, contratos e eventos;
@@ -70,41 +73,59 @@ Não li o conteúdo bruto do corpus PDF/EPUB de 22,67 GB: inspecionei contagem, 
 
 ## 4. Achados detalhados
 
-### SEC-01 — Segredos de startup aparecem em logs
+### SEC-01 — Fingerprints curtos continuam nos logs de startup
+
+**Status no HEAD atual:** exposição integral corrigida parcialmente; risco residual P3.
+**Evidência:** `app/main.py` (linhas 157–177), `app/admin/security.py` (linhas 44–51) e `app/auth.py` (linhas 155–168) agora registram os primeiros oito caracteres das chaves/segredo em vez do valor completo. As chaves são geradas com `secrets.token_urlsafe(32)`.
+
+**Impacto:** o fingerprint não permite recuperar uma chave de 256 bits, mas ainda divulga informação estável sobre credenciais em logs e não é necessário para diagnosticar startup. O problema principal da revisão anterior foi reduzido; não há evidência aqui de exposição prática da chave completa no HEAD atual.
+
+**Recomendação:** remover o valor/fingerprint do log e registrar apenas se o segredo foi configurado ou gerado. Em produção, manter `REQUIRE_AUTH=true` e fornecer credenciais estáveis via secret store. O guard de startup não exige `ADMIN_API_KEY` nem `SESSION_SECRET` estáveis, então rever esse contrato para superfícies de produção.
+
+### SEC-02 — Perfis Compose ainda publicam portas no host
+
+**Status no HEAD atual:** correção do default de senha implementada; exposição de rede permanece como P2.
+**Evidência:** `docker-compose.yml` agora usa `${POSTGRES_PASSWORD:?REQUIRED_SET_IN_ENV}`, `${GRAFANA_PASSWORD:?REQUIRED_SET_IN_ENV}` e `${NEO4J_PASSWORD:?REQUIRED_SET_IN_ENV}` (linhas 147, 162, 167 e 232), portanto Compose falha quando faltam as variáveis. Porém Postgres, Grafana e Neo4j publicam portas com mapeamento sem IP explícito (linhas 142–163 e 220–222), que por padrão escuta nos interfaces do host. Redis usa bind loopback por padrão (linhas 252–266).
+
+**Impacto:** quem ativa os perfis de observabilidade/GraphRAG pode expor banco, UI e Bolt para a rede acessível à máquina, além do loopback. Senhas fortes reduzem risco de autenticação, mas não substituem restrição de rede.
+
+**Recomendação:** usar `127.0.0.1` nos binds locais, deixar portas internas sem publicação quando possível, e documentar a exceção para quem realmente precisa de acesso remoto. A correção de interpolação obrigatória do HEAD atende a parte de senha ausente; não é necessário repetir essa mudança.
+
+### REL-01 — O semáforo é liberado enquanto a execução segue ativa
 
 **Prioridade:** P1
-**Evidência:** `app/main.py::_ensure_api_keys_configured` registra o valor gerado de `API_KEY`, `A2A_API_KEY` e `EVENT_MESH_API_KEY` no warning de startup (linhas 157–177); `app/admin/security.py::ensure_admin_key_configured` registra `ADMIN_API_KEY` (linhas 44–51); `app/auth.py::ensure_session_secret_configured` registra `SESSION_SECRET` (linhas 155–168).
+**Evidência:** `app/agent/graph.py` cria pool com quatro threads e semáforo com quatro vagas (linhas 145–152). `_invoke_graph_with_timeout` adquire vaga, submete future e, em `finally`, libera o semáforo assim que o caller termina a espera, inclusive quando `future.result(timeout=...)` expira (linhas 170–187). A própria docstring esclarece que a thread continua após o timeout (linhas 160–168). `DiagnosisTimeoutError` é sempre mapeada para HTTP 504 (`app/main.py`, linhas 276–286), inclusive quando o semáforo recusa nova execução com a mensagem “Service unavailable”.
 
-**Impacto:** agentes com acesso a logs, agregadores, tickets de suporte ou snapshots de container conseguem recuperar credenciais que autenticam endpoints. O padrão de desenvolvimento “gerar chave” evita endpoint aberto, mas publicar o segredo inteiro no log transforma observabilidade em armazenamento de credenciais. Em clusters com várias réplicas, cada pod pode gerar valores distintos e operadores podem depender de uma chave que muda em restart.
+**Impacto:** cada timeout libera uma vaga sem terminar o trabalho. Novos pedidos voltam a ser aceitos e podem entrar na fila ilimitada do executor enquanto quatro workers ainda estão presos; o admission control adicionado pelo HEAD não limita o número real de futures ativos/pendentes. A semântica de saturação também retorna 504 em vez de 429/503.
 
-**Recomendação:** nunca emitir o valor secreto; emitir apenas nome, geração automática e fingerprint curto não reversível. Em ambientes de produção, fazer startup falhar se faltar credencial estável (`REQUIRE_AUTH=true` deve incluir as superfícies admin/sessão) e usar Secret Manager/secret store. Criar teste que verifica ausência de segredos em logs.
+**Recomendação:** liberar a vaga por `Future.add_done_callback` quando o trabalho realmente concluir, inclusive se o caller já expirou; proteger falha de submissão; mapear saturação para 429/503 com `Retry-After`. A correção definitiva ainda requer cancelamento cooperativo/deadline nas etapas e limites no executor/fila. Fazer teste de concorrência que mantém as quatro tarefas além do deadline e verifica que a quinta não é enfileirada.
 
-### SEC-02 — Senhas sentinela são aceitas como credenciais em Compose
-
-**Prioridade:** P1
-**Evidência:** comentários em `docker-compose.yml` dizem que perfis falham se senhas estiverem ausentes, mas variáveis usam defaults literais: Postgres `${POSTGRES_PASSWORD:-REQUIRED_SET_IN_ENV}` (linha 147), Grafana `${GRAFANA_PASSWORD:-REQUIRED_SET_IN_ENV}` (linha 162), Neo4j `${NEO4J_PASSWORD:-REQUIRED_SET_IN_ENV}` (linha 232). A interpolação `:-` fornece um valor padrão; não impõe requisito. Postgres/Grafana/Neo4j publicam portas no host (`docker-compose.yml`, linhas 142–163 e 220–222). `REDIS_PASSWORD` é opcional e o Redis exposto pelo Compose inicia sem autenticação quando vazia (linhas 252–266), embora o bind padrão seja loopback.
-
-**Impacto:** perfis `observability`/`graphrag` podem iniciar com senha conhecida e acessíveis pela rede do host; Redis em configuração inadequada pode aceitar conexões sem senha. Isso contradiz as garantias escritas nos comentários e facilita exposição acidental em máquina compartilhada.
-
-**Recomendação:** trocar sentinelas por interpolação obrigatória `${VAR:?mensagem}` para segredos não opcionais; exigir senhas fortes em script/secret store; restringir publicação de portas a `127.0.0.1` por padrão ou remover portas quando não forem necessárias. Adicionar smoke/config gate que prove falha de renderização sem segredo e confirme binds esperados.
-
-### REL-01 — Timeout global não cancela execução e pode saturar pool
+### REL-02 — Estado distribuído e rate limit não têm a mesma garantia entre réplicas
 
 **Prioridade:** P1
-**Evidência:** `app/agent/graph.py` cria `ThreadPoolExecutor(max_workers=4)` (linha 144), submete `get_graph().invoke` e espera `future.result(timeout=...)` (linhas 161–169). A própria docstring declara que, em timeout, a thread continua executando e não existe cancelamento cooperativo (linhas 152–160). Configuração padrão do teto global é 180 s (`app/config.py`).
+**Evidência:** Kyma define 2 réplicas e HPA até 6 (`deploy/kyma/deployment.yaml`, `deploy/kyma/hpa.yaml`). A aplicação usa Redis opcional para tarefas, fila, idempotência e circuit breaker; `app/a2a/task_store.py` tem fallback em memória e degradação para perda de persistência, `app/events/idempotency.py` usa fallback/fail-open e `app/rate_limit.py` instancia `slowapi.Limiter` sem storage distribuído.
 
-**Impacto:** quatro chamadas presas por provider/retriever ocupam as quatro threads; chamadas seguintes acumulam na fila do executor e podem estourar o próprio timeout antes de começarem. A chamada HTTP retorna erro, mas CPU, conexões e chamadas cobradas continuam. A fila do `ThreadPoolExecutor` não tem limite nem mecanismo de rejeição, portanto sob sobrecarga pode haver latência/memória crescentes.
+**Impacto:** falhas de Redis ou configuração ausente tornam task lookup e deduplicação dependentes do pod; o rate-limit é independente por processo e pode multiplicar sua quota efetiva pelas réplicas. O ConfigMap Kyma aponta para Redis, mas nenhum recurso Redis está neste bundle e o segredo de acesso não está conectado corretamente (ver DEP-01).
 
-**Recomendação:** aplicar deadline/cancelamento por etapa onde SDKs suportam; evitar prometer cancelamento com watchdog; usar semáforo/admission control com rejeição 429/503 e fila limitada. Considerar worker isolado para execução realmente cancelável e persistir estado. Testar cenário de quatro execuções excedendo o prazo e confirmar recuperação do serviço.
+**Recomendação:** declarar storage compartilhado como requisito do perfil de produção e exigir Redis autenticado/TLS. Configurar storage distribuído para slowapi, preservar estados idempotentes e definir explicitamente se falha do Redis bloqueia ou permite eventos. Testar requisições alternando pods, reentrega de eventos e quotas compartilhadas.
 
-### REL-02 — Escala horizontal e estado distribuído têm garantias distintas
+### DEP-01 — Configuração Kyma não conecta credenciais ao Secret
 
-**Prioridade:** P1
-**Evidência:** `deploy/kyma/deployment.yaml` define 2 réplicas e HPA até 6 (`deploy/kyma/hpa.yaml`). `REDIS_URL` é definido no ConfigMap (`deploy/kyma/configmap.yaml`), mas a autenticação Redis não é configurada ali nem em `secret.example.yaml`; o próprio comentário alerta que sem Redis A2A e idempotência ficam locais. `app/a2a/task_store.py` retorna `InMemoryTaskStore` quando URL não existe e `RedisTaskStore` descarta persistência em falha Redis. `app/events/idempotency.py` faz fail-open em erro Redis. O limitador em `app/rate_limit.py` é o `Limiter` do slowapi sem storage Redis configurado, logo seus contadores ficam por processo.
+**Prioridade:** P1 para habilitar Redis/GraphRAG.
+**Evidência:** `deploy/kyma/configmap.yaml` coloca `REDIS_URL` com senha literal `CHANGE-ME-REDIS-PASSWORD` (linha 72) e `NEO4J_PASSWORD` em ConfigMap como `CHANGE-ME-NEO4J-PASSWORD` (linha 78). `deploy/kyma/secret.example.yaml` define `REDIS_PASSWORD: "CHANGE-ME-redis-password"` (linha 35), que não corresponde à senha na URL e não é usada por código para compor `REDIS_URL`; também não define `NEO4J_PASSWORD`. A ConfigMap instrui usar Secret, mas `NEO4J_PASSWORD` permanece no ConfigMap. `kustomization.yaml` exclui `secret.example.yaml` deliberadamente; o operador precisa criar/aplicar Secret real separado.
 
-**Impacto:** GET de task A2A pode falhar dependendo do pod; evento repetido pode ser processado em réplicas diferentes; e rate-limit de 10/min pode multiplicar por réplica. O Redis configurado no exemplo é sem TLS/credencial e os manifests não incluem Redis, apenas pressupõem serviço externo.
+**Impacto:** aplicar os templates como descrito não autentica no Redis se ele usa a senha do Secret; chamadas Redis falham e probes/readiness degradam. Habilitar GraphRAG com o placeholder Neo4j não chega a falhar na validação de “senha não vazia”, mas autenticação no banco falha. Além disso, senha em ConfigMap é armazenada como configuração não secreta.
 
-**Recomendação:** separar armazenamento de tarefa, idempotência, fila, circuit-breaker e rate limit em dependências distribuídas e declarar suas garantias em config/deploy. No perfil de produção, falhar fechado se Redis não estiver acessível/configurado e garantir TLS/auth/ACL. Adicionar sticky routing apenas como mitigação transitória, não como semântica de persistência.
+**Recomendação:** remover senhas e userinfo de ConfigMap. Injetar `REDIS_URL` completo ou `REDIS_PASSWORD` do Secret com formato coerente (incluindo escaping de URL), e injetar `NEO4J_PASSWORD` do Secret. Não manter placeholders não vazios que passam pelas validações. Adicionar validação Kustomize/CI que detecte `CHANGE-ME`, confirme chaves referenciadas e cheque autenticação Redis/Neo4j.
+
+### SEC-03 — Cookie de sessão não é Secure no template Kyma
+
+**Prioridade:** P2
+**Evidência:** `app/config.py` descreve `session_cookie_secure=True` como configuração de produção atrás de TLS (linhas 332–334), mas o ConfigMap Kyma define `SESSION_COOKIE_SECURE: "false"` (`deploy/kyma/configmap.yaml`, linha 79). `app/auth.py::session_cookie_kwargs` usa diretamente esse setting no atributo Secure do cookie (linha 209).
+
+**Impacto:** o browser não recebe a diretiva Secure e poderá enviar cookie por HTTP se houver um caminho HTTP acessível ao host. Isso amplia o risco de roubo de sessão por exposição/transporte sem TLS, mesmo que o caminho canônico do Gateway use HTTPS.
+
+**Recomendação:** definir `SESSION_COOKIE_SECURE: "true"` no perfil Kyma e reservar false para desenvolvimento HTTP local. Validar redirect/HTTPS externo e `SameSite` com teste de cookie no ambiente de homologação.
 
 ### GOV-01 — Classificação/redação não equivalem a DLP e campos declarados não governam policy
 
@@ -115,19 +136,37 @@ Não li o conteúdo bruto do corpus PDF/EPUB de 22,67 GB: inspecionei contagem, 
 
 **Recomendação:** incluir classificação autoritativa no estado e fazer validação conservadora (nível informado só pode elevar sensibilidade, nunca reduzi-la sem policy explícita). Separar redaction de PII da autorização de egress; default deny para cloud se classificação não for verificável. Criar testes de matriz por provider/origin, dados de conector e amostras PII multilíngues; rotular a redação atual como minimização parcial, nunca DLP.
 
-### OPS-01 — Readiness não representa todas as dependências obrigatórias
+### OPS-01 — A probe Neo4j usa uma API inexistente e impede readiness com GraphRAG
+
+**Prioridade:** P1 quando GraphRAG está habilitado.
+**Evidência:** `app/main.py` instancia `GraphDatabase.driver(...)` e chama `driver.cursor()` (linhas 398–413). O driver Neo4j Python oferece `driver.session()` e execução via sessão; o pacote instalado no `.venv` declara `Driver.session` em `neo4j/_sync/driver.py`, sem método `cursor`. A exceção é engolida pelo `except Exception` e traduzida em `neo4j: degraded`. `_required_services()` marca Neo4j obrigatório quando `GRAPH_RAG_ENABLED=true` (linhas 429–430), e `/ready` retorna 503 para serviço degradado.
+
+**Impacto:** em qualquer deployment que ligue GraphRAG, `/ready` reprova sempre, retirando os pods do balanceador ainda que Neo4j esteja saudável. O driver é criado em cada chamada e não é fechado no caminho de exceção, podendo também acumular recursos entre probes.
+
+**Recomendação:** usar `with driver.session() as session: session.run("RETURN 1")`, fechar o driver em `finally` ou usar cliente compartilhado de lifespan e aplicar deadline real. Cobrir com smoke contra Neo4j real; a alteração atual só adiciona stubs no teste de endpoint.
+
+### OPS-02 — Probe Langfuse chama método/path inexistente e bloqueia serviço opcional
+
+**Prioridade:** P1 quando Langfuse está configurado.
+**Evidência:** `app/main.py` chama `client.projects.get_many()` e converte qualquer erro em `langfuse: degraded` (linhas 383–393); `_required_services()` adiciona `langfuse` ao conjunto obrigatório quando configurado (linhas 431–432). No SDK presente (`langfuse 4.16.0`), a API REST fica em `client.api`; o código do pacote usa `self.api.projects.get()` (`.venv/lib/python3.12/site-packages/langfuse/_client/client.py`, linhas 448 e 2432), não `client.projects.get_many()`. O comentário da probe reconhece que sem Langfuse o app continua funcionando, mas uma falha remove o pod do tráfego.
+
+**Impacto:** com Langfuse configurado, a probe retorna degraded por `AttributeError` e o pod fica NotReady mesmo quando o backend responde e o diagnóstico poderia continuar sem tracing. Em múltiplas réplicas isso pode causar indisponibilidade total.
+
+**Recomendação:** usar endpoint/SDK realmente suportado e limitar duração. Decidir explicitamente se tracing é requisito de readiness; se observabilidade é best-effort, reportar degraded sem retirar o pod. Adicionar teste de integração para o caminho real do SDK.
+
+### OPS-03 — Orçamento de readiness não é aplicado e faltam dependências ativas
 
 **Prioridade:** P2
-**Evidência:** `_probe_infra_services()` em `app/main.py` (linhas 338–380) verifica Qdrant, Ollama e Redis; `_required_services()` (linhas 383–390) marca Qdrant e Ollama quando provider primário é Ollama. PostgreSQL, provider OpenAI/Azure, Neo4j mesmo com GraphRAG ligado e presença do worker RQ não entram na decisão de `/ready`. O deploy Kyma usa `/ready` como readiness probe (`deploy/kyma/deployment.yaml`, linhas 48–58).
+**Evidência:** `deploy/kyma/configmap.yaml` define `INFRA_PROBE_TIMEOUT: "5"` (linha 82), mas `rg` não encontra esse nome em `app/` nem em `tests/`; os probes HTTP/Redis usam timeouts hardcoded de 1 s e a chamada Langfuse não recebe timeout explícito (`app/main.py`, linhas 345, 349–373 e 383–389). `_required_services()` não inclui provider OpenAI/Azure, PostgreSQL, nem worker RQ.
 
-**Impacto:** pod pode receber tráfego mesmo sem uma dependência necessária para a configuração ativa, responder 500/erro de policy em todo diagnóstico ou aceitar job sem worker. Por outro lado, transformar cada dependência opcional em bloqueante também seria incorreto.
+**Impacto:** o valor anunciado de 5 s não controla a probe; serviços podem exceder o orçamento do kubelet (readiness timeout 5 s em `deploy/kyma/deployment.yaml`) ou falhar cedo por um timeout fixo. Ao mesmo tempo, pod pode ficar pronto sem provider cloud válido, DB necessário ao registry/metering ou worker para fila assíncrona.
 
-**Recomendação:** readiness baseada em capacidades configuradas: provider ativo, Qdrant, Neo4j se GraphRAG obrigatório, DB se modo registry ou requisito de negócio, e worker/Redis para rotas assíncronas. Separar health por capability e explicar degradação. A probe deve testar conexões curtas sem expor credenciais.
+**Recomendação:** modelar timeout no `Settings` e aplicar um deadline total compartilhado à probe. Expor status por capability e validar apenas dependências requeridas pela configuração/rotas habilitadas; não tratar toda integração opcional como requisito global.
 
 ### RAG-01 — Fingerprint do embedding descreve config, não o vetor usado
 
 **Prioridade:** P2
-**Evidência:** `app/rag/retriever.py` seleciona `EMBEDDING_BACKEND=fastembed` e instancia `_FastEmbedWrapper` com modelo fixo `BAAI/bge-small-en-v1.5` (linhas 72–102). Ingestão e validação continuam passando `EMBEDDING_MODEL` para `ensure_collection` e `stamp_collection` (`app/rag/ingest.py`, linhas 526–544; validação existente usa a mesma identidade em `stamp_existing_collection`, linhas 379–389); retrieval também chama `verify_once(..., EMBEDDING_MODEL)`. O rótulo pode ser `nomic-embed-text` mesmo quando os vetores são BGE.
+**Evidência:** `app/rag/retriever.py` seleciona `EMBEDDING_BACKEND=fastembed` e instancia `_FastEmbedWrapper` com modelo fixo `BAAI/bge-small-en-v1.5` (linhas 72–102). Ingestão e validação continuam passando `EMBEDDING_MODEL` para `ensure_collection` e `stamp_collection` (`app/rag/ingest.py`, linhas 526–544; `stamp_existing_collection`, linhas 379–389); retrieval também chama `verify_once(..., EMBEDDING_MODEL)`. O rótulo pode ser `nomic-embed-text` mesmo quando os vetores são BGE.
 
 **Impacto:** a proteção DA-45 detecta incompatibilidade dimensional em muitos casos, mas a identidade persistida pode ser falsa; backend/modelo com a mesma dimensão pode misturar espaços vetoriais incompatíveis sem falhar e gerar respostas plausíveis incorretas. A troca para FastEmbed na CI não é representada no fingerprint.
 
@@ -181,7 +220,7 @@ Não li o conteúdo bruto do corpus PDF/EPUB de 22,67 GB: inspecionei contagem, 
 ### TEST-01 — A evidência de integração e produção é parcial
 
 **Prioridade:** P2
-**Evidência:** workflows cobrem Qdrant e Neo4j com containers reais e migrations/dashboard em Postgres, mas conectores usam muitos `httpx.MockTransport`/cassettes; a documentação reconhece endpoints especulativos ou ausência de tenant real para alguns fornecedores. O job normal exclui `integration`; prompt eval não roda a cada PR e depende de segredo/provider.
+**Evidência:** workflows cobrem Qdrant e Neo4j com containers reais e migrations/dashboard em Postgres, mas conectores usam muitos `httpx.MockTransport`/cassettes; a documentação reconhece endpoints especulativos ou ausência de tenant real para alguns fornecedores. O job normal exclui `integration`; prompt eval não roda a cada PR e depende de segredo/provider. No commit atual, `tests/test_api.py` substitui `_probe_infra_services` por uma função fake nos testes de `/ready` (linhas 587–635), portanto não valida o novo uso de `client.projects.get_many()` nem do driver Neo4j.
 
 **Impacto:** mocks provam parsing/contratos sob fixtures, mas não autenticação, quotas, paginação, mudanças de schema, TLS, timeouts nem diferenças reais de fornecedores. Carga concorrente, failover e consumo de memória também não estão demonstrados.
 
@@ -189,13 +228,13 @@ Não li o conteúdo bruto do corpus PDF/EPUB de 22,67 GB: inspecionei contagem, 
 
 ## 5. Segurança, privacidade e operação: avaliação complementar
 
-- **Autenticação:** há chaves separadas para API, A2A, webhook e admin, comparação constante e opção de exigir configuração explícita; login web usa cookie assinado e PBKDF2. Isso é uma base útil. A gestão/rotação e distribuição dessas credenciais ainda depende do operador.
+- **Autenticação:** há chaves separadas para API, A2A, webhook e admin, comparação constante e opção de exigir configuração explícita; login web usa cookie assinado e PBKDF2. O HEAD deixou de logar chaves completas, mas ainda loga fingerprints de oito caracteres. A distribuição, rotação, `ADMIN_API_KEY` estável e `SESSION_SECRET` continuam dependentes do operador.
 - **Prompt injection:** entradas, retrieval e web search passam por neutralização heurística e a busca web tem gate de fonte/sensibilidade. Regex não é sandbox nem garantia de isolamento de instruções; conteúdo recuperado deve continuar tratado como não confiável e ferramentas devem permanecer com capability mínima.
 - **Egress:** a origem real dos providers e allowlist de dados confidenciais reduzem risco de roteamento acidental. A classificação default é prudente, mas a redação parcial e dados declarados pelo cliente não são suficientes para atestar DLP.
 - **Admin/model registry:** credenciais em repouso usam Fernet e a rota mascara plaintext, mas a segurança depende integralmente da proteção/backup/rotação de `LLM_CREDENTIALS_MASTER_KEY`; perda da chave impede descriptografia. O banco é simultaneamente configuração operacional e armazenamento de incidentes.
 - **Observabilidade:** Langfuse é opcional e com mask de dados; logs ainda precisam da correção SEC-01. `/metrics` é opt-in e deve ser protegido por rede/reverse proxy; dashboards e métricas não devem receber labels com valores de usuário/tenant.
 - **Fila/eventos:** RQ e idempotência melhoram resiliência se Redis estiver corretamente operado; sem Redis, `BackgroundTasks` é best effort. A entrega 202 sem Redis não equivale a durabilidade.
-- **Deploy:** Kyma templates têm usuário não-root, seccomp, probes e limites, mas não incluem policies de rede, TLS interno, secret operator nem o Qdrant/Redis gerenciado. A operação exige infraestrutura externa e substituição dos placeholders. O ConfigMap usa OpenAI como padrão e inclui origin Azure com placeholder; sem substituir e validar `CONFIDENTIAL_ALLOWED_ORIGINS`, chamadas confidenciais podem ser negadas. Isso deve ser tratado como template de deploy, não configuração pronta.
+- **Deploy:** Kyma templates têm usuário não-root, seccomp, probes e limites, mas não incluem policies de rede, secret operator nem Qdrant/Redis gerenciado. A operação exige infraestrutura externa e substituição dos placeholders. O ConfigMap usa OpenAI como padrão, inclui origin Azure com placeholder, credenciais Redis/Neo4j inconsistentes e `SESSION_COOKIE_SECURE=false`; não é configuração pronta. A APIRule documenta que seu schema não foi validado em cluster Kyma real.
 - **Contratos:** parser OData usa XML endurecido e modelo de drift é explícito. A publicação do evento/incidente em sistemas externos e ciclo de baseline ainda dependem da infraestrutura de evento/banco configurada.
 
 ## 6. Arquitetura-alvo recomendada
@@ -233,16 +272,17 @@ flowchart LR
 
 ### Fase 0 — Bloqueadores de exposição (imediato)
 
-- Corrigir logs de segredos efêmeros (SEC-01) e exigir segredos de produção sem fallback sentinela (SEC-02).
+- Remover até os fingerprints dos logs (SEC-01); manter as senhas Compose obrigatórias já introduzidas no HEAD e restringir os binds expostos (SEC-02).
+- Corrigir wiring de Secrets/ConfigMaps Kyma para Redis/Neo4j e não habilitar features enquanto placeholders estiverem presentes (DEP-01); ativar cookie Secure no perfil TLS (SEC-03).
 - Confirmar binds de portas locais e políticas de acesso para Postgres/Grafana/Neo4j/Redis.
 - Atualizar manifestos Kyma com credenciais via Secret Manager e validar origin/provider efetivos; documentar que templates não são deployment pronto.
 - Criar gate de segurança que falha com credenciais placeholder/ausentes nos perfis de produção.
 
 ### Fase 1 — Confiabilidade de tráfego (curto prazo)
 
-- Resolver saturação/cancelamento do diagnóstico (REL-01), com limites de admissão e timeouts por dependência.
+- Corrigir a liberação prematura do semáforo e o status HTTP de saturação; depois resolver cancelamento/deadline do diagnóstico (REL-01).
 - Configurar Redis com autenticação/TLS e storage distribuído para rate limit, A2A, idempotência e breaker; tornar pré-requisito explícito no perfil Kyma (REL-02).
-- Redefinir readiness por capabilities e worker ativo (OPS-01); retornar estado degradado específico em vez de sinal genérico.
+- Corrigir probes do Neo4j e Langfuse, definir se observabilidade opcional afeta readiness, aplicar timeout total e incluir as dependências necessárias por capability/worker (OPS-01/02/03).
 - Testar duplicidade, retry, crash entre claim e conclusão, e recuperação Redis/Qdrant/provider.
 
 ### Fase 2 — Governança de dados e RAG (médio prazo)
@@ -270,17 +310,17 @@ flowchart LR
 
 1. Nenhum segredo completo aparece em stdout/stderr, logs de aplicação, traces, métricas ou relatórios; testes de captura provam o comportamento.
 2. Compose e manifests falham com erro explícito quando um segredo obrigatório está ausente/placeholder; portas de administração/banco ficam privadas por default.
-3. Deadline expirado interrompe/reclama recursos, novas requisições não acumulam sem limite e saturação retorna erro controlado; teste prova recuperação após quatro chamadas bloqueadas.
+3. Admission control só libera a vaga quando o future termina; novas requisições não acumulam sem limite, saturação retorna 429/503 e teste comprova comportamento após quatro chamadas bloqueadas.
 4. Em 2+ réplicas, tarefa A2A pode ser consultada em qualquer pod, evento duplicado não executa duas vezes e rate limit tem bucket coerente e storage compartilhado.
 5. Para cada dado/provider/origin, política resulta em allow/deny auditável; sensibilidade fornecida pelo usuário só pode elevar proteção; nenhuma decisão de DLP depende de regex como única barreira.
-6. Readiness representa dependências requeridas pela configuração ativa e não marca pod pronto quando uma dependência crítica está ausente.
+6. Probes de Neo4j e Langfuse usam APIs válidas, fecham recursos e têm teste contra as dependências reais; readiness aplica timeout total e representa apenas dependências requeridas pela configuração ativa.
 7. Fingerprint da collection corresponde ao backend/modelo/revisão/dimensão do vetor efetivamente gravado e usado na consulta; incompatibilidade falha antes de responder.
 8. Reingestão de documento alterado remove chunks velhos sem apagar outros documentos nem deixar janela de indisponibilidade; corpus e resultado são reproduzíveis.
-9. Documentação de arquitetura/auditoria identifica o commit avaliado e não contém pendências já resolvidas; números têm classificação “medido”, “estimado” ou “não executado”.
+9. Documentação de arquitetura/auditoria identifica o commit avaliado e não contém pendências já resolvidas; manifestos Kyma não mantêm placeholders/segredos em ConfigMap e os valores têm classificação “medido”, “estimado” ou “não executado”.
 10. `pip-audit`, lint, typecheck frontend, testes determinísticos, smoke de infraestrutura e eval RAG/LLM produzem relatórios auditáveis; falhas de ferramenta não viram sucesso silencioso.
 11. Teste de carga valida latência p95/p99, RSS, limite de concorrência, custo, filas e comportamento do breaker com a configuração de produção pretendida.
 12. Runbook de deploy, rollback, rotação/recuperação de segredo e restore de dados é executável por outra pessoa sem acesso ao ambiente do autor.
 
 ## 9. Limites desta revisão
 
-Esta revisão não executou testes/build/CI nem verificou disponibilidade real de endpoints/provedores; não valida contratos de fornecedor além do que código, testes, fixtures e documentação sustentam. Os PDFs/EPUBs não foram semanticamente amostrados. Arquivos locais de segredo foram deliberadamente ignorados. Os benchmarks e medições descritos nos documentos foram tratados como evidência documental histórica, não como números reproduzidos nesta sessão. Portanto, os achados identificam riscos de desenho/configuração e itens que requerem validação operacional; não constituem certificação de segurança ou readiness para produção.
+Esta revisão não executou testes/build/CI nem verificou disponibilidade real de endpoints/provedores. Inspecionei estaticamente o código instalado dos SDKs Neo4j e Langfuse no `.venv` para confirmar a incompatibilidade das chamadas nas probes; não executei os probes contra serviços. Esta revisão não valida contratos de fornecedor além do que código, testes, fixtures e documentação sustentam. Os PDFs/EPUBs não foram semanticamente amostrados. Arquivos locais de segredo foram deliberadamente ignorados. Os benchmarks e medições descritos nos documentos foram tratados como evidência documental histórica, não como números reproduzidos nesta sessão. Portanto, os achados identificam riscos de desenho/configuração e itens que requerem validação operacional; não constituem certificação de segurança ou readiness para produção.

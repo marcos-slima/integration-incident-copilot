@@ -174,12 +174,12 @@ All gates passed: 17/17
 async def test_odata_fetch_success(httpx_mock: httpx.MockTransport):
     httpx_mock.add_response(
         url="https://services.odata.org/V2/Northwind/Northwind.svc/Customers",
-        json={"value": [{"CustomerID": "ALFKI"}]}
+        json={"value": [{"CustomerID": "ALFKI"}]},
     )
-    
+
     connector = ODataConnector(...)
     result = await connector.fetch("ALFKI")
-    
+
     assert result.success
     assert result.payload["CustomerID"] == "ALFKI"
 ```
@@ -206,15 +206,15 @@ async def test_supervisor_sap_route():
         messages=[HumanMessage(content="IDoc stuck in SAP")],
         domain="sap",
         connector_type="odata",
-        connector_source_system="sap-erp"
+        connector_source_system="sap-erp",
     )
-    
+
     # Mock supervisor (não chama LLM)
     with patch("app.agent.supervisor.classify_domain") as mock_classify:
         mock_classify.return_value = "sap"
-        
+
         result = await supervisor_node(state)
-        
+
         assert result["domain"] == "sap"
         assert result["connector_type"] == "odata"
 ```
@@ -227,21 +227,21 @@ async def test_retrieve_node_fallback():
     state = CopilotState(
         messages=[HumanMessage(content="problema integration SAP")],
         evidence=[],
-        context_documents=[]
+        context_documents=[],
     )
-    
+
     # Mock RetrievalResult
     mock_retrieval = RetrievalResult(
         chunks=[Chunk(text="IDocs são mensagens SAP...", score=0.3)],
         strategy="dense+sparse+reranker",
-        metadata={"source": "reference_library"}
+        metadata={"source": "reference_library"},
     )
-    
+
     with patch("app.agent.nodes.vector_store_search") as mock_search:
         mock_search.return_value = mock_retrieval
-        
+
         result = await retrieve_node(state)
-        
+
         assert len(result["context_documents"]) == 1
         assert result["context_documents"][0].source == "reference_library"
 ```
@@ -257,11 +257,13 @@ async def test_retrieve_node_fallback():
 async def test_llm_fallback_on_failure():
     # Primeira chamada (Ollama) falha
     with patch("app.llm.factory.invoke_with_hybrid_fallback") as mock_invoke:
-        mock_invoke.side_effect = [LLMError(" Connection refused"), 
-                                  MockResponse(content="resposta mockada")]
-        
+        mock_invoke.side_effect = [
+            LLMError(" Connection refused"),
+            MockResponse(content="resposta mockada"),
+        ]
+
         result = await invoke_via_gateway(...)
-        
+
         assert mock_invoke.call_count == 2
         assert result.content == "resposta mockada"
 ```
@@ -273,7 +275,7 @@ async def test_llm_fallback_on_failure():
 async def test_gateway_budget_exceeded():
     with patch("app.llm.gateway.invoke_via_gateway") as mock_gateway:
         mock_gateway.side_effect = BudgetExceededError("daily budget reached")
-        
+
         with pytest.raises(BudgetExceededError):
             await invoke_via_gateway(...)
 ```
@@ -290,18 +292,16 @@ async def test_retriever_dense_sparse_rerank():
     mock_chunks = [
         Chunk(text="IDocs são mensagens SAP", score=0.9),
         Chunk(text="IDoc stuck causa delay", score=0.85),
-        Chunk(text="IDoc review procedure", score=0.8)
+        Chunk(text="IDoc review procedure", score=0.8),
     ]
-    
+
     with patch("app.agent.retriever.vector_store_search") as mock_search:
         mock_search.return_value = RetrievalResult(
-            chunks=mock_chunks,
-            strategy="dense+sparse+rerank",
-            metadata={}
+            chunks=mock_chunks, strategy="dense+sparse+rerank", metadata={}
         )
-        
+
         result = await RAG.retrieve("IDoc stuck", top_k=3)
-        
+
         assert len(result.chunks) == 3
         assert result.chunks[0].score == 0.9
 ```
@@ -313,16 +313,16 @@ def test_reranker_score():
     passages = [
         ("pergunta", "IDoc stuck"),
         ("pergunta", "SAP integration"),
-        ("pergunta", "OData error")
+        ("pergunta", "OData error"),
     ]
-    
+
     scores = [0.9, 0.7, 0.4]
-    
+
     with patch("app.rag.retriever.reranker.predict") as mock_predict:
         mock_predict.return_value = [[score] for score in scores]
-        
+
         result = rerank(passages)
-        
+
         assert result[0][0] == "IDoc stuck"  # top score
 ```
 
@@ -371,20 +371,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      
+
       - name: Install dependencies
         run: |
           pip install uv
           uv sync --dev
-      
+
       - name: Unit tests (rápidos)
         run: uv run pytest tests/ -m "not integration" -v
-      
+
       - name: Quality gates
         run: uv run python scripts/quality_gate.py
 ```
@@ -408,18 +408,18 @@ def test_odata_fetch_not_found():
         base_url="https://services.odata.org/V2/Northwind/Northwind.svc",
         auth_type="basic",
         username="user",
-        password="pass"
+        password="pass",
     )
-    
+
     httpx_mock.add_response(
         url=f"{connector.base_url}/Customers('NONEXISTENT')",
         status_code=404,
-        json={"error": {"message": "Customer not found"}}
+        json={"error": {"message": "Customer not found"}},
     )
-    
+
     # Act
     result = await connector.fetch("NONEXISTENT")
-    
+
     # Assert
     assert not result.success
     assert result.error_code == "NOT_FOUND"
@@ -429,11 +429,14 @@ def test_odata_fetch_not_found():
 ### 2. Parametrização
 
 ```python
-@pytest.mark.parametrize("connector_type,expected_auth", [
-    ("odata", "basic"),
-    ("sap_cap", "jwt"),
-    ("servicenow", "oauth2"),
-])
+@pytest.mark.parametrize(
+    "connector_type,expected_auth",
+    [
+        ("odata", "basic"),
+        ("sap_cap", "jwt"),
+        ("servicenow", "oauth2"),
+    ],
+)
 def test_connector_authStrategy(connector_type, expected_auth):
     connector = get_connector(connector_type)
     assert connector.auth_strategy == expected_auth

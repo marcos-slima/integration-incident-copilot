@@ -81,6 +81,7 @@ MERGE (i)-[:HAS_RESOLUTION]->(r)
 # app/rag/graph_store.py
 from neo4j import DriverError, TransientError, Neo4jError
 
+
 def upsert_incident_graph(state: CopilotState):
     try:
         driver = get_driver()

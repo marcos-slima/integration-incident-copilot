@@ -27,13 +27,17 @@ def match_known_error(description: str) -> Optional[RuleMatch]:
             recommended_actions=[
                 "Verificar status do IDoc no transaction WE02/WE05",
                 "Consultar log do gateway (transaction SMGW)",
-                "Verificar credenciais e endpoint do receptor"
+                "Verificar credenciais e endpoint do receptor",
             ],
-            confidence=0.95
+            confidence=0.95,
         )
 
     # 2. RFC destination not found
-    if "rfc" in description.lower() and "destination" in description.lower() and "not found" in description.lower():
+    if (
+        "rfc" in description.lower()
+        and "destination" in description.lower()
+        and "not found" in description.lower()
+    ):
         return RuleMatch(
             rule_id="RFC_DEST_NOT_FOUND",
             description="RFC Destination não encontrado",
@@ -41,13 +45,15 @@ def match_known_error(description: str) -> Optional[RuleMatch]:
             recommended_actions=[
                 "Verificar transaction SM59 (RFC Destinations)",
                 "Testar conexão via 'Test Connection' no SM59",
-                "Validar usuário/senha do destino"
+                "Validar usuário/senha do destino",
             ],
-            confidence=0.93
+            confidence=0.93,
         )
 
     # 3. Authentication failed
-    if ("authentication" in description.lower() or "unauthorized" in description.lower()) and ("sap" in description.lower() or "rfc" in description.lower()):
+    if ("authentication" in description.lower() or "unauthorized" in description.lower()) and (
+        "sap" in description.lower() or "rfc" in description.lower()
+    ):
         return RuleMatch(
             rule_id="AUTH_FAILED",
             description="Falha de autenticação SAP",
@@ -55,13 +61,15 @@ def match_known_error(description: str) -> Optional[RuleMatch]:
             recommended_actions=[
                 "Verificar usuário e senha no conector configuration",
                 "Renovar token OAuth2 se aplicável",
-                "Verificar expiration do certificado (RFC: user凭证)"
+                "Verificar expiration do certificado (RFC: user凭证)",
             ],
-            confidence=0.92
+            confidence=0.92,
         )
 
     # 4. Network timeout
-    if "timeout" in description.lower() and ("network" in description.lower() or "connection" in description.lower()):
+    if "timeout" in description.lower() and (
+        "network" in description.lower() or "connection" in description.lower()
+    ):
         return RuleMatch(
             rule_id="NETWORK_TIMEOUT",
             description="Timeout de conexão",
@@ -69,9 +77,9 @@ def match_known_error(description: str) -> Optional[RuleMatch]:
             recommended_actions=[
                 "Verificar latência com transaction SMGP",
                 "Consultar network team sobre firewall rules",
-                "Aumentar timeout no conector se latência for normal"
+                "Aumentar timeout no conector se latência for normal",
             ],
-            confidence=0.90
+            confidence=0.90,
         )
 
     # 5. OData error
@@ -83,9 +91,9 @@ def match_known_error(description: str) -> Optional[RuleMatch]:
             recommended_actions=[
                 "Verificar $metadata no browser (browser test)",
                 "Comparar com contract baseline (DA-52)",
-                "Consultar SAP Basis sobre changes no backend"
+                "Consultar SAP Basis sobre changes no backend",
             ],
-            confidence=0.88
+            confidence=0.88,
         )
 
     # ... (21 regras no total)
@@ -114,9 +122,9 @@ def rules_node(state: CopilotState) -> CopilotState:
                 "evidence_strength": 1.0,  # Regra determinística
                 "model_confidence": match.confidence,  # 0.88–0.95
                 "diagnosis_confidence": match.confidence,
-                "matched_rule": match.rule_id
+                "matched_rule": match.rule_id,
             },
-            "llm_used": False  # Sem LLM
+            "llm_used": False,  # Sem LLM
         }
 
     return state  # Sem match, proceed para LLM

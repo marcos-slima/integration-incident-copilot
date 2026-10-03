@@ -55,32 +55,32 @@ supervisor → connector → retrieve → graph_enrich →
 **CopilotState (TypedDict):**
 ```python
 class CopilotState(TypedDict, total=False):
-    incident_id: str                 # DA-55: idempotência
-    interface_type: InterfaceType    # Literal fechado (odata, rfc, servicenow, ...)
-    identifier: str | None           # ID do conector (RFC: IDoc, OData: entity)
-    description: str                 # Texto livre do incidente
-    agent_domain: AgentDomain        # "sap" | "saas" | "generic" (DA-22)
+    incident_id: str  # DA-55: idempotência
+    interface_type: InterfaceType  # Literal fechado (odata, rfc, servicenow, ...)
+    identifier: str | None  # ID do conector (RFC: IDoc, OData: entity)
+    description: str  # Texto livre do incidente
+    agent_domain: AgentDomain  # "sap" | "saas" | "generic" (DA-22)
     connector_data: ConnectorResult  # Resultado do connector_node
-    retrieved_context: list          # RAG hits (Qdrant)
-    graph_history: list              # Neo4j recorrência
-    diagnosis: DiagnosisModel        # Resultado do diagnose_node
-    report_markdown: str             # Relatório final
+    retrieved_context: list  # RAG hits (Qdrant)
+    graph_history: list  # Neo4j recorrência
+    diagnosis: DiagnosisModel  # Resultado do diagnose_node
+    report_markdown: str  # Relatório final
 ```
 
 **DA-53: `DiagnosisModel` com Proveniência**
 ```python
 class DiagnosisModel(BaseModel):
     probable_root_cause: str
-    confidence: float                # auto-relatada pelo LLM (1.0)
-    matched_source: str | None       # RAG source doc
-    evidence_strength: float         # calculada por _compute_evidence_strength()
+    confidence: float  # auto-relatada pelo LLM (1.0)
+    matched_source: str | None  # RAG source doc
+    evidence_strength: float  # calculada por _compute_evidence_strength()
     next_steps: list[str]
-    
+
     # Proveniência (DA-53/DA-55)
-    llm_provider_used: str          # "ollama", "openai", ...
-    llm_model: str                  # texto livre (.env)
-    prompt_version: str | None      # NULL se rule engine encerrou
-    prompt_digest: str | None       # SHA-256 se LLM rodou
+    llm_provider_used: str  # "ollama", "openai", ...
+    llm_model: str  # texto livre (.env)
+    prompt_version: str | None  # NULL se rule engine encerrou
+    prompt_digest: str | None  # SHA-256 se LLM rodou
 ```
 
 **Invariante crítica (DA-53):**
@@ -98,17 +98,18 @@ _SAP_INTERFACE_TYPES = {"odata", "rfc", "cap", "po"}
 _SAP_KEYWORDS = ("iflow", "idoc", "cpi", "rfc", "sm59", "bapi", "abap", "btp", "s/4hana", ...)
 _SAP_WORD_RE = re.compile(r"\bsap\b", re.IGNORECASE)
 
+
 def classify_domain(state: CopilotState) -> AgentDomain:
     interface_type = (state.get("interface_type") or "").lower()
     if interface_type in _SAP_INTERFACE_TYPES:
         return "sap"
     if interface_type in _SAAS_INTERFACE_TYPES:
         return "saas"
-    
+
     description = (state.get("description") or "").lower()
     if _SAP_WORD_RE.search(description) or any(kw in description for kw in _SAP_KEYWORDS):
         return "sap"
-    
+
     return "generic"
 ```
 
@@ -188,18 +189,18 @@ sequenceDiagram
     graph->>retrieve: retrieve_node(state)
     retrieve->>retrieve: retrieve(query, top_k=3)
     retrieve-->>graph: {"retrieved_context": [...]}
-    
+
     alt GRAPH_RAG_ENABLED=true
         graph->>graph_enrich: graph_enrich_node(state)
         graph_enrich->>Neo4j: Consulta por recorrência
         graph_enrich-->>graph: {"graph_history": [...]}
     end
-    
+
     note over graph: Roteamento condicional por agent_domain
     graph->>sap_diag: sap_diagnosis_node(state)  # agent_domain == "sap"
     sap_diag->>sap_diag: _run_diagnosis_agent(state, SAP_SPECIALIST_PERSONA)
     sap_diag-->>graph: {"diagnosis": {"probable_root_cause": "...", "model_confidence": 0.85, "diagnosis_confidence": 0.72, ...}}
-    
+
     graph->>report: report_node(state)
     report->>report: _assemble_evidence() (DA-15/DA-16)
     report-->>User: {"diagnosis": ..., "report_markdown": "...", "eventually": "incident_id"}
@@ -374,8 +375,8 @@ diagnosis_rule = DiagnosisModel(
     probable_root_cause="IDoc truncado",
     confidence=0.90,
     llm_provider_used=None,  # Rule Engine, não LLM
-    prompt_version=None,     # DA-53: nenhuma prompt usada
-    prompt_digest=None,      # DA-53: nenhuma digest gerada
+    prompt_version=None,  # DA-53: nenhuma prompt usada
+    prompt_digest=None,  # DA-53: nenhuma digest gerada
 )
 
 assert diagnosis_rule.prompt_digest is None

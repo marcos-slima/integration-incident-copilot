@@ -221,7 +221,9 @@ def incident_event_webhook(envelope: IncidentEventEnvelope, background_tasks: Ba
 
 **Código que processa:**
 ```python
-def handle_incident_event_async(envelope: IncidentEventEnvelope, background_tasks: BackgroundTasks) -> dict:
+def handle_incident_event_async(
+    envelope: IncidentEventEnvelope, background_tasks: BackgroundTasks
+) -> dict:
     if settings.redis_url:
         # Com Redis: RQ fila durable com DLQ
         job_id = enqueue_incident_event(envelope.model_dump(mode="json"))
@@ -256,7 +258,7 @@ def _run_diagnosis_background(envelope: IncidentEventEnvelope) -> None:
         _logger.exception(
             "[events] Falha no diagnostico em background (DLQ) — "
             "cloudevents.source=%s cloudevents.id=%s",
-            ...
+            ...,
         )
 ```
 
@@ -336,6 +338,7 @@ def mark_completed(event_id: str | None) -> None:
         return
     redis_client.setex(f"idempotency:{event_id}", ttl, 1)
 
+
 def is_duplicate(event_id: str | None) -> bool:
     return redis_client.exists(f"idempotency:{event_id}") > 0
 ```
@@ -351,11 +354,12 @@ def is_duplicate(event_id: str | None) -> bool:
 # LRU cache de event_id → timestamp de processamento
 _cache: dict[str, float] = {}
 
+
 def is_duplicate(event_id: str | None) -> bool:
     if not event_id:
         return False
     now = time.time()
-    #清理 expirados
+    # 清理 expirados
     _cache.clear()
     # ...
 ```

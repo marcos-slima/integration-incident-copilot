@@ -76,8 +76,9 @@ Você consegue distinguir **três camadas** no campo `description`?
 def suma(a: int, b: int) -> int:
     return a + b
 
+
 # Em tempo de execução, type hints NÃO são forçadas:
-suma(2, 3)   # funciona
+suma(2, 3)  # funciona
 suma("a", "b")  # também funciona — str + str = concatenação!
 ```
 
@@ -125,6 +126,7 @@ ta.validate_python({"description": 123})  # int ≠ str
 ```python
 # app/models.py:14-63
 from pydantic import Field
+
 
 class IncidentRequest(BaseModel):
     description: str = Field(max_length=5_000)
@@ -227,7 +229,7 @@ class CopilotState(TypedDict, total=False):
 ```python
 # Exemplo simples
 x: str | None = None  # x tem o valor None
-y: str | None         # y não está definido (NameError se usar)
+y: str | None  # y não está definido (NameError se usar)
 ```
 
 | Variável | Tem valor? | Tipo |

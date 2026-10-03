@@ -57,8 +57,8 @@ O sinal é derivado de **APENAS fatosObserváveis e já decididos em código:**
 **Arquivo:** `app/agent/escalation.py::thresholds` (l.121, 126)
 
 ```python
-FLOOR_TIER_MIN_EVIDENCE = 0.62   # Tier de piso (manuais genéricos)
-CURATED_TIER_MIN_EVIDENCE = 0.45 # Tier curado (incident docs)
+FLOOR_TIER_MIN_EVIDENCE = 0.62  # Tier de piso (manuais genéricos)
+CURATED_TIER_MIN_EVIDENCE = 0.45  # Tier curado (incident docs)
 ```
 
 **Observação (DA-44, "Limitações"):**
@@ -132,7 +132,7 @@ EscalationDecision(
     tier="floor",
     abstained=False,
     top_evidence=0.383,
-    connector_real=False
+    connector_real=False,
 )
 ```
 
@@ -163,7 +163,7 @@ EscalationDecision(
     tier="curated",  # default quando collection=""
     abstained=False,
     top_evidence=1.000,
-    connector_real=False
+    connector_real=False,
 )
 ```
 
@@ -241,9 +241,9 @@ def escalate_to(self) -> str | None:
 def as_log_fields(self) -> dict:
     """Campos para log/auditoria. Sem conteúdo de documento e sem PII."""
     return {
-        "escalation": self.reason,           # "grounded", "abstained", ...
+        "escalation": self.reason,  # "grounded", "abstained", ...
         "should_escalate": self.should_escalate,
-        "tier": self.tier,                   # "none", "ungrounded", "floor", ...
+        "tier": self.tier,  # "none", "ungrounded", "floor", ...
         "abstained": self.abstained,
         "top_evidence": round(self.top_evidence, 3),
         "connector_real": self.connector_real,
@@ -342,8 +342,8 @@ Esse caso pode casar **duas** regras (abstenção e tier fraco). Por que **não*
 ### 11.3. Valores Críticos
 
 ```python
-FLOOR_TIER_MIN_EVIDENCE = 0.62   # Tier de piso (manuais genéricos)
-CURATED_TIER_MIN_EVIDENCE = 0.45 # Tier curado (incident docs)
+FLOOR_TIER_MIN_EVIDENCE = 0.62  # Tier de piso (manuais genéricos)
+CURATED_TIER_MIN_EVIDENCE = 0.45  # Tier curado (incident docs)
 # Ambos usando rerank_score_calibrated (DA-42)
 ```
 

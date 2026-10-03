@@ -167,7 +167,10 @@ async def diagnose(
     """
     Receive incident description and return structured diagnosis.
     """
-    logger.info("Received diagnosis request", extra={"connector_source_system": request.connector_source_system})
+    logger.info(
+        "Received diagnosis request",
+        extra={"connector_source_system": request.connector_source_system},
+    )
     return await run_diagnosis(request)
 ```
 

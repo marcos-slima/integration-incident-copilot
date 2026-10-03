@@ -135,6 +135,7 @@ def run_diagnosis_job(request_data: dict[str, Any]) -> dict[str, Any]:
     """Função executada pelo worker RQ (processo separado)."""
     from app.agent.graph import run_diagnosis
     from app.models import IncidentRequest
+
     request = IncidentRequest(**request_data)
     return run_diagnosis(request).model_dump()
 ```
@@ -230,12 +231,15 @@ def record_incident(**kwargs: Any) -> None:
 
     try:
         from app.services.incident_repository import Incident
+
         row = build_incident_row(**kwargs)
         with _get_session_factory()() as session:
             session.add(Incident(**row))
             session.commit()
     except Exception:
-        _logger.exception("[incidents] Falha ao gravar incidente %s no PostgreSQL (diagnostico nao afetado)", ...)
+        _logger.exception(
+            "[incidents] Falha ao gravar incidente %s no PostgreSQL (diagnostico nao afetado)", ...
+        )
         return  # Best-effort: diagnostico não pode quebrar
 ```
 
@@ -316,6 +320,7 @@ async def diagnose(request: IncidentRequest):
 # app/queue.py
 def run_event_job(envelope_data: dict[str, Any]) -> dict[str, Any]:
     from app.events import idempotency
+
     envelope = IncidentEventEnvelope(**envelope_data)
     if idempotency.is_duplicate(envelope.id):
         return {"status": "duplicate", "cloudevents_id": envelope.id}

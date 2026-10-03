@@ -377,6 +377,45 @@ def _probe_infra_services() -> dict[str, str]:
     else:
         results["redis"] = "not_configured"
 
+    # Langfuse - opcional, mas readiness deve representar se esta configurado
+    # e acessivel (para tracing completo). Se Langfuse estiver fora, o app
+    # continua funcionando (so perde tracing).
+    if settings.langfuse_configured:
+        try:
+            from langfuse import get_client
+
+            client = get_client()
+            client.projects.get_many()
+            results["langfuse"] = "ok"
+        except Exception:  # noqa: BLE001 - qualquer falha = degradado
+            results["langfuse"] = "degraded"
+    else:
+        results["langfuse"] = "not_configured"
+
+    # Neo4j - opcional (GraphRAG), mas readiness deve representar se esta
+    # configurado e acessivel. Se Neo4j estiver fora, GraphRAG falha, mas
+    # o resto do app continua funcionando.
+    if settings.graph_rag_enabled:
+        if settings.neo4j_uri and settings.neo4j_user and settings.neo4j_password:
+            try:
+                from neo4j import GraphDatabase
+
+                driver = GraphDatabase.driver(
+                    settings.neo4j_uri,
+                    auth=(settings.neo4j_user, settings.neo4j_password),
+                    connection_timeout=1,
+                )
+                with driver.cursor() as cursor:
+                    cursor.execute("RETURN 1 AS val")
+                    cursor.fetchone()
+                results["neo4j"] = "ok"
+            except Exception:  # noqa: BLE001 - qualquer falha = degradado
+                results["neo4j"] = "degraded"
+        else:
+            results["neo4j"] = "not_configured"
+    else:
+        results["neo4j"] = "not_applicable"
+
     return results
 
 
@@ -387,6 +426,10 @@ def _required_services() -> set[str]:
     required = {"qdrant"}
     if settings.llm_provider == "ollama":
         required.add("ollama")
+    if settings.graph_rag_enabled:
+        required.add("neo4j")
+    if settings.langfuse_configured:
+        required.add("langfuse")
     return required
 
 
@@ -430,7 +473,9 @@ def ready() -> Response:
     infra_probes = _probe_infra_services()
     required = _required_services()
     all_ok = all(
-        v == "ok" or (v == "not_configured" and name not in required)
+        v == "ok"
+        or (v == "not_configured" and name not in required)
+        or (v == "not_applicable" and name not in required)
         for name, v in infra_probes.items()
     )
     body = {"status": "ok" if all_ok else "degraded", **_status_body(), "services": infra_probes}

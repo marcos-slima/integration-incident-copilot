@@ -25,7 +25,7 @@ def fetch_contract(self) -> Contract:
         interface_type="odata",
         contract=contract,
         fingerprint=fingerprint,
-        fetched_at=datetime.utcnow()
+        fetched_at=datetime.utcnow(),
     )
 ```
 
@@ -41,15 +41,21 @@ def parse_edmx(xml: str) -> Contract:
     for entity_type in tree.findall(".//{http://docs.oasis-open.org/odata/ns/edm}EntityType"):
         properties = []
         for prop in entity_type.findall(".//{http://docs.oasis-open.org/odata/ns/edm}Property"):
-            properties.append({
-                "name": prop.get("Name"),
-                "type": prop.get("Type"),
-                "nullable": prop.get("Nullable", "true") == "true"
-            })
-        entities.append({
-            "name": entity_type.get("Name"),
-            "properties": tuple(sorted(properties, key=lambda p: p["name"]))  # Ordenação! DA-52
-        })
+            properties.append(
+                {
+                    "name": prop.get("Name"),
+                    "type": prop.get("Type"),
+                    "nullable": prop.get("Nullable", "true") == "true",
+                }
+            )
+        entities.append(
+            {
+                "name": entity_type.get("Name"),
+                "properties": tuple(
+                    sorted(properties, key=lambda p: p["name"])
+                ),  # Ordenação! DA-52
+            }
+        )
 
     # Generate fingerprint
     fingerprint = compute_fingerprint(entities)
@@ -65,13 +71,16 @@ def compute_fingerprint(entities: tuple) -> str:
     # Normalize: sort properties, remove namespace/version
     normalized = []
     for entity in entities:
-        normalized.append({
-            "name": entity["name"],
-            "properties": entity["properties"]  # tuple ordenado
-        })
+        normalized.append(
+            {
+                "name": entity["name"],
+                "properties": entity["properties"],  # tuple ordenado
+            }
+        )
 
     # Hash (SHA-256)
     import hashlib
+
     data = json.dumps(normalized, sort_keys=True)
     return hashlib.sha256(data.encode()).hexdigest()[:16]
 ```
@@ -79,10 +88,13 @@ def compute_fingerprint(entities: tuple) -> str:
 **Exemplo:**
 ```python
 entities = [
-    {"name": "Product", "properties": (
-        {"name": "ProductID", "type": "Edm.String", "nullable": False},
-        {"name": "Name", "type": "Edm.String", "nullable": True}
-    )}
+    {
+        "name": "Product",
+        "properties": (
+            {"name": "ProductID", "type": "Edm.String", "nullable": False},
+            {"name": "Name", "type": "Edm.String", "nullable": True},
+        ),
+    }
 ]
 
 fingerprint = compute_fingerprint(entities)
@@ -186,8 +198,8 @@ def contract_drift_event(drift: DriftResult, contract: Contract):
             "system_key": contract.system_key,
             "breaking_changes": drift.breaking,
             "previous_fingerprint": contract.previous_fingerprint,
-            "new_fingerprint": contract.fingerprint
-        }
+            "new_fingerprint": contract.fingerprint,
+        },
     )
 
     # Event Mesh (Solace)
@@ -224,11 +236,7 @@ contract = odata_connector.fetch_contract()
 # baseline: Nenhum (primeira vez)
 
 # Record first_observation
-baseline.insert(
-    system_key="SAP-SD",
-    fingerprint="abc123",
-    fetched_at=datetime.utcnow()
-)
+baseline.insert(system_key="SAP-SD", fingerprint="abc123", fetched_at=datetime.utcnow())
 ```
 
 ### Step 2: Next Observation

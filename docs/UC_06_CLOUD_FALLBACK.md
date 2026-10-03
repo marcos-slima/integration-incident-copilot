@@ -11,7 +11,7 @@ def invoke_via_gateway(
     build_and_invoke: Callable[[LLMClient], dict],
     state: CopilotState,
     prompt_text: str,
-    model_name: str
+    model_name: str,
 ) -> tuple[dict, str]:
     # DA-26: Policy de roteamento
     policy = resolve_policy(state)
@@ -49,7 +49,7 @@ def create_ollama_client() -> LLMClient:
         model=settings.llm_model,
         timeout=30,
         max_retries=2,
-        backoff_exponential=True  # DA-30
+        backoff_exponential=True,  # DA-30
     )
 ```
 
@@ -70,7 +70,7 @@ def _backoff_retry(func, max_retries=2):
         except TRANSPORT_FAILURE_EXCEPTIONS as exc:
             if attempt == max_retries:
                 raise
-            delay = (2 ** attempt)  # 1s, 2s, 4s...
+            delay = 2**attempt  # 1s, 2s, 4s...
             time.sleep(delay)
 ```
 

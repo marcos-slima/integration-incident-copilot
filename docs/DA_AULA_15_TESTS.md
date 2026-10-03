@@ -117,6 +117,7 @@ Usado quando a reescrita é mais complexa (ex.: métodos de instância).
 ```python
 from unittest.mock import patch
 
+
 def test_invoke_via_gateway_fallback_timeout():
     with patch("app.llm.gateway.invoke_with_hybrid_fallback") as mock_invoke:
         mock_invoke.side_effect = httpx.TimeoutException("timeout simulado")
@@ -141,6 +142,7 @@ def load_cassette(name: str) -> dict[str, Any]:
 
 ```python
 from cassette_loader import load_cassette
+
 
 def test_servicenow_incident_found(monkeypatch):
     cassette = load_cassette("servicenow_incident")
@@ -172,10 +174,10 @@ Define thresholds e validadores determinísticos (não dependem de LLM/Qdrant/Ol
 ```python
 @dataclass(frozen=True)
 class Thresholds:
-    min_rag_cases: int = 15              # dataset RAG mínimo
-    min_hit_at_1: float = 0.90           # hit@1 para RAG (DA-29)
-    min_benchmark_margin: float = 0.05   # margem entre reranker atual vs baseline
-    min_promptfoo_cases: int = 1         # mínimo de casos promptfoo
+    min_rag_cases: int = 15  # dataset RAG mínimo
+    min_hit_at_1: float = 0.90  # hit@1 para RAG (DA-29)
+    min_benchmark_margin: float = 0.05  # margem entre reranker atual vs baseline
+    min_promptfoo_cases: int = 1  # mínimo de casos promptfoo
 ```
 
 #### Gates principais (DA-51):

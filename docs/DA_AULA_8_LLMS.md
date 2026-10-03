@@ -161,8 +161,7 @@ allowed_providers = _select_allowed_providers(
 ```python
 # 1. Budget check
 estimated_cost = _estimate_cost_usd(
-    provider="ollama",
-    prompt_text="Prompt de 3,600 caracteres → ~900 tokens"
+    provider="ollama", prompt_text="Prompt de 3,600 caracteres → ~900 tokens"
 )
 # estimated_cost = (900 + 900 × 0.5) / 1000 × $0.00 = $0.00 (ok < $0.10)
 
@@ -244,8 +243,10 @@ from app.llm.gateway import invoke_via_gateway
 # Build
 llm = get_chat_model(model_name="qwen3-coder-next:latest", config=settings)
 
+
 def build_and_invoke(llm):
     return llm.invoke("Explique circuit breaker com exemplo do SAP.")
+
 
 # Invoke via gateway
 result, provider = invoke_via_gateway(
@@ -340,8 +341,10 @@ state = {
     "connector_data": ConnectorResult(..., is_mock=False, is_fallback=False)  # confidential
 }
 
+
 def build_and_invoke(llm):
     return llm.invoke("...")
+
 
 # Strict mode + dados confidenciais + fallback cloud = error
 try:

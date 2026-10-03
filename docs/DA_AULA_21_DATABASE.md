@@ -251,8 +251,10 @@ with factory() as session:
 revision = "009"
 down_revision = "008"
 
+
 def upgrade() -> None:
     op.add_column("incidents", sa.Column("custom_field", sa.String(128), nullable=True))
+
 
 def downgrade() -> None:
     op.drop_column("incidents", "custom_field")

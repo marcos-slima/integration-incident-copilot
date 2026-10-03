@@ -13,8 +13,9 @@ Ver docs/ARCHITECTURE.md para detalhamento por camada.
 """
 
 import os
+import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from uuid import uuid4
 
@@ -143,6 +144,13 @@ def get_graph():
 # seria desperdicio.
 _graph_invoke_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="diagnosis-invoke")
 
+# DA-59: admission control para evitar escalar threads por timeout
+# acumulado. Quatro chamadas presas no timeout (max_workers=4) deixariam
+# todas as chamadas novas na fila do executor. O semaforo limita a
+# quantidade de chamadas ativas simulando um admission control; quem
+# espera no semaforo ja e rejectado com 429/503 para o caller.
+_graph_invoke_semaphore = threading.Semaphore(4)
+
 
 def _invoke_graph_with_timeout(initial_state: CopilotState) -> CopilotState:
     """Roda get_graph().invoke(initial_state) com um teto de tempo
@@ -158,7 +166,15 @@ def _invoke_graph_with_timeout(initial_state: CopilotState) -> CopilotState:
     interna trave. Mesma limitacao pratica que qualquer watchdog sobre
     codigo sincrono sem pontos de cancelamento - documentada aqui em
     vez de fingida como cancelamento de verdade."""
-    future = _graph_invoke_pool.submit(get_graph().invoke, initial_state)
+
+    # DA-59: admission control antes de submeter ao pool
+    if not _graph_invoke_semaphore.acquire(blocking=False):
+        raise DiagnosisTimeoutError(
+            "Service unavailable: too many concurrent diagnoses. "
+            "Tente novamente em alguns segundos."
+        )
+
+    future: Future[CopilotState] = _graph_invoke_pool.submit(get_graph().invoke, initial_state)
     try:
         return future.result(timeout=settings.diagnosis_timeout_seconds)
     except FutureTimeoutError as exc:
@@ -167,6 +183,8 @@ def _invoke_graph_with_timeout(initial_state: CopilotState) -> CopilotState:
             "(settings.diagnosis_timeout_seconds) - o pipeline de retrieval/GraphRAG/LLM "
             "nao terminou a tempo."
         ) from exc
+    finally:
+        _graph_invoke_semaphore.release()
 
 
 @observe_span(name="sap_copilot_diagnosis")

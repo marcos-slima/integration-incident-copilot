@@ -91,15 +91,13 @@ WHERE created_at >= NOW() - INTERVAL '7 days'
 **Email (SMTP, não implementado no escopo atual):**
 ```python
 # app/services/alert_email.py (futuro)
-def send_sla_breach_alert(p95_ms: int, threshold_ms: int, region: str) -> None:
-    ...
+def send_sla_breach_alert(p95_ms: int, threshold_ms: int, region: str) -> None: ...
 ```
 
 **Slack (via webhook):**
 ```python
 # app/services/alert_slack.py (futuro)
-def notify_slack(message: str, channel: str = "#ops-alerts") -> None:
-    ...
+def notify_slack(message: str, channel: str = "#ops-alerts") -> None: ...
 ```
 
 ### Rules Engine para Alertas (DA-33, futura expansão)

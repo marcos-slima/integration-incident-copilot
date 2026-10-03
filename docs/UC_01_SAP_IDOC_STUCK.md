@@ -22,13 +22,15 @@ async def run_diagnosis(request: IncidentRequest) -> DiagnosisResponse:
     LangGraph entry point: supervisor → connector → retrieve → llm → report.
     """
     graph = build_graph()
-    result = await graph.ainvoke({
-        "description": request.description,
-        "interface_type": request.interface_type,
-        "identifier": request.identifier,
-        "connector_source_system": request.connector_source_system,
-        "context": request.context,
-    })
+    result = await graph.ainvoke(
+        {
+            "description": request.description,
+            "interface_type": request.interface_type,
+            "identifier": request.identifier,
+            "connector_source_system": request.connector_source_system,
+            "context": request.context,
+        }
+    )
     return result["diagnosis"], result["incident_id"]
 ```
 
@@ -127,7 +129,7 @@ async def graph_enrich_node(state: CopilotState) -> CopilotState:
     try:
         history = await neo4j_client.query(
             "MATCH (i:Incident {identifier: $id}) RETURN i.description AS desc ORDER BY i.created_at DESC LIMIT 1",
-            {"id": identifier}
+            {"id": identifier},
         )
         state["graph_history"] = history[0]["desc"] if history else None
     except (DriverError, TransientError):
@@ -175,11 +177,13 @@ async def llm_node(state: CopilotState) -> CopilotState:
 
     # Invoke (DA-20)
     result = await invoke_via_gateway(
-        lambda: chain.invoke({
-            "context": context or "Nenhum contexto disponível.",
-            "description": description,
-        }),
-        policy=settings.ai_gateway_policy  # strict / cloud_with_dlp
+        lambda: chain.invoke(
+            {
+                "context": context or "Nenhum contexto disponível.",
+                "description": description,
+            }
+        ),
+        policy=settings.ai_gateway_policy,  # strict / cloud_with_dlp
     )
 
     # Apply guardrails (DA-3/15)
@@ -200,7 +204,7 @@ async def llm_node(state: CopilotState) -> CopilotState:
     "recommended_actions": [
         "Verificar status do IDoc no transaction WE02/WE05",
         "Consultar log do gateway (transaction SMGW)",
-        "Verificar credenciais e endpoint do receptor"
+        "Verificar credenciais e endpoint do receptor",
     ],
     "evidence_strength": 0.85,  # RAG score
     "model_confidence": 0.92,
@@ -356,6 +360,7 @@ def get_chat_model() -> BaseChatModel:
     else:
         raise ConfigurationError(f"Provider desconhecido: {settings.llm_provider}")
 
+
 # app/llm/gateway.py
 async def invoke_via_gateway(coro, policy: AIGatewayPolicy):
     """
@@ -385,6 +390,7 @@ def _evidence_admission_score(top_score: float) -> bool:
     Evidence admission threshold (DA-25) → 0.3.
     """
     return top_score >= 0.3
+
 
 # Na retrieve_node():
 if not _evidence_admission_score(state["top_score"]):
@@ -444,6 +450,7 @@ def redact_pii(text: str) -> str:
         text = re.sub(pattern, replacement, text)
     return text
 
+
 # Backoff exponencial (invocation retry)
 async def invoke_with_backoff(coro, max_retries=3, base_delay=1.0):
     """
@@ -455,7 +462,7 @@ async def invoke_with_backoff(coro, max_retries=3, base_delay=1.0):
         except Exception as e:
             if attempt == max_retries - 1:
                 raise e
-            delay = base_delay * (2 ** attempt)
+            delay = base_delay * (2**attempt)
             await asyncio.sleep(delay)
 ```
 

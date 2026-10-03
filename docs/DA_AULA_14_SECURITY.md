@@ -74,11 +74,13 @@ response.set_cookie(
 SECRET_SCHEME = "pbkdf2_sha256"
 PBKDF2_ITERATIONS = 600_000  # OWASP 2023
 
+
 def hash_password(password: str, scheme: str = SECRET_SCHEME) -> str:
     """Gera hash PBKDF2-SHA256 (padrão Fernet, stdlib)."""
     salt = secrets.token_hex(16)
     hashed = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), PBKDF2_ITERATIONS)
     return f"{scheme}.{PBKDF2_ITERATIONS}.{salt}.{hashed.hex()}"
+
 
 def compare_secure(a: str, b: str) -> bool:
     """Comparar senhas ou tokens com secrets.compare_digest."""
@@ -103,9 +105,12 @@ Autenticação **fail-closed**: sem `WEB_UI_USERS` configurado, `/auth/login` re
 ```python
 Sensitivity = Literal["confidential", "public"]
 
+
 def classify_sensitivity(state: CopilotState) -> Sensitivity:
     """DA-26: classificar incidente como confidential se usa conector REAL (não mock)."""
-    if state.evidence and any(ev.trust_level in ("system_observed", "simulated") for ev in state.evidence):
+    if state.evidence and any(
+        ev.trust_level in ("system_observed", "simulated") for ev in state.evidence
+    ):
         return "confidential"  # Real connector (não mock)
     if state.connector_result and state.connector_result.source != "mock":
         return "confidential"  # Fallback real
@@ -166,6 +171,7 @@ class ToolPolicy:
     timeout_seconds: float = 30.0
     max_retries: int = 0
 
+
 CAPABILITY_REGISTRY: dict[str, ToolPolicy] = {
     "diagnose_incident": ToolPolicy(
         name="diagnose_incident",
@@ -186,6 +192,7 @@ CAPABILITY_REGISTRY: dict[str, ToolPolicy] = {
         timeout_seconds=5.0,
     ),
 }
+
 
 def enforce(tool_name: str, context: ExecutionContext) -> ToolPolicy:
     """DA-27: FAIL-CLOSED — tool sem entrada no registry é negada."""
@@ -289,6 +296,7 @@ def redact_pii_text(text: str) -> str:
     text = _PASSWORD_XML_RE.sub(r"\1[REDACTED]\2", text)
     return text
 
+
 def redact_pii_deep(data: Any) -> Any:
     """DA-41: passada como mask= na inicialização do client Langfuse."""
     # Aplicada a QUALQUER input/output capturado por @observe (não só texto)
@@ -330,6 +338,7 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 def encrypt_secret(plaintext: str) -> str:
     """DA-47: cifra + devolve token Fernet."""
     return _get_fernet().encrypt(plaintext.encode()).decode()
+
 
 def decrypt_secret(token: str) -> str:
     """DA-47: decifra token Fernet (raise ConfigurationError se master key errada)."""

@@ -45,8 +45,8 @@ else:
 A classe `DiagnosisModel` (app/models.py:136–207) inclui:
 
 ```python
-prompt_digest: str | None = None      # Digest SHA-256 do prompt usado (DA-53)
-prompt_version: str | None = None     # Versão do prompt (ex: "v2.1")
+prompt_digest: str | None = None  # Digest SHA-256 do prompt usado (DA-53)
+prompt_version: str | None = None  # Versão do prompt (ex: "v2.1")
 ```
 
 **Por que NULL quando rule engine vence?** — um diagnóstico sem LLM não foi produzido por prompt nenhum. Fallback `"desconhecido"` fabricaria proveniência falsa.

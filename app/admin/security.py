@@ -46,6 +46,6 @@ def ensure_admin_key_configured() -> None:
     settings.admin_api_key = secrets.token_urlsafe(32)
     logger.warning(
         "ADMIN_API_KEY nao configurada no .env - gerada automaticamente para "
-        "esta execucao (header X-API-Admin-Key, superficie /admin): %s",
-        settings.admin_api_key,
+        "esta execucao (header X-API-Admin-Key, superficie /admin); fingerprint: %s",
+        settings.admin_api_key[:8],
     )

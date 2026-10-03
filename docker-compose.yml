@@ -144,7 +144,7 @@ services:
     environment:
       POSTGRES_DB: iic
       POSTGRES_USER: iic
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-REQUIRED_SET_IN_ENV}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?REQUIRED_SET_IN_ENV}
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -159,12 +159,12 @@ services:
     ports:
       - "${GRAFANA_HOST_PORT:-3001}:3000"
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-REQUIRED_SET_IN_ENV}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?REQUIRED_SET_IN_ENV}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3001}
       # A mesma senha do postgres (provisioning do datasource usa
       # ${POSTGRES_PASSWORD} em deploy/grafana/provisioning/datasources/).
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-REQUIRED_SET_IN_ENV}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?REQUIRED_SET_IN_ENV}
     volumes:
       - grafana_data:/var/lib/grafana
       - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
@@ -229,7 +229,7 @@ services:
       # o "docker compose --profile graphrag up" falhar explicitamente
       # se NEO4J_PASSWORD nao estiver definida, em vez de subir com
       # uma senha conhecida publicamente.
-      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-REQUIRED_SET_IN_ENV}
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:?REQUIRED_SET_IN_ENV}
     volumes:
       - neo4j_data:/data
 

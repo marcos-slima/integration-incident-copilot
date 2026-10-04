@@ -52,3 +52,14 @@ reports/
 *.bak-*
 Modelfile
 .continue/
+
+# Documentação privada de treinamento (não versionada)
+DA_AULA_*.md
+DEPLOYMENT.md
+GUIA_DE_ESTUDOS.md
+MODOLO_*.md
+TRILHA_ESTUDOS_AGENTES_IA.md
+ferramentas-sustentacao-ecossistema.md
+a2a-interoperability-layer.md
+PROCESSO_DESENVOLVIMENTO.md
+INGEST_REFERENCE.md

@@ -33,7 +33,7 @@ Este cenário valida o **fluxo completo de onboarding de usuário** (criação �
 ### Fase 1: Criação de Usuário via API Admin
 
 **Endpoint**: `POST /admin/api/users`
-**Autenticação**: `X-API-Admin-Key: HomolAdmin-9ef8edad90279232ed`
+**Autenticação**: `X-API-Admin-Key: <redact>`
 **Payload**:
 
 ```json
@@ -41,7 +41,7 @@ Este cenário valida o **fluxo completo de onboarding de usuário** (criação �
   "username": "e2e_test",
   "email": "e2e_test@example.com",
   "phone": "+5511999999999",
-  "password": "SenhaSegura123!"
+  "password": "<redact>"
 }
 ```
 
@@ -56,7 +56,7 @@ Este cenário valida o **fluxo completo de onboarding de usuário** (criação �
   "status": "pending_email",
   "email_verified_at": null,
   "phone_verified_at": null,
-  "created_by": "admin-api",
+  "created_by": "<redact>",
   "created_at": "2026-10-02T02:45:03.961830+00:00",
   "updated_at": "2026-10-02T02:45:03.961835+00:00",
   "activation": {
@@ -218,7 +218,7 @@ verify-email:e2e_test:6ac06c2f:d53199d62e8c5648ec37cb11e65a46777f79ee3c26bd8ef39
 ```json
 {
   "email": "e2e_test@example.com",
-  "password": "SenhaSegura123!"
+  "password": "<redact>"
 }
 ```
 

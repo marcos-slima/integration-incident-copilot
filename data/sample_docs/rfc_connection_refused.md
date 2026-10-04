@@ -2,7 +2,12 @@
 
 ## Sintoma
 Chamada RFC (via SM59, ou de um sistema externo) falha com erro de
-"Connection refused" ou "Partner not reached".
+"Connection refused" ou "Partner not reached". Relato tipico do
+usuario: "SM59 nao conecta", "SM59 dando erro de conexao recusada",
+"conexao recusada no destino RFC", "ECONNREFUSED". A falha e
+IMEDIATA (a conexao nem e estabelecida) - diferente do esgotamento do
+pool de processos do gateway, em que a chamada conecta e falha so apos
+um timeout (ver rfc_gateway_pool_timeout.md).
 
 ## Causas comuns
 - Servico RFC/gateway do sistema de destino nao esta ativo

@@ -62,9 +62,19 @@ class Incident(Base):
     probable_root_cause: Mapped[str | None] = mapped_column(Text, nullable=True)
     model_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     diagnosis_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
-    evidence_strength: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    evidence_strength: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )  # A-05 fix: era String(32)
     llm_provider_used: Mapped[str | None] = mapped_column(String(64), nullable=True)
     agent_domain: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # DA-53: proveniencia. `llm_model` e' o nome efetivo que rodou (nao a
+    # rota), e prompt_version/prompt_digest identificam o artefato de prompt
+    # (app/agent/prompts.py). Anulaveis de proposito: rule engine (DA-33)
+    # encerra sem LLM e nao usou prompt nenhum, e linhas anteriores a 006 nao
+    # tem o dado. Default "desconhecido" fabricaria procedencia.
+    llm_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    prompt_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    prompt_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Evidências estruturadas (JSON — permite queries analíticas no Grafana)
     evidence_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
@@ -140,9 +150,13 @@ class IncidentRepository:
         probable_root_cause: str | None = None,
         model_confidence: float | None = None,
         diagnosis_confidence: float | None = None,
-        evidence_strength: str | None = None,
+        evidence_strength: float | None = None,
         llm_provider_used: str | None = None,
         agent_domain: str | None = None,
+        # DA-53: proveniencia (ver migration 006)
+        llm_model: str | None = None,
+        prompt_version: str | None = None,
+        prompt_digest: str | None = None,
         evidence_json: Any | None = None,
     ) -> Incident:
         """Persiste um novo diagnóstico e retorna o registro criado."""
@@ -163,6 +177,9 @@ class IncidentRepository:
             evidence_strength=evidence_strength,
             llm_provider_used=llm_provider_used,
             agent_domain=agent_domain,
+            llm_model=llm_model,
+            prompt_version=prompt_version,
+            prompt_digest=prompt_digest,
             evidence_json=evidence_json,
         )
         self._session.add(incident)
@@ -216,8 +233,38 @@ class IncidentRepository:
         result = await self._session.execute(select(Incident).where(Incident.id == incident_id))
         return result.scalar_one_or_none()
 
-    async def list_recent(self, limit: int = 50) -> list[Incident]:
-        result = await self._session.execute(
-            select(Incident).order_by(Incident.created_at.desc()).limit(limit)
-        )
+    async def list_recent(
+        self,
+        limit: int = 50,
+        *,
+        interface_type: str | None = None,
+        source_system: str | None = None,
+        verified: bool | None = None,
+    ) -> list[Incident]:
+        """Incidentes mais recentes, com filtros opcionais (DA-50).
+
+        verified=None -> todos; True -> so verificados; False -> so os que
+        ainda nao tem veredito humano (diagnosis_correct IS NULL).
+        """
+        stmt = select(Incident)
+        if interface_type:
+            stmt = stmt.where(Incident.interface_type == interface_type)
+        if source_system:
+            stmt = stmt.where(Incident.connector_source_system == source_system.strip())
+        if verified is True:
+            stmt = stmt.where(Incident.diagnosis_correct.is_not(None))
+        elif verified is False:
+            stmt = stmt.where(Incident.diagnosis_correct.is_(None))
+        stmt = stmt.order_by(Incident.created_at.desc()).limit(limit)
+        result = await self._session.execute(stmt)
         return list(result.scalars())
+
+    async def count(self, verified: bool | None = None) -> int:
+        from sqlalchemy import func
+
+        stmt = select(func.count()).select_from(Incident)
+        if verified is True:
+            stmt = stmt.where(Incident.diagnosis_correct.is_not(None))
+        elif verified is False:
+            stmt = stmt.where(Incident.diagnosis_correct.is_(None))
+        return int((await self._session.execute(stmt)).scalar_one())

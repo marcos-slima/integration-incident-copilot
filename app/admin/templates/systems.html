@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block title %}Sistemas integrados · Admin{% endblock %}
+{% block content %}
+<main>
+  <h2>Sistemas integrados (DA-49)</h2>
+  <p style="color: var(--text); margin-bottom: 1.5rem;">Catálogo de sistemas conectados ao Integration Copilot</p>
+
+  <div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3 style="margin: 0; color: var(--text);"> Lista de Sistemas</h3>
+      <button class="btn btn-primary" onclick="loadSystems()">🔄 Recarregar lista</button>
+    </div>
+
+    <div style="overflow-x: auto;">
+      <table id="systems">
+        <thead>
+          <tr>
+            <th style="width: 120px;">system_key</th>
+            <th>Nome</th>
+            <th style="width: 100px;">Vendor</th>
+            <th style="width: 100px;">Conector</th>
+            <th style="width: 80px;">Ambiente</th>
+            <th style="width: 80px;">Status</th>
+            <th>base_url</th>
+            <th style="width: 120px;">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="systems-body">
+          <tr><td colspan="8" style="text-align: center; padding: 2rem;">Carregando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--text);">Novo Sistema</h3>
+  <div class="card">
+    <form id="newsystem" onsubmit="return addSystem(event)">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+        <div class="form-group">
+          <label>system_key *</label>
+          <input name="system_key" placeholder="Slug único (ex: sap_odata_prod)" required>
+        </div>
+        <div class="form-group">
+          <label>Nome *</label>
+          <input name="name" placeholder="Nome exibido (ex: SAP OData — Produção)" required>
+        </div>
+        <div class="form-group">
+          <label>Vendor *</label>
+          <input name="vendor" placeholder="Ex: SAP, ServiceNow" required>
+        </div>
+        <div class="form-group">
+          <label>Conector *</label>
+          <select name="connector_type">
+            <option value="odata">odata</option>
+            <option value="rfc">rfc</option>
+            <option value="servicenow">servicenow</option>
+            <option value="salesforce">salesforce</option>
+            <option value="workday">workday</option>
+            <option value="ariba">ariba</option>
+            <option value="cap">cap</option>
+            <option value="apim">apim</option>
+            <option value="successfactors">successfactors</option>
+            <option value="po">po</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Ambiente *</label>
+          <select name="environment">
+            <option value="prod">prod</option>
+            <option value="stage">stage</option>
+            <option value="dev">dev</option>
+            <option value="test">test</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Status *</label>
+          <select name="status">
+            <option value="active">active</option>
+            <option value="degraded">degraded</option>
+            <option value="offline">offline</option>
+            <option value="trial">trial</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>base_url</label>
+        <input name="base_url" placeholder="URL do endpoint (opcional)">
+      </div>
+
+      <div class="form-group">
+        <label>Notas</label>
+        <input name="notes" placeholder="Detalhes adicionais (opcional)">
+      </div>
+
+      <button type="submit" class="btn btn-primary">➕ Adicionar sistema</button>
+    </form>
+  </div>
+
+  <p class="alert" id="msg" style="background: #fee2e2; border-color: #fecaca; color: #991b1b; display: none;"></p>
+</main>
+
+<script>
+function loadSystems() {
+  const btn = document.querySelector('#systems + h3 + .card button');
+  const originalText = btn.textContent;
+  btn.textContent = 'Carregando...';
+  btn.disabled = true;
+
+  adminFetch('/admin/api/systems').then(r => {
+    if (r.status === 401) throw new Error('Chave admin inválida — insira acima');
+    if (r.status === 503) throw new Error('DB não configurado (DATABASE_URL ausente)');
+    return r.json();
+  }).then(rows => {
+    const tb = document.getElementById('systems-body');
+    tb.innerHTML = '';
+    if (!rows.length) {
+      tb.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 2rem; color: var(--text); opacity: 0.7;">Nenhum sistema registrado</td></tr>';
+      btn.textContent = originalText;
+      btn.disabled = false;
+      return;
+    }
+    for (const s of rows) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="font-family: monospace; font-size: 0.9rem;">${escapeHtml(s.system_key)}</td>
+        <td style="font-weight: 500;">${escapeHtml(s.name)}</td>
+        <td>${escapeHtml(s.vendor)}</td>
+        <td style="font-family: monospace; font-size: 0.9rem;">${escapeHtml(s.connector_type)}</td>
+        <td><span class="pill">${escapeHtml(s.environment)}</span></td>
+        <td>${pill(s.status)}</td>
+        <td style="font-family: monospace; font-size: 0.85rem; opacity: 0.8;">${escapeHtml(s.base_url || '—')}</td>
+        <td>
+          <a href="/admin/incidents?system_key=${encodeURIComponent(s.system_key)}" class="btn" style="padding: 0.4rem 0.8rem; background: var(--border);">📋</a>
+          <button onclick="toggleStatus('${s.id}', '${s.status === 'active' ? 'degraded' : 'active'}')" class="btn" style="padding: 0.4rem 0.8rem; background: var(--border);">🔄</button>
+          <button onclick="delSystem('${s.id}')" class="btn btn-danger" style="padding: 0.4rem 0.8rem;">🗑️</button>
+        </td>`;
+      tb.appendChild(tr);
+    }
+    btn.textContent = originalText;
+    btn.disabled = false;
+  }).catch(e => {
+    const msg = document.getElementById('msg');
+    msg.textContent = e.message;
+    msg.style.display = 'block';
+    btn.textContent = originalText;
+    btn.disabled = false;
+  });
+}
+
+function toggleStatus(id, target) {
+  if (!confirm(target === 'active' ? 'Marcar este sistema como ativo?' : 'Marcar este sistema como degradado?')) return;
+  adminFetch('/admin/api/systems/' + id, {method:'PATCH', body: JSON.stringify({status: target})})
+    .then(() => loadSystems()).catch(e => document.getElementById('msg').textContent = e.message);
+}
+
+function delSystem(id) {
+  if (!confirm('Remover este sistema permanentemente?')) return;
+  adminFetch('/admin/api/systems/' + id, {method:'DELETE'})
+    .then(() => loadSystems()).catch(e => document.getElementById('msg').textContent = e.message);
+}
+
+function addSystem(e) {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const body = Object.fromEntries([...f.entries()].map(([k,v]) => [k, v === '' ? null : v]));
+
+  const btn = e.target.querySelector('button[type="submit"]');
+  const originalText = btn.textContent;
+  btn.textContent = 'Adicionando...';
+  btn.disabled = true;
+
+  adminFetch('/admin/api/systems', {method:'POST', body: JSON.stringify(body)})
+    .then(r => r.ok ? loadSystems() : r.json().then(j => { throw new Error(j.detail); }))
+    .then(() => e.target.reset())
+    .catch(err => document.getElementById('msg').textContent = err.message)
+    .finally(() => { btn.textContent = originalText; btn.disabled = false; });
+
+  return false;
+}
+
+loadSystems();
+</script>
+{% endblock %}

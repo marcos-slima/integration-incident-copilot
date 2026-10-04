@@ -10,6 +10,9 @@ providers:
     label: "qwen3-coder-next (producao atual)"
 
 tests:
+  # DA-33: o Rule Engine responde antes do LLM para erros conhecidos e
+  # devolve matched_source = "rule_engine:<categoria>". Os asserts de IDoc 51
+  # e RFC connection refused aceitam o documento RAG OU a regra equivalente.
   - description: "401 sem conector"
     vars: { description: "iFlow falhando com erro 401", interface_type: "none", identifier: "none" }
     assert:
@@ -26,25 +29,25 @@ tests:
     vars: { description: "IDoc travado", interface_type: "rfc", identifier: "RFC-IDOC-51-DEMO" }
     assert:
       - type: javascript
-        value: "JSON.parse(output).matched_source === 'idoc_status_51.md' && JSON.parse(output).confidence >= 0.6"
+        value: "['idoc_status_51.md','rule_engine:sap_idoc_status_51'].includes(JSON.parse(output).matched_source) && JSON.parse(output).confidence >= 0.6"
 
   - description: "IDoc 51 com conector RFC - repeticao 2 (teste de estabilidade)"
     vars: { description: "IDoc travado", interface_type: "rfc", identifier: "RFC-IDOC-51-DEMO" }
     assert:
       - type: javascript
-        value: "JSON.parse(output).matched_source === 'idoc_status_51.md' && JSON.parse(output).confidence >= 0.6"
+        value: "['idoc_status_51.md','rule_engine:sap_idoc_status_51'].includes(JSON.parse(output).matched_source) && JSON.parse(output).confidence >= 0.6"
 
   - description: "IDoc 51 com conector RFC - repeticao 3 (teste de estabilidade)"
     vars: { description: "IDoc travado", interface_type: "rfc", identifier: "RFC-IDOC-51-DEMO" }
     assert:
       - type: javascript
-        value: "JSON.parse(output).matched_source === 'idoc_status_51.md' && JSON.parse(output).confidence >= 0.6"
+        value: "['idoc_status_51.md','rule_engine:sap_idoc_status_51'].includes(JSON.parse(output).matched_source) && JSON.parse(output).confidence >= 0.6"
 
   - description: "RFC connection refused com conector"
     vars: { description: "SM59 não conecta", interface_type: "rfc", identifier: "RFC-CONN-REFUSED-DEMO" }
     assert:
       - type: javascript
-        value: "JSON.parse(output).matched_source === 'rfc_connection_refused.md' && JSON.parse(output).confidence >= 0.6"
+        value: "['rfc_connection_refused.md','rule_engine:network_connection_refused'].includes(JSON.parse(output).matched_source) && JSON.parse(output).confidence >= 0.6"
 
   - description: "OData timeout sem conector"
     vars: { description: "iFlow travando ao consumir OData sem retorno", interface_type: "none", identifier: "none" }
@@ -56,16 +59,55 @@ tests:
     vars: { description: "IDoc parado com status 51", interface_type: "none", identifier: "none" }
     assert:
       - type: javascript
-        value: "JSON.parse(output).matched_source === 'idoc_status_51.md'"
+        value: "['idoc_status_51.md','rule_engine:sap_idoc_status_51'].includes(JSON.parse(output).matched_source)"
 
   - description: "RFC connection refused sem conector"
     vars: { description: "SM59 dando erro de conexão recusada", interface_type: "none", identifier: "none" }
     assert:
       - type: javascript
-        value: "JSON.parse(output).matched_source === 'rfc_connection_refused.md'"
+        value: "['rfc_connection_refused.md','rule_engine:network_connection_refused'].includes(JSON.parse(output).matched_source)"
 
   - description: "Identificador desconhecido - guardrail de seguranca (nao deve ter alta confianca)"
     vars: { description: "algo estranho aconteceu", interface_type: "odata", identifier: "XPTO-999-NAO-EXISTE" }
+    # DA: exige ABSTENCAO, nao "confianca baixa".
+    #
+    # A versao anterior era so `confidence < 0.6`, que passa tanto quando o
+    # guardrail funciona quanto quando o sistema acerta o documento ERRADO
+    # com numero baixo - o caso do broker mostra exatamente esse numero
+    # (salesforce_case_sap_sync_failure.md com confidence 0.001) e ele
+    # passaria. O que separa as duas situacoes e' matched_source: o
+    # guardrail correto devolve null em vez de anexar um documento qualquer.
+    # Medido nos 3 providers em 2026-09-28: matched_source=null e' o
+    # comportamento real e consistente.
+    # Trapped por tests/test_eval_suite_integrity.py, que recusa assert
+    # com `confidence` como unica afirmacao.
     assert:
       - type: javascript
-        value: "JSON.parse(output).confidence < 0.6"
+        value: |
+          const o = JSON.parse(output);
+          o.matched_source === null && o.confidence < 0.6
+
+  # --- Casos da validacao manual de 26/09/2026 (ambiente Docker + Ollama do host) ---
+  # Resultado manual: 33% com causa raiz errada, construida sobre o "500"
+  # fabricado pelo _DEFAULT do mock OData. Apos a correcao em
+  # _build_diagnosis_prompt (fallback nao injeta status/codigo), a causa
+  # nao pode mais citar o 500 simulado.
+  - description: "OData com conector em fallback (sem identifier) - nao pode usar o 500 do mock"
+    vars: { description: "Pedidos do Salesforce nao chegam ao S/4HANA. OData retorna Read timed out after 60000 ms.", interface_type: "odata", identifier: "none" }
+    assert:
+      - type: javascript
+        value: "const o = JSON.parse(output); o.confidence < 0.6 && !/\\b500\\b/.test(o.probable_root_cause)"
+
+  # Resultado manual: 40%, causa correta com prefixo "confianca limitada".
+  - description: "OData timeout com identifier desconhecido - causa correta, confianca limitada"
+    vars: { description: "Chamada OData do CPI para o S/4HANA excede o tempo limite (Read timed out after 60000 ms)", interface_type: "odata", identifier: "SO-SF-000123" }
+    assert:
+      - type: javascript
+        value: "const o = JSON.parse(output); o.confidence <= 0.4 && /timeout|tempo limite|filtro/i.test(o.probable_root_cause)"
+
+  # Resultado manual: 95%, causa especifica (sem $filter/$top, 60 s do adapter OData V2).
+  - description: "OData timeout com CPI-TIMEOUT-DEMO - documento e sistema convergem"
+    vars: { description: "Chamada OData do CPI para o S/4HANA excede o tempo limite", interface_type: "odata", identifier: "CPI-TIMEOUT-DEMO" }
+    assert:
+      - type: javascript
+        value: "const o = JSON.parse(output); o.matched_source === 'odata_timeout_cpi.md' && o.confidence >= 0.8"

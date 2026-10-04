@@ -37,7 +37,9 @@ def test_ollama_uses_configured_request_timeout():
 
 def test_openai_uses_configured_request_timeout():
     cfg = Settings(
-        llm_provider="openai", openai_api_key="sk-fake-for-test", llm_request_timeout_seconds=42.0
+        llm_provider="openai",
+        openai_api_key="fake-openai-key-for-test",
+        llm_request_timeout_seconds=42.0,
     )
     llm = get_chat_model(config=cfg)
     assert llm.request_timeout == 42.0
@@ -62,7 +64,7 @@ def test_openai_without_api_key_raises_configuration_error():
 
 
 def test_openai_with_api_key_builds_chat_openai():
-    cfg = Settings(llm_provider="openai", openai_api_key="sk-fake-for-test")
+    cfg = Settings(llm_provider="openai", openai_api_key="fake-openai-key-for-test")
     llm = get_chat_model(config=cfg)
     assert llm.__class__.__name__ == "ChatOpenAI"
 
@@ -88,13 +90,17 @@ def test_azure_openai_fully_configured_builds_client():
 
 
 def test_model_name_override_is_respected():
-    cfg = Settings(llm_provider="ollama", llm_model="qwen2.5-coder:32b")
+    cfg = Settings(llm_provider="ollama", llm_model="qwen3-coder-next:latest")
     llm = get_chat_model(model_name="qwen3:30b-a3b", config=cfg)
     assert llm.model == "qwen3:30b-a3b"
 
 
 def test_hybrid_fallback_uses_primary_result_when_it_succeeds():
-    cfg = Settings(llm_provider="ollama", llm_fallback_provider="openai", openai_api_key="sk-fake")
+    cfg = Settings(
+        llm_provider="ollama",
+        llm_fallback_provider="openai",
+        openai_api_key="fake-openai-key-fallback",
+    )
     calls = []
 
     def build_and_invoke(llm):
@@ -119,7 +125,11 @@ def test_hybrid_fallback_reraises_transport_error_when_no_fallback_configured():
 
 
 def test_hybrid_fallback_switches_provider_on_transport_failure():
-    cfg = Settings(llm_provider="ollama", llm_fallback_provider="openai", openai_api_key="sk-fake")
+    cfg = Settings(
+        llm_provider="ollama",
+        llm_fallback_provider="openai",
+        openai_api_key="fake-openai-key-fallback",
+    )
     calls = []
 
     def build_and_invoke(llm):
@@ -136,7 +146,11 @@ def test_hybrid_fallback_switches_provider_on_transport_failure():
 
 
 def test_hybrid_fallback_raises_configuration_error_when_both_providers_fail():
-    cfg = Settings(llm_provider="ollama", llm_fallback_provider="openai", openai_api_key="sk-fake")
+    cfg = Settings(
+        llm_provider="ollama",
+        llm_fallback_provider="openai",
+        openai_api_key="fake-openai-key-fallback",
+    )
 
     def build_and_invoke(llm):
         raise ConnectionError(f"{llm.__class__.__name__} fora do ar (simulado)")
@@ -153,7 +167,11 @@ def test_hybrid_fallback_does_not_mask_application_errors():
     mesmo com fallback configurado - senao um bug real vira
     silenciosamente uma segunda chamada de LLM (custo/latencia
     desnecessarios) escondendo o problema de verdade."""
-    cfg = Settings(llm_provider="ollama", llm_fallback_provider="openai", openai_api_key="sk-fake")
+    cfg = Settings(
+        llm_provider="ollama",
+        llm_fallback_provider="openai",
+        openai_api_key="fake-openai-key-fallback",
+    )
     calls = []
 
     def build_and_invoke(llm):

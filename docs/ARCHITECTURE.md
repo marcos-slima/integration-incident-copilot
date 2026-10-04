@@ -12,15 +12,16 @@ flowchart TD
     A["IncidentRequest<br/>FastAPI POST /diagnose<br/>OU A2A message/send"] --> S["<b>supervisor</b><br/>classifica o dominio (DA-22)<br/>deterministico, sem LLM"]
     S --> B["<b>connector</b><br/>SAP/nao-SAP (app/connectors/)<br/>mock ou real"]
     B --> C["<b>retrieve</b><br/>Qdrant hibrido dense+sparse BM25<br/>incidents + reference_library<br/>fusao RRF + reranker cross-encoder"]
-    C --> W["web_search<br/>SAP Community/GitHub (fallback)"]
-    W --> D{"GraphRAG<br/>opt-in?"}
+    C --> D{"GraphRAG<br/>opt-in?"}
     D -->|"sim"| E["graph_enrich<br/>historico da interface no Neo4j"]
     D -->|"nao (default)"| R{"agent_domain?<br/>(DA-22)"}
     E --> R
-    R -->|"sap"| F1["<b>sap_diagnose</b><br/>especialista SAP<br/>LLM Gateway + guardrails"]
-    R -->|"saas / generic"| F2["<b>saas_diagnose</b><br/>especialista multi-fornecedor<br/>LLM Gateway + guardrails"]
+    R -->|"sap"| F1["<b>sap_diagnose</b><br/>especialista SAP<br/>LLM Gateway + guardrails<br/><i>busca web via ReAct tool (DA-57)</i>"]
+    R -->|"saas"| F2["<b>saas_diagnose</b><br/>especialista multi-fornecedor<br/>LLM Gateway + guardrails<br/><i>busca web via ReAct tool (DA-57)</i>"]
+    R -->|"generic"| F3["<b>generic_diagnose</b><br/>especialista generico<br/>LLM Gateway + guardrails"]
     F1 --> G{"GraphRAG<br/>opt-in?"}
     F2 --> G
+    F3 --> G
     G -->|"sim"| H["graph_write<br/>grava no Neo4j"]
     G -->|"nao (default)"| I["<b>report</b><br/>monta o Markdown final"]
     H --> I
@@ -34,6 +35,7 @@ flowchart TD
     style C fill:#e8f0fe,stroke:#4285f4
     style F1 fill:#e8f0fe,stroke:#4285f4
     style F2 fill:#e8f0fe,stroke:#4285f4
+    style F3 fill:#e8f0fe,stroke:#4285f4
 ```
 
 Os nodes `graph_enrich`/`graph_write` (GraphRAG) so entram no grafo
@@ -129,12 +131,14 @@ codigo Python para ativar - so preencher variaveis no `.env`.
 
 | Conector | Estado hoje | Falta so |
 |---|---|---|
-| `ODataConnector` | **Real** (OAuth2 client_credentials + OData v2) quando `ODATA_SERVICE_URL` configurado | Um tenant CPI/Integration Suite real para validar contra producao |
+| `ODataConnector` | **Real** (OAuth2 client_credentials + OData v2) quando `ODATA_SERVICE_URL` configurado — ⚠️ **NUNCA validado contra instância real** | Um tenant CPI/Integration Suite real para validar contra producao |
 | `RFCConnector` | **Real, validado contra ABAP Cloud Developer Trial real** (A4H rel 754, `RFC_SYSTEM_INFO` via `pyrfc` 3.3.1 + SDK 7.50 PL19) | `BAPI_IDOC_STATUS` nao disponivel no Trial — criar funcao Z ou usar landscape real para validar BAPI especifica |
 | `ServiceNowConnector` | **Real, validado contra ServiceNow PDI real** (Table API via HTTP, Basic Auth) | Nada - segundo conector com validacao ponta-a-ponta contra sistema real |
 | `SalesforceConnector` | **Real, validado contra Salesforce Developer Edition real** (OAuth2 Client Credentials + SOQL) | Nada - primeiro conector com validacao ponta-a-ponta contra sistema real, nao so mock |
-| `WorkdayConnector` | **Real** (OAuth2 + REST) quando `WORKDAY_TENANT` configurado | Um tenant Workday real |
-| `AribaConnector` | **Real** (OAuth2 + REST) quando `ARIBA_BASE_URL` configurado | Acesso a Ariba Network/API Business Hub |
+| `POConnector` | **Real** (Basic Auth nativo + `/mdt/api/1.0/facade`) quando `PO_BASE_URL` apontar para a fachada exposta. ⚠️ **API NAO PUBLICA**: o Message Monitor nao esta no Help Portal e varia entre patches/releases, e o payload e' lido de forma tolerante porisso | Validar contra um PO/PI real (7.5) e confirmar o path/formato; o Alert Inbox (`/nwa/api/1.0/alerts`) ainda nao foi implementado |
+| `WorkdayConnector` | **Real** (OAuth2 + REST) quando `WORKDAY_TENANT` configurado — ⚠️ **NUNCA validado contra instância real** | Um tenant Workday real |
+| `AribaConnector` | **Real** (OAuth2 + REST) quando `ARIBA_BASE_URL` configurado — ⚠️ **NUNCA validado contra instância real** | Acesso a Ariba Network/API Business Hub |
+| `SuccessFactorsConnector` | **Real** (OAuth2 Client Credentials + OData v2 PerPerson) quando `SUCCESSFACTORS_TENANT` configurado — ⚠️ **NUNCA validado contra instância real** (DA-34) | Um tenant SuccessFactors real; no cenário de referência SuccessFactors↔Workday só o lado Workday foi exercitado |
 | `CAPConnector` | **Real, validado contra SAP CAP real** (OData v4 + XSUAA client_credentials, BTP Trial) | Nada - terceiro conector com validacao ponta-a-ponta contra sistema real |
 | `APIManagementConnector` | ⚠️ **Implementado com schema ESPECULATIVO** (OAuth2 Client Credentials + endpoint assumido por analogia a produtos similares - NAO confirmado contra documentacao real do SAP API Management) | Validar contrato real da Analytics API contra um tenant de verdade; corrigir endpoint/schema conforme necessario |
 
@@ -325,22 +329,22 @@ diretamente (sem Ollama real, mesmo padrao de `test_llm_factory.py`).
 dois modos (GraphRAG ligado/desligado), confirmando os nodes esperados
 no grafo resultante.
 
-## Rodando sem depender do `~/ai-stack` pessoal
+## Rodando sem depender de infra externa
 
 O `docker-compose.yml` na raiz deste repositorio sobe Ollama + Qdrant +
-a API num unico `docker compose up -d`, sem depender do stack completo
-de observabilidade (`~/ai-stack`, com Langfuse/Postgres/ClickHouse/
-Redis/MinIO) usado no ambiente de desenvolvimento pessoal. Isso importa
-porque este projeto tambem funciona como demonstracao para terceiros
-(cliente, entrevistador) - que nao tem, nem deveriam precisar montar,
-o ambiente pessoal do autor so para rodar o projeto uma vez. Langfuse
-continua opcional: sem as chaves configuradas, o app roda normalmente,
-so sem tracing.
+a API num unico `docker compose up -d`, sem depender de infra externa
+(incluindo Neo4j opcional para GraphRAG e stack completo do Langfuse
+para observabilidade). Isso importa porque este projeto tambem funciona
+como demonstracao para terceiros (cliente, entrevistador) - que nao
+têm, nem deveriam precisar montar, o ambiente de desenvolvimento so
+para rodar o projeto uma vez. Langfuse, Neo4j e infra opcional:
+sem as chaves/configuracao, o app roda normalmente, so sem tracing/
+GraphRAG.
 
 ## A2A (Agent2Agent) - interoperabilidade externa
 
 `app/a2a/` implementa a proposta arquivada em
-[docs/proposals/a2a-interoperability-layer.md](proposals/a2a-interoperability-layer.md)
+[docs/a2a-interoperability-layer.md](a2a-interoperability-layer.md)
 (ler esse documento para o contexto de negocio completo e a ressalva
 sobre a GA inbound do Joule, prevista para Q4/2026 e ainda nao
 disponivel). Em resumo tecnico:
@@ -615,7 +619,7 @@ dado mock/fallback.) A lista e montada de forma inteiramente
 DETERMINISTICA em `app/agent/nodes.py::_assemble_evidence(state)` - o
 LLM nunca declara/cita suas proprias fontes, mesmo principio ja usado
 em `evidence_strength` (DA-15) e nos demais guardrails deste projeto
-("guardrails em codigo, nao em prompt"; ver `learnings.md` do projeto).
+("guardrails em codigo, nao em prompt", DA-3 do README.md).
 `_assemble_evidence` e chamada tanto em `report_node` (para a nova
 secao "Evidencias" do `report_markdown`) quanto em
 `graph.py::run_diagnosis` (para popular `DiagnosisResponse.evidence`)
@@ -695,8 +699,7 @@ sem nunca invocar o provider.
 decisao (`status=success|failure|circuit_open|budget_rejected`),
 latencia e custo estimado.
 
-**Nao-objetivos explicitos desta v1** (backlog em aberto, ver
-`learnings.md` do projeto): IAM/auth (ja resolvido na borda HTTP, nao
+**Nao-objetivos explicitos desta v1** (backlog em aberto): IAM/auth (ja resolvido na borda HTTP, nao
 duplicado aqui); PII/DLP de verdade (um scanner de dados sensiveis no
 CONTEUDO do prompt - `sanitize_untrusted_input` protege contra prompt
 injection, nao e a mesma coisa que um scanner de PII); tenant
@@ -751,8 +754,7 @@ terreno: qualquer tool de escrita futura (ex: `restart_iflow`,
 `PolicyDeniedError` em runtime, nao em uma tool silenciosamente
 liberada.
 
-**Nao-objetivos explicitos desta v1** (backlog em aberto, ver
-`learnings.md` do projeto): granularidade de scope POR CHAVE de API
+**Nao-objetivos explicitos desta v1** (backlog em aberto): granularidade de scope POR CHAVE de API
 (hoje ha uma unica `X-API-Key` compartilhada por todo o servidor MCP -
 multiplas chaves com scopes diferentes exigiria um esquema de
 credenciais mais rico, ex: OAuth2/TokenVerifier, que `app/mcp/server.py`
@@ -1000,7 +1002,8 @@ inferencia local ou custo de API.
 
 **Implementacao:** `app/agent/rules.py` — `ErrorRule` dataclass
 (pattern regex, action, root_cause, confidence) + catalogo
-`KNOWN_ERROR_RULES` com 14 regras cobrindo:
+`KNOWN_ERROR_RULES` com 21 regras cobrindo (14 originais + 7 da
+expansão adiante, seção "Rule Engine: 14 → 21 regras"):
 - OAuth expirado / tokens JWT invalidos
 - HTTP 401/403 (permissao/autorizacao)
 - Material lock (M8082) e Pricing condition (VK041)
@@ -1024,7 +1027,7 @@ testes que precisam forcar o caminho LLM.
 **Economia esperada:** 60-70% de reducao de chamadas LLM para cargas de
 trabalho de suporte SAP com erros repetitivos.
 
-**Validacao:** `tests/test_da33.py` (28 testes) — todos os 14 patterns
+**Validacao:** `tests/test_da33.py` (40 testes) — todos os 21 patterns
 individualmente, integracao com estado LangGraph, e invariante de
 catalogo (nenhuma regra duplicada, nenhum pattern vazio).
 

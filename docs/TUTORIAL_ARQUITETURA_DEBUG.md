@@ -5,19 +5,28 @@
 > analogias com ABAP como ponte, não como substituto de entender o
 > código Python real.
 >
-> Pré-requisito: stack local no ar (`~/ai-stack` via `docker compose
-> up -d`, Ollama ativo) e o projeto aberto no VS Code com o
-> `.vscode/launch.json` já configurado (ver Fase 4 do
-> `docs/PROCESSO_DESENVOLVIMENTO.md`).
+> Pré-requisito: stack local no ar (via `docker compose up -d` na raiz
+do projeto, Ollama ativo) e o projeto aberto no VS Code com o
+`.vscode/launch.json` já configurado (ver Fase 4 do
+`docs/PROCESSO_DESENVOLVIMENTO.md`).
 
 > **Nota de atualização:** este tutorial foi escrito quando o projeto
 > tinha só 2 conectores (OData/RFC, ambos mock) e 4 nodes no grafo. Hoje
-> sao 8 conectores (a maioria real quando configurado) e o grafo pode
-> ter ate 6 nodes com GraphRAG habilitado
-> (`connector → retrieve → [graph_enrich] → diagnose → [graph_write] → report`).
+> sao 9 conectores (a maioria real quando configurado) e o grafo tem
+> 9 nodes — `supervisor`, `connector`, `retrieve`, `sap_diagnose`,
+> `saas_diagnose`, `generic_diagnose`, `report` e, com GraphRAG, os
+> condicionais `graph_enrich`/`graph_write`. O fluxo de diagnostico e
+> `supervisor → connector → retrieve → <domain>_diagnose → report`;
 > O roteiro de debug abaixo continua correto para o caso RFC guiado na
 > Seção 5, mas nao cobre os nodes/conectores novos — ver
 > `docs/ARCHITECTURE.md` para o estado completo e atual.
+>
+> **Debug full stack (UI + backend):** a UI React roda via `npm run dev`
+> (porta 5173) com proxy `/diagnose` → FastAPI (porta 8000). Use
+> "Debug: Frontend (React) + Backend" no `.vscode/launch.json` para
+> iniciar o Vite e abrir o navegador automaticamente. Breakpoints em
+> componentes React (Chrome DevTools) + backend (VS Code debugpy) rodam
+> simultaneamente.
 
 ---
 
@@ -38,39 +47,65 @@ Cliente HTTP (curl / HTTPie / Bruno)
 └─────────────────────┬───────────────────────────────────┘
                        │ run_diagnosis(request)
                        ▼
-┌─────────────────────────────────────────────────────────┐
-│ app/agent/graph.py                                        │
-│   run_diagnosis() monta o estado inicial (CopilotState)    │
-│   e chama o grafo compilado LangGraph.                     │
-└─────────────────────┬───────────────────────────────────┘
-                       ▼
-        ┌──────────────────────────────┐
-        │  StateGraph (LangGraph)       │   ← máquina de estados,
-        │                                │      não um loop comum
-        │  connector → retrieve →        │
-        │  diagnose → report             │
-        └──────────────────────────────┘
-                       │
-   ┌───────────────────┼────────────────────┬─────────────────────┐
-   ▼                   ▼                    ▼                     ▼
-connector_node   retrieve_node        diagnose_node          report_node
-app/connectors/  app/rag/retriever.py  app/agent/graph.py     app/agent/graph.py
-   │                   │                    │
-   ▼                   ▼                    ▼
-SAPConnector      Qdrant (via          ChatOllama
-(mock hoje,       qdrant-client)       (langchain_ollama)
-OData/RFC)        + embeddings              │
-                  (nomic-embed-text          ▼
-                  via Ollama)          Ollama runtime local
-                                       (qwen3-coder-next:latest)
-                       │                    │
-                       └────────┬───────────┘
+      ┌──────────────────────────────────────────────────────────────┐
+      │ app/agent/graph.py                                           │
+      │ run_diagnosis() monta o estado inicial (CopilotState)        │
+      │ e chama o grafo compilado LangGraph.                         │
+      └──────────────────────────────────────────────────────────────┘
                                 ▼
-                     DiagnosisResponse (Pydantic)
-                                │
-                                ▼
-                  Cliente recebe JSON + report_markdown
+      ┌──────────────────────────────────────────────────────────────┐
+      │ StateGraph (LangGraph) — 9 nodes, entry point: supervisor    │
+      │                                                              │
+      │   supervisor ──► connector ──► retrieve                      │
+      │   classifica      9 conectores,    RAG híbrido: Qdrant       │
+      │   o domínio,      reais quando     (denso+BM25) + reranker   │
+      │   SEM LLM         configurados     mmarco-mMiniLMv2          │
+      │         │                                                    │
+      │         ▼  _route_to_specialist  lê `agent_domain`,          │
+      │         │  que o supervisor já decidiu no início             │
+      │         ▼                                                    │
+      │    ┌────────────┼─────────────┬──────────────┐               │
+      │    ▼            ▼             ▼              ▼               │
+      │  sap_diagnose saas_diagnose generic_diagnose                 │
+      │  (SAP)         (ServiceNow,   (multi-fornecedor,             │
+      │                Salesforce,    sem domínio                    │
+      │                Workday,       identificado)                  │
+      │                Ariba,                                        │
+      │                SuccessFactors)                               │
+      │    └────────────┼─────────────┴──────────────┘               │
+      │                 ▼                                            │
+      │         report ──► END                                       │
+      │                 ▲                                            │
+      │                 └── graph_write, só se USE_GRAPH_RAG=true    │
+      │                     (roda ANTES do report)                   │
+      └──────────────────────────────────────────────────────────────┘
 ```
+
+> **O fork é o ponto central do diagrama.** A DA-22 trocou o antigo
+> `diagnose_node` por três especialistas, e quem decide entre eles **não é o
+> supervisor**: o supervisor roda primeiro e *classifica* o domínio, gravando
+> `agent_domain` no estado. O roteamento acontece depois, por arestas
+> condicionais (`_route_to_specialist`) que leem esse campo. Depurar com
+> breakpoint só em `supervisor_node` não mostra a escolha acontecendo — ela
+> acontece na aresta, não no node.
+
+Cada node e o arquivo que o implementa:
+
+| Node do grafo | Função | Arquivo |
+|---|---|---|
+| `supervisor` | `supervisor_node` | `app/agent/supervisor.py` |
+| `connector` | `connector_node` | `app/agent/nodes.py` |
+| `retrieve` | `retrieve_node` | `app/agent/nodes.py` |
+| `sap_diagnose` | `sap_diagnosis_node` | `app/agent/nodes.py` |
+| `saas_diagnose` | `saas_diagnosis_node` | `app/agent/nodes.py` |
+| `generic_diagnose` | `generic_diagnosis_node` | `app/agent/nodes.py` |
+| `graph_enrich`, `graph_write` | `graph_enrich_node`, `graph_write_node` | `app/agent/nodes.py` (só com GraphRAG) |
+| `report` | `report_node` | `app/agent/nodes.py` |
+
+Os três especialistas chamam o mesmo corpo de diagnóstico, que fala com
+`ChatOllama` (`langchain_ollama`) apontando para o runtime local do Ollama
+(`qwen3-coder-next:latest`). O `structured_response` volta validado pelo
+Pydantic e a resposta HTTP sai como `DiagnosisResponse` + `report_markdown`.
 
 ### Onde cada etapa vive (arquivo real)
 
@@ -79,12 +114,12 @@ OData/RFC)        + embeddings              │
 | Entrada HTTP + validação | `app/main.py` | Define `POST /diagnose`, delega pro grafo |
 | Contratos de dados | `app/models.py` | `IncidentRequest` (entrada), `DiagnosisResponse` (saída) |
 | Configuração central | `app/config.py` | Única fonte de verdade — URLs, modelo, credenciais, lida do `.env` |
-| Orquestração (o "workflow") | `app/agent/graph.py` | Define os 4 nodes e as arestas entre eles |
-| Busca de dados no sistema SAP + multi-vendor | `app/connectors/` | `base.py` (contrato comum), 8 conectores (OData, RFC, ServiceNow, Salesforce, Workday, Ariba, CAP, APIManagement) - maioria real quando configurado |
+| Orquestração (o "workflow") | `app/agent/graph.py` | Define os 9 nodes e as arestas entre eles |
+| Busca de dados no sistema SAP + multi-vendor | `app/connectors/` | `base.py` (contrato comum), 9 conectores (OData, RFC, ServiceNow, Salesforce, Workday, Ariba, SuccessFactors, CAP, APIManagement) - maioria real quando configurado |
 | Busca de conhecimento (RAG) | `app/rag/ingest.py`, `app/rag/retriever.py` | Indexação e consulta no Qdrant |
 | Testes | `tests/` | Regressão automatizada de tudo acima |
 
-**Gap honesto:** `app/services/` existe na estrutura do repositório (criada no bootstrap inicial) mas está **vazia até hoje** — nenhuma lógica de negócio foi colocada lá. Não finja que existe algo funcionando ali.
+**Sobre `app/services/`:** não está vazia, e é mais central do que parece. `incident_repository.py` faz a persistência PostgreSQL das tabelas `incidents` e `verifications`; `incident_recorder.py` grava **cada** diagnóstico concluído em `incidents` e é chamado por `run_diagnosis()` — o ponto comum a todos os caminhos de entrada (`/diagnose`, worker RQ, webhook/AMQP, A2A e MCP). Se você depurar por que um relatório aparece no Grafana e não na tabela, esse é o arquivo.
 
 ### Analogia ABAP
 
@@ -148,7 +183,7 @@ Pra ir direto num símbolo, use `Ctrl+Shift+O` (Windows/Linux) com o arquivo abe
 
 ### BP3 — Node do conector
 
-**Arquivo:** `app/agent/graph.py`, função `connector_node`
+**Arquivo:** `app/agent/nodes.py`, função `connector_node` (linha 119)
 
 Coloque o breakpoint na linha `result = connector.fetch(...)`.
 
@@ -175,43 +210,74 @@ Breakpoint em `results = client.query_points(...)`.
 
 ### BP5 — Node de diagnóstico (chamada ao LLM)
 
-**Arquivo:** `app/agent/graph.py`, função `diagnose_node`
+**Arquivo:** `app/agent/nodes.py` — `diagnose_node` **não existe mais**: a DA-22
+(roteamento por domínio) o substituiu por três funções:
+`sap_diagnosis_node`, `saas_diagnosis_node` e `generic_diagnosis_node`
+(`app/agent/nodes.py:1060`, `:1067`, `:1074`) — o *node* do grafo se chama
+`saas_diagnose`, a *função* é `saas_diagnosis_node`. O `supervisor` escolhe qual
+roda; as três compartilham o mesmo corpo de chamada ao LLM.
 
 > **Atualizado após code review:** o código não usa mais `llm.invoke(prompt)`
-> direto — usa `llm.with_structured_output(DiagnosisModel, include_raw=True)`,
-> que valida a saída contra um schema Pydantic e retorna um **dicionário**,
-> não um `AIMessage` puro.
+> direto. O caminho primário é
+> `create_react_agent(llm, tools=..., response_format=DiagnosisModel)`,
+> que roda o loop ReAct e depois faz uma **chamada adicional** ao LLM com
+> `with_structured_output` de verdade (tool-calling nativo do provider),
+> devolvendo o resultado já validado. Não existe `include_raw=True` no
+> código, e `structured_llm` também não — são nomes de uma versão anterior.
 
 Dois breakpoints:
 
-**5a.** Na linha `result = structured_llm.invoke(prompt, ...)` — **antes** de executar.
-- Inspecione `prompt` (string completa)
-- Inspecione `llm` — confirme `model`, `temperature=0.0`, `seed=42`
+**5a.** Na linha `return react_agent.invoke(messages, config=config)`
+(`app/agent/nodes.py:943`) — **antes** de executar.
+- Inspecione o `prompt` montado (string completa) e o `json_instruction` anexado
+- Inspecione `react_tools` — é uma lista, e fica **vazia** quando
+  `WEB_SEARCH_ENABLED=false`. Esse é o enforcement de DA-29: a tool some do
+  agente, não só de uma instrução de prompt
+- Inspecione `llm` — confirme `model`, `temperature=0.0`, `seed=42` (DA-2)
 
-**5b.** Logo depois, na linha `raw_message = result["raw"]`.
-- `result` é um `dict` com duas chaves: `"raw"` (o `AIMessage` original, com `.content` em texto puro) e `"parsed"` (uma instância de `DiagnosisModel` já validada, ou `None` se a validação estruturada falhar)
-- Se `parsed` vier `None`, o código cai no bloco de fallback logo abaixo (parsing manual tolerante do `raw_message.content`) — é a mesma rede de segurança de sempre, agora como *segunda* camada, não a única
+**5b.** Logo depois, na linha `structured = react_result.get("structured_response")`
+(`app/agent/nodes.py:998`).
+- Se `structured` vier preenchido, o `DiagnosisModel` já vem validado pelo Pydantic
+- **Regressão real observada em 26/09/2026:** com `qwen3-coder-next` via Ollama,
+  o texto final do agente trazia `matched_source` preenchido, mas a chamada
+  adicional devolvia o campo nulo (4 de 13 casos do promptfoo, todos com
+  diagnóstico correto). O código trata isso logo abaixo, com
+  `_recover_matched_source_from_raw(raw)` — que não é alucinação porque
+  `_apply_confidence_guardrails` (BP6) ainda valida o nome contra as fontes
+  realmente recuperadas
+- Se `structured` vier `None`, o agente é refeito **sem** `response_format`
+  (linha 967) e o texto passa pelo parsing por regex — é a última camada,
+  não a primeira
 
-**Pergunta:** "o modelo recebeu exatamente o contexto que eu esperava, e a validação estruturada (`parsed`) teve sucesso, ou caiu no fallback manual?"
+**Pergunta:** "o modelo recebeu exatamente o contexto que eu esperava, e a
+validação estruturada teve sucesso, ou caiu no fallback?"
 
 ### BP6 — Guardrails determinísticos
 
-**Arquivo:** `app/agent/graph.py`, função `_apply_confidence_guardrails` (extraída de `diagnose_node` após o code review — antes ficava inline)
+**Arquivo:** `app/agent/nodes.py:691`, função `_apply_confidence_guardrails`
 
-Três verificações em sequência, todas de código, nenhuma delas depende do LLM se autoavaliar corretamente:
+> O campo `diagnosis["confidence"]` **não existe mais**. A revisão P1.5
+> (23/09/2026) separou o número em dois: `model_confidence`, que é o que o
+> LLM **auto-relata** e o que estes guardrails ajustam, e
+> `diagnosis_confidence`, calculado deterministicamente. Grep por
+> `diagnosis["confidence"]` não acha nada.
 
-1. **Clamp de range:** `diagnosis["confidence"] = max(0.0, min(1.0, ...))` — defesa em profundidade mesmo com `Field(ge=0.0, le=1.0)` já validando na origem via Pydantic
-2. **Fallback do conector:** mesmo guardrail de sempre — identificador não reconhecido → teto de confiança 0.4
-3. **Contexto vazio:** guardrail mais novo — se não veio nenhum documento do retriever **e** não tem dado de conector, teto de confiança 0.3, `matched_source` forçado pra `None`
+**Quatro** verificações em sequência, todas de código, nenhuma delas depende
+do LLM se autoavaliar corretamente:
 
-**O que observar:** rode uma vez com um caso conhecido (nenhum guardrail deveria disparar), uma vez com identificador desconhecido (guardrail 2), e uma vez com uma descrição totalmente fora do domínio sem `--interface` (guardrail 3).
+1. **Clamp de range:** `model_confidence = max(0.0, min(1.0, raw_model_confidence))` — defesa em profundidade mesmo com `Field(ge=0.0, le=1.0)` já validando na origem via Pydantic
+2. **Teto de evidência (DA-25):** `model_confidence = min(model_confidence, evidence_strength + EVIDENCE_CONFIDENCE_MARGIN)`, com a margem = `0.25` (`app/agent/nodes.py:551`). Confiança não pode exceder o quanto a evidência sustenta — este é o guardrail que mais aparece na prática e é o mais novo dos quatro
+3. **Fallback do conector:** mesmo guardrail de sempre — identificador não reconhecido → teto de 0.4
+4. **Contexto vazio:** se não veio nenhum documento do retriever **e** não tem dado de conector, teto de 0.3, `matched_source` forçado pra `None`
+
+**O que observar:** rode uma vez com um caso conhecido (nenhum guardrail deveria disparar), uma vez com identificador desconhecido (guardrail 3), e uma vez com uma descrição totalmente fora do domínio sem `--interface` (guardrail 4). Para ver o 2 disparando sozinho, use um caso com documento fraco: observe `evidence_strength` e compare com `model_confidence` antes e depois da linha do teto.
 
 **Pergunta:** "quantas camadas independentes de proteção existem entre uma resposta ruim do LLM e o que chega no usuário final — e cada uma delas dispara quando deveria?"
 
 
 ### BP7 — Node de relatório
 
-**Arquivo:** `app/agent/graph.py`, função `report_node`, no `return {"report_markdown": report}`
+**Arquivo:** `app/agent/nodes.py:1222`, função `report_node`, no `return {"report_markdown": report}`
 
 **O que observar:** a f-string `report` montada — compare com o `DiagnosisResponse.report_markdown` que sai na resposta HTTP final. Esse é o último ponto onde você vê tudo junto: causa raiz, confiança, fontes, dado do conector.
 

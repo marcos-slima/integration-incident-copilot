@@ -19,10 +19,37 @@ x-common-env: &common-env
   # em memoria (§3.7: degradacao graciosamente).
   REDIS_URL: ${REDIS_URL:-}
   # Persistência de incidentes (Fase 1 Observabilidade Grafana)
-  # Opt-in: vazio = sem PostgreSQL (padrão). Configure DATABASE_URL
-  # no .env para ativar. Formato:
-  #   postgresql+asyncpg://iic:iic@postgres:5432/iic
-  DATABASE_URL: ${DATABASE_URL:-}
+  # Opt-in: vazio = sem PostgreSQL (padrão). Configure no .env para ativar.
+  #
+  # O host "postgres" é o nome do serviço dentro da rede do compose e
+  # NÃO resolve na máquina — é por isso que o .env documenta o
+  # DATABASE_URL com 127.0.0.1 (ver .env.example). Aqui o container
+  # recebe o valor interno por default, sem depender do .env:
+  # mesma estrategia de QDRANT_URL acima, que tambem hardcodeia "qdrant".
+  # Para apontar o container a um Postgres externo (RDS, BTP,
+  # Cloud SQL), defina CONTAINER_DATABASE_URL em vez de mexer aqui.
+  DATABASE_URL: ${CONTAINER_DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-iic}:${POSTGRES_PASSWORD:-REQUIRED_SET_IN_ENV}@postgres:5432/${POSTGRES_DB:-iic}}
+  # Neo4j / GraphRAG (opt-in, perfil "graphrag"). O serviço "neo4j"
+  # existia no compose mas estas variaveis NAO eram passadas a api,
+  # entao o GraphRAG nao tinha como alcancar o banco nem no modo
+  # container. Sem NEO4J_URI, app/rag/graph_store.py fica inerte.
+  NEO4J_URI: ${CONTAINER_NEO4J_URI:-bolt://neo4j:7687}
+  NEO4J_USER: ${NEO4J_USER:-neo4j}
+  NEO4J_PASSWORD: ${NEO4J_PASSWORD:-}
+  # Autenticacao da API (header X-API-Key) e do servidor A2A.
+  # Vazio = o app gera uma chave aleatoria no startup (DA-18).
+  API_KEY: ${API_KEY:-}
+  A2A_API_KEY: ${A2A_API_KEY:-}
+  # DA-54: login de sessao da UI web. WEB_UI_USERS vazio = login
+  # FECHADO (fail-closed); SESSION_SECRET vazio = sessoes efemeras por
+  # restart (WARNING no log). Credenciais de MAQUINA ficam acima; o
+  # cookie de sessao NAO vale em /mcp, /a2a, /events ou /admin.
+  WEB_UI_USERS: ${WEB_UI_USERS:-}
+  SESSION_SECRET: ${SESSION_SECRET:-}
+  SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-8}
+  # DA-46: chave dedicada da superficie admin (X-API-Admin-Key) — mesma
+  # regra das outras: vazio = efemera por processo com WARNING no log.
+  ADMIN_API_KEY: ${ADMIN_API_KEY:-}
 
 services:
   api:
@@ -35,6 +62,8 @@ services:
     build:
       context: .
       target: final
+    # DA-41: .env já montado via volume (line 85), então env_file removido.
+    # Sem isso, "docker compose config" falha em checkout limpo (.env ainda não criado).
     ports:
       - "8000:8000"
     environment:
@@ -44,22 +73,30 @@ services:
     # manualmente ("docker compose stop"). Evita interrupco de servico
     # por falhas transitórias (OOM, excecao nao tratada, etc.).
     restart: unless-stopped
-    # DA-34: condition: service_healthy garante que Qdrant e Ollama
-    # estejam prontos antes da API comecar a servir requisicoes.
+    # DA-34: condition: service_healthy garante que o Qdrant esteja
+    # pronto antes da API comecar a servir requisicoes. O Ollama roda
+    # no host (host.docker.internal:11434), fora do compose - ver o
+    # servico "ollama" (opt-in) abaixo.
     depends_on:
-      ollama:
-        condition: service_healthy
       qdrant:
         condition: service_healthy
     volumes:
       - ./data/sample_docs:/app/data/sample_docs:ro
+      - ./.env:/app/.env:ro
 
+  # Ollama em container (opt-in) - NAO sobe com "docker compose up"
+  # default. Por padrao o projeto usa o Ollama do host, via
+  # host.docker.internal:11434 (OLLAMA_HOST em x-common-env). Ativar
+  # somente em maquinas sem Ollama local:
+  #   docker compose --profile container-ollama up -d ollama
+  # Atencao: conflita com a porta 11434 se o Ollama do host estiver ativo.
   ollama:
     image: ollama/ollama:0.34.1
-    # DA-34: healthcheck — garante que Ollama esta pronto para servir
-    # requisicoes antes da API comecar (condition: service_healthy abaixo).
+    profiles: ["container-ollama"]
+    # DA-34: healthcheck — a imagem oficial nao inclui curl/wget; o
+    # proprio CLI do Ollama testa se o servidor responde.
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      test: ["CMD", "ollama", "list"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -72,9 +109,10 @@ services:
 
   qdrant:
     image: qdrant/qdrant:v1.19.0
-    # DA-34: healthcheck — Qdrant expoe /healthz desde v1.3.0.
+    # DA-34: healthcheck — a imagem oficial não inclui curl/wget;
+    # verifica a porta 6333 via /dev/tcp do bash.
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -106,7 +144,7 @@ services:
     environment:
       POSTGRES_DB: iic
       POSTGRES_USER: iic
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-REQUIRED_SET_IN_ENV}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?REQUIRED_SET_IN_ENV}
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -121,15 +159,34 @@ services:
     ports:
       - "${GRAFANA_HOST_PORT:-3001}:3000"
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-REQUIRED_SET_IN_ENV}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?REQUIRED_SET_IN_ENV}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3001}
+      # A mesma senha do postgres (provisioning do datasource usa
+      # ${POSTGRES_PASSWORD} em deploy/grafana/provisioning/datasources/).
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?REQUIRED_SET_IN_ENV}
     volumes:
       - grafana_data:/var/lib/grafana
       - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/etc/grafana/dashboards:ro
     depends_on:
       postgres:
         condition: service_healthy
+
+  # Mailpit — SMTP testing local (zero custo, total offline)
+  # Permite visualizar e-mails enviados via http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:latest
+    profiles: ["mailpit"]
+    restart: unless-stopped
+    ports:
+      - "8025:8025"  # Web UI
+      - "1025:1025"  # SMTP
+    environment:
+      MP_MAX_MESSAGES: "1000"
+      MP_DATABASE: "/data/mailpit.db"
+    volumes:
+      - mailpit_data:/data
 
   # GraphRAG (opt-in) - NAO sobe com "docker compose up" default, so
   # com "docker compose --profile graphrag up -d neo4j" (decisao
@@ -140,10 +197,21 @@ services:
   neo4j:
     image: neo4j:5.26.0-community
     profiles: ["graphrag"]
-    # DA-34: healthcheck — Neo4j expoe /db/neo4j/available (HTTP
-    # acessivel em 7474 sem autenticacao para health).
+    # DA-34: healthcheck. O comentario anterior dizia que
+    # /db/neo4j/available respondia sem autenticacao, e isso era verdade em
+    # versoes antigas: no 5.26 o endpoint devolve 401, e `curl -f` falha em
+    # 401. Pior: a imagem neo4j:5.26.0-community nao tem `curl` (so `wget`),
+    # entao o healthcheck era `curl: not found` em TODA execucao — o
+    # container ficava `unhealthy` para sempre e nunca melhorava. Nenhum
+    # `depends_on` consulta o estado, entao nada quebrava: o healthcheck
+    # mentia sem consequencia observavel, que e' a forma mais facil de um
+    # sinal de saude apodrecer. Agora usa `wget` na raiz (200 sem auth),
+    # igual ao healthcheck do job neo4j-smoke no CI.
+    # CMD-SHELL, e nao CMD: em exec form nao ha shell, entao `|| exit 1`
+    # viraria ARGUMENTO do wget (ele tentaria baixar a URL "||") e o health
+    # check ficaria pendurado em vez de reprovar. Verificado nos dois modos.
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7474/db/neo4j/available"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -161,7 +229,7 @@ services:
       # o "docker compose --profile graphrag up" falhar explicitamente
       # se NEO4J_PASSWORD nao estiver definida, em vez de subir com
       # uma senha conhecida publicamente.
-      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-REQUIRED_SET_IN_ENV}
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:?REQUIRED_SET_IN_ENV}
     volumes:
       - neo4j_data:/data
 
@@ -182,10 +250,20 @@ services:
       retries: 5
       start_period: 5s
     ports:
-      - "${REDIS_HOST_PORT:-6379}:6379"
+      - "${REDIS_BIND_IP:-127.0.0.1}:${REDIS_HOST_PORT:-6379}:6379"  # A-12: bind loopback por padrao
     volumes:
       - redis_data:/data
-    command: ["redis-server", "--appendonly", "yes"]
+    # A-12: autenticacao via REDIS_PASSWORD (opt-in); se vazio, sobe sem senha
+    # (compativel com dev local sem Redis protegido). Em producao, defina
+    # REDIS_PASSWORD no .env e configure o mesmo valor em REDIS_URL.
+    command: >
+      sh -c "if [ -n "$$REDIS_PASSWORD" ]; then
+               redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD";
+             else
+               redis-server --appendonly yes;
+             fi"
+    environment:
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
 
   # Worker RQ (opt-in, mesmo profile "async" do redis acima) -
   # avaliacao externa (medio prazo, item 6): consome a fila de
@@ -220,13 +298,32 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      ollama:
-        condition: service_healthy
       qdrant:
         condition: service_healthy
     volumes:
       - ./data/sample_docs:/app/data/sample_docs:ro
 
+
+  # ---------------------------------------------------------------------------
+  # Fase 5 — Notificações (DA-55: email/SMS via MessagePit)
+  # ---------------------------------------------------------------------------
+
+  # MessagePit — SMTP email + Twilio-compatible SMS testing local
+  # Fork do Mailpit com SMS Twilio-compatible ingest (porta 8200)
+  # Permite visualizar emails e SMS via http://localhost:8025
+  messagepit:
+    image: ghcr.io/coreydaley/messagepit:latest
+    profiles: ["messagepit"]
+    restart: unless-stopped
+    ports:
+      - "8025:8025"  # Web UI (email + SMS)
+      - "1025:1025"  # SMTP (email)
+      - "8200:8200"  # Twilio-compatible SMS ingest
+    environment:
+      MP_MAX_MESSAGES: "1000"
+      MP_DATABASE: "/data/messagepit.db"
+    volumes:
+      - messagepit_data:/data
 
   # ---------------------------------------------------------------------------
   # Fase 4 — Relatórios agendados (COI/IOC, SOC, iPaaS)
@@ -267,3 +364,5 @@ volumes:
   redis_data:
   postgres_data:
   grafana_data:
+  mailpit_data:
+  messagepit_data:

@@ -14,10 +14,19 @@ from uuid import uuid4
 from app.config import settings
 from app.metrics import RULE_ENGINE_HIT_TOTAL
 
-os.environ.setdefault("LANGFUSE_PUBLIC_KEY", settings.langfuse_public_key)
-os.environ.setdefault("LANGFUSE_SECRET_KEY", settings.langfuse_secret_key)
-os.environ.setdefault("LANGFUSE_HOST", settings.langfuse_host)
-os.environ.setdefault("LANGFUSE_BASE_URL", settings.langfuse_host)
+if settings.langfuse_configured:
+    os.environ.setdefault("LANGFUSE_PUBLIC_KEY", settings.langfuse_public_key)
+    os.environ.setdefault("LANGFUSE_SECRET_KEY", settings.langfuse_secret_key)
+    os.environ.setdefault("LANGFUSE_HOST", settings.langfuse_host)
+    os.environ.setdefault("LANGFUSE_BASE_URL", settings.langfuse_host)
+else:
+    # Sem as DUAS chaves o @observe AINDA assim cria um client default e
+    # tenta exportar a cada span, logando "Authentication error: Langfuse
+    # client / LANGFUSE_PUBLIC_KEY environment" a cada node (6+ por
+    # diagnostico). A SDK v4 le este flag em client.py:365, entao e o
+    # desligamento suportado - e precisa vir AQUI, antes de qualquer
+    # client/span ser criado.
+    os.environ["LANGFUSE_TRACING_ENABLED"] = "false"
 
 from ddgs import DDGS
 from langchain_core.tools import tool as lc_tool
@@ -25,6 +34,7 @@ from langfuse import Langfuse, get_client, observe
 from langfuse.langchain import CallbackHandler
 from langgraph.prebuilt import create_react_agent
 
+from app.agent import prompts
 from app.agent.rules import match_known_error
 from app.agent.state import CopilotState, DiagnosisModel
 from app.connectors import get_connector
@@ -39,20 +49,22 @@ from app.rag.graph_store import (
 from app.rag.retriever import retrieve
 from app.redaction import redact_pii_deep, redact_pii_text
 
-# Mapeamento de interface_type para fontes de busca web — compartilhado entre
-# web_search_node (fallback do grafo) e _make_web_search_tool (ReAct tool).
-# Centralizado aqui para evitar duplicidade e garantir consistência.
-_WEB_SEARCH_SITE_MAP: dict[str, str] = {
-    "odata": "site:help.sap.com OR site:community.sap.com/t5/technology-blogs-by-sap",
-    "rfc": "site:help.sap.com/docs/SAP_NETWEAVER OR site:community.sap.com OR site:github.com/SAP/PyRFC",
-    "cap": "site:cap.cloud.sap OR site:github.com/SAP/cloud-cap-samples OR site:community.sap.com",
-    "servicenow": "site:developer.servicenow.com OR site:community.sap.com OR site:help.sap.com",
-    "salesforce": "site:developer.salesforce.com OR site:community.sap.com OR site:github.com/SAP",
-    "workday": "site:community.workday.com OR site:community.sap.com",
-    "ariba": "site:help.sap.com/docs/ARIBA OR site:community.sap.com",
-    "apim": "site:help.sap.com/docs/SAP_API_MANAGEMENT OR site:community.sap.com",
-}
-_WEB_SEARCH_SITE_MAP_DEFAULT = "site:community.sap.com OR site:github.com/SAP OR site:help.sap.com"
+# DA-57: a fonte de busca web aprovada por `interface_type` deixou de ser
+# literal em codigo. Os dois mapas que viviam aqui
+# (`_WEB_SEARCH_SITE_MAP` com 8 entradas e o dict `tech_term` com 8) foram
+# para a tabela `web_search_sources`, e a resolucao e FAIL-CLOSED:
+# `resolve_approved_source()` devolve None quando nao ha linha habilitada
+# e a busca web NAO acontece. Sem fallback em codigo — um default
+# hardcoded seria a falha silenciosa que a DA-57 removeu: um conector novo
+# aceito em todo o produto, e jogado num filtro generico sem ninguem ver.
+#
+# Consequencia que vale registrar: `successfactors` (DA-34) e `po` (DA-56)
+# nunca estiveram em nenhum dos dois mapas, e perdiam tambem o `tech_term`
+# (cai no generico "SAP integration"), entao a identidade do conector se
+# perdia ANTES do filtro de site. A migration 008 semeia as 10 linhas.
+#
+# Ver app/services/web_search_sources.py e
+# app/admin/models.py::WebSearchSource.
 
 # Avaliacao externa (medio prazo, item 4): inicializa o client Langfuse
 # EXPLICITAMENTE com mask=redact_pii_deep, ANTES de qualquer
@@ -62,8 +74,39 @@ _WEB_SEARCH_SITE_MAP_DEFAULT = "site:community.sap.com OR site:github.com/SAP OR
 # input/output que @observe capturar automaticamente (o CopilotState
 # inteiro, nao so o texto que sanitize_untrusted_input ja sanitizava
 # manualmente para o prompt).
-Langfuse(mask=redact_pii_deep)
-_langfuse_handler = CallbackHandler()
+#
+# Guard: sem as DUAS chaves, nao criamos client nenhum. Criar client com
+# chave vazia faz o SDK tentar exportar em background e logarithm
+# "401 Unauthorized" a cada run (o @observe acima vira no-op, o que e
+# desejado). A mascara de PII nao e perdida: ela so importa quando existe
+# client exportando span, e sem chave nao exporta span nenhum.
+if settings.langfuse_configured:
+    Langfuse(mask=redact_pii_deep)
+    _langfuse_handler = CallbackHandler()
+    observe_span = observe
+else:
+
+    def observe_span(*_args, **_kwargs):
+        """No-op stand-in para @observe quando o Langfuse nao esta
+        configurado.
+
+        Nao basta desligar `LANGFUSE_TRACING_ENABLED`: o SDK v4 loga
+        "client initialized without public_key" no __init__ do client, e
+        o proprio @observe chama get_client() para pegar o tracer - ou
+        seja, o aviso sai mesmo com tracing desligado. O unico jeito de
+        nao instanciar client e nao decorating as funcoes. Como o grafo
+        nao depende de span para funcionar, o no-op e semanticamente
+        identico, so que silencioso.
+
+        Usado pelos nodes daqui e por app/agent/graph.py.
+        """
+
+        def _decorator(fn):
+            return fn
+
+        return _decorator
+
+    _langfuse_handler = None
 
 MAX_LOGS_IN_PROMPT = 3_000
 MAX_PAYLOAD_IN_PROMPT = 3_000
@@ -76,6 +119,18 @@ def connector_node(state: CopilotState) -> CopilotState:
 
     connector = get_connector(interface_type)
     result = connector.fetch(state.get("identifier") or "")
+
+    # A-09: incrementa metrica de chamadas a conectores externos
+    from app.metrics import CONNECTOR_REQUEST_TOTAL
+
+    _metric_status = (
+        "mock" if result.is_mock else ("error" if result.status == "error" else "success")
+    )
+    CONNECTOR_REQUEST_TOTAL.labels(
+        connector=result.source_system,
+        status=_metric_status,
+    ).inc()
+
     return {"connector_data": result}
 
 
@@ -87,13 +142,13 @@ def _effective_query(state: CopilotState) -> str:
     return base
 
 
-@observe(name="retrieve")
+@observe_span(name="retrieve")
 def retrieve_node(state: CopilotState) -> CopilotState:
     hits = retrieve(_effective_query(state), target="incidents", top_k=3)
     return {"retrieved_context": hits}
 
 
-@observe(name="graph_enrich")
+@observe_span(name="graph_enrich")
 def graph_enrich_node(state: CopilotState) -> CopilotState:
     """So entra no grafo quando GRAPH_RAG_ENABLED=true (ver
     build_graph()) - consulta o Neo4j por incidentes anteriores na
@@ -115,7 +170,7 @@ def graph_enrich_node(state: CopilotState) -> CopilotState:
     return {"graph_history": related}
 
 
-@observe(name="graph_write")
+@observe_span(name="graph_write")
 def graph_write_node(state: CopilotState) -> CopilotState:
     """So entra no grafo quando GRAPH_RAG_ENABLED=true - grava o
     diagnostico concluido no Neo4j para alimentar consultas futuras de
@@ -156,7 +211,36 @@ def graph_write_node(state: CopilotState) -> CopilotState:
     return {}
 
 
-@observe(name="web_search")
+def _web_search_allowed(state) -> bool:
+    """P0.2 + DA-57: gate unico de egress para busca web - usado pelo
+    web_search_node e pelo tool do agente ReAct. Exige web_search_enabled
+    (interruptor principal), que WEB_SEARCH_POLICY permita E que exista uma
+    fonte APROVADA (linha habilitada em `web_search_sources`) para o
+    `interface_type` do incidente.
+
+    DA-57: o ramo `approved` antes retornava `True` incondicionalmente — o
+    nome prometia uma lista de sites aprovados que nao existia em lugar
+    nenhum do codigo. Agora `approved` significa o que diz: so passa quem
+    tem linha habilitada. Sem linha => sem busca web, e a fonte e' lida do
+    banco (fail-closed), nao de um default em codigo.
+    """
+    from app.llm.gateway import classify_sensitivity
+    from app.services.web_search_sources import resolve_approved_source
+
+    if not settings.web_search_enabled:
+        return False
+    policy = settings.web_search_policy
+    if policy == "disabled":
+        return False
+    if policy == "public_only" and classify_sensitivity(state) != "public":
+        return False
+    # Unica fonte de verdade da query: a linha aprovada. Sem ela, o
+    # interface_type nao tem onde buscar — e nao ha tech_term generico
+    # para cair (era exatamente o que escondia successfactors e po).
+    return resolve_approved_source(state.get("interface_type")) is not None
+
+
+@observe_span(name="web_search")
 def web_search_node(state: CopilotState) -> CopilotState:
     """Busca web via DuckDuckGo - ativada apenas quando o RAG local
     nao encontrou contexto suficiente (todos os hits com score baixo
@@ -168,40 +252,28 @@ def web_search_node(state: CopilotState) -> CopilotState:
     + mensagem sanitizada do conector (sem PII) + site_filter.
 
     Politica de egress controlada por WEB_SEARCH_POLICY:
-      disabled    — nunca executa (default seguro para producao/Kyma)
-      approved    — executa com query sanitizada
+      disabled    — nunca executa
+      approved    — executa com query sanitizada (default; WEB_SEARCH_ENABLED
+                    continua sendo o interruptor principal, default off)
       public_only — so executa se classificacao de sensibilidade = 'public'
 
     So ativa quando threshold do RAG local nao foi atingido."""
-    from app.llm.gateway import classify_sensitivity
-
     hits = state.get("retrieved_context", [])
     top_score = hits[0]["score"] if hits else 0.0
 
-    # Politica de egress (P0.2): WEB_SEARCH_POLICY tem precedencia sobre
-    # web_search_enabled legado
-    policy = settings.web_search_policy
-    if policy == "disabled":
-        return {"web_search_results": []}
-    if policy == "public_only" and classify_sensitivity(state) != "public":
-        return {"web_search_results": []}
-    # policy == "approved": prossegue, mas so se habilitado E score baixo
-    if not settings.web_search_enabled or top_score >= settings.web_search_threshold:
+    if not _web_search_allowed(state) or top_score >= settings.web_search_threshold:
         return {"web_search_results": []}
 
-    interface_type = state.get("interface_type", "")
+    from app.services.web_search_sources import resolve_approved_source
 
-    site_filter = _WEB_SEARCH_SITE_MAP.get(interface_type, _WEB_SEARCH_SITE_MAP_DEFAULT)
-    tech_term = {
-        "odata": "OData SAP Gateway",
-        "rfc": "RFC ABAP BAPI",
-        "cap": "SAP CAP CDS BTP",
-        "servicenow": "ServiceNow SAP integration",
-        "salesforce": "Salesforce SAP integration",
-        "workday": "Workday SAP integration",
-        "ariba": "SAP Ariba integration",
-        "apim": "SAP API Management",
-    }.get(interface_type, "SAP integration")
+    # DA-57: fonte aprovada vem do banco (fail-closed). `_web_search_allowed`
+    # ja garantiu que existe; o segundo check cobre a corrida em que a linha
+    # foi desabilitada entre as duas leituras.
+    source = resolve_approved_source(state.get("interface_type"))
+    if source is None:
+        return {"web_search_results": []}
+    site_filter = source.site_filter
+    tech_term = source.tech_term
 
     # P0.2 (revisao arquitetural externa, 23/09/2026): a descricao ORIGINAL do
     # incidente nunca vai para a rede — pode conter nome de cliente, sistema,
@@ -412,16 +484,22 @@ def _build_diagnosis_prompt(state: CopilotState, persona: str) -> str:
 
     connector_block = ""
     data = state.get("connector_data")
-    if data:
-        fallback_warning = (
-            "\n  ATENCAO: este e um dado GENERICO DE FALLBACK - o identificador "
-            "informado nao foi reconhecido pelo sistema. NAO trate isso como um "
-            "erro especifico conhecido. A menos que a descricao textual do "
-            "incidente, por si so, bata claramente com o documento de contexto, "
-            "use confidence baixa (< 0.4) e considere matched_source como null."
-            if data.is_fallback
-            else ""
-        )
+    if data and data.is_fallback:
+        # Identificador nao reconhecido: o conector devolve um resultado
+        # GENERICO (em alguns mocks, ex. OData/RFC, com status=error e
+        # codigo 500 fabricados). Esses campos NAO vao para o prompt -
+        # em teste real o modelo construiu a causa raiz em cima do "500"
+        # simulado, mesmo com o aviso de fallback. Sem o dado inventado,
+        # o modelo so pode se apoiar na descricao, nos logs e no RAG.
+        connector_block = f"""
+Dados do sistema (conector {data.source_system}): NENHUM DADO DISPONIVEL - o
+identificador informado nao foi reconhecido pelo sistema. Nao existe status
+nem codigo de erro observado; nao presuma nenhum. Baseie o diagnostico apenas
+na descricao, nos logs e no documento de contexto, use confidence baixa
+(< 0.4) e considere matched_source como null se o documento nao corresponder
+claramente ao incidente.
+"""
+    elif data:
         safe_error_code = sanitize_untrusted_input(
             str(data.error_code) if data.error_code else "", "connector_error_code"
         )
@@ -432,7 +510,7 @@ Dados coletados diretamente do sistema SAP (via conector {data.source_system}{" 
   status: {data.status}
   codigo de erro: {safe_error_code}
   mensagem: {safe_message}
-  detalhe bruto: {safe_raw}{fallback_warning}
+  detalhe bruto: {safe_raw}
 """
 
     _raw_graph_block = format_graph_context_for_prompt(state.get("graph_history", []))
@@ -460,31 +538,20 @@ Resultado de busca web (SAP Community / GitHub SAP) como contexto adicional:
 
     safe_description = sanitize_untrusted_input(state["description"], "description")
 
-    return f"""{persona}
-
-Incidente reportado:
-{safe_description}
-{extras}{connector_block}
-Contexto recuperado da base de conhecimento de incidentes:
-{context_block}
-{others_note}{graph_block}{web_block}
-Regra importante: baseie sua resposta EXCLUSIVAMENTE no documento de
-contexto acima e, se disponivel, nos dados reais do conector (que tem
-prioridade sobre a descricao textual do usuario, pois vem diretamente
-do sistema). Nao combine informacoes de outros documentos. Se o
-documento acima nao corresponder ao sintoma descrito, diga isso e use
-confidence baixa em vez de inventar uma causa raiz combinando temas
-diferentes.
-
-No campo matched_source, copie EXATAMENTE o nome do arquivo indicado
-apos "fonte=" no cabecalho do documento mais relevante mostrado acima
-(exemplo: se o cabecalho diz "fonte=cpi_http_401.md", o valor de
-matched_source deve ser exatamente "cpi_http_401.md", sem alteracoes).
-Se nenhum documento corresponder ao incidente, use null nesse campo.
-
-"confidence" deve ser um numero entre 0.0 e 1.0. Se houver dados reais
-do conector confirmando o diagnostico, a confidence pode ser mais alta
-(o dado do sistema e mais confiavel que so a descricao textual)."""
+    # DA-53: o template e' dado (app/agent/prompts.py), nao f-string local.
+    # `safe_description` ja vem sanitizado acima; `render` exige todos os
+    # slots e falha alto, para que um bloco de contexto nunca desapareca
+    # do prompt em silencio.
+    return prompts.render(
+        persona=persona,
+        description=safe_description,
+        extras=extras,
+        connector_block=connector_block,
+        context_block=context_block,
+        others_note=others_note,
+        graph_block=graph_block,
+        web_block=web_block,
+    )
 
 
 # Margem de tolerancia entre confidence auto-relatada pelo LLM e a
@@ -679,11 +746,23 @@ def _apply_confidence_guardrails(diagnosis: dict, state: CopilotState) -> dict:
             )
 
     # Valida matched_source contra as fontes realmente recuperadas
-    # Impede que o LLM invente ou alucine um nome de documento
+    # Impede que o LLM invente ou alucine um nome de documento.
+    # Excecao: diagnostico do Rule Engine (DA-33) - "rule_engine:<categoria>"
+    # nao e documento RAG, e sim a regra deterministica que casou. So
+    # rules.py define rule_engine_category (a saida do LLM nao tem esse
+    # campo), entao o LLM nao consegue se passar pelo rule engine.
     retrieved = state.get("retrieved_context") or []
     valid_sources = {h["source"] for h in retrieved if h.get("source")}
     claimed_source = diagnosis.get("matched_source")
-    if claimed_source and valid_sources and claimed_source not in valid_sources:
+    is_rule_engine = bool(diagnosis.get("rule_engine_category")) and claimed_source == (
+        f"rule_engine:{diagnosis.get('rule_engine_category')}"
+    )
+    if (
+        claimed_source
+        and valid_sources
+        and claimed_source not in valid_sources
+        and not is_rule_engine
+    ):
         diagnosis["matched_source"] = None
         model_confidence = min(model_confidence, 0.3)
         diagnosis["probable_root_cause"] = (
@@ -764,9 +843,30 @@ def _sanitize_web_search_query(query: str) -> str:
 
 def _make_web_search_tool(state):
     """Fabrica um tool de busca web contextualizado com o interface_type
-    do incidente — o agente ReAct decide quando chamar."""
-    interface_type = state.get("interface_type") or ""
-    site_filter = _WEB_SEARCH_SITE_MAP.get(interface_type, _WEB_SEARCH_SITE_MAP_DEFAULT)
+    do incidente — o agente ReAct decide quando chamar.
+
+    DA-57: `site_filter` vem da linha aprovada em `web_search_sources`. Sem
+    linha habilitada nao ha tool — o ReAct recebe uma tool que diz explicitamente
+    que nao ha fonte aprovada, em vez de uma que buscaria num filtro generico.
+    """
+    from app.services.web_search_sources import resolve_approved_source
+
+    source = resolve_approved_source(state.get("interface_type"))
+
+    if source is None:
+
+        @lc_tool
+        def web_search_tool(query: str) -> str:
+            """Busca web indisponivel para este incidente (DA-57, fail-closed)."""
+            return (
+                "Busca web indisponivel: nao ha fonte aprovada cadastrada para o "
+                "interface_type deste incidente. Responda a partir do RAG local, do "
+                "conector e das regras — nao invente fonte externa."
+            )
+
+        return web_search_tool
+
+    site_filter = source.site_filter
 
     @lc_tool
     def web_search_tool(query: str) -> str:
@@ -805,29 +905,12 @@ def _make_web_search_tool(state):
 # com personas diferentes. O supervisor (app/agent/supervisor.py) decide
 # QUAL dos dois roda, via roteamento condicional em app/agent/graph.py -
 # nunca os dois no mesmo incidente (custo de LLM nao duplica).
-_SAP_SPECIALIST_PERSONA = (
-    "Voce e um especialista em integracao SAP (OData, IDoc, RFC, CPI/Integration Suite, BTP)."
-)
-_ENTERPRISE_SPECIALIST_PERSONA = (
-    "Voce e um especialista em integracoes empresariais multi-fornecedor "
-    "(ServiceNow, Salesforce, Workday, Ariba e APIs corporativas em geral) - "
-    "conhece padroes tipicos de falha em REST/OAuth2, webhooks, rate limits "
-    "e sincronizacao de dados entre sistemas terceiros. Quando o fornecedor "
-    "especifico do incidente nao estiver identificado, aplique o mesmo "
-    "raciocinio generalista de troubleshooting de integracao de sistemas."
-)
-# DA-22: persona propria para incidentes sem dominio identificado (agent_domain="generic").
-# Usa linguagem agnosta de fornecedor — foco em protocolo, transporte e middleware —
-# sem assumir vocabulario SAP nem SaaS especifico.
-_GENERIC_INTEGRATION_PERSONA = (
-    "Voce e um especialista em integracao de sistemas e middleware, com dominio "
-    "amplo em padroes de comunicacao (REST, SOAP, gRPC, mensageria), protocolos "
-    "de autenticacao (OAuth2, SAML, mTLS), formatos de dados (JSON, XML, CSV) "
-    "e ferramentas de integracao (ESB, iPaaS, API gateways). Nao assuma "
-    "nenhum fornecedor especifico — analise o incidente com base nos sinais "
-    "tecnicos observados (erros HTTP, timeouts, falhas de autenticacao, "
-    "problemas de mapeamento) e recomende acoes pragmaticas de troubleshooting."
-)
+# DA-53: personas e template do prompt vivem em app/agent/prompts.py, com
+# versao e digest. Aqui ficam so os aliases, porque varios testes e o
+# proprio grafo referenciam os nomes com prefixo `_`.
+_SAP_SPECIALIST_PERSONA = prompts.SAP_SPECIALIST_PERSONA
+_ENTERPRISE_SPECIALIST_PERSONA = prompts.ENTERPRISE_SPECIALIST_PERSONA
+_GENERIC_INTEGRATION_PERSONA = prompts.GENERIC_INTEGRATION_PERSONA
 
 
 def _run_diagnosis_agent(state: CopilotState, persona: str) -> dict:
@@ -869,18 +952,9 @@ def _run_diagnosis_agent(state: CopilotState, persona: str) -> dict:
     # que o LLM nao tenha o tool disponivel independente de instrucao de
     # prompt (enforcement de codigo, nao de prompt).
     web_tool = _make_web_search_tool(state)
-    react_tools = [web_tool] if settings.web_search_enabled else []
+    react_tools = [web_tool] if _web_search_allowed(state) else []
     # Instrucao adicional para forcar JSON na resposta final do agente ReAct
-    json_instruction = """
-
-Apos sua analise (usando o tool de busca se necessario), retorne OBRIGATORIAMENTE
-um JSON valido com exatamente esta estrutura (sem texto adicional antes ou depois):
-{
-  "matched_source": "nome_do_arquivo.md ou null",
-  "probable_root_cause": "causa raiz em uma ou duas frases",
-  "confidence": 0.0,
-  "next_steps": ["passo 1", "passo 2"]
-}"""
+    json_instruction = prompts.JSON_INSTRUCTION
 
     def _build_and_invoke(llm):
         # Avaliacao externa (curto prazo, item 5): "structured output de
@@ -890,15 +964,14 @@ um JSON valido com exatamente esta estrutura (sem texto adicional antes ou depoi
         # de verdade (tool-calling nativo do provider), e devolve o
         # resultado ja validado em react_result["structured_response"] -
         # nao mais so um texto que a gente torce pra estar em JSON. O
-        # parsing por regex abaixo (_extract_diagnosis_from_raw_message)
-        # deixa de ser o caminho principal e vira o ULTIMO fallback, so
+        # o parsing por regex abaixo deixa de ser o caminho
+        # principal e vira o ULTIMO fallback, so
         # usado quando structured_response nao vem preenchido.
         react_agent = create_react_agent(llm, tools=react_tools, response_format=DiagnosisModel)
         messages = {"messages": [{"role": "user", "content": prompt + json_instruction}]}
-        config = {
-            "callbacks": [_langfuse_handler],
-            "recursion_limit": settings.react_agent_recursion_limit,
-        }
+        config = {"recursion_limit": settings.react_agent_recursion_limit}
+        if _langfuse_handler is not None:
+            config["callbacks"] = [_langfuse_handler]
         try:
             return react_agent.invoke(messages, config=config)
         except TRANSPORT_FAILURE_EXCEPTIONS:
@@ -960,6 +1033,17 @@ um JSON valido com exatamente esta estrutura (sem texto adicional antes ou depoi
         diagnosis = (
             structured.model_dump() if hasattr(structured, "model_dump") else dict(structured)
         )
+        # Regressao observada em 26/09/2026 com qwen3-coder-next via Ollama:
+        # o texto final do agente trazia "matched_source": "cpi_http_401.md",
+        # mas a chamada ADICIONAL de structured output devolvia o campo nulo
+        # (4 de 13 casos do promptfoo, todos com diagnostico correto). Quando
+        # isso acontece, recupera o valor do texto cru. Nao e uma porta para
+        # alucinacao: _apply_confidence_guardrails abaixo ainda valida o nome
+        # contra as fontes realmente recuperadas.
+        if not diagnosis.get("matched_source"):
+            recovered = _recover_matched_source_from_raw(raw)
+            if recovered:
+                diagnosis["matched_source"] = recovered
     else:
         # Extrai JSON estruturado da resposta final do agente
         json_match = re_module.search(
@@ -982,24 +1066,44 @@ um JSON valido com exatamente esta estrutura (sem texto adicional antes ou depoi
 
     diagnosis = _apply_confidence_guardrails(diagnosis, state)
     diagnosis["llm_provider_used"] = llm_provider_used
+    # DA-53: proveniencia do prompt, gravada AQUI e nao no `run_diagnosis`.
+    # O return antecipado do rule engine (acima) nao passa por esta linha, e
+    # isso e' o correto: um diagnostico que saiu sem chamar o LLM nao foi
+    # produzido por prompt nenhum. Registrar o digest nesse caminho seria
+    # afirmar uma origem falsa -- e foi exatamente por isso que a coluna
+    # `incidents.prompt_digest` e' anulavel em vez de ter default.
+    diagnosis.update(prompts.get_spec().provenance())
     return diagnosis
 
 
-@observe(name="sap_specialist")
+def _recover_matched_source_from_raw(raw: str) -> str | None:
+    """Extrai "matched_source" do texto cru da resposta do agente.
+
+    Usado quando o structured output vem com matched_source nulo mas o
+    modelo escreveu o nome do documento no texto. Devolve None para
+    ausencia, null literal ou string vazia."""
+    match = re_module.search(r'"matched_source"\s*:\s*"([^"]+)"', raw or "")
+    if not match:
+        return None
+    value = match.group(1).strip()
+    return value or None
+
+
+@observe_span(name="sap_specialist")
 def sap_diagnosis_node(state: CopilotState) -> CopilotState:
     """Sub-agente especialista SAP - roteado pelo supervisor quando
     `agent_domain == "sap"` (ver app/agent/supervisor.py)."""
     return {"diagnosis": _run_diagnosis_agent(state, _SAP_SPECIALIST_PERSONA)}
 
 
-@observe(name="saas_specialist")
+@observe_span(name="saas_specialist")
 def saas_diagnosis_node(state: CopilotState) -> CopilotState:
     """Sub-agente especialista multi-fornecedor (SaaS empresarial) -
     roteado pelo supervisor quando `agent_domain == "saas"`."""
     return {"diagnosis": _run_diagnosis_agent(state, _ENTERPRISE_SPECIALIST_PERSONA)}
 
 
-@observe(name="generic_specialist")
+@observe_span(name="generic_specialist")
 def generic_diagnosis_node(state: CopilotState) -> CopilotState:
     """Sub-agente generalista de integracao - roteado pelo supervisor
     quando `agent_domain == "generic"` (nenhum dominio identificado).
@@ -1027,7 +1131,15 @@ def _record_quality_metrics(state: CopilotState, diagnosis: dict) -> None:
     - has_matched_source: 1 se encontrou documento, 0 se nao (proxy de hallucination)
     - rerank_top_score: score do reranker no top resultado (qualidade do retrieval)
     - web_search_used: 1 se a busca web foi ativada nesta execucao
+
+    Sem as duas chaves do Langfuse nao faz NADA: get_client() criaria um
+    client sem chave e o SDK v4 logaria "initialized without public_key" +
+    "No active span" a cada diagnostico. Tratar isso como no-op e o
+    comportamento correto - metricas de observabilidade nao podem custar
+    ruido em quem nao pediu observabilidade.
     """
+    if not settings.langfuse_configured:
+        return
     try:
         client = get_client()
         confidence = float(diagnosis.get("model_confidence", diagnosis.get("confidence", 0.0)))
@@ -1055,7 +1167,7 @@ def _record_quality_metrics(state: CopilotState, diagnosis: dict) -> None:
         logging.getLogger(__name__).debug("Langfuse metrics error", exc_info=True)
 
 
-@observe(name="report")
+@observe_span(name="report")
 def report_node(state: CopilotState) -> CopilotState:
     """P1.5 + P1.6 (revisao arquitetural externa, 23/09/2026):
     - P1.5: exibe model_confidence e diagnosis_confidence separados no report.
@@ -1073,7 +1185,12 @@ def report_node(state: CopilotState) -> CopilotState:
 
     connector_line = ""
     data = state.get("connector_data")
-    if data:
+    if data and data.is_fallback:
+        connector_line = (
+            f"\n**Dados do sistema ({data.source_system}):** "
+            f"identificador nao reconhecido - nenhum dado do sistema disponivel\n"
+        )
+    elif data:
         connector_line = (
             f"\n**Dados do sistema ({data.source_system}"
             f"{' - simulado' if data.is_mock else ''}):** "
@@ -1122,7 +1239,7 @@ def report_node(state: CopilotState) -> CopilotState:
 - `diagnosis_confidence` (pipeline): {diag_conf:.0%} — use este para automacao
 - `model_confidence` (LLM pos-guardrail): {model_conf:.0%}
 - `evidence_strength` (retrieval/conector): {evidence_str:.0%}
-- Provider: {diagnosis.get("llm_provider_used", "N/A")} | Agente: {state.get("agent_domain", "N/A")}
+- Provider: {diagnosis.get("llm_provider_used", "N/A")} | Agente: {state.get("agent_domain", "N/A")} | Modelo: {state.get("llm_model", "N/A")} | Prompt: {diagnosis.get("prompt_version", "nenhum")}
 
 **Documento usado como base:** {matched}
 

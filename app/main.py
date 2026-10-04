@@ -5,8 +5,8 @@ import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Security, status
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Security, status
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from langfuse import get_client
@@ -16,25 +16,21 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.a2a.agent_card import get_agent_card
 from app.a2a.server import router as a2a_router
+from app.admin.routes import router as admin_router  # DA-46/47/48
+from app.admin.security import ensure_admin_key_configured
+from app.admin.ui import ui_router as admin_ui_router
 from app.agent.graph import run_diagnosis
+from app.auth import ensure_session_secret_configured, verify_session_cookie
+from app.auth import router as auth_router
 from app.config import settings
 from app.connectors import connector_status
-from app.db import AsyncSessionLocal, is_db_enabled
+from app.events import idempotency
 from app.events.amqp_consumer import amqp_consumer  # DA-32
-from app.events.consumer import handle_incident_event
-from app.events.idempotency import _warn_if_redis_missing_with_replicas
+from app.events.consumer import handle_incident_event_async
 from app.exceptions import DiagnosisTimeoutError
+from app.llm.gateway import describe_effective_policy
 from app.mcp.server import build_mcp_asgi_app
 from app.mcp.server import mcp as mcp_server
-from app.metrics import (
-    DIAGNOSIS_LATENCY,
-    DIAGNOSIS_TOTAL,
-    DIAGNOSIS_VERIFIED_TOTAL,
-    PII_DETECTED_TOTAL,
-    REDACTION_APPLIED_TOTAL,
-    SENSITIVE_INCIDENT_TOTAL,
-    setup_metrics,
-)
 from app.models import (
     DiagnosisResponse,
     IncidentEventEnvelope,
@@ -44,13 +40,15 @@ from app.models import (
 from app.queue import AsyncQueueUnavailableError, enqueue_diagnosis, get_job_status
 from app.rag.graph_store import GRAPH_UNAVAILABLE_EXCEPTIONS, ensure_constraints, verify_incident
 from app.rate_limit import limiter
-from app.services.incident_repository import IncidentRepository
+from app.services.incident_recorder import record_verification  # DA-50
 
 logger = logging.getLogger(__name__)
 
-# ─── API Key (opcional) ────────────────────────────────────────────────────
-# Se API_KEY nao estiver configurado no .env, autenticacao e desabilitada.
-# Para habilitar: API_KEY=sua-chave-secreta no .env
+# ─── API Key (sempre exigida - DA-18) ──────────────────────────────────────
+# Se API_KEY nao estiver configurado, _ensure_api_keys_configured gera uma
+# chave aleatoria no startup (avisada em WARNING no log) - a autenticacao
+# NUNCA fica desabilitada. Para uma chave fixa: API_KEY=... no .env
+# (e repassada ao container via x-common-env no docker-compose.yml).
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 event_mesh_api_key_header = APIKeyHeader(name="X-Event-Mesh-Api-Key", auto_error=False)
 
@@ -66,6 +64,35 @@ def verify_api_key(api_key: str | None = Security(api_key_header)) -> None:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="X-API-Key invalida ou ausente",
         )
+
+
+def verify_session_or_api_key(
+    request: Request, api_key: str | None = Security(api_key_header)
+) -> None:
+    """DA-54 sobre DA-18, sem quebra: duas vias em /diagnose.
+
+    - maquina: header X-API-Key, exatamente como antes (le o settings
+      DESTE modulo — o que os testes monkeypatcham, mesmo padrao de
+      verify_api_key);
+    - humano: cookie de sessao HttpOnly (DA-54), validado em
+      app/auth.py::verify_session_cookie.
+
+    Aceitar o cookie NAO enfraquece o header: os dois exigem um segredo
+    que o servidor emitiu/valida. MCP/A2A/Event Mesh/admin nao usam esta
+    dependency — chaves dedicadas (DA-19/27/46)."""
+    configured_key = settings.api_key
+    # MESMA semantica de verify_api_key (DA-18), inclusive o vazio==vazio
+    # confiar no startup: _ensure_api_keys_configured garante que o app
+    # real nunca sobe com settings.api_key vazio — o guard e do lifespan,
+    # nao da dependency (13 testes de test_api.py documentam isso).
+    if secrets.compare_digest(api_key or "", configured_key):
+        return
+    if verify_session_cookie(request) is not None:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="X-API-Key invalida/ausente e sem sessao valida (faca login em /auth/login)",
+    )
 
 
 def verify_event_mesh_api_key(api_key: str | None = Security(event_mesh_api_key_header)) -> None:
@@ -129,30 +156,28 @@ def _ensure_api_keys_configured() -> None:
             )
     if not settings.api_key:
         settings.api_key = secrets.token_urlsafe(32)
-        # B7: nunca logue o valor da chave — logs sao frequentemente
-        # agregados em sistemas externos (Datadog, Grafana Loki) e o valor
-        # pode vazar. Para recuperar a chave gerada, use a variavel de
-        # ambiente API_KEY no .env; reiniciar o processo gera uma nova chave.
         logger.warning(
-            "API_KEY nao configurada no .env — chave efemera gerada para "
-            "esta execucao. Configure API_KEY no .env para chave estavel, "
-            "ou REQUIRE_AUTH=true para recusar subir sem chave explicita."
+            "API_KEY nao configurada no .env - chave gerada automaticamente "
+            "para esta execucao (header X-API-Key): %s",
+            settings.api_key,
         )
     if not settings.a2a_api_key:
         settings.a2a_api_key = secrets.token_urlsafe(32)
         logger.warning(
-            "A2A_API_KEY nao configurada no .env — chave efemera gerada para "
-            "esta execucao. Configure A2A_API_KEY no .env para chave estavel, "
-            "ou REQUIRE_AUTH=true para recusar subir sem chave explicita."
+            "A2A_API_KEY nao configurada no .env - chave gerada automaticamente "
+            "para esta execucao (header X-A2A-Api-Key): %s",
+            settings.a2a_api_key,
         )
     if not settings.event_mesh_api_key:
         settings.event_mesh_api_key = secrets.token_urlsafe(32)
         logger.warning(
-            "EVENT_MESH_API_KEY nao configurada no .env — chave efemera gerada "
-            "para esta execucao. Configure EVENT_MESH_API_KEY no .env para "
-            "chave estavel, ou REQUIRE_AUTH=true para recusar subir sem chave "
-            "explicita."
+            "EVENT_MESH_API_KEY nao configurada no .env - chave gerada "
+            "automaticamente para esta execucao (header X-Event-Mesh-Api-Key): %s",
+            settings.event_mesh_api_key,
         )
+    # DA-46/47/48: superficie admin (registro de modelos/credenciais/metering)
+    # com chave DEDICADA. Mesmo contrato DA-18: nunca auth desabilitada.
+    ensure_admin_key_configured()
 
 
 class MissingGraphRagCredentialsError(RuntimeError):
@@ -186,9 +211,12 @@ def _ensure_graph_rag_password_configured() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _ensure_api_keys_configured()
+    # DA-54: segredo HMAC dos cookies de sessao — vazio gera efemero
+    # com WARNING, mesmo padrao DA-18 (nunca cookie sem assinatura)
+    ensure_session_secret_configured()
     _ensure_graph_rag_password_configured()
-    # P1.1: avisa sobre ausencia de Redis em producao multi-replica
-    _warn_if_redis_missing_with_replicas()
+    # P1.1: avisa quando idempotencia/A2A TaskStore ficam so em memoria
+    idempotency._warn_if_redis_missing_with_replicas()
     # DA-21: garante os constraints/indices do Neo4j no startup quando
     # GraphRAG esta habilitado, eliminando o passo manual
     # `python -m app.rag.graph_store --init`. Envolvido em try/except
@@ -222,7 +250,8 @@ async def lifespan(app: FastAPI):
             yield
         finally:
             await amqp_consumer.stop()  # DA-32: graceful shutdown
-    get_client().flush()
+    if settings.langfuse_configured:
+        get_client().flush()
 
 
 app = FastAPI(
@@ -242,9 +271,6 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # explicito, ver app/a2a/server.py, pelo mesmo motivo de /diagnose ja
 # ter um).
 app.add_middleware(SlowAPIMiddleware)
-
-# Fase 2 Observabilidade: Prometheus /metrics (opt-in via PROMETHEUS_ENABLED=true)
-setup_metrics(app)
 
 
 @app.exception_handler(DiagnosisTimeoutError)
@@ -305,16 +331,13 @@ def index() -> FileResponse | JSONResponse:
 
 
 def _probe_infra_services() -> dict[str, str]:
-    """Testa conectividade com Qdrant e com o provider LLM configurado.
+    """Testa conectividade real com Qdrant e Ollama (timeout curto para
+    nao tornar o /ready lento). Retorna dict {servico: "ok"|"degraded"}.
 
-    DA-39: antes checava Ollama incondicionalmente - um pod Kyma com
-    LLM_PROVIDER=openai ficava sempre "degraded" por nao ter OLLAMA_HOST,
-    o que deixava o readinessProbe do Kubernetes retornando 503 e o pod
-    nunca passava para "Ready". Agora a checagem e provider-aware:
-    - ollama -> proba /api/tags no OLLAMA_HOST configurado
-    - openai -> verifica se OPENAI_API_KEY foi configurada (nao faz chamada
-      de rede para nao expor a key e nao adicionar latencia/custo)
-    - azure_openai -> idem para AZURE_OPENAI_API_KEY
+    DA-35: /health antes retornava status="ok" sempre, independente de
+    Qdrant/Ollama estarem acessiveis — nao era um readiness probe real.
+    Agora faz GET nos endpoints de health de cada servico configurado,
+    com timeout de 1s para nao impactar o tempo de resposta do /ready.
     """
     import httpx  # import local: mantém ordenacao de imports sem quebrar isort
 
@@ -330,84 +353,142 @@ def _probe_infra_services() -> dict[str, str]:
     else:
         results["qdrant"] = "not_configured"
 
-    # DA-39: checagem do LLM depende do provider configurado
-    provider = settings.llm_provider
-    if provider == "ollama":
-        if settings.ollama_host:
-            try:
-                r = httpx.get(f"{settings.ollama_host.rstrip('/')}/api/tags", timeout=_timeout)
-                results["ollama"] = "ok" if r.is_success else "degraded"
-            except (OSError, httpx.HTTPError):
-                results["ollama"] = "degraded"
-        else:
-            results["ollama"] = "not_configured"
-    elif provider == "openai":
-        results["openai"] = "ok" if settings.openai_api_key else "not_configured"
-    elif provider == "azure_openai":
-        results["azure_openai"] = "ok" if settings.azure_openai_api_key else "not_configured"
+    if settings.ollama_host:
+        try:
+            r = httpx.get(f"{settings.ollama_host.rstrip('/')}/api/tags", timeout=_timeout)
+            results["ollama"] = "ok" if r.is_success else "degraded"
+        except (OSError, httpx.HTTPError):
+            results["ollama"] = "degraded"
     else:
-        results[provider] = "unknown_provider"
+        results["ollama"] = "not_configured"
+
+    # B-07: Redis sustenta fila de eventos, idempotencia e A2A TaskStore
+    # quando configurado - indisponivel = pod nao pronto.
+    if settings.redis_url:
+        try:
+            import redis
+
+            redis.Redis.from_url(
+                settings.redis_url, socket_connect_timeout=1, socket_timeout=1
+            ).ping()
+            results["redis"] = "ok"
+        except Exception:  # noqa: BLE001 - qualquer falha de conexao/auth = degradado
+            results["redis"] = "degraded"
+    else:
+        results["redis"] = "not_configured"
+
+    # Langfuse - opcional, mas readiness deve representar se esta configurado
+    # e acessivel (para tracing completo). Se Langfuse estiver fora, o app
+    # continua funcionando (so perde tracing).
+    if settings.langfuse_configured:
+        try:
+            from langfuse import get_client
+
+            client = get_client()
+            client.projects.get_many()
+            results["langfuse"] = "ok"
+        except Exception:  # noqa: BLE001 - qualquer falha = degradado
+            results["langfuse"] = "degraded"
+    else:
+        results["langfuse"] = "not_configured"
+
+    # Neo4j - opcional (GraphRAG), mas readiness deve representar se esta
+    # configurado e acessivel. Se Neo4j estiver fora, GraphRAG falha, mas
+    # o resto do app continua funcionando.
+    if settings.graph_rag_enabled:
+        if settings.neo4j_uri and settings.neo4j_user and settings.neo4j_password:
+            try:
+                from neo4j import GraphDatabase
+
+                driver = GraphDatabase.driver(
+                    settings.neo4j_uri,
+                    auth=(settings.neo4j_user, settings.neo4j_password),
+                    connection_timeout=1,
+                )
+                with driver.cursor() as cursor:
+                    cursor.execute("RETURN 1 AS val")
+                    cursor.fetchone()
+                results["neo4j"] = "ok"
+            except Exception:  # noqa: BLE001 - qualquer falha = degradado
+                results["neo4j"] = "degraded"
+        else:
+            results["neo4j"] = "not_configured"
+    else:
+        results["neo4j"] = "not_applicable"
 
     return results
 
 
-@app.get("/health")
-def health() -> dict:
-    """Alem do status geral, devolve o estado real (derivado do .env
-    atual, ver app.connectors.connector_status) de cada conector e das
-    principais flags de infraestrutura - fonte que o frontend
-    (StatusView) consulta em vez de manter uma lista hardcoded que
-    nao reflete o backend de verdade.
+def _required_services() -> set[str]:
+    """B-07: dependencias obrigatorias para o modo ATIVO - "not_configured"
+    so e aceitavel para as opcionais. Qdrant sempre (RAG e o nucleo do
+    diagnostico); Ollama quando e o provider primario."""
+    required = {"qdrant"}
+    if settings.llm_provider == "ollama":
+        required.add("ollama")
+    if settings.graph_rag_enabled:
+        required.add("neo4j")
+    if settings.langfuse_configured:
+        required.add("langfuse")
+    return required
 
-    DA-35: probe real em Qdrant/Ollama via _probe_infra_services() —
-    o /health agora reflete disponibilidade real, nao so configuracao.
-    Quando algum servico esta degradado, "status" passa a "degraded"
-    (nao "ok") para que load balancers e liveness probes detectem."""
-    infra_probes = _probe_infra_services()
-    all_ok = all(v == "ok" for v in infra_probes.values() if v != "not_configured")
-    overall = "ok" if all_ok else "degraded"
 
+def _status_body() -> dict:
+    """Estado derivado so de configuracao (.env) - sem IO externo."""
     return {
-        "status": overall,
         "connectors": connector_status(),
         "infra": {
             "llm_provider": settings.llm_provider,
             "graph_rag_enabled": settings.graph_rag_enabled,
-            "langfuse_enabled": bool(settings.langfuse_public_key and settings.langfuse_secret_key),
+            "langfuse_enabled": settings.langfuse_configured,
             "async_queue_enabled": bool(settings.redis_url),
             "auth_required": bool(settings.api_key),
         },
-        "services": infra_probes,
     }
 
 
+@app.get("/health")
+def health() -> dict:
+    """Liveness probe - confirma apenas que o processo FastAPI esta de pe.
+    NAO faz chamadas externas (Qdrant/Ollama) e sempre retorna 200.
+
+    §4.3 (avaliacao externa §3.6): o Kubernetes usa liveness para decidir
+    se REINICIA o pod. Reiniciar nao resolve "Qdrant fora do ar", entao
+    condicionar o liveness a dependencias externas causa restart-loop.
+    Dependencias externas ficam em /ready (readiness).
+
+    Tambem devolve o estado dos conectores/infra derivado do .env, que o
+    frontend (StatusView) consulta."""
+    return {"status": "ok", **_status_body()}
+
+
 @app.get("/ready")
-def ready() -> dict:
-    """Readiness probe — verifica se os servicos de infraestrutura estao acessiveis.
-
-    Diferente de /health (liveness, sem I/O externo), este endpoint faz probes
-    reais em Qdrant e no LLM provider. O Kubernetes so roteia trafego para o pod
-    quando este endpoint retorna 2xx.
-
-    Retorna 503 se algum servico obrigatorio estiver degradado, removendo o pod
-    do load balancer ate a recuperacao.
-    """
+def ready() -> Response:
+    """Readiness probe - probe real em Qdrant/Ollama/Redis (DA-35). Retorna
+    503 quando algum servico configurado esta degradado (A-11) ou quando
+    uma dependencia obrigatoria do modo ativo nao esta configurada
+    (B-07, ver _required_services), para que o
+    Kubernetes tire o pod do pool de roteamento ate a dependencia voltar,
+    sem reinicia-lo (ver /health)."""
     infra_probes = _probe_infra_services()
-    degraded = [k for k, v in infra_probes.items() if v not in ("ok", "not_configured")]
-    if degraded:
-        from fastapi import HTTPException
-
-        raise HTTPException(
-            status_code=503,
-            detail={"status": "not_ready", "degraded": degraded, "services": infra_probes},
-        )
-    return {"status": "ready", "services": infra_probes}
+    required = _required_services()
+    all_ok = all(
+        v == "ok"
+        or (v == "not_configured" and name not in required)
+        or (v == "not_applicable" and name not in required)
+        for name, v in infra_probes.items()
+    )
+    body = {"status": "ok" if all_ok else "degraded", **_status_body(), "services": infra_probes}
+    return JSONResponse(
+        status_code=status.HTTP_200_OK if all_ok else status.HTTP_503_SERVICE_UNAVAILABLE,
+        content=body,
+    )
 
 
 @app.post(
     "/diagnose",
     response_model=DiagnosisResponse,
-    dependencies=[Depends(verify_api_key)],
+    dependencies=[Depends(verify_session_or_api_key)],
 )
 @limiter.limit("10/minute")
 def diagnose(request: Request, body: IncidentRequest) -> DiagnosisResponse:
@@ -416,85 +497,13 @@ def diagnose(request: Request, body: IncidentRequest) -> DiagnosisResponse:
     Rate limit: 10 requisicoes por minuto por IP.
     Autenticacao: X-API-Key header (se API_KEY configurado no .env).
     """
-    import time
-
-    _t0 = time.monotonic()
-    result = run_diagnosis(body)
-    _latency_ms = int((time.monotonic() - _t0) * 1000)
-
-    # Métricas Prometheus (Fase 2 Observabilidade) — COI/IOC + SOC + iPaaS
-    _agent = result.agent_domain or "unknown"
-    _provider = result.llm_provider_used or "unknown"
-    _strength = result.evidence_strength or "unknown"
-    _sensitivity = getattr(body, "sensitivity_level", None) or "unclassified"
-    _pii = getattr(body, "pii_detected", False)
-    _redacted = getattr(body, "redaction_applied", False)
-
-    DIAGNOSIS_TOTAL.labels(
-        agent_domain=_agent,
-        llm_provider=_provider,
-        evidence_strength=_strength,
-    ).inc()
-
-    DIAGNOSIS_LATENCY.labels(
-        agent_domain=_agent,
-        llm_provider=_provider,
-    ).observe(_latency_ms / 1000.0)
-
-    if _pii:
-        PII_DETECTED_TOTAL.labels(sensitivity_level=_sensitivity).inc()
-    if _redacted:
-        REDACTION_APPLIED_TOTAL.labels(sensitivity_level=_sensitivity).inc()
-    if _sensitivity in ("confidential", "secret"):
-        SENSITIVE_INCIDENT_TOTAL.labels(sensitivity_level=_sensitivity).inc()
-
-    # Persistência opt-in (Fase 1 Observabilidade Grafana)
-    if is_db_enabled() and AsyncSessionLocal is not None:
-        import asyncio
-
-        async def _persist() -> None:
-            async with AsyncSessionLocal() as _session:
-                try:
-                    repo = IncidentRepository(_session)
-                    _evidence_list = [
-                        {"source": e.source, "content": e.content} for e in (result.evidence or [])
-                    ]
-                    await repo.create(
-                        interface_type=getattr(body, "interface_type", None),
-                        description=getattr(body, "description", None),
-                        connector_source_system=getattr(body, "connector_source_system", None),
-                        is_mock=getattr(body, "use_mock", True),
-                        sensitivity_level=getattr(body, "sensitivity_level", None),
-                        trace_id=result.trace_id,
-                        probable_root_cause=result.probable_root_cause,
-                        model_confidence=result.model_confidence,
-                        diagnosis_confidence=result.diagnosis_confidence,
-                        evidence_strength=result.evidence_strength,
-                        llm_provider_used=result.llm_provider_used,
-                        agent_domain=result.agent_domain,
-                        evidence_json=_evidence_list if _evidence_list else None,
-                        latency_ms=_latency_ms,
-                    )
-                    await _session.commit()
-                except Exception:
-                    logger.warning("Falha ao persistir incidente no PostgreSQL", exc_info=True)
-
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.ensure_future(_persist())
-            else:
-                loop.run_until_complete(_persist())
-        except Exception:
-            logger.warning("Falha ao agendar persistência assíncrona", exc_info=True)
-
-    return result
+    return run_diagnosis(body)
 
 
 @app.post(
     "/diagnose/async",
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(verify_api_key)],
+    dependencies=[Depends(verify_session_or_api_key)],
 )
 @limiter.limit("10/minute")
 def diagnose_async(request: Request, body: IncidentRequest) -> dict[str, str]:
@@ -526,7 +535,7 @@ def diagnose_async(request: Request, body: IncidentRequest) -> dict[str, str]:
 
 @app.get(
     "/diagnose/async/{job_id}",
-    dependencies=[Depends(verify_api_key)],
+    dependencies=[Depends(verify_session_or_api_key)],
 )
 def diagnose_async_status(job_id: str) -> dict[str, object]:
     """Consulta (polling) o status/resultado de um diagnostico
@@ -559,53 +568,69 @@ def diagnose_async_status(job_id: str) -> dict[str, object]:
     dependencies=[Depends(verify_event_mesh_api_key)],
 )
 @limiter.limit("10/minute")
-def incident_event_webhook(request: Request, envelope: IncidentEventEnvelope) -> dict[str, object]:
-    """DA-23 (Event Mesh) + P0.4 (revisao arquitetural, 23/09/2026).
+def incident_event_webhook(
+    request: Request,
+    envelope: IncidentEventEnvelope,
+    background_tasks: BackgroundTasks,
+) -> Response:
+    """DA-23 (Event Mesh) - ingestao orientada a evento: recebe um
+    envelope CloudEvents (formato usado pelo SAP Event Mesh em modo
+    REST/Webhook push subscription) representando uma falha de
+    integracao detectada por um sistema de monitoracao externo, e
+    dispara run_diagnosis() em background - sem chamada manual a
+    /diagnose. So `type == "com.sap.integration.incident.detected.v1"`
+    e aceito hoje; qualquer outro valor e rejeitado com 422 (ver
+    IncidentEventEnvelope em app/models.py).
 
-    Ingestao orientada a evento: recebe um envelope CloudEvents
-    (formato usado pelo SAP Event Mesh em modo REST/Webhook push
-    subscription) representando uma falha de integracao detectada
-    por um sistema de monitoracao externo.
-
-    P0.4: retorna 202 Accepted + job_id imediatamente apos enfileirar
-    o diagnostico via Redis/RQ. O diagnostico roda de forma duravel
-    no worker (profile "async") — pod crash nao perde o evento.
-    Fallback: sem Redis, executa inline (pre-P0.4) com warning no log.
-
-    Idempotencia: cloudevents.id e usado como job_id — re-entrega do
-    mesmo evento nao cria um segundo diagnostico.
+    §3.4 / B-02: responde 202 Accepted sem esperar o LLM. Com REDIS_URL,
+    o 202 so sai depois do evento gravado na fila RQ (durable, retry,
+    DLQ no FailedJobRegistry) e o corpo traz o job_id para consulta em
+    GET /diagnose/async/{job_id}; falha no enqueue -> 503. Sem REDIS_URL
+    (dev), usa BackgroundTasks no processo web - nao durable.
 
     Rate limit: 10 requisicoes por minuto por IP.
-    Autenticacao: X-Event-Mesh-Api-Key header (DA-23), chave dedicada
-    isolada de API_KEY/A2A_API_KEY.
+    Autenticacao: X-Event-Mesh-Api-Key header, chave dedicada e isolada
+    de API_KEY/A2A_API_KEY.
     """
-    return handle_incident_event(envelope)
+    try:
+        body = handle_incident_event_async(envelope, background_tasks)
+    except Exception as exc:
+        # B-02: sem enqueue durable confirmado nao ha 202 - o publicador
+        # (Event Mesh) recebe 503 e reenvia.
+        logger.exception("[events] Falha ao enfileirar cloudevents.id=%s", envelope.id)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Fila de eventos indisponivel - reenvie o evento.",
+        ) from exc
+    return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content=body)
 
 
 @app.post(
     "/incidents/{incident_id}/verify",
-    dependencies=[Depends(verify_api_key)],
+    dependencies=[Depends(verify_session_or_api_key)],
 )
 @limiter.limit("10/minute")
 def verify_incident_endpoint(
     request: Request, incident_id: str, body: VerifyIncidentRequest
 ) -> dict[str, str | bool]:
     """DA-28 (VERIFIED_AS) + avaliacao externa (medio prazo, item 5 -
-    "Metricas e feedback"): registra a confirmacao EXPLICITA (humana ou
-    de outro sistema) da causa raiz de um incidente ja diagnosticado, e
+    "Metricas e feedback") + DA-50: registra a confirmacao EXPLICITA (humana
+    ou de outro sistema) da causa raiz de um incidente ja diagnosticado, e
     opcionalmente um veredito de correto/incorreto (`body.correct`)
     como score no trace Langfuse original (`body.trace_id`).
 
-    Dois efeitos INDEPENDENTES (ver docstring de VerifyIncidentRequest):
-    grafo (Neo4j, exige GraphRAG ligado + incident_id valido) e score
-    Langfuse (exige trace_id). Nenhum bloqueia o outro - um cliente que
-    so tem trace_id (GraphRAG desligado) ainda registra feedback no
-    Langfuse; um cliente que so tem incident_id ainda grava no grafo,
-    exatamente como antes desta mudanca (DA-28).
+    Tres efeitos INDEPENDENTES (ver docstring de VerifyIncidentRequest):
+    grafo (Neo4j, exige GraphRAG ligado + incident_id valido), score
+    Langfuse (exige trace_id) e DA-50: gravacao na tabela `incidents`
+    (best-effort, ver incident_recorder.record_verification). Nenhum
+    bloqueia o outro - um cliente que so tem trace_id (GraphRAG desligado)
+    ainda registra feedback no Langfuse; um cliente que so tem incident_id
+    ainda grava no grafo.
 
-    400 se nenhum dos dois puder acontecer - GraphRAG desligado (ou
-    sem tentativa de grafo porque nao houve incident_id gravavel) E
-    trace_id ausente, ou seja, a chamada nao tem NENHUMA pre-condicao
+    400 se nenhum dos tres puder acontecer - GraphRAG desligado (ou
+    sem tentativa de grafo porque nao houve incident_id gravavel), sem
+    gravacao no banco (sem DATABASE_URL ou incidente inexistente na tabela)
+    E trace_id ausente, ou seja, a chamada nao tem NENHUMA pre-condicao
     atendida para fazer alguma coisa.
     404 se GraphRAG estiver ligado mas o `incident_id` nao existir no
     grafo - mesmo comportamento estrito de antes (nao silencioso, o
@@ -615,6 +640,18 @@ def verify_incident_endpoint(
     demais endpoints mutantes).
     Autenticacao: X-API-Key header (mesma dependency de /diagnose).
     """
+    # DA-50: efeito SQL primeiro e best-effort (record_verification nunca
+    # levanta). Precisa vir antes do 404 do grafo para que os tres efeitos
+    # sejam de fato independentes: um incidente que existe na tabela mas nao
+    # no grafo ainda tem a verificacao persistida, senao o operador perderia
+    # o veredito por causa de um backend (Neo4j) que e opcional.
+    sql_updated = record_verification(
+        incident_id,
+        diagnosis_correct=body.correct,
+        verified_by=body.verified_by,
+        verified_root_cause=body.root_cause,
+    )
+
     graph_updated = False
     if settings.graph_rag_enabled:
         graph_updated = verify_incident(
@@ -629,7 +666,7 @@ def verify_incident_endpoint(
             )
 
     langfuse_scored = False
-    if body.trace_id and body.correct is not None:
+    if settings.langfuse_configured and body.trace_id and body.correct is not None:
         try:
             get_client().create_score(
                 trace_id=body.trace_id,
@@ -646,60 +683,44 @@ def verify_incident_endpoint(
                 exc_info=True,
             )
 
-    if not settings.graph_rag_enabled and not langfuse_scored:
+    # DA-50: sem este passo, verified_at/diagnosis_correct ficavam sempre
+    # NULL no banco analitico e a tela /admin/incidents + os dashboards nunca
+    # mostravam verificacao.
+    if not graph_updated and not langfuse_scored and not sql_updated:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
                 "Nada para registrar: GraphRAG esta desligado "
-                "(GRAPH_RAG_ENABLED=false) e nenhum trace_id/correct valido "
-                "foi informado para gravar feedback no Langfuse."
+                "(GRAPH_RAG_ENABLED=false), nao ha DATABASE_URL ou o "
+                "incidente nao existe na tabela `incidents`, e nenhum "
+                "trace_id/correct valido foi informado para gravar feedback "
+                "no Langfuse."
             ),
         )
-
-    # Persistência opt-in (Fase 1 Observabilidade Grafana)
-    if is_db_enabled() and AsyncSessionLocal is not None:
-        import asyncio
-
-        async def _update_verification() -> None:
-            async with AsyncSessionLocal() as _session:
-                try:
-                    repo = IncidentRepository(_session)
-                    await repo.update_verification(
-                        incident_id,
-                        diagnosis_correct=body.correct if body.correct is not None else True,
-                        verified_by=body.verified_by,
-                        verified_root_cause=body.root_cause,
-                    )
-                    await _session.commit()
-                except Exception:
-                    logger.warning(
-                        "Falha ao atualizar verificação no PostgreSQL (incident_id=%s)",
-                        incident_id,
-                        exc_info=True,
-                    )
-
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.ensure_future(_update_verification())
-            else:
-                loop.run_until_complete(_update_verification())
-        except Exception:
-            logger.warning("Falha ao agendar atualização de verificação", exc_info=True)
-
-    # Métrica de verificação humana (COI/IOC)
-    _verdict = "correct" if (body.correct is True) else "incorrect"
-    DIAGNOSIS_VERIFIED_TOTAL.labels(
-        agent_domain="unknown",  # agent_domain não está no VerifyIncidentRequest
-        verdict=_verdict,
-    ).inc()
 
     return {
         "incident_id": incident_id,
         "status": "verified",
         "graph_updated": graph_updated,
         "langfuse_scored": langfuse_scored,
+        "sql_updated": sql_updated,
     }
+
+
+@app.get("/llm/policy", dependencies=[Depends(verify_session_or_api_key)])
+def llm_policy() -> dict:
+    """DA-43: policy de soberanca de dados do AI Gateway, em vigor agora.
+
+    Superficie de auditoria para questionario de seguranca de cliente:
+    mostra, por provider, a ORIGIN real resolvida, se pode receber dado
+    'public' e 'confidential', e o motivo de cada decisao. Nao inclui
+    nenhuma credencial (ver normalize_origin, que descarta userinfo).
+
+    Leitura de config, sem efeito colateral: nao abre circuito, nao chama
+    LLM, nao cobra. Autenticacao: X-API-Key (mesma dependency de
+    /diagnose).
+    """
+    return describe_effective_policy()
 
 
 @app.get("/.well-known/agent-card.json")
@@ -707,7 +728,10 @@ def agent_card() -> dict:
     return get_agent_card()
 
 
+app.include_router(auth_router)  # DA-54: /auth/login, /auth/logout, /auth/session
 app.include_router(a2a_router)
+app.include_router(admin_router)  # DA-46/47/48: /admin/api/* (ADMIN_API_KEY)
+app.include_router(admin_ui_router)  # /admin pages (shell Jinja2, dados via API)
 
 # DA-19: servidor MCP montado em /mcp - ver app/mcp/server.py para o
 # contrato de ferramentas (diagnose_incident, list_connectors) e a

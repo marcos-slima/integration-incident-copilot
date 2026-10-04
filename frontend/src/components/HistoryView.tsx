@@ -41,7 +41,7 @@ export function HistoryView({ history }: HistoryViewProps) {
         <div key={i} className="history-item">
           <div className="history-row">
             <p className="history-desc">{item.description}</p>
-            <Badge value={item.result.confidence} />
+            <Badge value={item.result.diagnosis_confidence} />
           </div>
           <div className="history-meta">
             {item.interface_type && (

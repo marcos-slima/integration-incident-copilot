@@ -14,9 +14,10 @@ import httpx
 import pytest
 
 from app.config import Settings
-from app.connectors import ConnectorResult, get_connector
+from app.connectors import ConnectorResult, connector_status, get_connector
 from app.connectors.ariba_connector import AribaConnector
 from app.connectors.odata_connector import ODataConnector
+from app.connectors.po_connector import POConnector
 from app.connectors.rfc_connector import RFCConnector
 from app.connectors.salesforce_connector import SalesforceConnector
 from app.connectors.servicenow_connector import ServiceNowConnector
@@ -427,6 +428,7 @@ def test_connector_status_reports_mock_for_all_when_unconfigured(monkeypatch):
         "sfsf_base_url",
         "cap_service_url",
         "apim_analytics_url",
+        "po_base_url",
     ):
         monkeypatch.setattr(f"app.connectors.settings.{attr}", "")
 
@@ -443,6 +445,7 @@ def test_connector_status_reports_mock_for_all_when_unconfigured(monkeypatch):
         "successfactors",
         "cap",
         "apim",
+        "po",
     }
     for info in status.values():
         assert info["status"] == "mock"
@@ -621,3 +624,278 @@ def test_successfactors_connector_real_mode_401(monkeypatch):
 
     assert result.error_code == "401"
     assert result.is_fallback is True
+
+
+# ---------------------------------------------------------------------------
+# DA-56: SAP PO/PI (on-premise)
+# ---------------------------------------------------------------------------
+
+
+def test_po_connector_registrado_e_status_mock_sem_config(monkeypatch):
+    """Registry + `connector_status` (a mesma fonte que GET /health usa)."""
+    monkeypatch.setattr("app.connectors.po_connector.settings.po_base_url", "")
+    connector = get_connector("po")
+    assert isinstance(connector, POConnector)
+    assert connector_status()["po"]["status"] == "mock"
+
+
+def test_po_connector_mocks_conhecidos():
+    result = POConnector().fetch("PO-FAILED-001")
+    assert result.status == "error"  # FAILED e' o incidente
+    assert result.error_code == "FAILED"
+    assert result.is_mock is True
+    assert "Z_S4_ORDER_OUT" in result.message
+
+
+def test_po_connector_modo_lista_por_filtro():
+    """Sem `po_base_url`, os filtros de status devolvem a lista mock em vez
+    do fallback 'nao encontrado' — o Message Monitor e' justamente um
+    monitor de mensagens em falha."""
+    for filtro in ("FAILED", "HOLDING", "ALL", ""):
+        result = POConnector().fetch(filtro)
+        assert result.is_fallback is False
+        assert "PO/PI" in result.message
+
+
+def test_po_connector_identificador_desconhecido_cai_em_fallback():
+    result = POConnector().fetch("PO-NAO-EXISTE")
+    assert result.is_mock is True
+    assert result.is_fallback is True
+
+
+def test_po_connector_use_real_sem_url_falha_alto():
+    """Padrao do ODataConnector: pedir real sem configuracao e' erro
+    explicito, nao queda silenciosa em mock."""
+    with pytest.raises(ConfigurationError):
+        POConnector(use_real=True)
+
+
+def test_po_connector_oauth2_sem_token_url_falha_alto(monkeypatch):
+    """Fail-closed: modo oauth2 sem token URL nao pode cair em Basic Auth
+    (mandaria Basic para um token endpoint e receberia 401 sem explicacao)."""
+    monkeypatch.setattr("app.connectors.po_connector.settings.po_auth_mode", "oauth2")
+    monkeypatch.setattr("app.connectors.po_connector.settings.po_oauth_token_url", "")
+    with pytest.raises(ConfigurationError):
+        POConnector()
+
+
+def test_po_connector_real_mode_basic_auth(monkeypatch):
+    """Caminho HTTP REAL via MockTransport, com Basic Auth nativo (o PO/PI
+    nao tem OAuth2)."""
+    monkeypatch.setattr(
+        "app.connectors.po_connector.settings",
+        Settings(po_base_url="https://wd-dmz.corp.example/po", po_username="u", po_password="p"),
+    )
+    vistos: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        vistos.append(request)
+        assert request.url.path.endswith("/mdt/api/1.0/facade")
+        assert request.headers["Authorization"].startswith("Basic ")
+        return httpx.Response(200, json=load_cassette("po_message_monitor"))
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    result = POConnector(client=client).fetch("FAILED")
+
+    assert len(vistos) == 1
+    assert vistos[0].url.params["type"] == "message"
+    assert vistos[0].url.params["status"] == "FAILED"
+    assert result.status == "error"
+    assert result.error_code == "FAILED"
+    assert result.is_mock is False
+    assert result.is_fallback is False
+    assert "Connection refused" in result.message
+
+
+def test_po_connector_real_mode_detalhe_por_message_id(monkeypatch):
+    monkeypatch.setattr(
+        "app.connectors.po_connector.settings",
+        Settings(po_base_url="https://wd-dmz.corp.example/po", po_username="u", po_password="p"),
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["id"] == "PO-FAILED-001"
+        assert "status" not in request.url.params
+        return httpx.Response(200, json=load_cassette("po_message_monitor"))
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    result = POConnector(client=client).fetch("PO-FAILED-001")
+    assert result.is_mock is False
+    assert "PO-FAILED-001" in result.message
+
+
+def test_po_connector_oauth2_quando_apim_esta_na_frente(monkeypatch):
+    """Modo oauth2: token endpoint do APIM + Bearer na chamada do Message
+    Monitor. E' o mesmo contrato de `odata_connector`/`ariba_connector`."""
+    monkeypatch.setattr(
+        "app.connectors.po_connector.settings",
+        Settings(
+            po_base_url="https://apim.corp.example/po",
+            po_auth_mode="oauth2",
+            po_oauth_token_url="https://apim.corp.example/oauth/token",
+            po_oauth_client_id="cid",
+            po_oauth_client_secret="csecret",
+        ),
+    )
+    auths: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        auths.append(request.headers.get("Authorization", ""))
+        if request.url.path == "/oauth/token":
+            return httpx.Response(200, json={"access_token": "tok-123"})
+        return httpx.Response(200, json=load_cassette("po_message_monitor"))
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    result = POConnector(client=client).fetch("FAILED")
+
+    assert auths[0].startswith("Basic ")  # token endpoint = Client Credentials
+    assert auths[1] == "Bearer tok-123"
+    assert result.is_mock is False
+
+
+def test_po_connector_parser_tolera_envelopes_e_formatos():
+    """A API do Message Monitor nao e' publica nem estavel: o parser tem de
+    tolerar lista direta, envelope `messages`, envelope OData (`d.results`)
+    e objeto unico — um formato inesperado vira evidencia, nao traceback."""
+    from app.connectors.po_connector import _extract_messages
+
+    msg = {"messageId": "M1", "status": "FAILED"}
+    assert _extract_messages([msg]) == [msg]
+    assert _extract_messages({"messages": [msg]}) == [msg]
+    assert _extract_messages({"messageLog": [msg]}) == [msg]
+    assert _extract_messages({"d": {"results": [msg]}}) == [msg]
+    assert _extract_messages(msg) == [msg]
+    assert _extract_messages("lixo") == []
+    assert _extract_messages(None) == []
+
+
+def test_po_connector_resposta_nao_json_vira_evidencia(monkeypatch):
+    """O Message Monitor pode responder XML conforme patch/release. Um
+    JSONDecodeError aqui viraria traceback no grafo; tem de virar erro
+    legivel com o caminho verificado."""
+    monkeypatch.setattr(
+        "app.connectors.po_connector.settings",
+        Settings(po_base_url="https://wd-dmz.corp.example/po", po_username="u", po_password="p"),
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="<messageLog><entry/></messageLog>")
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    result = POConnector(client=client).fetch("FAILED")
+    assert result.error_code == "UNEXPECTED_CONTENT_TYPE"
+    assert result.is_mock is False
+    assert "/mdt/api/1.0/facade" in result.message
+
+
+def test_po_connector_rejeita_identifier_com_injection(monkeypatch):
+    """O identifier vem de entrada do usuario e vai para a query string.
+    `validate_identifier_charset` e' o que impede injecao nos conectores
+    reais (ver app/connectors/base.py) — o PO/PI nao pode ser a excecao."""
+    monkeypatch.setattr(
+        "app.connectors.po_connector.settings",
+        Settings(po_base_url="https://wd-dmz.corp.example/po", po_username="u", po_password="p"),
+    )
+    client = httpx.Client(
+        transport=httpx.MockTransport(lambda r: pytest.fail("nao deveria chamar a rede"))
+    )
+    result = POConnector(client=client).fetch("x' or 1 eq 1")
+    assert result.error_code == "INVALID_IDENTIFIER"
+    assert result.is_mock is False
+
+
+def test_po_connector_http_error_e_fallback(monkeypatch):
+    monkeypatch.setattr(
+        "app.connectors.po_connector.settings",
+        Settings(po_base_url="https://wd-dmz.corp.example/po", po_username="u", po_password="p"),
+    )
+    client = httpx.Client(
+        transport=httpx.MockTransport(lambda r: httpx.Response(403, text="Forbidden"))
+    )
+    result = POConnector(client=client).fetch("FAILED")
+    assert result.error_code == "403"
+    assert result.is_fallback is True
+
+
+def test_po_connector_token_401_vira_result_e_nao_excecao(monkeypatch):
+    """REGRESSAO CORRIGIDA. O `raise_for_status` do token endpoint estoura
+    `httpx.HTTPStatusError`, que NAO e subclasse de `RequestError`: um 401 do
+    APIM subia como excecao em vez de virar `ConnectorResult`. O grafo veria
+    500 em vez de um conector degradado com evidencia — e o circuit breaker
+    nem registrava a falha, que e' justamente o sinal que ele existe para
+    capturar. Mesmo par de `except` do `ODataConnector` e `AribaConnector`.
+    """
+    monkeypatch.setattr(
+        "app.connectors.po_connector.settings",
+        Settings(
+            po_base_url="https://apim.corp.example/po",
+            po_auth_mode="oauth2",
+            po_oauth_token_url="https://apim.corp.example/oauth/token",
+            po_oauth_client_id="id",
+            po_oauth_client_secret="seg",
+        ),
+    )
+    client = httpx.Client(
+        transport=httpx.MockTransport(lambda r: httpx.Response(401, text="invalid_client"))
+    )
+    result = POConnector(client=client).fetch("FAILED")
+    assert result.status == "error"
+    assert result.error_code == "401"
+    assert result.is_mock is False
+    assert result.is_fallback is True
+    assert "401" in result.message
+
+
+def test_po_connector_token_sem_access_token_vira_result(monkeypatch):
+    """200 sem `access_token`, ou corpo que nao e JSON: um APIM mal
+    configurado faz isso sem nenhum erro HTTP. Sem este caminho, a KeyError
+    do dict ou o JSONDecodeError subiam como excecao."""
+    monkeypatch.setattr(
+        "app.connectors.po_connector.settings",
+        Settings(
+            po_base_url="https://apim.corp.example/po",
+            po_auth_mode="oauth2",
+            po_oauth_token_url="https://apim.corp.example/oauth/token",
+            po_oauth_client_id="id",
+            po_oauth_client_secret="seg",
+        ),
+    )
+    # B023: a lambda precisa amarrar `corpo` no default. Sem isso ela fecha
+    # sobre a variavel do loop e as duas iteracoes testariam o mesmo corpo —
+    # o dict sem `access_token` passaria sem nunca ter sido exercitado.
+    for corpo in ({"token_type": "Bearer"}, "<html>proxy error</html>"):
+        client = httpx.Client(
+            transport=httpx.MockTransport(lambda r, c=corpo: httpx.Response(200, json=c))
+        )
+        result = POConnector(client=client).fetch("FAILED")
+        assert result.status == "error"
+        assert result.is_fallback is True
+
+
+def test_po_connector_erro_de_rede_registra_no_circuit_breaker(monkeypatch):
+    """O caminho de rede tambem estava sem teste: e' o unico motivo de o
+    breaker existir no conector, e uma regressao ali passaria despercebida."""
+    monkeypatch.setattr(
+        "app.connectors.po_connector.settings",
+        Settings(po_base_url="https://wd-dmz.corp.example/po", po_username="u", po_password="p"),
+    )
+
+    def estoura(r: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("Connection refused", request=r)
+
+    client = httpx.Client(transport=httpx.MockTransport(estoura))
+    result = POConnector(client=client).fetch("FAILED")
+    assert result.status == "error"
+    assert result.error_code == "CONNECTION_ERROR"
+    assert result.is_fallback is True
+
+
+def test_po_connector_summary_limita_linhas(monkeypatch):
+    """Teto de linhas no resumo: o `raw` completo vai junto para o RAG, mas
+    o texto injetado no prompt do LLM nao pode crescer sem limite."""
+    from app.connectors.po_connector import _MAX_SUMMARIZED, _summarize
+
+    mensagens = [{"messageId": f"M{i}", "status": "FAILED"} for i in range(25)]
+    resumo = _summarize(mensagens)
+    assert len(resumo.splitlines()) == _MAX_SUMMARIZED + 1
+    assert "+15 mensagens" in resumo

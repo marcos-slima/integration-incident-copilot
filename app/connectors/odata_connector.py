@@ -29,6 +29,8 @@ from app.connectors.base import (
     connector_circuit_breaker,
     validate_identifier_charset,
 )
+from app.contracts.model import Contract
+from app.contracts.odata import MetadataError, parse_odata_metadata
 from app.exceptions import ConfigurationError
 
 _MOCK_SCENARIOS: dict[str, ConnectorResult] = {
@@ -96,6 +98,43 @@ class ODataConnector(SAPConnector):
         response.raise_for_status()
         return response.json()["access_token"]
 
+    def fetch_contract(self) -> Contract | None:  # DA-52
+        """Le o `$metadata` do serviço e devolve o contrato normalizado.
+
+        Reusa o mesmo OAuth de `_fetch_real` de proposito: duplicar o
+        token aqui criaria um segundo caminho de credencial, e o dia que um
+        deles divergisse o detector leria o contrato com permissao
+        diferente da do diagnostico -- que e' o tipo de bug que so aparece
+        em producao.
+
+        Devolve `None` (estado `nao_introspectavel` no detector) quando o
+        conector esta em mock ou sem URL: nao ha contrato para ler, e
+        inventar um aqui seria pior do que nao ter resposta.
+        """
+        if not (self.use_real or settings.odata_service_url):
+            return None
+        client = self._injected_client or httpx.Client(timeout=10.0)
+        try:
+            token = self._get_access_token(client)
+            # URL crua: o conector usa `odata_service_url` como endpoint
+            # final, entao o $metadata e' a raiz do servico + sufixo.
+            metadata_url = f"{settings.odata_service_url.rstrip('/')}/$metadata"
+            response = client.get(
+                metadata_url,
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/xml"},
+            )
+            response.raise_for_status()
+            return parse_odata_metadata(response.text)
+        except (httpx.HTTPError, MetadataError, KeyError, ValueError):
+            # Vira `unverified` no detector (app/contracts/observe.py).
+            # Engolir aqui e' seguro: o report carrega o motivo, e o
+            # chamador decide. O que nao pode acontecer e' devolver um
+            # contrato vazio "sem drift".
+            return None
+        finally:
+            if self._injected_client is None:
+                client.close()
+
     def _fetch_real(self, identifier: str) -> ConnectorResult:
         if (blocked := circuit_breaker_guard("OData")) is not None:
             return blocked
@@ -111,7 +150,9 @@ class ODataConnector(SAPConnector):
             )
         except httpx.HTTPStatusError as exc:
             connector_circuit_breaker.record_failure(
-                "OData", settings.connector_circuit_failure_threshold
+                "OData",
+                settings.connector_circuit_failure_threshold,
+                settings.connector_circuit_cooldown_seconds,
             )
             return ConnectorResult(
                 source_system="OData",
@@ -124,7 +165,9 @@ class ODataConnector(SAPConnector):
             )
         except httpx.RequestError as exc:
             connector_circuit_breaker.record_failure(
-                "OData", settings.connector_circuit_failure_threshold
+                "OData",
+                settings.connector_circuit_failure_threshold,
+                settings.connector_circuit_cooldown_seconds,
             )
             return ConnectorResult(
                 source_system="OData",

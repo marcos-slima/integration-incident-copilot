@@ -36,8 +36,7 @@ em outra camada (auth continua na borda HTTP via API key, DA-18/23):
    (provider, sensibilidade, decisao, latencia, custo estimado,
    sucesso/falha).
 
-Nao-objetivos explicitos desta v1 (backlog em aberto, ver learnings.md
-do projeto):
+Nao-objetivos explicitos desta v1 (backlog em aberto):
 - IAM/auth: ja resolvido na borda HTTP (X-API-Key por endpoint,
   DA-18/DA-23) - nao duplicado aqui.
 - PII/DLP de verdade: um scanner de dados sensiveis (NER/classificador)
@@ -59,10 +58,24 @@ import random
 import time
 from typing import Literal
 
+from app.admin.metering import attach_metering, record_usage_observed  # DA-48
 from app.circuit_breaker import CircuitBreaker
 from app.config import Settings, settings
 from app.exceptions import ConfigurationError
 from app.llm.factory import TRANSPORT_FAILURE_EXCEPTIONS, get_chat_model
+
+# DA-45: as duas funcoes passaram a morar em app/llm/origins.py porque o
+# factory tambem precisa delas e nao pode importar este modulo (o gateway
+# importa o factory - importaria de volta, ciclo). Re-exportadas aqui para
+# que `from app.llm.gateway import normalize_origin` (testes de DA-43)
+# siga funcionando sem alteracao.
+from app.llm.origins import is_loopback_origin, normalize_origin, resolve_provider_origin
+
+__all__ = [
+    "is_loopback_origin",
+    "normalize_origin",
+    "resolve_provider_origin",
+]
 from app.metrics import CIRCUIT_BREAKER_OPEN_TOTAL, CIRCUIT_BREAKER_STATE, LLM_FALLBACK_TOTAL
 
 logger = logging.getLogger(__name__)
@@ -113,13 +126,16 @@ def classify_sensitivity(state: dict) -> Sensitivity:
     Trust Layer (DA-25): dado real de conector (nao mock, nao
     fallback) e informacao de sistema de producao (status, codigo de
     erro, mensagem reais) - tratado como confidential por padrao.
-    Sem dado real de conector (so a descricao textual que o usuario ja
-    digitou pra pedir ajuda), classificado como public.
+    Sem dado real de conector (so descricao/logs/payload enviados pelo
+    usuario), vale settings.sensitivity_default - "confidential" por
+    padrao (B-04): texto livre pode conter dado empresarial que a
+    redacao por regex nao reconhece, entao nao classificado = sensivel.
+    SENSITIVITY_DEFAULT=public restaura o comportamento anterior.
     """
     data = state.get("connector_data")
     if data is not None and not data.is_mock and not data.is_fallback:
         return "confidential"
-    return "public"
+    return settings.sensitivity_default
 
 
 def _estimate_tokens(text: str) -> int:
@@ -151,31 +167,172 @@ def _estimate_cost_usd(
     return (total_tokens / 1000.0) * price
 
 
-def _select_allowed_providers(sensitivity: Sensitivity, primary: str, fallback: str) -> list[str]:
-    """Aplica a policy de roteamento.
+def _allowed_origins(cfg: Settings) -> set[str]:
+    """Parseia CONFIDENTIAL_ALLOWED_ORIGINS em um set de origens
+    normalizadas. Entradas invalidas sao ignoradas (fail-closed: uma
+    entrada nao parseavel nunca amplia a permissao)."""
+    raw = (cfg.confidential_allowed_origins or "").strip()
+    if not raw:
+        return set()
+    out: set[str] = set()
+    for item in raw.split(","):
+        origin = normalize_origin(item)
+        if origin:
+            out.add(origin)
+    return out
 
-    DA-39: comportamento depende de settings.data_sovereignty_mode:
-    - "strict" (default): dado confidencial so pode ir para providers
-      locais (ollama). Adequado para on-premise / self-hosted.
-    - "cloud_with_dlp": dado confidencial pode ir para cloud providers
-      (openai/azure_openai) porque PII ja foi redacted antes de chegar
-      aqui (redact_pii_deep em nodes.py). Use em deploy Kyma/cloud.
+
+def _provider_allows_sensitivity(
+    provider: str, sensitivity: Sensitivity, cfg: Settings
+) -> tuple[bool, str]:
+    """Decide se um provider pode receber dado com esta sensibilidade.
+
+    Retorna (permitido, motivo). O motivo vai para o audit log e para o
+    endpoint /llm/policy - e a resposta objetiva a "por que isso foi
+    (nao) permitido?".
+
+    Fail-closed em todas as branches desconhecidas: so
+    'cloud_with_dlp' EXPLICITO libera cloud. Um Settings invalido
+    montado sem passar pelo pydantic (model_copy em teste, por exemplo)
+    nega em vez de liberar.
     """
+    origin = resolve_provider_origin(provider, cfg)
+    if not origin:
+        return False, f"origin nao resolvida para o provider '{provider}'"
+
+    is_local = PROVIDER_LOCALITY.get(provider) == "local"
+
+    if sensitivity == "public":
+        return True, f"dado public: origem {origin} nao e restringida"
+
+    # daqui para frente: confidential
+    if is_local:
+        return True, f"origem local {origin} sob jurisdicao do operador"
+
+    if cfg.data_sovereignty_mode != "cloud_with_dlp":
+        return (
+            False,
+            (
+                f"dado confidencial para cloud exige data_sovereignty_mode="
+                f"'cloud_with_dlp' (atual: '{cfg.data_sovereignty_mode or '(vazio)'}')"
+            ),
+        )
+
+    allowed = _allowed_origins(cfg)
+    if not allowed:
+        return (
+            False,
+            (
+                f"dado confidencial para cloud exige a origem na allowlist "
+                f"CONFIDENTIAL_ALLOWED_ORIGINS (vazia; destino e {origin})"
+            ),
+        )
+    if origin in allowed:
+        return True, f"origem {origin} esta na allowlist de dado confidencial"
+    return (
+        False,
+        (f"origem {origin} nao esta em CONFIDENTIAL_ALLOWED_ORIGINS ({sorted(allowed)})"),
+    )
+
+
+def _select_allowed_providers(
+    sensitivity: Sensitivity, primary: str, fallback: str, cfg: Settings | None = None
+) -> list[str]:
+    """DA-39 + DA-43: filtra os candidatos pela policy de soberania.
+
+    - dado 'public': todos os candidatos passam.
+    - dado 'confidential': apenas providers locais e - se
+      data_sovereignty_mode == 'cloud_with_dlp' - os destinos cuja ORIGIN
+      esteja em CONFIDENTIAL_ALLOWED_ORIGINS.
+    - qualquer outra coisa: fail-closed (ver _provider_allows_sensitivity).
+    """
+    conf = cfg or settings
     candidates = [primary] + ([fallback] if fallback else [])
     # remove duplicatas preservando ordem (primario tem prioridade)
     seen: set[str] = set()
     candidates = [p for p in candidates if not (p in seen or seen.add(p))]
 
-    if sensitivity == "public":
-        return candidates
+    allowed: list[str] = []
+    for provider in candidates:
+        ok, reason = _provider_allows_sensitivity(provider, sensitivity, conf)
+        if ok:
+            allowed.append(provider)
+        else:
+            logger.info(
+                "AI Gateway policy: provider=%s origin=%s sensitivity=%s DENY - %s",
+                provider,
+                resolve_provider_origin(provider, conf),
+                sensitivity,
+                reason,
+            )
+    return allowed
 
-    # strict: apenas providers locais
-    if settings.data_sovereignty_mode == "strict":
-        return [p for p in candidates if PROVIDER_LOCALITY.get(p) == "local"]
 
-    # cloud_with_dlp: todos os providers sao permitidos — PII ja foi
-    # redacted pelo pipeline antes de chegar aqui (redact_pii_deep).
-    return candidates
+def describe_effective_policy(cfg: Settings | None = None) -> dict:
+    """DA-43: snapshot LEGIVEL da policy de soberania em vigor.
+
+    Existe para responder a pergunta de um questionario de seguranca de
+    cliente - "para onde vai meu dado confidencial?" - sem nenhum
+    'confia'. Para cada provider conhecido mostra a ORIGIN real
+    resolvida, a localidade, e se pode receber 'public' e 'confidential',
+    sempre com o motivo da decisao.
+
+    NUNCA inclui chave, token ou o conteudo de openai_api_key /
+    azure_openai_api_key - so origens, que nao carregam credencial
+    (normalize_origin descarta userinfo).
+    """
+    conf = cfg or settings
+    known = ["ollama", "openai", "azure_openai"]
+    for extra in (conf.llm_provider, conf.llm_fallback_provider):
+        if extra and extra not in known:
+            known.append(extra)
+
+    providers: dict[str, dict] = {}
+    for name in known:
+        origin = resolve_provider_origin(name, conf)
+        pub_ok, pub_reason = _provider_allows_sensitivity(name, "public", conf)
+        conf_ok, conf_reason = _provider_allows_sensitivity(name, "confidential", conf)
+        providers[name] = {
+            "locality": PROVIDER_LOCALITY.get(name, "unknown"),
+            "origin": origin or None,
+            "may_receive_public": pub_ok,
+            "may_receive_confidential": conf_ok,
+            "public_reason": pub_reason,
+            "confidential_reason": conf_reason,
+            "circuit_open": circuit_breaker.is_open(
+                name, conf.llm_gateway_circuit_cooldown_seconds
+            ),
+        }
+
+    return {
+        "data_sovereignty_mode": conf.data_sovereignty_mode,
+        "sensitivity_default": conf.sensitivity_default,
+        "confidential_allowed_origins": sorted(_allowed_origins(conf)),
+        "routing": {
+            "primary": conf.llm_provider,
+            "fallback": conf.llm_fallback_provider or None,
+            "allowed_for_public": _select_allowed_providers(
+                "public", conf.llm_provider, conf.llm_fallback_provider, conf
+            ),
+            "allowed_for_confidential": _select_allowed_providers(
+                "confidential", conf.llm_provider, conf.llm_fallback_provider, conf
+            ),
+        },
+        "limits": {
+            "max_cost_usd": conf.llm_gateway_max_cost_usd,
+            "request_timeout_seconds": conf.llm_request_timeout_seconds,
+            "circuit_failure_threshold": conf.llm_gateway_circuit_failure_threshold,
+        },
+        "providers": providers,
+        "note": (
+            "A policy e avaliada por ORIGIN (scheme://host[:port]), nao pelo "
+            "rotulo do provider: 'openai' pode apontar para api.openai.com ou "
+            "para qualquer endpoint compativel via OPENAI_BASE_URL. Dado "
+            "confidential so sai se a origin estiver em "
+            "confidential_allowed_origins E data_sovereignty_mode="
+            "'cloud_with_dlp'. Sem isso, so providers locais. Fail-closed."
+        ),
+    }
 
 
 def invoke_via_gateway(
@@ -203,14 +360,23 @@ def invoke_via_gateway(
     """
     cfg = config or settings
     sensitivity = classify_sensitivity(state)
-    allowed = _select_allowed_providers(sensitivity, cfg.llm_provider, cfg.llm_fallback_provider)
+    allowed = _select_allowed_providers(
+        sensitivity, cfg.llm_provider, cfg.llm_fallback_provider, cfg
+    )
 
     if not allowed:
+        reasons = "; ".join(
+            f"{p} ({resolve_provider_origin(p, cfg) or 'origin desconhecida'}): "
+            f"{_provider_allows_sensitivity(p, sensitivity, cfg)[1]}"
+            for p in [cfg.llm_provider]
+            + ([cfg.llm_fallback_provider] if cfg.llm_fallback_provider else [])
+        )
         raise PolicyViolationError(
             f"AI Gateway: incidente classificado como '{sensitivity}' - nenhum "
-            f"provider permitido pela policy (primario='{cfg.llm_provider}', "
-            f"fallback='{cfg.llm_fallback_provider or '(nenhum)'}''). Dado "
-            "confidencial so pode ser roteado para um provider local (ollama)."
+            f"provider permitido pela policy de soberania "
+            f"(primario='{cfg.llm_provider}', "
+            f"fallback='{cfg.llm_fallback_provider or '(nenhum)'}'). "
+            f"Motivos: {reasons}. Diagnose a policy effective em GET /llm/policy."
         )
 
     last_error: Exception | None = None
@@ -249,12 +415,26 @@ def invoke_via_gateway(
         provider_cfg = cfg.model_copy(update={"llm_provider": provider})
         llm = get_chat_model(model_name=model_name, config=provider_cfg)
 
+        # DA-48: anexa o callback de captura de tokens reais (usage) das
+        # respostas do model. Best-effort: sem DATABASE_URL ou sem
+        # callback exposto pelo model, metering_cb fica None e nada muda.
+        metering_cb = attach_metering(
+            llm,
+            provider,
+            model_name=model_name or getattr(llm, "model_name", None) or cfg.llm_model,
+            enabled=bool(cfg.metering_enabled and cfg.database_url),
+        )
+
         started_at = time.monotonic()
         try:
             result = build_and_invoke(llm)
         except TRANSPORT_FAILURE_EXCEPTIONS as exc:
             latency = time.monotonic() - started_at
-            circuit_breaker.record_failure(provider, cfg.llm_gateway_circuit_failure_threshold)
+            circuit_breaker.record_failure(
+                provider,
+                cfg.llm_gateway_circuit_failure_threshold,
+                cfg.llm_gateway_circuit_cooldown_seconds,
+            )
             CIRCUIT_BREAKER_STATE.labels(target=provider).set(
                 1
                 if circuit_breaker.is_open(provider, cfg.llm_gateway_circuit_cooldown_seconds)
@@ -296,12 +476,14 @@ def invoke_via_gateway(
                 latency,
                 exc,
             )
+            record_usage_observed(metering_cb, successful=False)
             last_error = exc
             continue
         else:
             latency = time.monotonic() - started_at
             circuit_breaker.record_success(provider)
             CIRCUIT_BREAKER_STATE.labels(target=provider).set(0)
+            record_usage_observed(metering_cb, successful=True)
             # Registra fallback quando o provider usado não é o primário
             if provider != cfg.llm_provider and cfg.llm_provider:
                 LLM_FALLBACK_TOTAL.labels(

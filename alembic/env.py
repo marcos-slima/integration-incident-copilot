@@ -26,6 +26,10 @@ from alembic import context
 # Garante que o pacote `app` é importável a partir do root do projeto
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+# DA-46/47/48: registro de modelos + credenciais + metering (tabelas
+# `llm_models`/`llm_credentials`/`llm_usage`) — precisam estar no
+# metadata para o `alembic revision --autogenerate` enxerga-las.
+from app.admin.models import IntegrationSystem, LlmCredential, LlmModel, LlmUsage  # noqa: F401
 from app.config import settings
 from app.db import Base
 

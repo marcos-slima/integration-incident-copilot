@@ -17,12 +17,19 @@ dependencies = [
     "langfuse>=4.14",
     "python-dotenv>=1.0",
     "langchain-text-splitters>=1.1.2",
-    "pypdf>=6.15.0",
+    # >=6.16.1: PYSEC-2026-3910/3911/3913 (pypdf 6.15.0). A versao anterior
+    # estava pinada acima do piso com CVEs corrigidos; o job `security` do
+    # CI nao os enxergava (ver [tool.uv] e o comentário de constraint abaixo).
+    "pypdf>=6.16.1",
     "pydantic-settings>=2.14.2",
     # runtime (nao so teste): usado pelo ServiceNowConnector para
     # chamadas HTTP reais contra a Table API
     "httpx>=0.27",
     "fastembed>=0.8.0",
+    # DA-52: parse do EDMX de $metadata (host remoto = entrada nao confiavel).
+    # bandit B314 exige defusedxml para nao estourar DTD/entidade; antes ele
+    # entrava so como transitiva e o fix dependia de outra dependencia.
+    "defusedxml>=0.7.1",
     "numpy>=2.5.1",
     "aiofiles>=25.1.0",
     "ddgs>=9.16.0",
@@ -47,6 +54,13 @@ dependencies = [
     "alembic>=1.13",
     "asyncpg>=0.29",  # driver async nativo (psycopg3 compat)
     "psycopg2-binary>=2.9",  # alembic CLI / migrations sync
+    # DA-47: cifra Fernet p/ credenciais de provedores em repouso no
+    # registro (/admin). Manager via MASTER_KEY em .env (único segredo
+    # restante depois que as chaves dos provedores migram pro banco).
+    "cryptography>=42",
+    # UI admin (/admin - DA-46/48): a interface de manutencao (substitui
+    # edicao manual do .env) e servida pelas proprias paginas Jinja2.
+    "jinja2>=3.1",
     # AMQP 1.0 puro Python para Solace Cloud / SAP AEM (DA-32)
     "python-qpid-proton>=0.39",  # DA-40: AMQP 1.0 (Solace/SAP Event Mesh); substituiu aiormq (0.9.1),
     # Fila assincrona de diagnostico (app/queue.py) - mesmo Redis do
@@ -56,15 +70,14 @@ dependencies = [
     "rq>=2.12.0",
 ]
 
-# Opcional: so necessario se LLM_PROVIDER=openai ou azure_openai no
+[project.optional-dependencies]
+# DA-26: Opcional: so necessario se LLM_PROVIDER=openai ou azure_openai no
 # .env (default e "ollama", que nao precisa disso). Mantido fora das
 # dependencias principais de proposito - o caminho local-first nao
 # deve exigir instalar SDK de nenhum provedor de nuvem.
 openai = [
     "langchain-openai>=0.3",
 ]
-
-[project.optional-dependencies]
 # Observabilidade Prometheus (Fase 2): PROMETHEUS_ENABLED=true exige este extra.
 # pip install -e ".[prometheus]"
 reports = [
@@ -72,10 +85,18 @@ reports = [
     "jinja2>=3.1",        # templates Markdown/HTML
     "psycopg2-binary>=2.9",  # já em deps, mas declarado aqui p/ extra standalone
 ]
-
 prometheus = [
     "prometheus-fastapi-instrumentator>=7.0",
 ]
+
+[tool.uv]
+# CVE-2026-97687/97688/97689 no urllib3 2.7.0 (fix: 2.8.0). urllib3 e'
+# transitivo (requests, langfuse, etc.), entao nao ha linha `urllib3=` em
+# dependencies para subir o piso. Uma constraint e' o mecanismo correto: ela
+# governa a resolucao sem declarar uma dependencia que o projeto nao usa
+# diretamente. Sem isto o pip-audit mantem o processo de seguranca verde
+# sobre uma versao com CVE conhecida.
+constraint-dependencies = ["urllib3>=2.8.0"]
 
 [tool.ruff]
 line-length = 100

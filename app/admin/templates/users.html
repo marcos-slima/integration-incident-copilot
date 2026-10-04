@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% block title %}Usuários da UI · Admin{% endblock %}
+{% block content %}
+<main>
+  <h2>Usuários da UI web (DA-55)</h2>
+  <p style="color: var(--text); margin-bottom: 1.5rem; line-height: 1.6;">
+    Ativação em duas etapas: token por e-mail → código por telefone → login.
+    Sem SMTP/SMS configurados (<strong>out-of-band</strong>), o token/código aparece abaixo —
+    entregue ao usuário pelo canal que você controlar.
+  </p>
+
+  <div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3 style="margin: 0; color: var(--text);">Lista de Usuários</h3>
+      <button class="btn btn-primary" onclick="loadUsers()">🔄 Recarregar</button>
+    </div>
+
+    <div style="overflow-x: auto;">
+      <table id="users">
+        <thead>
+          <tr>
+            <th style="width: 120px;">Usuário</th>
+            <th style="width: 200px;">E-mail</th>
+            <th style="width: 140px;">Telefone</th>
+            <th style="width: 100px;">Status</th>
+            <th style="width: 100px;">E-mail verif.</th>
+            <th style="width: 100px;">Telefone verif.</th>
+            <th style="width: 120px;">Criado por</th>
+            <th style="width: 120px;">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="users-body">
+          <tr><td colspan="8" style="text-align: center; padding: 2rem;">Carregando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--text);">Novo Usuário</h3>
+  <div class="card">
+    <form id="newuser" onsubmit="return addUser(event)">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+        <div class="form-group">
+          <label>Usuário *</label>
+          <input name="username" placeholder="a-z, 0-9, . _ -" required>
+        </div>
+        <div class="form-group">
+          <label>E-mail *</label>
+          <input name="email" type="email" placeholder="example@domain.com" required>
+        </div>
+        <div class="form-group">
+          <label>Telefone *</label>
+          <input name="phone" placeholder="+55 11 9..." required>
+        </div>
+        <div class="form-group">
+          <label>Senha inicial *</label>
+          <input name="password" type="password" placeholder="Mín. 10 caracteres" required>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary">➕ Criar usuário</button>
+    </form>
+  </div>
+
+  <div class="card" style="display: none;" id="handoff-container">
+    <h3 style="margin-top: 0; color: var(--text);">Entrega Out-of-Band</h3>
+    <pre id="handoff" style="background: #1e293b; color: #f1f5f9; padding: 1rem; border-radius: 8px; overflow-x: auto; margin-bottom: 0;"></pre>
+  </div>
+
+  <p class="alert" id="msg" style="background: #fee2e2; border-color: #fecaca; color: #991b1b; display: none;"></p>
+</main>
+
+<script>
+function userPill(status) {
+  const cls = status === 'active' ? 'status-active' : (status === 'disabled' ? 'status-offline' : 'status-degraded');
+  return `<span class="status-badge ${cls}">${escapeHtml(status)}</span>`;
+}
+
+function showHandoff(text) {
+  const el = document.getElementById('handoff');
+  const container = document.getElementById('handoff-container');
+  el.textContent = text;
+  container.style.display = 'block';
+}
+
+function loadUsers() {
+  const btn = document.querySelector('#users + .card + h3 + .card button');
+  const originalText = btn.textContent;
+  btn.textContent = 'Carregando...';
+  btn.disabled = true;
+
+  adminFetch('/admin/api/users').then(r => {
+    if (r.status === 401) throw new Error('Chave admin inválida — insira acima');
+    if (r.status === 503) throw new Error('DB não configurado (DATABASE_URL ausente)');
+    return r.json();
+  }).then(rows => {
+    const tb = document.getElementById('users-body');
+    tb.innerHTML = '';
+    if (!rows.length) {
+      tb.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 2rem; color: var(--text); opacity: 0.7;">Nenhum usuário</td></tr>';
+      btn.textContent = originalText;
+      btn.disabled = false;
+      return;
+    }
+    for (const u of rows) {
+      const tr = document.createElement('tr');
+      const actions = [];
+      if (u.status === 'pending_email')
+        actions.push(`<button onclick="reissue('${u.id}','email-token')" class="btn" style="padding: 0.4rem 0.8rem; background: var(--border);">✉️</button>`);
+      if (u.status === 'pending_phone')
+        actions.push(`<button onclick="reissue('${u.id}','phone-code')" class="btn" style="padding: 0.4rem 0.8rem; background: var(--border);">📱</button>`);
+      if (u.status === 'active')
+        actions.push(`<button onclick="setStatus('${u.id}','disabled')" class="btn btn-danger" style="padding: 0.4rem 0.8rem;">🚫</button>`);
+      if (u.status === 'disabled')
+        actions.push(`<button onclick="setStatus '${u.id}','active')" class="btn btn-success" style="padding: 0.4rem 0.8rem;">✅</button>`);
+      actions.push(`<button onclick="delUser('${u.id}')" class="btn btn-danger" style="padding: 0.4rem 0.8rem;">🗑️</button>`);
+      tr.innerHTML = `
+        <td style="font-weight: 500;">${escapeHtml(u.username)}</td>
+        <td style="font-family: monospace; font-size: 0.9rem;">${escapeHtml(u.email)}</td>
+        <td style="font-family: monospace; font-size: 0.9rem;">${escapeHtml(u.phone)}</td>
+        <td>${userPill(u.status)}</td>
+        <td>${u.email_verified_at ? '✓' : '—'}</td>
+        <td>${u.phone_verified_at ? '✓' : '—'}</td>
+        <td style="font-family: monospace; font-size: 0.9rem; opacity: 0.7;">${escapeHtml(u.created_by)}</td>
+        <td>${actions.join(' ')}</td>`;
+      tb.appendChild(tr);
+    }
+    btn.textContent = originalText;
+    btn.disabled = false;
+  }).catch(e => {
+    const msg = document.getElementById('msg');
+    msg.textContent = e.message;
+    msg.style.display = 'block';
+    btn.textContent = originalText;
+    btn.disabled = false;
+  });
+}
+
+function addUser(ev) {
+  ev.preventDefault();
+  const f = ev.target;
+  const body = {
+    username: f.username.value.trim(),
+    email: f.email.value.trim(),
+    phone: f.phone.value.trim(),
+    password: f.password.value,
+  };
+  adminFetch('/admin/api/users', { method: 'POST', body: JSON.stringify(body) })
+    .then(async r => {
+      if (r.status === 401) throw new Error('Chave admin inválida');
+      const data = await r.json();
+      if (r.status === 409) throw new Error(data.detail || 'Usuário já existe');
+      if (!r.ok) throw new Error(JSON.stringify(data));
+      if (data.activation && data.activation.email_token) {
+        showHandoff(
+          'OUT-OF-BAND — entregue ao usuário pelo canal que você controlar:\n' +
+          'usuário: ' + escapeHtml(data.username) + '\n' +
+          '1) token de e-mail (vale 24h): ' + data.activation.email_token +
+          '\n2) após confirmar o token, reemita o código de telefone aqui.');
+      } else {
+        document.getElementById('msg').textContent =
+          'Criado — token enviado por e-mail de verdade';
+      }
+      f.reset();
+      document.getElementById('handoff-container').style.display = 'none';
+      loadUsers();
+    })
+    .catch(e => {
+      const msg = document.getElementById('msg');
+      msg.textContent = e.message;
+      msg.style.display = 'block';
+    });
+  return false;
+}
+
+function reissue(id, kind) {
+  adminFetch(`/admin/api/users/${id}/${kind}`, { method: 'POST' })
+    .then(async r => {
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.detail || r.status);
+      const a = data.activation || {};
+      if (a.email_token) showHandoff('Token de e-mail (vale 24h): ' + a.email_token);
+      else if (a.phone_code) showHandoff('Código de telefone (vale 10 min): ' + a.phone_code);
+      else document.getElementById('msg').textContent = 'Enviado de verdade';
+      loadUsers();
+    })
+    .catch(e => {
+      const msg = document.getElementById('msg');
+      msg.textContent = e.message;
+      msg.style.display = 'block';
+    });
+}
+
+function setStatus(id, status) {
+  adminFetch(`/admin/api/users/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) })
+    .then(r => { if (!r.ok) throw new Error(r.status); loadUsers(); })
+    .catch(e => {
+      const msg = document.getElementById('msg');
+      msg.textContent = e.message;
+      msg.style.display = 'block';
+    });
+}
+
+function delUser(id) {
+  adminFetch(`/admin/api/users/${id}`, { method: 'DELETE' })
+    .then(r => { if (!r.ok && r.status !== 204) throw new Error(r.status); loadUsers(); })
+    .catch(e => {
+      const msg = document.getElementById('msg');
+      msg.textContent = e.message;
+      msg.style.display = 'block';
+    });
+}
+
+loadUsers();
+</script>
+{% endblock %}

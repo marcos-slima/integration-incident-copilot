@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+{% block title %}Fontes de busca web · Admin{% endblock %}
+{% block content %}
+<main>
+  <h2>Fontes de busca web aprovadas (DA-57)</h2>
+  <p style="color: var(--text); margin-bottom: 1.5rem; line-height: 1.6;">
+    Uma linha por <code>interface_type</code>. É esta lista que monta a query de
+    busca web (termo técnico + filtro de site). A resolução é
+    <strong>fail-closed</strong>: conector <em>sem linha aqui</em> não tem busca
+    web — não existe filtro genérico em código.
+  </p>
+
+  <div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3 style="margin: 0; color: var(--text);">Fontes Aprovadas</h3>
+      <button class="btn btn-primary" onclick="loadSources()">🔄 Recarregar</button>
+    </div>
+
+    <div style="overflow-x: auto;">
+      <table id="sources">
+        <thead>
+          <tr>
+            <th style="width: 100px;">Interface</th>
+            <th style="min-width: 150px;">Termo técnico</th>
+            <th style="min-width: 200px;">Filtro site</th>
+            <th style="width: 80px;">Ativo</th>
+            <th style="min-width: 120px;">Notas</th>
+            <th style="width: 140px;">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="sources-body">
+          <tr><td colspan="6" style="text-align: center; padding: 2rem;">Carregando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--text);">Nova Fonte</h3>
+  <div class="card">
+    <form id="newsource" onsubmit="return addSource(event)">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+        <div class="form-group">
+          <label>Interface *</label>
+          <select name="interface_type">
+            <option value="odata">odata</option>
+            <option value="rfc">rfc</option>
+            <option value="servicenow">servicenow</option>
+            <option value="salesforce">salesforce</option>
+            <option value="workday">workday</option>
+            <option value="ariba">ariba</option>
+            <option value="successfactors">successfactors</option>
+            <option value="cap">cap</option>
+            <option value="apim">apim</option>
+            <option value="po">po</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Termo técnico *</label>
+          <input name="tech_term" placeholder="Ex: OData SAP Gateway" required>
+        </div>
+        <div class="form-group">
+          <label>Filtro site *</label>
+          <input name="site_filter" placeholder="Ex: site:help.sap.com OR site:community.sap.com" required>
+        </div>
+        <div class="form-group">
+          <label>Notas</label>
+          <input name="notes" placeholder="Opcional">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary">➕ Adicionar fonte</button>
+    </form>
+  </div>
+
+  <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--text);">Editar Fonte <span id="edit-id"></span></h3>
+  <div class="card">
+    <form id="edit-form" onsubmit="return saveEdit(event)">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+        <div class="form-group">
+          <label>Termo técnico</label>
+          <input name="tech_term" placeholder="Vazio mantém o atual">
+        </div>
+        <div class="form-group">
+          <label>Filtro site</label>
+          <input name="site_filter" placeholder="Vazio mantém o atual">
+        </div>
+        <div class="form-group">
+          <label>Notas</label>
+          <input name="notes" placeholder="Vazio mantém as atuais">
+        </div>
+      </div>
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <button type="submit" class="btn btn-primary">💾 Salvar</button>
+        <button type="button" onclick="cancelEdit()" class="btn btn-secondary">✕ Cancelar</button>
+      </div>
+      <p style="margin-top: 1rem; padding: 0.75rem; background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; color: #856404;">
+        <strong>Aviso:</strong> <code>interface_type</code> não é editável: trocar o conector de uma linha deixaria a linha antiga servindo o conector errado.
+      </p>
+    </form>
+  </div>
+
+  <p class="alert" id="msg" style="background: #fee2e2; border-color: #fecaca; color: #991b1b; display: none;"></p>
+</main>
+
+<script>
+function loadSources() {
+  const btn = document.querySelector('#sources + .card + h3 + .card button');
+  const originalText = btn.textContent;
+  btn.textContent = 'Carregando...';
+  btn.disabled = true;
+
+  adminFetch('/admin/api/web-search-sources').then(r => {
+    if (r.status === 401) throw new Error('Chave admin inválida — insira acima');
+    if (r.status === 503) throw new Error('DB não configurado (DATABASE_URL ausente)');
+    return r.json();
+  }).then(rows => {
+    const tb = document.getElementById('sources-body');
+    tb.innerHTML = '';
+    if (!rows.length) {
+      tb.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem; color: var(--text); opacity: 0.7;">Nenhuma fonte cadastrada — rode <code>alembic upgrade head</code> para o seed dos 10 conectores</td></tr>';
+      btn.textContent = originalText;
+      btn.disabled = false;
+      return;
+    }
+    for (const s of rows) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="font-family: monospace; font-size: 0.9rem;">${escapeHtml(s.interface_type)}</td>
+        <td style="font-family: sans-serif;">${escapeHtml(s.tech_term)}</td>
+        <td style="font-family: monospace; font-size: 0.85rem;">${escapeHtml(s.site_filter)}</td>
+        <td>${s.enabled ? '<span class="status-badge status-active">Sim</span>' : '<span class="status-badge status-offline">Não</span>'}</td>
+        <td>${escapeHtml(s.notes || '—')}</td>
+        <td>
+          <button onclick="editSource('${s.id}')" class="btn" style="padding: 0.4rem 0.8rem; background: var(--border);">✎</button>
+          <button onclick="toggleSource('${s.id}', ${s.enabled ? 'false' : 'true'})" class="btn" style="padding: 0.4rem 0.8rem; background: var(--border);">🔄</button>
+          <button onclick="delSource('${s.id}')" class="btn btn-danger" style="padding: 0.4rem 0.8rem;">🗑️</button>
+        </td>`;
+      tb.appendChild(tr);
+    }
+    btn.textContent = originalText;
+    btn.disabled = false;
+  }).catch(e => {
+    const msg = document.getElementById('msg');
+    msg.textContent = e.message;
+    msg.style.display = 'block';
+    btn.textContent = originalText;
+    btn.disabled = false;
+  });
+}
+
+function editSource(id) {
+  const f = document.getElementById('edit-form');
+  f.dataset.id = id;
+  f.querySelector('[name=tech_term]').value = '';
+  f.querySelector('[name=site_filter]').value = '';
+  f.querySelector('[name=notes]').value = '';
+  document.getElementById('edit-id').textContent = id;
+  document.getElementById('edit-form').hidden = false;
+}
+
+function cancelEdit() {
+  document.getElementById('edit-form').hidden = true;
+}
+
+function saveEdit(e) {
+  e.preventDefault();
+  const f = e.target;
+  const fd = new FormData(f);
+  const body = {};
+  for (const [k, v] of fd.entries()) if (v !== '') body[k] = v;
+  if (!Object.keys(body).length) { cancelEdit(); return false; }
+  adminFetch('/admin/api/web-search-sources/' + f.dataset.id,
+    {method:'PATCH', body: JSON.stringify(body)})
+    .then(r => r.ok ? null : r.json().then(j => { throw new Error(j.detail); }))
+    .then(() => { cancelEdit(); return loadSources(); })
+    .catch(err => {
+      const msg = document.getElementById('msg');
+      msg.textContent = err.message;
+      msg.style.display = 'block';
+    });
+  return false;
+}
+
+function toggleSource(id, enabled) {
+  adminFetch('/admin/api/web-search-sources/' + id, {method:'PATCH', body: JSON.stringify({enabled})})
+    .then(() => loadSources()).catch(e => {
+      const msg = document.getElementById('msg');
+      msg.textContent = e.message;
+      msg.style.display = 'block';
+    });
+}
+
+function delSource(id) {
+  if (!confirm('Remover esta fonte? O conector volta a ficar sem busca web (fail-closed).')) return;
+  adminFetch('/admin/api/web-search-sources/' + id, {method:'DELETE'})
+    .then(() => loadSources()).catch(e => {
+      const msg = document.getElementById('msg');
+      msg.textContent = e.message;
+      msg.style.display = 'block';
+    });
+}
+
+function addSource(e) {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const body = Object.fromEntries([...f.entries()].map(([k,v]) => [k, v === '' ? null : v]));
+  body.enabled = true;
+  adminFetch('/admin/api/web-search-sources', {method:'POST', body: JSON.stringify(body)})
+    .then(r => r.ok ? loadSources() : r.json().then(j => { throw new Error(j.detail); }))
+    .then(() => e.target.reset())
+    .catch(err => {
+      const msg = document.getElementById('msg');
+      msg.textContent = err.message;
+      msg.style.display = 'block';
+    });
+  return false;
+}
+
+loadSources();
+</script>
+{% endblock %}

@@ -18,6 +18,7 @@ Uso:
 import argparse
 import hashlib
 import json
+import re
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
@@ -38,6 +39,12 @@ from qdrant_client.models import (
 )
 
 from app.config import settings
+from app.rag.embedding_guard import (
+    stamp_collection,
+    verify_collection_embedding,
+)
+from app.rag.retriever import _FastEmbedWrapper
+from app.rag.retriever import _get_embeddings as get_query_embeddings
 
 # §4.5 (avaliacao externa §3.5): pymupdf4llm.use_layout(False) desativa
 # o motor de layout ONNX (BoxRFDGNN) que detecta colunas/tabelas em PDFs.
@@ -198,32 +205,53 @@ def file_hash(path: Path) -> str:
     return h.hexdigest()
 
 
+#: Ordem importa: o primeiro bucket casado vence. As chaves sao CASADAS POR
+#: TOKEN, nunca por substring -- casar por substring classifica
+#: "po_pi_message_ordering.md" como "sales" ("order" dentro de "ordering") e
+#: "apim_..._throttle.md" como "hcm" ("hr" dentro de "throttle").
+CATEGORY_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("security", ("security", "authorization", "auth", "xsuaa")),
+    ("abap", ("abap", "rap", "bapi", "rfc")),
+    ("integration", ("integration", "cpi", "iflow", "idoc", "odata", "api")),
+    ("cap_btp", ("cap", "btp", "cloud")),
+    ("ui", ("fiori", "ui5", "frontend")),
+    ("database", ("hana", "sql", "database", "db")),
+    ("hcm", ("successfactor", "hcm", "hr", "payroll")),
+    ("finance", ("finance", "fi", "co", "accounting")),
+    ("procurement", ("mm", "material", "procurement", "ariba", "vendor")),
+    # "salesforce" e explicito: antes ele so casava porque "sales" e
+    # substring de "salesforce"; com casamento por token cairia em "general".
+    ("sales", ("sd", "sales", "salesforce", "order", "crm")),
+)
+
+_TOKEN_RE = re.compile(r"[A-Z]+(?![a-z])|[A-Z][a-z0-9]*|[a-z0-9]+")
+
+
+def _filename_tokens(filename: str) -> set[str]:
+    """Tokens do nome do arquivo, quebrando snake_case, hifen e camelCase."""
+    stem = Path(filename).stem
+    tokens: set[str] = set()
+    for chunk in re.split(r"[^A-Za-z0-9]+", stem):
+        tokens.update(tok.lower() for tok in _TOKEN_RE.findall(chunk))
+    return tokens
+
+
+def _token_matches(token: str, keyword: str) -> bool:
+    """Token casa com a keyword: exato ou plural simples (orders -> order)."""
+    return token == keyword or token == f"{keyword}s" or token == f"{keyword}es"
+
+
 def infer_category(filename: str) -> str:
-    name = filename.lower()
-    if any(k in name for k in ["security", "authorization", "auth", "xsuaa"]):
-        return "security"
-    if any(k in name for k in ["abap", "rap", "bapi", "rfc"]):
-        return "abap"
-    if any(k in name for k in ["integration", "cpi", "iflow", "idoc", "odata", "api"]):
-        return "integration"
-    if any(k in name for k in ["cap", "btp", "cloud"]):
-        return "cap_btp"
-    if any(k in name for k in ["fiori", "ui5", "frontend"]):
-        return "ui"
-    if any(k in name for k in ["hana", "sql", "database", "db"]):
-        return "database"
-    if any(k in name for k in ["successfactor", "hcm", "hr", "payroll"]):
-        return "hcm"
-    if any(k in name for k in ["finance", "fi", "co", "accounting"]):
-        return "finance"
-    if any(k in name for k in ["mm", "material", "procurement", "ariba", "vendor"]):
-        return "procurement"
-    if any(k in name for k in ["sd", "sales", "order", "crm"]):
-        return "sales"
+    tokens = _filename_tokens(filename)
+    if not tokens:
+        return "general"
+    for category, keywords in CATEGORY_KEYWORDS:
+        if any(_token_matches(token, kw) for token in tokens for kw in keywords):
+            return category
     return "general"
 
 
-def probe_vector_size(embeddings: OllamaEmbeddings) -> int:
+def probe_vector_size(embeddings: OllamaEmbeddings | _FastEmbedWrapper) -> int:
     return len(embeddings.embed_query("probe"))
 
 
@@ -232,6 +260,7 @@ def ensure_collection(
     collection_name: str,
     vector_size: int,
     hybrid: bool,
+    embedding_model: str,
     allow_recreate: bool = False,
 ) -> None:
     """Cria a collection se nao existir. Se existir com schema
@@ -242,6 +271,21 @@ def ensure_collection(
     needs_recreate = False
     if collection_name in existing:
         info = client.get_collection(collection_name)
+        # DA-45: a checagem de dimensao ABAXO nao basta. Dois modelos
+        # de embedding diferentes podem ter a mesma dimensao (768 e' a
+        # mais comum do ecossistema) e produzem espacos vetoriais
+        # incomparaveis - a busca passaria a devolver respostas
+        # plausiveis e erradas em vez de erro. Aqui a identidade do
+        # modelo e' conferida contra a collection lateral de identidade.
+        aviso_embedding = verify_collection_embedding(
+            client,
+            collection_name,
+            expected_model=embedding_model,
+            expected_size=vector_size,
+        )
+        if aviso_embedding:
+            print(f"AVISO: {aviso_embedding}")
+
         vectors = info.config.params.vectors
         sparse_vectors = getattr(info.config.params, "sparse_vectors", None)
         has_named_dense = isinstance(vectors, dict) and "dense" in vectors
@@ -284,6 +328,11 @@ def ensure_collection(
                 vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
             )
         print(f"Collection '{collection_name}' criada ({'hybrid' if hybrid else 'dense-only'}).")
+        # DA-45: grava AGORA a identidade do embedding, nao no fim do run.
+        # Um ingest interrompido no meio deixa a collection com metadado,
+        # e o proximo run sabe o que espera; gravar so no fim deixaria
+        # uma collection meio-ingestada indistinguivel de uma vergine.
+        stamp_collection(client, collection_name, embedding_model)
         # Payload indexes para campos usados em filtros — melhora performance
         # à medida que a collection cresce (Qdrant docs: payload indexes).
         for field_name, field_schema in [
@@ -300,6 +349,44 @@ def ensure_collection(
                 )
             except Exception:  # noqa: BLE001 S110
                 pass  # índice já existe ou versão do Qdrant não suporta — não crítico
+
+
+def stamp_existing_collection(client: QdrantClient, collection_name: str, embeddings) -> None:
+    """DA-45: carimba a identidade de uma collection EXISTENTE, guard antes.
+
+    O aviso do guard promete "um reindex sem --reset gravara a identidade"
+    — o caminho de 'nada a fazer' do run_ingest devolvia ANTES do stamp e
+    quebrava a promessa: numa collection 100% indexada pre-DA-45 (tudo no
+    state), nenhum reincremental carimbava nada e o aviso aparecia para
+    sempre. Este e' exatamente o caminho de migracao que o aviso descreve.
+
+    Ordem deliberada: guard -> stamp (nunca o contrario). Divergencia
+    comprovada (fingerprint diferente ou dimensao incompativel) levanta
+    ANTES de gravar — carimbar por cima de divergencia comprovada seria
+    inventar identidade. O stamp acontece so em identidade ausente
+    (migracao pre-DA-45) ou identidade igual (reescreve o mesmo valor).
+    A collection e' criada em lugar nenhum aqui: no-op run nao cria
+    collection vazia.
+
+    Args:
+        client: QdrantClient pronto para uso.
+        collection_name: nome da collection a ser carimbada.
+        embeddings: embedder instanciado (para probe de tamanho).
+    """
+    existing = {c.name for c in client.get_collections().collections}
+    if collection_name not in existing:
+        return
+    vector_size = probe_vector_size(embeddings)
+    aviso = verify_collection_embedding(
+        client, collection_name, expected_model=EMBEDDING_MODEL, expected_size=vector_size
+    )
+    if aviso:
+        print(f"AVISO: {aviso}")
+        print(
+            f"[DA-45] {collection_name}: gravando identidade do embedding corrente "
+            f"('{EMBEDDING_MODEL}') — migracao de collection pre-DA-45."
+        )
+    stamp_collection(client, collection_name, EMBEDDING_MODEL)
 
 
 def deterministic_point_id(document_id: str, chunk_index: int) -> str:
@@ -414,17 +501,47 @@ def run_ingest(
             print(f"Collection '{cfg['collection']}' removida por --reset-collection.")
 
     if not pending:
+        # DA-45: o early-exit de 'nada a fazer' devolvia antes do stamp e
+        # quebrava a promessa do aviso do guard. Chama stamp_existing_collection
+        # para carimbar a identidade (se existir) e fechar o buraco.
+        embeddings = get_query_embeddings()
+        stamp_existing_collection(client, cfg["collection"], embeddings)
         print(f"[{target}] Nada a fazer.")
         return 0
 
-    embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
+    # DA-38: a INGESTAO precisa respeitar EMBEDDING_BACKEND tanto quanto a
+    # consulta. Antes ela ignorava a variavel e usava Ollama fixo, enquanto
+    # `retriever._get_embeddings()` respeitava. O job `rag-quality` do CI
+    # ingeria com fastembed mas a ingestao montava a collection com o
+    # nomic-embed-text do Ollama: os pontos saiam 384 (bge-small) numa
+    # collection de 768, e a consulta falhava com
+    # "expected dim: 768, got 384". Nao era ambiente: o job do GitHub roda
+    # sem Ollama, entao la a ingestao nem completava. Agora a ingestao e a
+    # consulta usam o MESMO embedder, e a dimensao da collection e' sempre
+    # medida do embedder em maos (probe), nunca assumida.
+    embeddings = get_query_embeddings()
     splitter = MarkdownTextSplitter(
         chunk_size=cfg["chunk_size"], chunk_overlap=cfg["chunk_overlap"]
     )
     vector_size = probe_vector_size(embeddings)
     ensure_collection(
-        client, cfg["collection"], vector_size, cfg["hybrid"], allow_recreate=reset_collection
+        client,
+        cfg["collection"],
+        vector_size,
+        cfg["hybrid"],
+        embedding_model=EMBEDDING_MODEL,
+        allow_recreate=reset_collection,
     )
+    # DA-45: reaffirma a identidade a CADA run, nao so na criacao da
+    # collection. `ensure_collection` so grava quando cria; num reindex
+    # incremental (o caso normal deste corpus) a collection ja existia e
+    # o stamp nunca acontecia - a identidade ficava ausente para sempre,
+    # que e' o estado que o guard trata como "nao sei". Como o guard
+    # acima ja falha duro quando ha divergencia comprovada, chegar
+    # aqui significa que a identidade ausente NAO era divergencia: e
+    # collection pre-DA-45 no embedding corrente, ou nao gravada. Nos
+    # dois casos o gravar agora e' a acao que fecha o buraco.
+    stamp_collection(client, cfg["collection"], EMBEDDING_MODEL)
 
     # Carrega o BM25 antes do paralelismo; o acesso posterior e somente para
     # gerar vetores, nao para inicializar/downloadar o modelo em varias threads.

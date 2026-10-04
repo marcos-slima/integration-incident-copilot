@@ -63,12 +63,27 @@ def test_real_connector_data_is_confidential():
     assert classify_sensitivity({"connector_data": _real_connector_data()}) == "confidential"
 
 
-def test_mock_connector_data_is_public():
-    assert classify_sensitivity({"connector_data": _mock_connector_data()}) == "public"
+@pytest.fixture
+def public_default(monkeypatch):
+    """B-04: incidentes sem dado real de conector sao 'confidential' por
+    default - testes de roteamento de dado publico ligam o opt-out."""
+    monkeypatch.setattr("app.llm.gateway.settings.sensitivity_default", "public")
 
 
-def test_no_connector_data_is_public():
+def test_mock_connector_data_uses_sensitivity_default():
+    state = {"connector_data": _mock_connector_data()}
+    assert classify_sensitivity(state) == "confidential"
+
+
+def test_no_connector_data_is_confidential_by_default():
+    """B-04: texto livre pode conter dado empresarial nao reconhecido pela
+    redacao por regex - nao classificado = sensivel."""
+    assert classify_sensitivity({"description": "erro generico"}) == "confidential"
+
+
+def test_no_connector_data_is_public_when_opted_out(public_default):
     assert classify_sensitivity({"description": "erro generico"}) == "public"
+    assert classify_sensitivity({"connector_data": _mock_connector_data()}) == "public"
 
 
 # ---------------------------------------------------------------------
@@ -195,7 +210,7 @@ def test_confidential_data_with_only_cloud_configured_raises_policy_violation():
         )
 
 
-def test_public_data_falls_back_to_cloud_on_transport_failure():
+def test_public_data_falls_back_to_cloud_on_transport_failure(public_default):
     cfg = Settings(llm_provider="ollama", llm_fallback_provider="openai", openai_api_key="fake")
     calls = []
 
@@ -231,7 +246,7 @@ def test_all_providers_failing_raises_configuration_error():
         )
 
 
-def test_budget_rejection_skips_call_without_invoking_provider():
+def test_budget_rejection_skips_call_without_invoking_provider(public_default):
     cfg = Settings(llm_provider="openai", openai_api_key="fake", llm_gateway_max_cost_usd=0.0001)
 
     def fake_build_and_invoke(llm):
@@ -246,7 +261,7 @@ def test_budget_rejection_skips_call_without_invoking_provider():
         )
 
 
-def test_open_circuit_skips_provider_without_invoking_it():
+def test_open_circuit_skips_provider_without_invoking_it(public_default):
     cfg = Settings(
         llm_provider="ollama",
         llm_fallback_provider="openai",

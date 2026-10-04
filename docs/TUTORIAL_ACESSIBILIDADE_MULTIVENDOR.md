@@ -224,13 +224,12 @@ só o que for usar.
   --extra openai`, mantendo o caminho local-first default sem SDK de
   nuvem nenhum.
 
-### 4.4 `docker-compose.yml` (novo arquivo, raiz do projeto)
+### 4.4 `docker-compose.yml`
 
 Sobe `api` + `ollama` + `qdrant` com um `docker compose up -d` só —
-self-contained, sem depender do `~/ai-stack` pessoal (que traz Neo4j
-+ Langfuse completo, úteis no dia a dia mas não necessários só para
-rodar/demonstrar o projeto uma vez). Langfuse continua opcional via
-variáveis de ambiente vazias.
+self-contained, sem depender de infra externa (Neo4j opcional para
+GraphRAG, Langfuse opcional para observabilidade). Langfuse e Neo4j
+continuam opcionais via variáveis de ambiente vazias.
 
 ### 4.5 `.vscode/launch.json`
 
@@ -276,7 +275,7 @@ existia para o resto do projeto.
 
 ```bash
 # 1. Clonar e instalar
-git clone https://github.com/marcos-slima/sap-integration-copilot.git
+git clone https://github.com/marcos-slima/integration-incident-copilot.git
 cd integration-incident-copilot
 uv sync --extra dev            # so o caminho local-first
 uv sync --extra dev --extra openai   # se tambem quiser testar o provider OpenAI

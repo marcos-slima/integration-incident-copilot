@@ -1,0 +1,54 @@
+# B-02: worker RQ que consome a fila "diagnosis" - processa os eventos
+# enfileirados por POST /events/incident (e POST /diagnose/async). Sem
+# ele, com REDIS_URL configurada, os eventos ficariam na fila sem
+# processamento. Mesma imagem, ConfigMap e Secret da API
+# (deployment.yaml); mesmo equivalente ao servico "worker" do
+# docker-compose.yml.
+#
+# Pre-requisito: o Redis apontado por REDIS_URL (configmap.yaml) - nao
+# faz parte deste bundle de manifests.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sap-integration-copilot-worker
+  namespace: sap-integration-copilot
+  labels:
+    app.kubernetes.io/name: sap-integration-copilot-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sap-integration-copilot-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sap-integration-copilot-worker
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: "<REGISTRY>/sap-integration-copilot:<TAG>"
+          command: [".venv/bin/rq"]
+          # $(REDIS_URL) e expandido pelo kubelet a partir do envFrom
+          args: ["worker", "--url", "$(REDIS_URL)", "diagnosis"]
+          envFrom:
+            - configMapRef:
+                name: sap-integration-copilot-config
+            - secretRef:
+                name: sap-integration-copilot-secrets
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]

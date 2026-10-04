@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Fase 4 — Relatórios Agendados de Observabilidade.
 
 Gera relatórios diários ou semanais em Excel (.xlsx) e Markdown (.md)
@@ -25,13 +24,13 @@ import logging
 import os
 import re
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import psycopg2
 import psycopg2.extras
-from jinja2 import Environment, BaseLoader
+from jinja2 import BaseLoader, Environment
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
@@ -47,6 +46,7 @@ log = logging.getLogger(__name__)
 # Conexão
 # ---------------------------------------------------------------------------
 
+
 def _sync_url(raw: str) -> str:
     """Converte URL asyncpg → psycopg2 e adapta host para ambiente Docker.
 
@@ -58,6 +58,7 @@ def _sync_url(raw: str) -> str:
     url = re.sub(r"^postgres://", "postgresql://", url)
     # Dentro do Docker, substitui localhost/127.0.0.1 pelo hostname do servico
     import os
+
     if os.path.exists("/.dockerenv"):
         url = re.sub(r"@(localhost|127\.0\.0\.1)(:\d+)?/", "@postgres\\2/", url)
     return url
@@ -74,8 +75,9 @@ def _connect(database_url: str) -> psycopg2.extensions.connection:
 # Janela de tempo
 # ---------------------------------------------------------------------------
 
+
 def _time_window(period: str) -> tuple[datetime, datetime]:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if period == "weekly":
         since = now - timedelta(days=7)
     else:  # daily
@@ -195,7 +197,10 @@ SELECT
     ROUND(AVG(model_confidence)::numeric, 3)                          AS avg_confidence,
     ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency_ms))  AS p95_latency_ms,
     COUNT(*) FILTER (WHERE llm_provider_used LIKE '%%fallback%%')    AS fallbacks_llm,
-    COUNT(*) FILTER (WHERE evidence_strength IN ('high','critical'))  AS high_critical_evidence
+    -- DA-50 fix: evidence_strength e FLOAT desde a migration 002 - o
+    -- predicado textual IN ('high','critical') quebrava a query com
+    -- "invalid input syntax for type double precision".
+    COUNT(*) FILTER (WHERE evidence_strength >= 0.7)                  AS high_critical_evidence
 FROM incidents
 WHERE created_at BETWEEN %(since)s AND %(until)s;
 """
@@ -255,8 +260,8 @@ def _fetch(conn: psycopg2.extensions.connection, sql: str, params: dict) -> list
 
 _HEADER_FILL = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
 _HEADER_FONT = Font(bold=True, color="FFFFFF", size=10)
-_TITLE_FONT  = Font(bold=True, size=13, color="1F4E79")
-_ALT_FILL    = PatternFill(start_color="EBF3FB", end_color="EBF3FB", fill_type="solid")
+_TITLE_FONT = Font(bold=True, size=13, color="1F4E79")
+_ALT_FILL = PatternFill(start_color="EBF3FB", end_color="EBF3FB", fill_type="solid")
 
 
 def _write_sheet_table(
@@ -286,6 +291,10 @@ def _write_sheet_table(
             val = row[key]
             if isinstance(val, datetime):
                 val = val.strftime("%Y-%m-%d %H:%M")
+            # A-14: sanitiza formula injection em XLSX — prefixos =,+,-,@ são
+            # interpretados pelo Excel como fórmulas; prefixamos com ' para forçar texto.
+            if isinstance(val, str) and val and val[0] in ("=", "+", "-", "@"):
+                val = "'" + val
             cell = ws.cell(r_idx, col, val)
             if fill:
                 cell.fill = fill
@@ -301,12 +310,20 @@ def _write_sheet_table(
     return header_row + len(rows) + 2
 
 
+def _sanitize_xlsx_cell(val):
+    """A-14: evita formula injection no Excel prefixando =,+,-,@ com '."""
+    if isinstance(val, str) and val and val[0] in ("=", "+", "-", "@"):
+        return "'" + val
+    return val
+
+
 def _kv_sheet(ws, title: str, data: dict) -> None:
     ws.cell(1, 1, title).font = _TITLE_FONT
     for r, (k, v) in enumerate(data.items(), 3):
         label = str(k).replace("_", " ").title()
         ws.cell(r, 1, label).font = Font(bold=True)
-        ws.cell(r, 2, v if not isinstance(v, datetime) else v.strftime("%Y-%m-%d %H:%M"))
+        v_safe = v if not isinstance(v, datetime) else v.strftime("%Y-%m-%d %H:%M")
+        ws.cell(r, 2, _sanitize_xlsx_cell(v_safe))
     ws.column_dimensions["A"].width = 30
     ws.column_dimensions["B"].width = 25
 
@@ -318,7 +335,7 @@ def _kv_sheet(ws, title: str, data: dict) -> None:
 _MD_TEMPLATE = """\
 # {{ title }}
 
-**Período:** {{ since }} → {{ until }}  
+**Período:** {{ since }} → {{ until }}
 **Gerado em:** {{ generated_at }}
 
 ---
@@ -328,7 +345,7 @@ _MD_TEMPLATE = """\
 | Métrica | Valor |
 |---|---|
 {% for k, v in summary.items() -%}
-| {{ k | replace('_', ' ') | title }} | {{ v }} |
+| {{ k | replace('_', ' ') | title }} | {{ v | md_cell }} |
 {% endfor %}
 
 {% for section in sections %}
@@ -338,7 +355,7 @@ _MD_TEMPLATE = """\
 | {{ section.rows[0].keys() | join(' | ') }} |
 | {{ ['---'] * (section.rows[0].keys() | list | length) | join(' | ') }} |
 {% for row in section.rows -%}
-| {{ row.values() | join(' | ') }} |
+| {{ row.values() | map('md_cell') | join(' | ') }} |
 {% endfor %}
 {% else %}
 _Sem dados no período._
@@ -357,13 +374,22 @@ def _render_markdown(
     summary: dict,
     sections: list[dict],
 ) -> str:
+    # A-14: autoescape=False é intencional para Markdown (não é HTML), mas valores
+    # de células são sanitizados antes de serem passados ao template (ver _sanitize_md_cell).
     env = Environment(loader=BaseLoader(), autoescape=False)
+
+    def _sanitize_md_cell(val) -> str:
+        """Escapa pipes e newlines dentro de células de tabela Markdown."""
+        s = str(val) if val is not None else ""
+        return s.replace("|", "\\|").replace("\n", " ").replace("\r", "")
+
+    env.filters["md_cell"] = _sanitize_md_cell
     tpl = env.from_string(_MD_TEMPLATE)
     return tpl.render(
         title=title,
         since=since.strftime("%Y-%m-%d %H:%M UTC"),
         until=until.strftime("%Y-%m-%d %H:%M UTC"),
-        generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        generated_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         summary=summary,
         sections=sections,
     )
@@ -373,19 +399,22 @@ def _render_markdown(
 # Geradores por audiência
 # ---------------------------------------------------------------------------
 
-def _report_coi(conn, params: dict, since: datetime, until: datetime, wb: Workbook, out_dir: Path, label: str) -> None:
+
+def _report_coi(
+    conn, params: dict, since: datetime, until: datetime, wb: Workbook, out_dir: Path, label: str
+) -> None:
     summary_rows = _fetch(conn, _Q_COI_SUMMARY, params)
-    by_domain    = _fetch(conn, _Q_COI_BY_DOMAIN, params)
-    top_causes   = _fetch(conn, _Q_COI_TOP_CAUSES, params)
-    recent       = _fetch(conn, _Q_COI_RECENT, params)
+    by_domain = _fetch(conn, _Q_COI_BY_DOMAIN, params)
+    top_causes = _fetch(conn, _Q_COI_TOP_CAUSES, params)
+    recent = _fetch(conn, _Q_COI_RECENT, params)
 
     summary = summary_rows[0] if summary_rows else {}
     # Taxa de verificação / acuracidade
-    total    = summary.get("total") or 0
+    total = summary.get("total") or 0
     verified = summary.get("verified") or 0
-    correct  = summary.get("correct") or 0
+    correct = summary.get("correct") or 0
     summary["taxa_verificacao_pct"] = f"{100 * verified / total:.1f}%" if total else "n/a"
-    summary["acuracidade_pct"]      = f"{100 * correct / verified:.1f}%" if verified else "n/a"
+    summary["acuracidade_pct"] = f"{100 * correct / verified:.1f}%" if verified else "n/a"
 
     # Excel
     ws = wb.create_sheet("COI-IOC Resumo")
@@ -403,7 +432,8 @@ def _report_coi(conn, params: dict, since: datetime, until: datetime, wb: Workbo
     # Markdown
     md = _render_markdown(
         title=f"IIC — COI/IOC: Relatório {label.title()}",
-        since=since, until=until,
+        since=since,
+        until=until,
         summary=summary,
         sections=[
             {"title": "Por Domínio de Agente", "rows": by_domain},
@@ -414,17 +444,19 @@ def _report_coi(conn, params: dict, since: datetime, until: datetime, wb: Workbo
     log.info("COI/IOC markdown → %s", out_dir / f"coi_ioc_{label}.md")
 
 
-def _report_soc(conn, params: dict, since: datetime, until: datetime, wb: Workbook, out_dir: Path, label: str) -> None:
-    summary_rows    = _fetch(conn, _Q_SOC_SUMMARY, params)
-    by_sensitivity  = _fetch(conn, _Q_SOC_BY_SENSITIVITY, params)
-    pii_incidents   = _fetch(conn, _Q_SOC_PII_INCIDENTS, params)
+def _report_soc(
+    conn, params: dict, since: datetime, until: datetime, wb: Workbook, out_dir: Path, label: str
+) -> None:
+    summary_rows = _fetch(conn, _Q_SOC_SUMMARY, params)
+    by_sensitivity = _fetch(conn, _Q_SOC_BY_SENSITIVITY, params)
+    pii_incidents = _fetch(conn, _Q_SOC_PII_INCIDENTS, params)
 
     summary = summary_rows[0] if summary_rows else {}
-    pii_total   = summary.get("pii_total") or 0
+    pii_total = summary.get("pii_total") or 0
     pii_redigido = summary.get("pii_redigido") or 0
     summary["taxa_redacao_pct"] = f"{100 * pii_redigido / pii_total:.1f}%" if pii_total else "n/a"
 
-    ws  = wb.create_sheet("SOC Resumo")
+    ws = wb.create_sheet("SOC Resumo")
     _kv_sheet(ws, "SOC — Resumo Executivo", summary)
 
     ws2 = wb.create_sheet("SOC Por Sensibilidade")
@@ -435,7 +467,8 @@ def _report_soc(conn, params: dict, since: datetime, until: datetime, wb: Workbo
 
     md = _render_markdown(
         title=f"IIC — SOC: Relatório {label.title()}",
-        since=since, until=until,
+        since=since,
+        until=until,
         summary=summary,
         sections=[
             {"title": "Por Nível de Sensibilidade", "rows": by_sensitivity},
@@ -446,15 +479,17 @@ def _report_soc(conn, params: dict, since: datetime, until: datetime, wb: Workbo
     log.info("SOC markdown → %s", out_dir / f"soc_{label}.md")
 
 
-def _report_ipaas(conn, params: dict, since: datetime, until: datetime, wb: Workbook, out_dir: Path, label: str) -> None:
-    summary_rows  = _fetch(conn, _Q_IPAAS_SUMMARY, params)
-    by_interface  = _fetch(conn, _Q_IPAAS_BY_INTERFACE, params)
-    by_provider   = _fetch(conn, _Q_IPAAS_BY_PROVIDER, params)
-    recent        = _fetch(conn, _Q_IPAAS_RECENT, params)
+def _report_ipaas(
+    conn, params: dict, since: datetime, until: datetime, wb: Workbook, out_dir: Path, label: str
+) -> None:
+    summary_rows = _fetch(conn, _Q_IPAAS_SUMMARY, params)
+    by_interface = _fetch(conn, _Q_IPAAS_BY_INTERFACE, params)
+    by_provider = _fetch(conn, _Q_IPAAS_BY_PROVIDER, params)
+    recent = _fetch(conn, _Q_IPAAS_RECENT, params)
 
     summary = summary_rows[0] if summary_rows else {}
 
-    ws  = wb.create_sheet("iPaaS Resumo")
+    ws = wb.create_sheet("iPaaS Resumo")
     _kv_sheet(ws, "iPaaS — Resumo Executivo", summary)
 
     ws2 = wb.create_sheet("iPaaS Por Interface")
@@ -468,7 +503,8 @@ def _report_ipaas(conn, params: dict, since: datetime, until: datetime, wb: Work
 
     md = _render_markdown(
         title=f"IIC — iPaaS: Relatório {label.title()}",
-        since=since, until=until,
+        since=since,
+        until=until,
         summary=summary,
         sections=[
             {"title": "Por Tipo de Interface", "rows": by_interface},
@@ -483,10 +519,12 @@ def _report_ipaas(conn, params: dict, since: datetime, until: datetime, wb: Work
 # Entry-point
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="IIC — gerador de relatórios Fase 4")
     parser.add_argument(
-        "--period", choices=["daily", "weekly"],
+        "--period",
+        choices=["daily", "weekly"],
         default=os.getenv("REPORT_PERIOD", "daily"),
         help="Janela de tempo do relatório (padrão: daily)",
     )
@@ -496,7 +534,8 @@ def main() -> None:
         help="Diretório de saída (padrão: reports/)",
     )
     parser.add_argument(
-        "--audience", choices=["all", "coi", "soc", "ipaas"],
+        "--audience",
+        choices=["all", "coi", "soc", "ipaas"],
         default="all",
         help="Audiência do relatório (padrão: all)",
     )
@@ -512,13 +551,13 @@ def main() -> None:
 
     since, until = _time_window(args.period)
     label = args.period  # "daily" | "weekly"
-    ts    = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M")
+    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M")
     params: dict[str, Any] = {"since": since, "until": until}
 
     log.info("Período: %s → %s (%s)", since.isoformat(), until.isoformat(), label)
 
     conn = _connect(database_url)
-    wb   = Workbook()
+    wb = Workbook()
     wb.remove(wb.active)  # remove aba default em branco
 
     try:

@@ -47,3 +47,22 @@ dev_rfc.log
 .precommit-cache-tmp/
 reports/
 !reports/.gitkeep
+
+# Artefatos locais de ambiente (IA local / backups manuais)
+*.bak-*
+Modelfile
+.continue/
+
+# Documentação privada de treinamento (não versionada)
+docs/DA_AULA_*.md
+docs/DEPLOYMENT.md
+docs/GUIA_DE_ESTUDOS.md
+docs/MODOLO_*.md
+docs/TRILHA_ESTUDOS_AGENTES_IA.md
+docs/ferramentas-sustentacao-ecossistema.md
+docs/a2a-interoperability-layer.md
+docs/PROCESSO_DESENVOLVIMENTO.md
+docs/INGEST_REFERENCE.md
+
+# Relatórios/auditorias gerados manualmente (não versionados)
+ARCHITECTURE_REVIEW.md

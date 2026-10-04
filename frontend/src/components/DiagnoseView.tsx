@@ -20,9 +20,12 @@ import { Badge } from './Badge';
 // Props do componente
 interface DiagnoseViewProps {
   onResult: (item: HistoryItem) => void; // callback para adicionar ao histórico
+  onSessionExpired: () => void; // DA-54: 401 devolve para a tela de login
 }
 
-// Sistemas disponíveis no dropdown
+// Sistemas disponíveis no dropdown — os 9 conectores do pipeline
+// (app/connectors/__init__.py::_REGISTRY). O gate connector_reachable
+// reprova se um conector registrado faltar aqui.
 const SYSTEMS: Array<[string, string]> = [
   ['', 'Sem conector (texto livre)'],
   ['odata', 'OData / SAP Gateway'],
@@ -31,8 +34,10 @@ const SYSTEMS: Array<[string, string]> = [
   ['salesforce', 'Salesforce CRM'],
   ['workday', 'Workday HCM'],
   ['ariba', 'SAP Ariba'],
+  ['successfactors', 'SAP SuccessFactors EC'],
   ['cap', 'SAP CAP / BTP'],
   ['apim', 'SAP API Management'],
+  ['po', 'SAP PO/PI (on-premise)'],
 ];
 
 // Limite de tamanho de arquivo p/ upload - alinhado ao limite do backend
@@ -58,7 +63,7 @@ interface UploadedFile {
   target: 'logs' | 'payload';
 }
 
-export function DiagnoseView({ onResult }: DiagnoseViewProps) {
+export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) {
   // Estado do formulário
   const [desc, setDesc]       = useState('');
   const [sys, setSys]         = useState('');
@@ -104,8 +109,15 @@ export function DiagnoseView({ onResult }: DiagnoseViewProps) {
       setTimeout(() => resultRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     } catch (e) {
       if (e instanceof ApiError) {
-        // Erro HTTP do backend (401, 422, 429, 500)
-        setError(`Erro ${e.status}: ${e.message}`);
+        if (e.status === 401) {
+          // DA-54: sessão expirada em pleno uso — o App troca para a
+          // tela de login com aviso; aqui só o rastro do motivo
+          setError('Sessão expirada (401) — entre novamente.');
+          onSessionExpired();
+        } else {
+          // Erro HTTP do backend (422, 429, 500)
+          setError(`Erro ${e.status}: ${e.message}`);
+        }
       } else {
         // Erro de rede (servidor offline, timeout)
         setError('Falha na comunicação com o servidor. Verifique se o backend está ativo.');
@@ -347,7 +359,7 @@ export function DiagnoseView({ onResult }: DiagnoseViewProps) {
         <div className="result-card" ref={resultRef}>
           <div className="result-header">
             <span className="result-header-title">Resultado do diagnóstico</span>
-            <Badge value={result.confidence} />
+            <Badge value={result.diagnosis_confidence} />
           </div>
           <div className="result-body">
             <div className="section-label">Causa raiz provável</div>

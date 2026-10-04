@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Admin · Integration Copilot{% endblock %}</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f8fafc; --card: #ffffff; --text: #1e293b; --border: #e2e8f0; --accent: #3b82f6; --success: #10b981; --warning: #f59e0b; --error: #ef4444; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0f172a; --card: #1e293b; --text: #f1f5f9; --border: #334155; --accent: #60a5fa; } }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 0; line-height: 1.6; }
+  header { background: var(--card); border-bottom: 1px solid var(--border); padding: 1.5rem 2rem; position: sticky; top: 0; z-index: 100; }
+  nav { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; }
+  nav a { color: var(--text); text-decoration: none; padding: 0.5rem 1rem; border-radius: 6px; transition: all 0.2s; font-weight: 500; }
+  nav a:hover { background: var(--border); }
+  nav a.active { background: var(--accent); color: white; }
+  main { max-width: 1200px; margin: 2rem auto; padding: 0 1.5rem 4rem; }
+  h1 { font-size: 2rem; margin-bottom: 1.5rem; color: var(--text); }
+  h2 { font-size: 1.5rem; margin: 2rem 0 1rem; border-bottom: 2px solid var(--border); padding-bottom: 0.5rem; color: var(--text); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .card-header { font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; color: var(--text); display: flex; align-items: center; gap: 0.5rem; }
+  .card-header .icon { font-size: 1.2em; }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 1rem; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  th, td { padding: 1rem; text-align: left; border-bottom: 1px solid var(--border); }
+  th { background: var(--border); font-size: 0.9rem; font-weight: 600; color: var(--text); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--border); }
+  .pill { border-radius: 999px; padding: 0.25rem 0.75rem; font-size: 0.8rem; font-weight: 500; display: inline-flex; align-items: center; gap: 0.35rem; }
+  .ok { background: #d1fae5; color: var(--success); } .ok::before { content: '● '; }
+  .warn { background: #fef3c7; color: var(--warning); } .warn::before { content: '● '; }
+  .err { background: #fee2e2; color: var(--error); } .err::before { content: '● '; }
+  .muted { opacity: 0.7; font-size: 0.9rem; }
+  .btn { padding: 0.6rem 1.2rem; border: none; border-radius: 8px; cursor: pointer; font-weight: 500; transition: all 0.2s; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+  .btn-danger { background: var(--error); color: white; }
+  .btn-success { background: var(--success); color: white; }
+  .btn:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.15); }
+  .form-group { margin-bottom: 1rem; }
+  .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; color: var(--text); }
+  .form-group input, .form-group select { width: 100%; padding: 0.75rem; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text); font-size: 1rem; }
+  .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+  .filters { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; padding: 1rem; background: var(--border); border-radius: 8px; }
+  .filters input, .filters select { flex: 1; min-width: 150px; }
+  .filters button { padding: 0.6rem 1.2rem; background: var(--accent); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 500; }
+  .filters button:hover { opacity: 0.9; }
+  .filters button.secondary { background: var(--border); color: var(--text); }
+  pre { background: #1e1e1e; color: #f8f8f2; padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.9rem; line-height: 1.5; }
+  code { background: var(--border); padding: 0.2rem 0.4rem; border-radius: 4px; font-family: 'Consolas', 'Monaco', monospace; font-size: 0.9em; }
+  .status-badge { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.35rem 0.75rem; border-radius: 999px; font-size: 0.8rem; font-weight: 500; }
+  .status-active { background: #d1fae5; color: var(--success); }
+  .status-degraded { background: #fef3c7; color: var(--warning); }
+  .status-offline { background: #fee2e2; color: var(--error); }
+  .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+  .metric { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; text-align: center; }
+  .metric-value { font-size: 2rem; font-weight: 700; color: var(--accent); margin-bottom: 0.25rem; }
+  .metric-label { font-size: 0.9rem; color: var(--text); opacity: 0.7; }
+  .search-box { display: flex; gap: 1rem; }
+  .search-box input { flex: 1; }
+  .key-container { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; }
+  .alert { background: #fff3cd; border: 1px solid #ffeeba; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; color: #856404; }
+  .alert strong { display: block; margin-bottom: 0.25rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Integration Copilot · Admin</h1>
+  <nav>
+    <a href="/admin" {% if request.url.path == '/admin' %}class="active"{% endif %}>🏠 Início</a>
+    <a href="/admin/models" {% if request.url.path.startswith('/admin/models') %}class="active"{% endif %}>🤖 Modelos</a>
+    <a href="/admin/usage" {% if request.url.path.startswith('/admin/usage') %}class="active"{% endif %}>📊 Metering</a>
+    <a href="/admin/systems" {% if request.url.path.startswith('/admin/systems') %}class="active"{% endif %}>🔗 Sistemas</a>
+    <a href="/admin/incidents" {% if request.url.path.startswith('/admin/incidents') %}class="active"{% endif %}>⚠️ Incidentes</a>
+    <a href="/admin/users" {% if request.url.path.startswith('/admin/users') %}class="active"{% endif %}>👥 Usuários</a>
+    <a href="/admin/web-search" {% if request.url.path.startswith('/admin/web-search') %}class="active"{% endif %}>🔍 Busca web</a>
+    <a href="/docs" target="_blank" style="margin-left: auto;">📄 API Docs</a>
+  </nav>
+</header>
+
+{% if not db_configured %}
+<div class="alert" style="background: #fee2e2; border-color: #fecaca; color: #991b1b;">
+  <strong>⚠️ Persistência não configurada</strong>
+  DATABASE_URL ausente no .env. As operações de dados retornarão 503. A API de diagnóstico continua funcionando.
+</div>
+{% endif %}
+
+<div class="key-container">
+  <h3 style="margin-top: 0; color: var(--text);">🔐 Chave Admin</h3>
+  <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+    <label style="margin: 0; font-weight: 500; color: var(--text);">ADMIN_API_KEY (salva no sessionStorage):</label>
+    <input id="adminkey" type="password" size="50" placeholder="cole a chave admin" autocomplete="off" style="flex: 1; min-width: 200px;">
+    <button class="btn btn-primary" onclick="saveKey()">💾 Salvar</button>
+  </div>
+  <p style="margin-top: 0.75rem; margin-bottom: 0; color: var(--text); opacity: 0.7; font-size: 0.9rem;">Enviar como <code>X-API-Admin-Key</code>. Nada é salvo no servidor.</p>
+</div>
+
+<main>
+{% block content %}{% endblock %}
+</main>
+
+<script>
+function saveKey() {
+  const v = document.getElementById('adminkey').value.trim();
+  if (!v) { sessionStorage.removeItem('adminKey'); return; }
+  sessionStorage.setItem('adminKey', v);
+  location.reload();
+}
+function adminFetch(path, opts) {
+  opts = opts || {};
+  opts.headers = Object.assign({}, opts.headers || {});
+  const k = sessionStorage.getItem('adminKey');
+  if (k) opts.headers['X-API-Admin-Key'] = k;
+  opts.headers['Content-Type'] = 'application/json';
+  return fetch(path, opts);
+}
+function restoreKeyLabel() {
+  const k = sessionStorage.getItem('adminKey');
+  const el = document.getElementById('adminkey');
+  if (el && k) el.value = k;
+}
+function escapeHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = s == null ? '' : String(s);
+  return div.innerHTML;
+}
+function pill(status) {
+  const cls = status === 'active' ? 'status-active' : (status === 'degraded' ? 'status-degraded' : 'status-offline');
+  return `<span class="status-badge ${cls}">${escapeHtml(status)}</span>`;
+}
+restoreKeyLabel();
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

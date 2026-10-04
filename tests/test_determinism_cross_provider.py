@@ -14,7 +14,7 @@ honra `seed` em chamadas live, Ollama tem suporte variavel por modelo,
 AzureOpenAI herda o comportamento do OpenAI) e nao pode ser validado
 em testes unitarios sem chamadas reais de rede.
 
-Ver DA-02 (learnings.md) e factory.py para a decisao arquitetural de
+Ver DA-02 (secao 2 do README.md) e factory.py para a decisao de
 seed=42/temperature=0.0 para todos os providers.
 """
 
@@ -30,7 +30,7 @@ from app.llm.factory import get_chat_model
 
 def test_openai_temperature_is_zero():
     """ChatOpenAI deve ser inicializado com temperature=0.0."""
-    cfg = Settings(llm_provider="openai", openai_api_key="sk-fake-determinism-test")
+    cfg = Settings(llm_provider="openai", openai_api_key="fake-openai-key-determinism-test")
     llm = get_chat_model(config=cfg)
     assert llm.temperature == 0.0, (
         f"OpenAI temperature esperado 0.0, obtido {llm.temperature!r}. "
@@ -40,7 +40,7 @@ def test_openai_temperature_is_zero():
 
 def test_openai_seed_is_42():
     """ChatOpenAI deve ser inicializado com seed=42."""
-    cfg = Settings(llm_provider="openai", openai_api_key="sk-fake-determinism-test")
+    cfg = Settings(llm_provider="openai", openai_api_key="fake-openai-key-determinism-test")
     llm = get_chat_model(config=cfg)
     assert llm.seed == 42, (
         f"OpenAI seed esperado 42, obtido {llm.seed!r}. "
@@ -131,7 +131,7 @@ def test_ollama_seed_is_42():
     "cfg_kwargs",
     [
         {"llm_provider": "ollama"},
-        {"llm_provider": "openai", "openai_api_key": "sk-fake-determinism-test"},
+        {"llm_provider": "openai", "openai_api_key": "fake-openai-key-determinism-test"},
         {
             "llm_provider": "azure_openai",
             "azure_openai_endpoint": "https://example.openai.azure.com",

@@ -98,7 +98,9 @@ class AribaConnector(ExternalSystemConnector):
             )
         except httpx.HTTPStatusError as exc:
             connector_circuit_breaker.record_failure(
-                "Ariba", settings.connector_circuit_failure_threshold
+                "Ariba",
+                settings.connector_circuit_failure_threshold,
+                settings.connector_circuit_cooldown_seconds,
             )
             return ConnectorResult(
                 source_system="Ariba",
@@ -111,7 +113,9 @@ class AribaConnector(ExternalSystemConnector):
             )
         except httpx.RequestError as exc:
             connector_circuit_breaker.record_failure(
-                "Ariba", settings.connector_circuit_failure_threshold
+                "Ariba",
+                settings.connector_circuit_failure_threshold,
+                settings.connector_circuit_cooldown_seconds,
             )
             return ConnectorResult(
                 source_system="Ariba",

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "copilot-mcp": {
+      "type": "http",
+      "url": "http://127.0.0.1:8000/mcp/",
+      "headers": {
+        "X-API-Key": "${API_KEY}"
+      }
+    }
+  }
+}

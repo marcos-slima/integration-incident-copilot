@@ -32,8 +32,9 @@ Avaliacao externa §3.4 — tres melhorias de resiliencia adicionadas:
    mesmo evento em caso de timeout ou falha de rede (at-least-once
    delivery). Sem deduplicacao, o mesmo incidente seria diagnosticado
    duas vezes, gerando traces duplicados no Langfuse e logs confusos.
-   `_SEEN_EVENT_IDS` (LRU in-memory, tamanho limitado) armazena os
-   ids ja processados e descarta reenvios, logando um aviso.
+   app/events/idempotency.py (P1.1: Redis Set compartilhado entre pods,
+   fallback LRU em memoria) descarta reenvios; se o diagnostico falhar
+   o id e liberado, para a reentrega/reprocessamento ser aceito.
 
 3. DLQ (Dead Letter Queue) simples: excecoes durante o diagnostico em
    background nao mais silam silenciosamente. Sao logadas com nivel
@@ -47,39 +48,16 @@ Avaliacao externa §3.4 — tres melhorias de resiliencia adicionadas:
 from __future__ import annotations
 
 import logging
-from collections import OrderedDict
 from typing import TYPE_CHECKING
 
 from app.agent.graph import run_diagnosis
+from app.events import idempotency
 from app.models import DiagnosisResponse, IncidentEventEnvelope, IncidentRequest
 
 if TYPE_CHECKING:
     from fastapi import BackgroundTasks
 
 _logger = logging.getLogger(__name__)
-
-# LRU de ids ja vistos — limita memoria a `_SEEN_MAX` entradas.
-# Suficiente para absorver reenvios do SAP Event Mesh (que garante
-# "at-least-once" com janela tipica de minutos, nao dias).
-# In-memory: perdido no restart, mas um restart tambem reseta o
-# pipeline de diagnostico — reprocessar eventos recentes e aceitavel.
-_SEEN_MAX = 2_000
-_SEEN_EVENT_IDS: OrderedDict[str, bool] = OrderedDict()
-
-
-def _is_duplicate(event_id: str | None) -> bool:
-    """Retorna True se `event_id` ja foi processado (deduplicacao).
-    None (evento sem id) nunca e deduplicado - melhor processar duas
-    vezes do que descartar um evento valido sem id."""
-    if not event_id:
-        return False
-    if event_id in _SEEN_EVENT_IDS:
-        return True
-    # Registra o novo id; evicao FIFO quando o limite e atingido.
-    _SEEN_EVENT_IDS[event_id] = True
-    if len(_SEEN_EVENT_IDS) > _SEEN_MAX:
-        _SEEN_EVENT_IDS.popitem(last=False)
-    return False
 
 
 def to_incident_request(envelope: IncidentEventEnvelope) -> IncidentRequest:
@@ -99,14 +77,18 @@ def _run_diagnosis_background(envelope: IncidentEventEnvelope) -> None:
     event_id = getattr(envelope, "id", None)
     try:
         result = run_diagnosis(to_incident_request(envelope))
+        idempotency.mark_completed(event_id)
         _logger.info(
             "[events] Diagnostico concluido em background — "
-            "cloudevents.id=%s confidence=%.2f provider=%s",
+            "cloudevents.id=%s diagnosis_confidence=%.2f provider=%s",
             event_id,
-            result.confidence,
+            result.diagnosis_confidence,
             result.llm_provider_used,
         )
     except Exception:
+        # Libera o id: sem isso a reentrega/reprocessamento do mesmo
+        # cloudevents.id seria descartado como duplicata.
+        idempotency.release(event_id)
         # DLQ: log estruturado com todos os campos para reprocessamento
         # manual. Nao e silencioso - nivel ERROR garante que o operador
         # veja (alertas de log tipicamente filtram por nivel >= ERROR).
@@ -144,15 +126,20 @@ def handle_incident_event(envelope: IncidentEventEnvelope) -> DiagnosisResponse:
 def handle_incident_event_async(
     envelope: IncidentEventEnvelope,
     background_tasks: BackgroundTasks,
-) -> None:
-    """§3.4 — Variante assincrona (202 Accepted): registra o diagnostico
-    como BackgroundTask do FastAPI e retorna imediatamente, sem esperar
-    a inferencia do LLM. Usada pelo endpoint POST /events/incident em
-    app/main.py (que agora responde 202, nao mais DiagnosisResponse).
+) -> dict[str, str | None]:
+    """§3.4 — Variante assincrona (202 Accepted) usada pelo endpoint
+    POST /events/incident em app/main.py.
 
-    Deduplicacao por cloudevents.id antes de enfileirar: eventos ja
-    processados sao descartados silenciosamente (log WARNING), evitando
-    diagnosticos duplicados causados por reenvios do SAP Event Mesh."""
+    B-02: com REDIS_URL, o evento e enfileirado no RQ (durable, com retry
+    e FailedJobRegistry como DLQ) ANTES do 202 - se o enqueue falhar, a
+    excecao propaga e o endpoint responde 503 para o publicador reenviar.
+    A deduplicacao acontece no worker (app/queue.py::run_event_job).
+
+    Sem REDIS_URL (desenvolvimento local): BackgroundTasks no proprio
+    processo web, com dedup em memoria - NAO e durable (perde o evento
+    em restart), ver warning de startup em app/events/idempotency.py."""
+    from app.config import settings
+
     event_id = getattr(envelope, "id", None)
     _logger.info(
         "[events] Evento de incidente recebido — "
@@ -161,10 +148,17 @@ def handle_incident_event_async(
         event_id,
         getattr(envelope, "time", None),
     )
-    if _is_duplicate(event_id):
+    if settings.redis_url:
+        from app.queue import enqueue_incident_event
+
+        job_id = enqueue_incident_event(envelope.model_dump(mode="json"))
+        return {"status": "queued", "job_id": job_id}
+
+    if idempotency.is_duplicate(event_id):
         _logger.warning(
             "[events] Evento duplicado descartado (idempotencia) — cloudevents.id=%s",
             event_id,
         )
-        return
+        return {"status": "duplicate", "job_id": None}
     background_tasks.add_task(_run_diagnosis_background, envelope)
+    return {"status": "accepted", "job_id": None}

@@ -1,0 +1,887 @@
+{
+ "__inputs": [],
+ "__requires": [],
+ "annotations": {
+  "list": []
+ },
+ "description": "IIC — Sistemas integrados: catálogo (DA-49) correlacionado com os incidentes diagnosticados (DA-50)",
+ "editable": true,
+ "fiscalYearStartMonth": 0,
+ "graphTooltip": 1,
+ "id": null,
+ "links": [],
+ "refresh": "30s",
+ "schemaVersion": 39,
+ "tags": [
+  "iic",
+  "systems",
+  "integration",
+  "sap",
+  "da50"
+ ],
+ "time": {
+  "from": "now-7d",
+  "to": "now"
+ },
+ "timepicker": {},
+ "timezone": "browser",
+ "title": "IIC — Sistemas integrados × Incidentes",
+ "uid": "iic-systems",
+ "version": 1,
+ "templating": {
+  "list": [
+   {
+    "current": {
+     "selected": true,
+     "text": "All",
+     "value": "$__all"
+    },
+    "datasource": {
+     "type": "grafana-postgresql-datasource",
+     "uid": "postgres_iic"
+    },
+    "definition": "SELECT system_key FROM integration_systems ORDER BY 1",
+    "hide": 0,
+    "includeAll": true,
+    "multi": true,
+    "name": "system_key",
+    "options": [],
+    "query": "SELECT system_key FROM integration_systems ORDER BY 1",
+    "refresh": 2,
+    "type": "query",
+    "label": "Sistema (system_key)"
+   },
+   {
+    "current": {
+     "selected": true,
+     "text": "All",
+     "value": "$__all"
+    },
+    "datasource": {
+     "type": "grafana-postgresql-datasource",
+     "uid": "postgres_iic"
+    },
+    "definition": "SELECT DISTINCT interface_type FROM incidents WHERE interface_type IS NOT NULL ORDER BY 1",
+    "hide": 0,
+    "includeAll": true,
+    "multi": true,
+    "name": "interface_type",
+    "options": [],
+    "query": "SELECT DISTINCT interface_type FROM incidents WHERE interface_type IS NOT NULL ORDER BY 1",
+    "refresh": 2,
+    "type": "query",
+    "label": "Tipo de Interface"
+   }
+  ]
+ },
+ "panels": [
+  {
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "postgres_iic"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     },
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 0,
+    "y": 0
+   },
+   "id": 1,
+   "options": {
+    "colorMode": "background",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "auto"
+   },
+   "title": "Sistemas cadastrados",
+   "description": "Catálogo de sistemas integrados (DA-49)",
+   "type": "stat",
+   "targets": [
+    {
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "postgres_iic"
+     },
+     "rawSql": "SELECT COUNT(*) AS value FROM integration_systems",
+     "format": "table"
+    }
+   ]
+  },
+  {
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "postgres_iic"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     },
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 4,
+    "y": 0
+   },
+   "id": 2,
+   "options": {
+    "colorMode": "background",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "auto"
+   },
+   "title": "Sistemas não ativos",
+   "description": "Sistemas marcados como degraded/offline/trial no catálogo",
+   "type": "stat",
+   "targets": [
+    {
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "postgres_iic"
+     },
+     "rawSql": "SELECT COUNT(*) AS value FROM integration_systems WHERE status <> 'active'",
+     "format": "table"
+    }
+   ]
+  },
+  {
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "postgres_iic"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     },
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 8,
+    "y": 0
+   },
+   "id": 3,
+   "options": {
+    "colorMode": "background",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "auto"
+   },
+   "title": "Incidentes (24h)",
+   "description": "Volume total de diagnósticos no último dia",
+   "type": "stat",
+   "targets": [
+    {
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "postgres_iic"
+     },
+     "rawSql": "SELECT COUNT(*) AS value FROM incidents WHERE created_at >= NOW() - INTERVAL '24 hours'",
+     "format": "table"
+    }
+   ]
+  },
+  {
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "postgres_iic"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       }
+      ]
+     },
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 12,
+    "y": 0
+   },
+   "id": 4,
+   "options": {
+    "colorMode": "background",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "auto"
+   },
+   "title": "Incidentes sem sistema (24h)",
+   "description": "DA-50: incidentes cujo connector_source_system não casa com nenhum system_key (nem por connector_type) — normalmente o cliente não informou connector_source_system",
+   "type": "stat",
+   "targets": [
+    {
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "postgres_iic"
+     },
+     "rawSql": "SELECT COUNT(*) AS value FROM incidents i\n            WHERE i.created_at >= NOW() - INTERVAL '24 hours'\n              AND NOT EXISTS (SELECT 1 FROM integration_systems s\n                              WHERE s.system_key = i.connector_source_system)",
+     "format": "table"
+    }
+   ]
+  },
+  {
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "postgres_iic"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     },
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 16,
+    "y": 0
+   },
+   "id": 5,
+   "options": {
+    "colorMode": "background",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "auto"
+   },
+   "title": "Verificação humana pendente",
+   "description": "DA-50: incidentes sem veredito de analista (POST /incidents/{id}/verify)",
+   "type": "stat",
+   "targets": [
+    {
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "postgres_iic"
+     },
+     "rawSql": "SELECT COUNT(*) AS value FROM incidents WHERE diagnosis_correct IS NULL",
+     "format": "table"
+    }
+   ]
+  },
+  {
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "postgres_iic"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     },
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 20,
+    "y": 0
+   },
+   "id": 6,
+   "options": {
+    "colorMode": "background",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "auto"
+   },
+   "title": "Alta confiança (>=0.7)",
+   "description": "evidence_strength é FLOAT (>= 0.7) desde a migration 002",
+   "type": "stat",
+   "targets": [
+    {
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "postgres_iic"
+     },
+     "rawSql": "SELECT COUNT(*) AS value FROM incidents WHERE created_at >= NOW() - INTERVAL '7 days' AND evidence_strength >= 0.7",
+     "format": "table"
+    }
+   ]
+  },
+  {
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "postgres_iic"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "custom": {
+      "axisBorderShow": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "drawStyle": "line",
+      "fillOpacity": 20,
+      "gradientMode": "none",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "insertNulls": false,
+      "lineInterpolation": "smooth",
+      "lineWidth": 1,
+      "pointSize": 5,
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "showPoints": "auto",
+      "spanNulls": false,
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      }
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 4
+   },
+   "id": 7,
+   "options": {
+    "legend": {
+     "calcs": [],
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "none"
+    }
+   },
+   "title": "Volume de incidentes por sistema informado (connector_source_system)",
+   "description": "Quando o cliente envia connector_source_system = system_key (DA-50), a série é o sistema real do catálogo",
+   "type": "timeseries",
+   "targets": [
+    {
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "postgres_iic"
+     },
+     "rawSql": "SELECT $__timeGroupAlias(created_at, $__interval), connector_source_system AS metric, COUNT(*) AS value\n                  FROM incidents\n                  WHERE $__timeFilter(created_at) AND connector_source_system IS NOT NULL\n                  GROUP BY 1, 2 ORDER BY 1",
+     "format": "table"
+    }
+   ]
+  },
+  {
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "postgres_iic"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "custom": {
+      "axisBorderShow": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "drawStyle": "line",
+      "fillOpacity": 20,
+      "gradientMode": "none",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "insertNulls": false,
+      "lineInterpolation": "smooth",
+      "lineWidth": 1,
+      "pointSize": 5,
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "showPoints": "auto",
+      "spanNulls": false,
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      }
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 4
+   },
+   "id": 8,
+   "options": {
+    "legend": {
+     "calcs": [],
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "none"
+    }
+   },
+   "title": "Volume por interface_type (correlação por conector)",
+   "description": "Fallback da correlação DA-50 quando connector_source_system não foi informado",
+   "type": "timeseries",
+   "targets": [
+    {
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "postgres_iic"
+     },
+     "rawSql": "SELECT $__timeGroupAlias(created_at, $__interval), COALESCE(interface_type, 'n/a') AS metric, COUNT(*) AS value\n                  FROM incidents WHERE $__timeFilter(created_at)\n                  GROUP BY 1, 2 ORDER BY 1",
+     "format": "table"
+    }
+   ]
+  },
+  {
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "postgres_iic"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 8,
+    "x": 0,
+    "y": 12
+   },
+   "id": 9,
+   "options": {
+    "barRadius": 0,
+    "barWidth": 0.8,
+    "fullHighlight": false,
+    "groupWidth": 0.7,
+    "legend": {
+     "calcs": [],
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": false
+    },
+    "orientation": "auto",
+    "showValue": "auto",
+    "stacking": "none",
+    "tooltip": {
+     "mode": "single",
+     "sort": "none"
+    },
+    "xTickLabelRotation": 0,
+    "xTickLabelSpacing": 0
+   },
+   "title": "Incidentes por sistema do catálogo (24h)",
+   "description": "Match exato (DA-50): connector_source_system = integration_systems.system_key",
+   "type": "barchart",
+   "targets": [
+    {
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "postgres_iic"
+     },
+     "rawSql": "SELECT COALESCE(s.name || ' (' || s.system_key || ')', 'sem sistema') AS sistema, COUNT(i.id) AS incidentes\n                FROM incidents i\n                LEFT JOIN integration_systems s ON s.system_key = i.connector_source_system\n                WHERE i.created_at >= NOW() - INTERVAL '24 hours'\n                GROUP BY 1 HAVING COUNT(i.id) > 0\n                ORDER BY 2 DESC LIMIT 15",
+     "format": "table"
+    }
+   ]
+  },
+  {
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "postgres_iic"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 8,
+    "x": 8,
+    "y": 12
+   },
+   "id": 10,
+   "options": {
+    "barRadius": 0,
+    "barWidth": 0.8,
+    "fullHighlight": false,
+    "groupWidth": 0.7,
+    "legend": {
+     "calcs": [],
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": false
+    },
+    "orientation": "auto",
+    "showValue": "auto",
+    "stacking": "none",
+    "tooltip": {
+     "mode": "single",
+     "sort": "none"
+    },
+    "xTickLabelRotation": 0,
+    "xTickLabelSpacing": 0
+   },
+   "title": "Incidentes por status do sistema do catálogo",
+   "description": "Correlação por conector (DA-50): interface_type = integration_systems.connector_type. Quando há mais de um sistema do mesmo tipo, o incidente é ambíguo e aparece aqui como 'sem correspondência' — a resolução por ambiente fica para o operador via /admin/incidents",
+   "type": "barchart",
+   "targets": [
+    {
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "postgres_iic"
+     },
+     "rawSql": "SELECT COALESCE(s.status, 'sem correspondência') AS status_sistema, COUNT(i.id) AS incidentes\n                FROM incidents i\n                LEFT JOIN integration_systems s ON s.connector_type = i.interface_type\n                WHERE i.created_at >= NOW() - INTERVAL '24 hours'\n                GROUP BY 1 ORDER BY 2 DESC",
+     "format": "table"
+    }
+   ]
+  },
+  {
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "postgres_iic"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      }
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 8,
+    "x": 16,
+    "y": 12
+   },
+   "id": 11,
+   "options": {
+    "cellHeight": "sm",
+    "footer": {
+     "countRows": false,
+     "fields": "",
+     "reducer": [
+      "sum"
+     ],
+     "show": false
+    },
+    "showHeader": true,
+    "sortBy": []
+   },
+   "title": "Sistemas do catálogo × volume de incidentes (7d)",
+   "description": "Visão operacional: cada sistema do catálogo com o volume de incidentes da última semana e o mais recente",
+   "type": "table",
+   "targets": [
+    {
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "postgres_iic"
+     },
+     "rawSql": "SELECT s.system_key, s.name, s.vendor, s.connector_type, s.environment, s.status,\n                    COUNT(i.id) FILTER (WHERE i.created_at >= NOW() - INTERVAL '7 days') AS incidentes_7d,\n                    MAX(i.created_at) AS ultimo_incidente\n             FROM integration_systems s\n             LEFT JOIN incidents i\n               ON (i.connector_source_system = s.system_key OR i.interface_type = s.connector_type)\n              AND i.created_at >= NOW() - INTERVAL '7 days'\n             GROUP BY 1, 2, 3, 4, 5, 6\n             ORDER BY 7 DESC, 1",
+     "format": "table"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {},
+      "indexByName": {},
+      "renameByName": {}
+     }
+    }
+   ]
+  },
+  {
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "postgres_iic"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      }
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 9,
+    "w": 24,
+    "x": 0,
+    "y": 20
+   },
+   "id": 12,
+   "options": {
+    "cellHeight": "sm",
+    "footer": {
+     "countRows": false,
+     "fields": "",
+     "reducer": [
+      "sum"
+     ],
+     "show": false
+    },
+    "showHeader": true,
+    "sortBy": []
+   },
+   "title": "Últimos 20 incidentes com sistema e verificação",
+   "description": "Mesma correlação da tela /admin/incidents (DA-50): o cliente informa connector_source_system = system_key",
+   "type": "table",
+   "targets": [
+    {
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "postgres_iic"
+     },
+     "rawSql": "SELECT LEFT(i.id::text, 8) AS id, i.created_at AS \"Criado Em\", i.interface_type,\n                    i.connector_source_system AS origem,\n                    COALESCE(s.name, '—') AS sistema, COALESCE(s.status, '—') AS status_sistema,\n                    LEFT(COALESCE(i.probable_root_cause, '-'), 70) AS causa,\n                    i.diagnosis_confidence, i.evidence_strength, i.llm_provider_used, i.latency_ms,\n                    CASE WHEN i.diagnosis_correct IS NULL THEN '⏳'\n                         WHEN i.diagnosis_correct THEN '✅' ELSE '❌' END AS verificado\n             FROM incidents i\n             LEFT JOIN integration_systems s ON s.system_key = i.connector_source_system\n             WHERE i.created_at >= NOW() - INTERVAL '7 days'\n             ORDER BY i.created_at DESC LIMIT 20",
+     "format": "table"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {},
+      "indexByName": {},
+      "renameByName": {}
+     }
+    }
+   ]
+  }
+ ]
+}

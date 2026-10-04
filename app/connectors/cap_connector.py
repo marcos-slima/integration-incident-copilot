@@ -120,7 +120,9 @@ class CAPConnector(ExternalSystemConnector):
             )
         except httpx.HTTPStatusError as exc:
             connector_circuit_breaker.record_failure(
-                "SAP CAP", settings.connector_circuit_failure_threshold
+                "SAP CAP",
+                settings.connector_circuit_failure_threshold,
+                settings.connector_circuit_cooldown_seconds,
             )
             return ConnectorResult(
                 source_system="SAP CAP",
@@ -133,7 +135,9 @@ class CAPConnector(ExternalSystemConnector):
             )
         except httpx.RequestError as exc:
             connector_circuit_breaker.record_failure(
-                "SAP CAP", settings.connector_circuit_failure_threshold
+                "SAP CAP",
+                settings.connector_circuit_failure_threshold,
+                settings.connector_circuit_cooldown_seconds,
             )
             return ConnectorResult(
                 source_system="SAP CAP",

@@ -45,6 +45,7 @@ from app.connectors.base import (
     ExternalSystemConnector,
     circuit_breaker_guard,
     connector_circuit_breaker,
+    validate_identifier_charset,
 )
 
 _MOCK_SCENARIOS: dict[str, ConnectorResult] = {
@@ -110,6 +111,8 @@ class APIManagementConnector(ExternalSystemConnector):
     def _fetch_real(self, identifier: str) -> ConnectorResult:
         if (blocked := circuit_breaker_guard("SAP API Management")) is not None:
             return blocked
+        if (invalid := validate_identifier_charset(identifier, "SAP API Management")) is not None:
+            return invalid
         client = self._injected_client or httpx.Client(timeout=self.timeout)
         try:
             token = self._get_access_token(client)
@@ -122,7 +125,9 @@ class APIManagementConnector(ExternalSystemConnector):
             )
         except httpx.HTTPStatusError as exc:
             connector_circuit_breaker.record_failure(
-                "SAP API Management", settings.connector_circuit_failure_threshold
+                "SAP API Management",
+                settings.connector_circuit_failure_threshold,
+                settings.connector_circuit_cooldown_seconds,
             )
             return ConnectorResult(
                 source_system="SAP API Management",
@@ -135,7 +140,9 @@ class APIManagementConnector(ExternalSystemConnector):
             )
         except httpx.RequestError as exc:
             connector_circuit_breaker.record_failure(
-                "SAP API Management", settings.connector_circuit_failure_threshold
+                "SAP API Management",
+                settings.connector_circuit_failure_threshold,
+                settings.connector_circuit_cooldown_seconds,
             )
             return ConnectorResult(
                 source_system="SAP API Management",

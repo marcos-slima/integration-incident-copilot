@@ -1,6 +1,6 @@
 """Servidor A2A (JSON-RPC 2.0) - endpoint HTTP que coexiste com o
 `/diagnose` do FastAPI, ambos chamando a mesma orquestracao
-(`run_diagnosis`) por tras. Ver docs/proposals/a2a-interoperability-layer.md
+(`run_diagnosis`) por tras. Ver docs/a2a-interoperability-layer.md
 para o contexto/criterio de aceite original.
 
 Metodos implementados (subconjunto deliberado do protocolo A2A -

@@ -11,9 +11,10 @@ com persona/expertise apropriada ao dominio - ver
 `app/agent/nodes.py::sap_diagnosis_node` / `saas_diagnosis_node`.
 
 Classificacao e DETERMINISTICA (mapeamento de interface_type + poucas
-palavras-chave), nao uma chamada de LLM: mesmo principio ja registrado
-em `learnings.md` de que guardrails/decisoes estruturais pertencem a
-codigo, nao a autoavaliacao de um modelo - o roteamento e barato,
+palavras-chave), nao uma chamada de LLM: mesmo principio da DA-3 do
+README.md (guardrails em codigo, nao em prompt), de que decisoes
+estruturais pertencem a codigo e nao a autoavaliacao de um modelo -
+o roteamento e barato,
 explicavel e 100% testavel sem depender de LLM real.
 """
 
@@ -28,13 +29,16 @@ AgentDomain = Literal["sap", "saas", "generic"]
 
 # interface_type (ver Literal fechado em app/models.py::IncidentRequest)
 # mapeado para o dominio do sub-agente especialista.
-_SAP_INTERFACE_TYPES = {"odata", "rfc", "cap"}
-_SAAS_INTERFACE_TYPES = {"servicenow", "salesforce", "workday", "ariba"}
+# "po" = SAP PO/PI on-premise: middleware SAP de integracao, nao SaaS.
+_SAP_INTERFACE_TYPES = {"odata", "rfc", "cap", "po"}
+# successfactors: SaaS de RH da SAP, mesmo caso do Ariba — marca SAP,
+# produto multi-tenant entregue como servico (OAuth, nao RFC on-premise).
+_SAAS_INTERFACE_TYPES = {"servicenow", "salesforce", "workday", "ariba", "successfactors"}
 
 # Heuristica de fallback quando interface_type nao foi informado (fluxo
 # livre por descricao textual, ver test_graph_e2e.py casos com
 # interface_type=None) - termos que aparecem nos documentos de
-# conhecimento SAP deste repositorio — 24 termos cobrindo vocabulario
+# conhecimento SAP deste repositorio — 26 termos cobrindo vocabulario
 # de integracao SAP (OData, HANA, BTP, SuccessFactors, Ariba, etc.).
 # DA-22 fix: lista expandida para cobrir vocabulario SAP alternativo
 # que aparece quando interface_type nao vem preenchido. Termos ordenados
@@ -67,10 +71,15 @@ _SAP_KEYWORDS = (
     "xi/pi",
     "nwds",
     "fica",
-    "fi-tv",
     "successfactors",
     "sfsf",
     "ariba",
+    # DA-56: vocabulario de PO/PI. Termos especificos de proposito —
+    # "po"/"pi" soltos casariam com palavras portuguesas comuns.
+    "process orchestration",
+    "process integration",
+    "sap po",
+    "sap pi",
 )
 
 # Padrao com word boundary para "sap" — evita falsos positivos em

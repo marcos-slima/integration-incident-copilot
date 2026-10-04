@@ -29,6 +29,7 @@ RUN apt-get update \
         libssl-dev \
         libffi-dev \
         cmake \
+        make \
         libsasl2-dev \
         libsasl2-2 \
     && rm -rf /var/lib/apt/lists/*
@@ -47,7 +48,9 @@ COPY scripts/ scripts/
 
 COPY data/sample_docs/ data/sample_docs/
 
-COPY static/ static/
+# DA-24: static/ não e' versionado (esta no .gitignore), COPY static/ static/
+# quebra em checkout limpo. O stage "frontend-build" ja gera o dist/
+# com `npm run build` e o estagio "final" ja copia para `static/dist`.
 
 # DA-24: usuario nao-root - boa pratica de seguranca para rodar em
 # Kubernetes/Kyma (PodSecurityStandards de varios clusters bloqueiam
@@ -63,7 +66,7 @@ FROM app AS final
 
 # DA-24-fix: copia o frontend buildado no estagio anterior em vez de
 # exigir que static/dist/ ja exista no contexto de build.
-COPY --from=frontend-build /frontend/dist static/dist
+COPY --from=frontend-build /static/dist static/dist
 
 EXPOSE 8000
 

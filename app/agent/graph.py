@@ -13,11 +13,13 @@ Ver docs/ARCHITECTURE.md para detalhamento por camada.
 """
 
 import os
-from concurrent.futures import ThreadPoolExecutor
+import threading
+import time
+from concurrent.futures import Future, ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from uuid import uuid4
 
-from langfuse import get_client, observe
+from langfuse import get_client
 
 from app.agent.nodes import (
     _assemble_evidence,
@@ -25,6 +27,7 @@ from app.agent.nodes import (
     generic_diagnosis_node,
     graph_enrich_node,
     graph_write_node,
+    observe_span,
     report_node,
     retrieve_node,
     saas_diagnosis_node,
@@ -35,11 +38,17 @@ from app.agent.supervisor import supervisor_node
 from app.config import settings
 from app.exceptions import DiagnosisTimeoutError
 from app.models import DiagnosisResponse, IncidentRequest
+from app.services.incident_recorder import record_incident
 
-os.environ.setdefault("LANGFUSE_PUBLIC_KEY", settings.langfuse_public_key)
-os.environ.setdefault("LANGFUSE_SECRET_KEY", settings.langfuse_secret_key)
-os.environ.setdefault("LANGFUSE_HOST", settings.langfuse_host)
-os.environ.setdefault("LANGFUSE_BASE_URL", settings.langfuse_host)
+if settings.langfuse_configured:
+    os.environ.setdefault("LANGFUSE_PUBLIC_KEY", settings.langfuse_public_key)
+    os.environ.setdefault("LANGFUSE_SECRET_KEY", settings.langfuse_secret_key)
+    os.environ.setdefault("LANGFUSE_HOST", settings.langfuse_host)
+    os.environ.setdefault("LANGFUSE_BASE_URL", settings.langfuse_host)
+else:
+    # ver app/agent/nodes.py: sem as duas chaves, desligar o tracing
+    # explicitamente evita o warning por span da SDK
+    os.environ["LANGFUSE_TRACING_ENABLED"] = "false"
 
 from langgraph.graph import END, StateGraph
 
@@ -135,6 +144,13 @@ def get_graph():
 # seria desperdicio.
 _graph_invoke_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="diagnosis-invoke")
 
+# DA-59: admission control para evitar escalar threads por timeout
+# acumulado. Quatro chamadas presas no timeout (max_workers=4) deixariam
+# todas as chamadas novas na fila do executor. O semaforo limita a
+# quantidade de chamadas ativas simulando um admission control; quem
+# espera no semaforo ja e rejectado com 429/503 para o caller.
+_graph_invoke_semaphore = threading.Semaphore(4)
+
 
 def _invoke_graph_with_timeout(initial_state: CopilotState) -> CopilotState:
     """Roda get_graph().invoke(initial_state) com um teto de tempo
@@ -150,7 +166,15 @@ def _invoke_graph_with_timeout(initial_state: CopilotState) -> CopilotState:
     interna trave. Mesma limitacao pratica que qualquer watchdog sobre
     codigo sincrono sem pontos de cancelamento - documentada aqui em
     vez de fingida como cancelamento de verdade."""
-    future = _graph_invoke_pool.submit(get_graph().invoke, initial_state)
+
+    # DA-59: admission control antes de submeter ao pool
+    if not _graph_invoke_semaphore.acquire(blocking=False):
+        raise DiagnosisTimeoutError(
+            "Service unavailable: too many concurrent diagnoses. "
+            "Tente novamente em alguns segundos."
+        )
+
+    future: Future[CopilotState] = _graph_invoke_pool.submit(get_graph().invoke, initial_state)
     try:
         return future.result(timeout=settings.diagnosis_timeout_seconds)
     except FutureTimeoutError as exc:
@@ -159,9 +183,11 @@ def _invoke_graph_with_timeout(initial_state: CopilotState) -> CopilotState:
             "(settings.diagnosis_timeout_seconds) - o pipeline de retrieval/GraphRAG/LLM "
             "nao terminou a tempo."
         ) from exc
+    finally:
+        _graph_invoke_semaphore.release()
 
 
-@observe(name="sap_copilot_diagnosis")
+@observe_span(name="sap_copilot_diagnosis")
 def run_diagnosis(
     request: IncidentRequest,
     debug: bool = False,
@@ -184,11 +210,19 @@ def run_diagnosis(
         "payload": request.payload,
         "interface_type": request.interface_type,
         "identifier": request.identifier,
+        # DA-50: propaga connector_source_system (system_key) do request para
+        # o state - antes esse campo existia em IncidentRequest mas nunca
+        # chegava ao pipeline, entao incidents.connector_source_system era
+        # sempre o rotulo generico do conector ("OData", "SAP CAP"), nunca a
+        # chave do catalogo. Ver app/services/incident_recorder.py.
+        "connector_source_system": request.connector_source_system,
         "llm_model": llm_model or settings.llm_model,
         "debug": debug,
         "incident_id": incident_id,
     }
+    started_at = time.monotonic()
     final_state = _invoke_graph_with_timeout(initial_state)
+    latency_ms = int((time.monotonic() - started_at) * 1000)
     diagnosis = final_state.get("diagnosis", {})
 
     # Avaliacao externa (medio prazo, item 5): captura o trace_id do
@@ -199,9 +233,12 @@ def run_diagnosis(
     # Langfuse nao estiver configurado/ativo (tracing desabilitado) -
     # graceful, mesmo padrao de qualquer outra integracao opcional
     # deste projeto.
-    trace_id = get_client().get_current_trace_id()
+    # Guard: get_client() CRIA um client mesmo com tracing desabilitado, e
+    # o SDK v4 loga "initialized without public_key" + "No active span"
+    # nesse caminho. So chamamos quando ha chave configurada.
+    trace_id = get_client().get_current_trace_id() if settings.langfuse_configured else None
 
-    return DiagnosisResponse(
+    response = DiagnosisResponse(
         probable_root_cause=diagnosis.get("probable_root_cause", "N/A"),
         model_confidence=float(diagnosis.get("model_confidence", diagnosis.get("confidence", 0.0))),
         diagnosis_confidence=float(diagnosis.get("diagnosis_confidence", 0.0)),
@@ -211,6 +248,17 @@ def run_diagnosis(
         evidence_strength=diagnosis.get("evidence_strength"),
         llm_provider_used=diagnosis.get("llm_provider_used"),
         agent_domain=final_state.get("agent_domain"),
+        # DA-53: proveniencia do prompt. Sai do `diagnosis` (e nao do
+        # `final_state`) porque quem grava e' `_run_diagnosis_agent`, e so'
+        # depois de passar pelo rule engine. O return antecipado do rule
+        # engine nao escreve estas chaves -> None, que e' a resposta correta
+        # ("nenhum prompt produziu isto") em vez de um default inventado.
+        prompt_version=diagnosis.get("prompt_version"),
+        prompt_digest=diagnosis.get("prompt_digest"),
+        # O modelo e' lido do state e nao do `diagnosis`: `llm_model` e'
+        # definido no state inicial e nao muda durante o grafo, e fica
+        # gravado mesmo quando o rule engine encerra.
+        llm_model=final_state.get("llm_model"),
         # DA-25: mesma montagem deterministica usada no report_markdown
         # (ver report_node) - chamada de novo aqui sobre final_state
         # (nao guardada no state) porque e uma funcao pura e barata, e
@@ -228,6 +276,16 @@ def run_diagnosis(
         else None,
         trace_id=trace_id,
     )
+    # B-01: persistencia analitica no PostgreSQL (best-effort, no-op sem
+    # DATABASE_URL) - ver app/services/incident_recorder.py.
+    record_incident(
+        incident_id=incident_id,
+        request=request,
+        response=response,
+        final_state=final_state,
+        latency_ms=latency_ms,
+    )
+    return response
 
 
 if __name__ == "__main__":
@@ -237,7 +295,18 @@ if __name__ == "__main__":
     parser.add_argument("description", nargs="*", default=[])
     parser.add_argument(
         "--interface",
-        choices=["odata", "rfc", "servicenow", "salesforce", "workday", "ariba", "cap", "apim"],
+        choices=[
+            "odata",
+            "rfc",
+            "servicenow",
+            "salesforce",
+            "workday",
+            "ariba",
+            "successfactors",
+            "po",
+            "cap",
+            "apim",
+        ],
         default=None,
     )
     parser.add_argument("--id", dest="identifier", default=None)
@@ -256,4 +325,5 @@ if __name__ == "__main__":
     result = run_diagnosis(request, debug=args.debug, llm_model=args.llm_model)
     print(result.report_markdown)
 
-    get_client().flush()
+    if settings.langfuse_configured:
+        get_client().flush()

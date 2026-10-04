@@ -73,6 +73,30 @@ def run_diagnosis_job(request_data: dict[str, Any]) -> dict[str, Any]:
     return run_diagnosis(request).model_dump()
 
 
+def run_event_job(envelope_data: dict[str, Any]) -> dict[str, Any]:
+    """Job RQ do webhook /events/incident (B-02): o evento so e
+    confirmado com 202 depois de gravado no Redis, e sobrevive a
+    restart/deploy da API. Idempotencia por cloudevents.id no worker
+    (claim -> done; release na falha, para o retry do RQ reprocessar).
+    Falha apos esgotar os retries fica no FailedJobRegistry do RQ -
+    DLQ persistente, consultavel via GET /diagnose/async/{job_id}."""
+    from app.agent.graph import run_diagnosis
+    from app.events import idempotency
+    from app.events.consumer import to_incident_request
+    from app.models import IncidentEventEnvelope
+
+    envelope = IncidentEventEnvelope(**envelope_data)
+    if idempotency.is_duplicate(envelope.id):
+        return {"status": "duplicate", "cloudevents_id": envelope.id}
+    try:
+        result = run_diagnosis(to_incident_request(envelope)).model_dump(mode="json")
+    except Exception:
+        idempotency.release(envelope.id)
+        raise
+    idempotency.mark_completed(envelope.id)
+    return result
+
+
 class DiagnosisQueue:
     """Camada fina sobre `Queue`/`Job` do RQ - so traduz
     enqueue/status para o formato usado pelos endpoints
@@ -91,6 +115,15 @@ class DiagnosisQueue:
             run_diagnosis_job,
             request_data,
             job_timeout=settings.diagnosis_timeout_seconds + 30,
+        )
+        return job.id
+
+    def enqueue_event(self, envelope_data: dict[str, Any], retry: Any = None) -> str:
+        job = self._queue.enqueue(
+            run_event_job,
+            envelope_data,
+            job_timeout=settings.diagnosis_timeout_seconds + 30,
+            retry=retry,
         )
         return job.id
 
@@ -147,6 +180,19 @@ def enqueue_diagnosis(request_data: dict[str, Any]) -> str:
     AsyncQueueUnavailableError se REDIS_URL nao estiver configurada."""
     _require_redis_configured()
     return get_default_diagnosis_queue().enqueue(request_data)
+
+
+def enqueue_incident_event(envelope_data: dict[str, Any]) -> str:
+    """Enfileira um evento do webhook /events/incident com retry
+    (3 tentativas, backoff 10s/60s/300s) e devolve o job id. Levanta
+    AsyncQueueUnavailableError sem REDIS_URL; erros de conexao com o
+    Redis propagam - o endpoint responde 503 para o publicador reenviar."""
+    _require_redis_configured()
+    from rq import Retry
+
+    return get_default_diagnosis_queue().enqueue_event(
+        envelope_data, retry=Retry(max=3, interval=[10, 60, 300])
+    )
 
 
 def get_job_status(job_id: str) -> dict[str, Any] | None:

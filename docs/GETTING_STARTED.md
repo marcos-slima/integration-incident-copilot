@@ -18,8 +18,8 @@
 ## 1. Clone e configure o ambiente
 
 ```bash
-git clone https://github.com/marcos-slima/sap-integration-copilot.git
-cd sap-integration-copilot
+git clone https://github.com/marcos-slima/integration-incident-copilot.git
+cd integration-incident-copilot
 cp .env.example .env
 uv sync
 ```
@@ -37,12 +37,20 @@ ollama pull nomic-embed-text
 
 ## 3. Suba a infraestrutura
 
+A infraestrutura vem do `docker-compose.yml` **deste repositório** — não de
+nenhum diretório externo. Dois serviços ficam atrás de perfil, então os
+perfis são explícitos:
+
 ```bash
-cd ~/ai-stack
-docker compose up -d
+# núcleo: Postgres (persistência de incidentes + Grafana), Qdrant, Redis
+docker compose --profile observability up -d qdrant postgres grafana redis
+
+# GraphRAG (opt-in; sem isto o app roda normal, só sem grafo)
+docker compose --profile graphrag up -d neo4j
 ```
 
-Sobe: Qdrant (localhost:6333), Neo4j (localhost:7474), Langfuse (localhost:3000).
+Sobe: Qdrant (`localhost:6333`), Postgres (`localhost:5432`), Neo4j
+(`localhost:7474`, só com o perfil `graphrag`), Grafana (`localhost:3001`).
 
 ---
 
@@ -58,13 +66,44 @@ não a internet nem nenhum serviço externo.
 
 ---
 
-## 5. Inicie o servidor
+## 5. Escolha como rodar a aplicação
+
+As duas rotas usam a **mesma** infraestrutura do passo 3. O que muda é
+apenas onde o processo Python roda — e o `.env` precisa refletir isso.
+
+### 5a. Nativo, para debug passo a passo (recomendado para estudo)
 
 ```bash
 uv run uvicorn app.main:app --reload
 ```
 
-Acesse http://localhost:8000
+Acesse http://localhost:8000 e use os breakpoints de
+`.vscode/launch.json` ("Debug: FastAPI (uvicorn)") — o código roda na sua
+máquina, com o debugger do VS Code anexado.
+
+Exige no `.env` os hosts **da sua máquina**, nunca nomes de serviço:
+
+```bash
+QDRANT_URL=http://127.0.0.1:6333
+DATABASE_URL=postgresql+asyncpg://iic:SENHA@127.0.0.1:5432/iic
+NEO4J_URI=bolt://127.0.0.1:7687     # só se GRAPH_RAG_ENABLED=true
+```
+
+### 5b. Em container, para deploy
+
+```bash
+docker compose --profile observability --profile graphrag up -d
+```
+
+Acesse http://localhost:8000. Aqui **não** edite o `.env` para `127.0.0.1`:
+o `docker-compose.yml` injeta os hosts internos (`qdrant`, `postgres`,
+`neo4j`) por default, e o `host.docker.internal` já aponta para o Ollama da
+máquina. Apontar o `.env` para `127.0.0.1` aqui é o erro clássico — o
+container não enxerga o loopback do host.
+
+Se precisar de um Postgres **externo** ao compose (RDS, Cloud SQL, BTP),
+defina `CONTAINER_DATABASE_URL` em vez de `DATABASE_URL`; o mesmo vale para
+`CONTAINER_NEO4J_URI`.
 
 ---
 
@@ -202,8 +241,17 @@ export LD_LIBRARY_PATH=/usr/local/sap/nwrfcsdk/lib:$LD_LIBRARY_PATH
 
 **Qdrant connection refused**
 ```bash
-cd ~/ai-stack && docker compose up -d qdrant
+docker compose up -d qdrant
 ```
+
+**`could not translate host name "postgres"` (modo container)**
+O `.env` está apontando para `127.0.0.1` e o container precisa do nome do
+serviço. Apague `DATABASE_URL`/`NEO4J_URI` do `.env`: o compose injeta os
+hosts internos sozinho (ver passo 5b).
+
+**Postgres nativo recusa a conexão**
+O `.env` precisa de `127.0.0.1:5432`, não `postgres:5432` — `postgres` é o
+nome do serviço dentro da rede do compose e não resolve na máquina.
 
 **Modelo não encontrado**
 ```bash
@@ -217,4 +265,4 @@ uv run python -m app.rag.ingest --target incidents --reset
 
 ---
 
-*Integration Incident Copilot · github.com/marcos-slima/sap-integration-copilot*
+*Integration Incident Copilot · github.com/marcos-slima/integration-incident-copilot*

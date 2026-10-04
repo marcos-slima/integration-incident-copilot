@@ -14,6 +14,34 @@ dados na web"): dois guardrails de codigo, nao so de prompt.
 from typing import ClassVar
 
 from app.agent.nodes import _make_web_search_tool, _run_diagnosis_agent
+from app.services.web_search_sources import ApprovedSource
+
+
+def _approve(monkeypatch, *interface_types: str) -> None:
+    """DA-57: registra fonte(s) aprovada(s) como se viessem do banco.
+
+    `nodes.py` importa `resolve_approved_source` de dentro da funcao, entao
+    monkeypatchar o atributo no modulo de origem vale para os dois
+    consumidores (node e tool ReAct).
+    """
+    wanted = set(interface_types)
+    monkeypatch.setattr(
+        "app.services.web_search_sources.resolve_approved_source",
+        lambda it: (
+            ApprovedSource(
+                interface_type=it,
+                site_filter=f"site:exemplo-{it}.com",
+                tech_term=f"termo {it}",
+            )
+            if it in wanted
+            else None
+        ),
+    )
+
+
+def _no_sources(monkeypatch) -> None:
+    """DA-57 fail-closed: nenhuma linha habilitada na tabela."""
+    monkeypatch.setattr("app.services.web_search_sources.resolve_approved_source", lambda it: None)
 
 
 class _FakeDDGS:
@@ -37,6 +65,7 @@ class _FakeDDGS:
 def test_web_search_tool_redacts_pii_from_llm_composed_query(monkeypatch):
     _FakeDDGS.captured_queries = []
     monkeypatch.setattr("app.agent.nodes.DDGS", _FakeDDGS)
+    _approve(monkeypatch, "odata")
 
     tool = _make_web_search_tool({"interface_type": "odata"})
     tool.invoke({"query": "erro no IDoc 1234567890123456 relatado por joao@empresa.com"})
@@ -51,11 +80,52 @@ def test_web_search_tool_redacts_pii_from_llm_composed_query(monkeypatch):
 def test_web_search_tool_passes_through_generic_technical_query(monkeypatch):
     _FakeDDGS.captured_queries = []
     monkeypatch.setattr("app.agent.nodes.DDGS", _FakeDDGS)
+    _approve(monkeypatch, "odata")
 
     tool = _make_web_search_tool({"interface_type": "odata"})
     tool.invoke({"query": "BAPI_MATERIAL_SAVEDATA authorization error"})
 
     assert "BAPI_MATERIAL_SAVEDATA authorization error" in _FakeDDGS.captured_queries[0]
+
+
+def test_web_search_tool_uses_site_filter_from_approved_source(monkeypatch):
+    """DA-57: o filtro de site vem da LINHA, nao de um mapa em codigo."""
+    _FakeDDGS.captured_queries = []
+    monkeypatch.setattr("app.agent.nodes.DDGS", _FakeDDGS)
+    _approve(monkeypatch, "po")
+
+    _make_web_search_tool({"interface_type": "po"}).invoke({"query": "IDoc status 51"})
+
+    assert "site:exemplo-po.com" in _FakeDDGS.captured_queries[0]
+
+
+def test_web_search_tool_disabled_when_no_approved_source(monkeypatch):
+    """DA-57 fail-closed: sem linha habilitada, a tool nao busca — e diz
+    que nao ha fonte, em vez de cair num filtro generico silencioso."""
+    _FakeDDGS.captured_queries = []
+    monkeypatch.setattr("app.agent.nodes.DDGS", _FakeDDGS)
+    _no_sources(monkeypatch)
+
+    tool = _make_web_search_tool({"interface_type": "po"})
+    said = tool.invoke({"query": "IDoc status 51"})
+
+    assert _FakeDDGS.captured_queries == []
+    assert "fonte aprovada" in said
+
+
+def test_web_search_tool_works_for_successfactors_and_po(monkeypatch):
+    """DA-57: `successfactors` (DA-34) e `po` (DA-56) NAO estavam em nenhum
+    dos dois mapas hardcoded e perdiam tambem o tech_term. Aqui proves que a
+    resolucao funciona para os dois — quem guarantees a linha e' a migration
+    008 / o cadastro no admin, nao um mapa em codigo."""
+    for interface_type in ("successfactors", "po"):
+        _FakeDDGS.captured_queries = []
+        monkeypatch.setattr("app.agent.nodes.DDGS", _FakeDDGS)
+        _approve(monkeypatch, interface_type)
+
+        _make_web_search_tool({"interface_type": interface_type}).invoke({"query": "erro"})
+        assert len(_FakeDDGS.captured_queries) == 1
+        assert f"site:exemplo-{interface_type}.com" in _FakeDDGS.captured_queries[0]
 
 
 class _FakeMessage:
@@ -137,3 +207,73 @@ def test_run_diagnosis_agent_does_not_pass_web_tool_when_web_search_disabled(mon
     assert captured_tools == [], (
         "Quando web_search_enabled=False, o ReAct agent nao deve receber nenhum tool"
     )
+
+
+def _state_with_connector(is_mock: bool):
+    from app.connectors.base import ConnectorResult
+
+    return {
+        "connector_data": ConnectorResult(
+            source_system="ODATA",
+            status="error",
+            error_code=None,
+            message="m",
+            raw="",
+            is_mock=is_mock,
+        )
+    }
+
+
+def test_web_search_policy_gate(monkeypatch):
+    """P0.2 + DA-57: WEB_SEARCH_POLICY aplicada no gate unico (node + tool ReAct)."""
+    from app.agent import nodes
+
+    monkeypatch.setattr(nodes.settings, "web_search_enabled", True)
+    monkeypatch.setattr("app.llm.gateway.settings.sensitivity_default", "public")
+    public_state = _state_with_connector(is_mock=True)
+    confidential_state = _state_with_connector(is_mock=False)
+    _approve(monkeypatch, "odata", "rfc")
+    public_state["interface_type"] = "odata"
+    confidential_state["interface_type"] = "rfc"
+
+    monkeypatch.setattr(nodes.settings, "web_search_policy", "approved")
+    assert nodes._web_search_allowed(confidential_state) is True
+
+    monkeypatch.setattr(nodes.settings, "web_search_policy", "public_only")
+    assert nodes._web_search_allowed(public_state) is True
+    assert nodes._web_search_allowed(confidential_state) is False
+
+    monkeypatch.setattr(nodes.settings, "web_search_policy", "disabled")
+    assert nodes._web_search_allowed(public_state) is False
+
+    monkeypatch.setattr(nodes.settings, "web_search_enabled", False)
+    monkeypatch.setattr(nodes.settings, "web_search_policy", "approved")
+    assert nodes._web_search_allowed(public_state) is False
+
+
+def test_web_search_approved_policy_blocks_without_approved_source(monkeypatch):
+    """DA-57: `approved` passou a significar o que o nome diz.
+
+    Antes deste gate, o ramo `approved` retornava `True` incondicionalmente
+    — nao havia lista de sites aprovados em lugar nenhum do codigo. Agora,
+    sem linha habilitada em `web_search_sources` para o interface_type, a
+    busca web nao acontece, mesmo com policy=approved e incidente publico.
+    """
+    from app.agent import nodes
+
+    monkeypatch.setattr(nodes.settings, "web_search_enabled", True)
+    monkeypatch.setattr(nodes.settings, "web_search_policy", "approved")
+    monkeypatch.setattr("app.llm.gateway.settings.sensitivity_default", "public")
+    _no_sources(monkeypatch)
+
+    assert nodes._web_search_allowed(_state_with_connector(is_mock=True)) is False
+
+
+def test_web_search_public_only_blocks_free_text_by_default(monkeypatch):
+    """B-04: com sensitivity_default=confidential (default), public_only
+    bloqueia a busca web para incidente so com texto do usuario."""
+    from app.agent import nodes
+
+    monkeypatch.setattr(nodes.settings, "web_search_enabled", True)
+    monkeypatch.setattr(nodes.settings, "web_search_policy", "public_only")
+    assert nodes._web_search_allowed({"description": "erro na interface"}) is False

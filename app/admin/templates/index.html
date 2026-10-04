@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Início · Admin{% endblock %}
+{% block content %}
+<main>
+  <h2>Dashboard</h2>
+  <p style="color: var(--text); margin-bottom: 2rem; line-height: 1.6;">
+    Gerencie modelos, sistemas integrados e incidentes. Substitui a edição manual do
+    <code>.env</code> com total controle via interface.
+  </p>
+
+  <div class="metrics-grid">
+    <div class="card">
+      <div class="card-header">
+        <span class="icon">🤖</span> Modelos
+      </div>
+      <p style="margin: 0; color: var(--text);">Gerencie chaves e preços por origem</p>
+      <a href="/admin/models" class="btn btn-primary" style="margin-top: 1rem; display: inline-block;">Gerenciar modelos</a>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="icon">📊</span> Metering
+      </div>
+      <p style="margin: 0; color: var(--text);">Acompanhe consumo real de tokens</p>
+      <a href="/admin/usage" class="btn btn-primary" style="margin-top: 1rem; display: inline-block;">Ver uso</a>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="icon">🔗</span> Sistemas
+      </div>
+      <p style="margin: 0; color: var(--text);">Catálogo de sistemas integrados</p>
+      <a href="/admin/systems" class="btn btn-primary" style="margin-top: 1rem; display: inline-block;">Gerenciar sistemas</a>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="icon">⚠️</span> Incidentes
+      </div>
+      <p style="margin: 0; color: var(--text);">Histórico de diagnósticos</p>
+      <a href="/admin/incidents" class="btn btn-primary" style="margin-top: 1rem; display: inline-block;">Ver incidentes</a>
+    </div>
+  </div>
+
+  <h2 style="margin-top: 3rem;">Configuração</h2>
+  <div class="card">
+    <h3 style="margin-top: 0; color: var(--text);">Modo Gerenciado</h3>
+    <p style="margin-bottom: 0; color: var(--text);">
+      {% if managed %}<span class="status-badge status-active">Ligado</span> — O runtime resolve modelo/base_url/chave do registro (fail-closed).{% else %}<span class="status-badge status-degraded">Desligado</span> — O runtime continua 100% dirigido pelo .env.{% endif %}
+    </p>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top: 0; color: var(--text);">Metering de Tokens</h3>
+    <p style="margin-bottom: 0; color: var(--text);">
+      {% if metering_enabled %}<span class="status-badge status-active">Ativo</span> — Persistido em <code>llm_usage</code> com <code>DATABASE_URL</code>.{% else %}<span class="status-badge status-degraded">Desligado</span>{% endif %}
+    </p>
+  </div>
+</main>
+{% endblock %}

@@ -154,7 +154,8 @@ def test_run_diagnosis_job_reconstructs_request_and_serializes_response(monkeypa
         captured_request["request"] = request
         return DiagnosisResponse(
             probable_root_cause="Causa raiz stub",
-            confidence=0.5,
+            model_confidence=0.5,
+            diagnosis_confidence=0.0,
             next_steps=["Passo 1"],
             report_markdown="## Diagnostico",
         )

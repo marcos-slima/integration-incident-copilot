@@ -7,6 +7,7 @@ import app.main as main_module
 from app.config import Settings
 from app.main import app
 from app.models import DiagnosisResponse
+from app.rate_limit import limiter
 
 client = TestClient(app)
 
@@ -14,7 +15,8 @@ client = TestClient(app)
 def _stub_diagnosis(request):
     return DiagnosisResponse(
         probable_root_cause="Causa raiz de teste (stub)",
-        confidence=0.75,
+        model_confidence=0.75,
+        diagnosis_confidence=0.0,
         next_steps=["Passo 1"],
         report_markdown="## Diagnostico\n\nCausa raiz de teste (stub)",
         matched_source="doc_teste.md",
@@ -49,11 +51,8 @@ def test_health_endpoint():
     response = client.get("/health")
     assert response.status_code == 200
     body = response.json()
-    # DA-35: status agora pode ser "ok" ou "degraded" dependendo da
-    # disponibilidade real de Qdrant/Ollama — em testes unitarios os
-    # servicos nao estao no ar, entao o valor esperado e "degraded".
-    # O importante aqui e que o campo existe e tem um valor valido.
-    assert body["status"] in {"ok", "degraded"}
+    # §4.3: /health e liveness puro - sempre "ok"; probe de infra fica em /ready.
+    assert body["status"] == "ok"
     assert set(body["connectors"]) == {
         "odata",
         "rfc",
@@ -64,6 +63,7 @@ def test_health_endpoint():
         "successfactors",
         "cap",
         "apim",
+        "po",
     }
     for connector_info in body["connectors"].values():
         assert connector_info["status"] in {"real", "mock", "misconfigured"}
@@ -75,10 +75,8 @@ def test_health_endpoint():
         "async_queue_enabled",
         "auth_required",
     }
-    # DA-35: campo "services" com probe real de Qdrant/Ollama
-    assert "services" in body
-    for svc_status in body["services"].values():
-        assert svc_status in {"ok", "degraded", "not_configured"}
+    # DA-35: probe real de Qdrant/Ollama so em /ready, nunca em /health
+    assert "services" not in body
 
 
 def test_health_endpoint_reflects_connector_config(monkeypatch):
@@ -100,8 +98,9 @@ def test_health_endpoint_is_rate_limited_by_global_default():
     SlowAPIMiddleware ser registrado (app/main.py), isso significava
     NENHUM rate limit, apesar do Limiter ter default_limits=["10/minute"].
     Este teste prova que o default global agora vale mesmo para rotas
-    sem decorator proprio."""
-    for _ in range(10):
+    sem decorator proprio. Default atual: 60/minute (app/rate_limit.py)."""
+    limiter.reset()
+    for _ in range(60):
         assert client.get("/health").status_code == 200
 
     assert client.get("/health").status_code == 429
@@ -358,7 +357,19 @@ def test_verify_incident_scores_langfuse_even_with_graph_rag_disabled(monkeypatc
     """O segundo efeito (score no Langfuse) e independente do primeiro
     (grafo) - um cliente que so tem trace_id (GraphRAG desligado) ainda
     consegue registrar feedback."""
-    monkeypatch.setattr(main_module, "settings", Settings(graph_rag_enabled=False))
+    monkeypatch.setattr(
+        main_module,
+        "settings",
+        # chaves de Langfuse PRECISAM estar setadas: o endpoint so grava
+        # score se settings.langfuse_configured for True (guard em
+        # main.py::verify_incident). Este teste cobre o caminho
+        # "observabilidade ligada", nao o default desligado.
+        Settings(
+            graph_rag_enabled=False,
+            langfuse_public_key="pk-lf-fake-for-test",
+            langfuse_secret_key="sk-lf-fake-for-test",
+        ),
+    )
     captured = {}
 
     class _FakeLangfuseClient:
@@ -460,11 +471,14 @@ def test_verify_incident_returns_200_on_success(monkeypatch):
         json={"root_cause": "causa confirmada por Basis", "verified_by": "human"},
     )
     assert response.status_code == 200
+    # sql_updated=False: sem DATABASE_URL nao ha onde persistir a verificacao
+    # (DA-50) - o efeito SQL e best-effort e independente dos outros dois.
     assert response.json() == {
         "incident_id": "i1",
         "status": "verified",
         "graph_updated": True,
         "langfuse_scored": False,
+        "sql_updated": False,
     }
     assert captured["incident_id"] == "i1"
     assert captured["verified_root_cause"] == "causa confirmada por Basis"
@@ -506,8 +520,22 @@ def test_verify_incident_requires_api_key_when_configured(monkeypatch):
 # ── DA-35: _probe_infra_services — readiness real ────────────────────────────
 
 
+def test_health_is_pure_liveness_even_when_infra_degraded(monkeypatch):
+    """§4.3: /health nao depende de Qdrant/Ollama - sempre 200, para o
+    Kubernetes nao reiniciar o pod por falha de dependencia externa."""
+    import app.main as main_module
+
+    def _probe_must_not_run():
+        raise AssertionError("/health nao pode fazer probe de infra externa")
+
+    monkeypatch.setattr(main_module, "_probe_infra_services", _probe_must_not_run)
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+
 def test_health_services_degraded_when_qdrant_unreachable(monkeypatch):
-    """DA-35: quando Qdrant nao responde, /health retorna status=degraded."""
+    """DA-35 + A-11: quando Qdrant nao responde, /ready retorna 503 degraded."""
     import app.main as main_module
     from app.config import Settings
 
@@ -517,7 +545,9 @@ def test_health_services_degraded_when_qdrant_unreachable(monkeypatch):
     monkeypatch.setattr(main_module, "_probe_infra_services", _probe_degraded)
     monkeypatch.setattr(main_module, "settings", Settings(qdrant_url="http://qdrant:6333"))
 
-    result = main_module.health()
+    response = client.get("/ready")
+    assert response.status_code == 503
+    result = response.json()
     assert result["services"]["qdrant"] == "degraded"
     assert result["status"] == "degraded"
 
@@ -528,29 +558,74 @@ def test_health_services_ok_when_qdrant_responds(monkeypatch):
     from app.config import Settings
 
     def _probe_ok():
-        return {"qdrant": "ok", "ollama": "not_configured"}
+        return {"qdrant": "ok", "ollama": "ok", "redis": "not_configured"}
 
     monkeypatch.setattr(main_module, "_probe_infra_services", _probe_ok)
     monkeypatch.setattr(main_module, "settings", Settings(qdrant_url="http://qdrant:6333"))
 
-    result = main_module.health()
+    response = client.get("/ready")
+    assert response.status_code == 200
+    result = response.json()
     assert result["services"]["qdrant"] == "ok"
     assert result["status"] == "ok"
 
 
-def test_health_services_not_configured_when_no_qdrant_url(monkeypatch):
-    """DA-35: sem QDRANT_URL configurado, status e 'not_configured'."""
+def test_ready_degraded_when_required_qdrant_not_configured(monkeypatch):
+    """B-07: Qdrant e obrigatorio (RAG) - "not_configured" nao pode dar 200."""
     import app.main as main_module
     from app.config import Settings
 
     def _probe_not_configured():
-        return {"qdrant": "not_configured", "ollama": "not_configured"}
+        return {"qdrant": "not_configured", "ollama": "not_configured", "redis": "not_configured"}
 
     monkeypatch.setattr(main_module, "_probe_infra_services", _probe_not_configured)
     monkeypatch.setattr(main_module, "settings", Settings(qdrant_url="", ollama_host=""))
 
-    result = main_module.health()
-    assert result["services"]["qdrant"] == "not_configured"
-    assert result["services"]["ollama"] == "not_configured"
-    # sem servicos configurados, nao pode ser "degraded" (nao ha nada pra degradar)
-    assert result["status"] == "ok"
+    response = client.get("/ready")
+    assert response.status_code == 503
+    assert response.json()["status"] == "degraded"
+
+
+def test_ready_ignores_optional_services_not_configured(monkeypatch):
+    """B-07: Ollama so e obrigatorio quando e o provider primario; Redis, Langfuse
+    e Neo4j sao opcionais - "not_configured" nesses casos mantem o pod pronto."""
+    import app.main as main_module
+    from app.config import Settings
+
+    def _probe():
+        return {
+            "qdrant": "ok",
+            "ollama": "not_configured",
+            "redis": "not_configured",
+            "langfuse": "not_configured",
+            "neo4j": "not_applicable",
+        }
+
+    monkeypatch.setattr(main_module, "_probe_infra_services", _probe)
+    new_settings = Settings(
+        llm_provider="openai", ollama_host="", redis_url="", graph_rag_enabled=False
+    )
+    monkeypatch.setattr(main_module, "settings", new_settings)
+
+    response = client.get("/ready")
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+
+def test_ready_degraded_when_primary_ollama_not_configured(monkeypatch):
+    import app.main as main_module
+    from app.config import Settings
+
+    def _probe():
+        return {
+            "qdrant": "ok",
+            "ollama": "not_configured",
+            "redis": "not_configured",
+            "langfuse": "not_configured",
+            "neo4j": "not_applicable",
+        }
+
+    monkeypatch.setattr(main_module, "_probe_infra_services", _probe)
+    monkeypatch.setattr(main_module, "settings", Settings(llm_provider="ollama", ollama_host=""))
+
+    assert client.get("/ready").status_code == 503

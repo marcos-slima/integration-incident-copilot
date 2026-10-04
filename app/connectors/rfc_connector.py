@@ -34,7 +34,11 @@ ativa usa esse conector sem restricao adicional.
 """
 
 from app.config import settings
-from app.connectors.base import ConnectorResult, SAPConnector
+from app.connectors.base import (
+    ConnectorResult,
+    SAPConnector,
+    validate_identifier_charset,
+)
 from app.exceptions import ConfigurationError
 
 try:
@@ -138,6 +142,8 @@ class RFCConnector(SAPConnector):
         separado de `fetch()` para o caminho mock continuar 100%
         testavel sem essa dependencia.
         """
+        if (invalid := validate_identifier_charset(identifier, "RFC")) is not None:
+            return invalid
         conn = pyrfc.Connection(
             ashost=settings.sap_ashost,
             sysnr=settings.sap_sysnr,

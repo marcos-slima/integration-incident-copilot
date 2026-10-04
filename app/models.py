@@ -16,10 +16,50 @@ class IncidentRequest(BaseModel):
     logs: str | None = Field(default=None, max_length=MAX_LOGS_LENGTH)
     payload: str | None = Field(default=None, max_length=MAX_PAYLOAD_LENGTH)
     interface_type: (
-        Literal["odata", "rfc", "servicenow", "salesforce", "workday", "ariba", "cap", "apim"]
+        Literal[
+            "odata",
+            "rfc",
+            "servicenow",
+            "salesforce",
+            "workday",
+            "ariba",
+            "successfactors",
+            "po",
+            "cap",
+            "apim",
+        ]
         | None
     ) = None
     identifier: str | None = None  # ex: nome do iFlow, RFC destination, numero de IDoc/incidente
+    # A-05: campos SOC/iPaaS — opcionais, permitem que clientes informem contexto de seguranca
+    # diretamente (ex: sistemas de monitoracao que ja classificaram o incidente).
+    # Sem esses campos, o pipeline deriva classificacao por heuristicas internas (gateway.py).
+    connector_source_system: str | None = Field(
+        default=None,
+        description=(
+            "Sistema de origem. DA-50: quando informado com o `system_key` "
+            "do catalogo de sistemas integrados (app/admin/ -> "
+            "integration_systems, ex: 'cap_prod'), e o valor com o qual o "
+            "incidente e correlacionado na tela /admin/incidents, na API "
+            "admin e no dashboard Grafana. Sem informacao, a correlacao cai "
+            "para `interface_type` -> `connector_type` e, havendo mais de "
+            "um sistema do mesmo conector, o resultado e 'ambiguo' em vez "
+            "de um palpite. Aceita rotulo livre tambem ('S/4HANA', 'BTP') - "
+            "nesse caso simplesmente nao casa com o catalogo."
+        ),
+    )
+    sensitivity_level: Literal["public", "internal", "confidential", "secret"] | None = Field(
+        default=None,
+        description="Nivel de sensibilidade declarado pelo cliente. None = classificado pelo pipeline.",
+    )
+    pii_detected: bool | None = Field(
+        default=None,
+        description="PII detectado antes do envio? None = nao informado (pipeline pode redetetar).",
+    )
+    redaction_applied: bool | None = Field(
+        default=None,
+        description="Redacao ja aplicada ao payload/logs antes do envio? None = nao informado.",
+    )
 
 
 # DA-23 (Event Mesh): formato CloudEvents, o mesmo usado pelo SAP
@@ -42,10 +82,26 @@ class IncidentEventData(BaseModel):
     logs: str | None = Field(default=None, max_length=MAX_LOGS_LENGTH)
     payload: str | None = Field(default=None, max_length=MAX_PAYLOAD_LENGTH)
     interface_type: (
-        Literal["odata", "rfc", "servicenow", "salesforce", "workday", "ariba", "cap", "apim"]
+        Literal[
+            "odata",
+            "rfc",
+            "servicenow",
+            "salesforce",
+            "workday",
+            "ariba",
+            "successfactors",
+            "po",
+            "cap",
+            "apim",
+        ]
         | None
     ) = None
     identifier: str | None = None
+    # A-05: mesmos campos SOC/iPaaS de IncidentRequest para consistencia
+    connector_source_system: str | None = None
+    sensitivity_level: Literal["public", "internal", "confidential", "secret"] | None = None
+    pii_detected: bool | None = None
+    redaction_applied: bool | None = None
 
 
 class IncidentEventEnvelope(BaseModel):
@@ -119,7 +175,7 @@ class DiagnosisResponse(BaseModel):
     # - diagnosis_confidence: metrica CALCULADA pelo pipeline com base nos sinais
     #   objetivos disponiveis (evidence_strength + presenca de dado real de conector
     #   + correspondencia RAG). Nao depende de nenhuma autoavaliacao do LLM.
-    #   Formula: max(evidence_strength, model_confidence * evidence_strength).
+    #   Formula: evidence_strength * model_confidence (produto — A-13 fix: corrigido de max(...)).
     #   Leitura: "quao confiavel e este diagnostico dado o que o pipeline
     #   efetivamente encontrou" — e o numero que um consumidor deveria usar para
     #   decidir se o diagnostico e acionavel sem revisao humana.
@@ -137,7 +193,8 @@ class DiagnosisResponse(BaseModel):
         le=1.0,
         description=(
             "Confianca CALCULADA pelo pipeline (nao auto-relatada pelo LLM): "
-            "max(evidence_strength, model_confidence * evidence_strength). "
+            "evidence_strength * model_confidence — produto das duas sinalizacoes "
+            "independentes (A-13 fix: corrigido de max(...) para produto). "
             "Usa apenas sinais objetivos — evidence_strength do retrieval/conector "
             "e model_confidence pos-guardrail. E o valor recomendado para decisoes "
             "de automacao (ex: 'acionar runbook se diagnosis_confidence > 0.8'). "
@@ -175,6 +232,36 @@ class DiagnosisResponse(BaseModel):
             "('sap', 'saas' ou 'generic'), decidido deterministicamente "
             "pelo supervisor a partir de interface_type/descricao - nunca "
             "por autoavaliacao do LLM. Ver DA-22 (Multi-agent)."
+        ),
+    )
+    # DA-53: proveniencia. Sem estes campos, um incidente gravado e
+    # irreproduzivel: `llm_provider_used` diz QUAL transporte respondeu, mas
+    # nao qual MODELO nem qual PROMPT - e trocar o modelo canonico (DA-4/8,
+    # DA-12) nao deixava rastro de quais diagnosticos eram do modelo antigo.
+    llm_model: str | None = Field(
+        default=None,
+        description=(
+            "Nome do modelo que efetivamente produziu o diagnostico. Texto "
+            "livre ('qwen3-coder-next:latest', nome de deployment), NAO uma "
+            "rota: modelo nunca entra na tabela de rotas (invariante 8). None "
+            "quando o rule engine (DA-33) encerrou sem chamar o LLM. Ver DA-53."
+        ),
+    )
+    prompt_version: str | None = Field(
+        default=None,
+        description=(
+            "Revisao declarada do artefato de prompt de diagnostico "
+            "(app/agent/prompts.py::PROMPT_VERSION). None quando nenhum "
+            "prompt foi usado (rule engine). Ver DA-53."
+        ),
+    )
+    prompt_digest: str | None = Field(
+        default=None,
+        description=(
+            "SHA-256 do artefato de prompt: template, slots, personas, "
+            "instrucao de saida e schema estruturado. Dois diagnosticos com o "
+            "mesmo digest usaram o mesmo prompt. None quando nenhum prompt "
+            "foi usado. Ver DA-53."
         ),
     )
     evidence: list[Evidence] = Field(
@@ -216,7 +303,7 @@ class VerifyIncidentRequest(BaseModel):
     """DA-28 (VERIFIED_AS) + avaliacao externa (medio prazo, item 5 -
     'Metricas e feedback'): corpo de POST /incidents/{incident_id}/verify.
 
-    Dois efeitos independentes, cada um so acontece se as
+    Tres efeitos independentes, cada um so acontece se as
     pre-condicoes dele estiverem presentes - nenhum bloqueia o outro:
       1. Grava VERIFIED_AS no grafo (Neo4j) - exige GraphRAG ligado e
          `incident_id` correspondendo a um incidente ja gravado (ver
@@ -225,8 +312,13 @@ class VerifyIncidentRequest(BaseModel):
       2. Registra um score booleano ('correto'/'incorreto') no trace
          Langfuse do diagnostico original - exige `trace_id` (devolvido
          em DiagnosisResponse.trace_id) e Langfuse configurado.
-    400 se NENHUM dos dois puder acontecer (GraphRAG desligado/
-    incidente nao gravado E trace_id ausente) - nao ha nada credivel
+      3. DA-50: grava a verificacao na tabela `incidents` do PostgreSQL
+         (verified_at/diagnosis_correct/verified_by/verified_root_cause)
+         - exige DATABASE_URL e que o incidente exista na tabela. E o
+         efeito que alimenta a tela /admin/incidents e os dashboards
+         (antes disso, `verified_at` ficava sempre NULL no banco
+         analitico, independente de quantas verificacoes fossem feitas).
+    400 se NENHUM dos tres puder acontecer - nao ha nada credivel
     para fazer com a chamada nesse caso.
     """
 

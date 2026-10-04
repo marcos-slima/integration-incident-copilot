@@ -96,9 +96,14 @@ class SalesforceConnector(ExternalSystemConnector):
         # caracteres perigosos, mas escapamos apostrofos explicitamente como
         # defesa em profundidade (o escape canonico do SOQL e duplicar a apostrofe).
         safe_identifier = identifier.replace("'", "''")
+        # SOQL nao aceita bind variables, entao a interpolacao e'
+        # inevitavel. O valor nao e entrada do usuario cru: `identifier` passou
+        # por `validate_identifier_charset` (acima) e o apostrofo e' escapado
+        # uma linha acima. Um nosec generico aqui nao diria nada; este diz poror
+        # que a string e' segura.
         soql = (
             "SELECT CaseNumber, Priority, Subject, Status, Origin FROM Case "
-            f"WHERE CaseNumber = '{safe_identifier}' LIMIT 1"
+            f"WHERE CaseNumber = '{safe_identifier}' LIMIT 1"  # nosec B608
         )
         try:
             token = self._get_access_token(client)
@@ -110,7 +115,9 @@ class SalesforceConnector(ExternalSystemConnector):
             )
         except httpx.HTTPStatusError as exc:
             connector_circuit_breaker.record_failure(
-                "Salesforce", settings.connector_circuit_failure_threshold
+                "Salesforce",
+                settings.connector_circuit_failure_threshold,
+                settings.connector_circuit_cooldown_seconds,
             )
             return ConnectorResult(
                 source_system="Salesforce",
@@ -123,7 +130,9 @@ class SalesforceConnector(ExternalSystemConnector):
             )
         except httpx.RequestError as exc:
             connector_circuit_breaker.record_failure(
-                "Salesforce", settings.connector_circuit_failure_threshold
+                "Salesforce",
+                settings.connector_circuit_failure_threshold,
+                settings.connector_circuit_cooldown_seconds,
             )
             return ConnectorResult(
                 source_system="Salesforce",

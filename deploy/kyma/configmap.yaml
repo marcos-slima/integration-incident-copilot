@@ -28,6 +28,10 @@ data:
   GRAPH_RAG_ENABLED: "false"
   WEB_SEARCH_ENABLED: "true"
   WEB_SEARCH_THRESHOLD: "0.6"
+  # P0.2: busca web so quando nao ha dado real de conector no estado
+  # (classify_sensitivity() == "public"). Nao e DLP: texto livre do
+  # usuario ainda e classificado como public.
+  WEB_SEARCH_POLICY: "public_only"
   # DA-39: politica de data sovereignty — alinhada com o provider cloud
   # configurado acima (openai/azure_openai). "cloud_with_dlp" permite
   # que o AI Gateway rotei dados confidenciais para providers cloud,
@@ -35,6 +39,21 @@ data:
   # (garantido por redact_pii_deep em app/agent/nodes.py).
   # Altere para "strict" se implantar um Ollama local no cluster.
   DATA_SOVEREIGNTY_MODE: "cloud_with_dlp"
+
+  # DA-43: quais ORIGINS (scheme://host[:port]) estao LIBERADAS a receber
+  # dado confidencial. NECESSARIO com DATA_SOVEREIGNTY_MODE=cloud_with_dlp:
+  # o modo sozinho libera nada, e fail-closed — allowlist vazia significa
+  # "so providers locais", e todo cloud vai com PolicyViolationError.
+  #
+  # A unidade de governanca e a ORIGIN, nao o rotulo do provider: 'openai'
+  # pode apontar para api.openai.com ou (via OPENAI_BASE_URL) para vLLM,
+  # Groq, Gemini, LiteLLM. Um questionario de seguranca de cliente pergunta
+  # "para onde vai meu dado?" — a resposta e uma URL. Troque pelo endpoint
+  # que voce CONTRATOU (Azure OpenAI: https://<recurso>.openai.azure.com).
+  #
+  # Sem o valor abaixo, este deploy so pode diagnosticar incidents SEM
+  # dado real de conector. Confira a policy efetiva em GET /llm/policy.
+  CONFIDENTIAL_ALLOWED_ORIGINS: "https://<recurso>.openai.azure.com"
 
   # Langfuse (observabilidade) e opcional - vazio aqui, sem tracing.
   # Aponte para um Langfuse self-hosted ou cloud via Secret se quiser
@@ -50,4 +69,14 @@ data:
   # Service name se usar Redis externo ou Upstash.
   # O valor da senha DEVE vir de um Secret (REDIS_PASSWORD no
   # secret.example.yaml) — nao coloque senha aqui.
-  REDIS_URL: "redis://redis:6379/0"
+  REDIS_URL: "redis://:CHANGE-ME-REDIS-PASSWORD@redis:6379/0"
+  # DA-41/DA-51: Neo4j (GraphRAG) — necessario para GraphRAG, opcional.
+  # Se GRAPH_RAG_ENABLED=true, preencha os tres campos abaixo (URI, user,
+  # password) via Secret ou diretamente aqui (nao recomendado).
+  NEO4J_URI: "bolt://neo4j:7687"
+  NEO4J_USER: "neo4j"
+  NEO4J_PASSWORD: "CHANGE-ME-NEO4J-PASSWORD"
+  SESSION_COOKIE_SECURE: "false"
+  WEB_UI_USERS: ""
+  # B-07: Tempo em segundos para probes de service (Qdrant/Ollama/Redis/Neo4j/Langfuse)
+  INFRA_PROBE_TIMEOUT: "5"

@@ -20,10 +20,12 @@ import numpy as np
 from fastembed import SparseTextEmbedding, TextEmbedding
 from langchain_ollama import OllamaEmbeddings
 from qdrant_client import QdrantClient
+from qdrant_client.http.exceptions import UnexpectedResponse
 from qdrant_client.models import Fusion, FusionQuery, Prefetch, SparseVector
 from sentence_transformers import CrossEncoder
 
 from app.config import settings
+from app.rag.embedding_guard import verify_once
 
 _logger = logging.getLogger(__name__)
 
@@ -35,6 +37,14 @@ DEFAULT_SCORE_THRESHOLD = 0.5
 HYBRID_PREFETCH_LIMIT = 20  # candidatos por perna (dense/sparse) antes da fusao
 RERANKER_MODEL = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"  # DA-29: mmarco supera baseline em +7pp Hit@1, +4pp MRR@5, 3.5x mais rapido
 RERANKER_TOP_K = 3  # quantos candidatos retornar apos o reranking
+
+# DA-17: gate denso do fallback para `sap_reference_library` — so consulta a
+# reference quando `incidents` (curado) nao tem match forte. Constante de
+# MODULO (nao local de _retrieve_unified) para o script de recalibracao
+# conseguir ler o valor em uso: scripts/calibrate_reference_fallback.py.
+# Historico completo da medicao e a decisao ficam no comentario de
+# _retrieve_unified, junto da logica que o aplica.
+REFERENCE_FALLBACK_THRESHOLD = 0.665
 
 # DA-25: piso baixo aplicado ANTES do reranker - so descarta ruido
 # semantico extremo (candidato sem nenhuma relacao com a query), nunca
@@ -75,6 +85,14 @@ class _FastEmbedWrapper:
     def embed_query(self, text: str) -> list[float]:
         return list(next(self._model.embed([text])))
 
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        # DA-38: a ingestao (`app.rag.ingest`) indexa com o MESMO embedder da
+        # consulta, entao o adaptador tambem precisa saber indexar em lote.
+        # Sem este metodo, `ingest` falhava com
+        # "'_FastEmbedWrapper' object has no attribute 'embed_documents'" e o
+        # job `rag-quality` do CI nao conseguia popular a collection.
+        return [list(vector) for vector in self._model.embed(texts)]
+
 
 @lru_cache(maxsize=1)
 def _get_embeddings() -> "OllamaEmbeddings | _FastEmbedWrapper":
@@ -104,6 +122,11 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
 
 def _retrieve_hybrid(query: str, collection_name: str, top_k: int) -> list[dict]:
     client = _get_qdrant_client()
+    # DA-45: um vetor de consulta de um modelo comparado com pontos de
+    # outro devolve resposta plausivel e ERRADA, nao erro. Verificado uma
+    # vez por processo (verify_once) para nao custar uma ida ao Qdrant por
+    # query.
+    verify_once(client, collection_name, EMBEDDING_MODEL)
     dense_query = _get_embeddings().embed_query(query)
     sparse_query = _sparse_query_vector(query)
 
@@ -193,6 +216,8 @@ def _retrieve_dense_only(
     query: str, collection_name: str, top_k: int, score_threshold: float
 ) -> list[dict]:
     client = _get_qdrant_client()
+    # DA-45: mesma verificacao da perna hibrida - ver _retrieve_hybrid.
+    verify_once(client, collection_name, EMBEDDING_MODEL)
     query_vector = _get_embeddings().embed_query(query)
     results = client.query_points(
         collection_name=collection_name,
@@ -329,15 +354,45 @@ def _retrieve_unified(
     # reavalia o texto e pode preferir o manual de qualquer forma. A
     # regra objetiva e mais forte: so consulta reference_library quando
     # incidents NAO retornou nada acima do score_threshold.
-    # A reference_library nao e curada por incidente (766k+ chunks de
-    # manuais tecnicos genericos) - qualquer query relacionada a SAP
-    # tende a achar ALGO semanticamente proximo nela, mesmo quando o
-    # incidente reportado nao tem relacao real com nenhum documento
-    # conhecido (caso out-of-scope). Por isso o fallback exige um
-    # score bem mais alto que o usado em incidents (documentos feitos
-    # sob medida): 0.85 filtra "vagamente parecido" e so deixa passar
-    # match forte o suficiente para ser confiavel como fallback.
-    REFERENCE_FALLBACK_THRESHOLD = 0.85
+    # A reference_library nao e curada por incidente (manuais tecnicos
+    # genericos) - qualquer query relacionada a SAP tende a achar ALGO
+    # semanticamente proximo nela, mesmo quando o incidente reportado nao
+    # tem relacao real com nenhum documento conhecido (caso out-of-scope).
+    # Por isso o fallback exige um score mais alto que o de incidents
+    # (documentos feitos sob medida).
+    #
+    # RECALIBRADO 2026-10-01 contra o corpus REAL (medido, nao estimado).
+    # O valor anterior era 0.85, justificado por um comentario que citava
+    # "766k+ chunks" - corpus que nunca existiu aqui. O proprio codigo
+    # registrava que o limiar estava por recalibrar (DA-44 "Limitacoes",
+    # item 2).
+    #
+    # Medicao (embeddings `nomic-embed-text` via Ollama, 552 docs /
+    # 100.805 chunks em `sap_reference_library`):
+    #
+    #   - 20 queries VERDADEIRAS (a resposta existe no acervo): score do
+    #     top-1 min=0.672, p50=0.762, max=0.886
+    #   - 15 queries FALSAS (sem relacao com integracao SAP): max=0.658
+    #
+    # Os intervalos NAO se sobrepoem: max dos falsos 0.658 < min dos
+    # verdadeiros 0.672. Um threshold no meio da faixa (0.665) separa os
+    # dois grupos com folga dos dois lados.
+    #
+    # O 0.85 rejeitava 20 de 20 verdadeiros e aceitava 0 de 15 falsos.
+    # Isso nao e' um limiar conservador demais, e' um limiar que DESLIGAVA
+    # o fallback inteiro: a reference_library era 21 GB indexados para
+    # nunca entrar em resposta nenhuma. Medido no caminho real do produto
+    # (nao na busca direta, onde o default e' 0.5), 1 de 12 consultas de
+    # diagnostico disparava o fallback.
+    #
+    # CUIDADO ao recalibrar de novo: os numeros acima valem para
+    # `nomic-embed-text` neste corpus. Trocar o modelo de embedding
+    # desloca a escala de cosseno e invalidaria esta medicao - o mesmo
+    # motivo de a DA-45 existir. Com corpus maior (o ingest estava em 26%
+    # quando medido), reavalie: mais documentos quase synonymous empurram
+    # o max dos falsos para cima, e 0.665 pode voltar a vazar.
+    # A reavaliacao e' scripts/calibrate_reference_fallback.py (queries
+    # versionadas — sem ele esta medicao nao era reproduzivel).
 
     incidents_hits = _retrieve_hybrid(query, COLLECTIONS["incidents"], top_k)
     all_hits: list[dict] = list(incidents_hits)
@@ -365,9 +420,13 @@ def _retrieve_unified(
                         REFERENCE_FALLBACK_THRESHOLD,
                     )
                 )
-        except (ValueError, RuntimeError) as _ref_err:
+        except (ValueError, RuntimeError, UnexpectedResponse) as _ref_err:
             # Distingue falha de infra (Qdrant inacessivel) de colecao vazia:
             # sem log, o diagnóstico parece correto quando na verdade o retrieval falhou.
+            # UnexpectedResponse cobre o 404 do Qdrant quando a collection
+            # sap_reference_library nao existe (ambiente novo, biblioteca
+            # nao indexada) - antes escapava do except e derrubava o
+            # /diagnose com 500 em vez de degradar sem o fallback.
             _logger.warning(
                 "[retriever] sap_reference_library indisponivel — "
                 "continuando sem contexto de referencia: %s",

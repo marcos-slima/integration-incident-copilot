@@ -6,16 +6,15 @@ funcionava para um unico pod/processo, mas falha silenciosamente em deploy
 Kyma com replicas > 1: cada pod tem seu proprio set, entao o mesmo evento
 pode ser processado duas vezes por pods diferentes.
 
-P1.1 substitui o set em memoria por um Redis Set (SADD + TTL), que e
-compartilhado entre todos os pods. A semantica e identica, a durabilidade e
-superior:
+P1.1 substitui o set em memoria por chaves Redis por evento
+("events:seen:<id>", SET NX EX), compartilhadas entre todos os pods:
 
-  - SADD event_id retorna 1 se o evento era novo, 0 se ja estava no set.
-  - TTL de 24h garante que o set nao cresca sem limite (eventos mais
+  - SET NX cria a chave se o evento e novo; retorna vazio se ja existia.
+  - TTL de 24h por chave, gravado na mesma operacao atomica (eventos mais
     antigos que 24h raramente sao reentregues por qualquer broker).
   - Fallback: se Redis nao estiver disponivel (REDIS_URL vazio ou Redis
-    fora do ar), is_duplicate() sempre retorna False — comportamento
-    pre-P1.1, preservando a disponibilidade em ambiente de desenvolvimento
+    fora do ar), usa um LRU em memoria — dedup so dentro do pod,
+    preservando a disponibilidade em ambiente de desenvolvimento
     sem Redis. Log de warning explicito quando o fallback e acionado.
 
 Integracao com P0.4 (consumer.py): cloudevents.id ja e usado como
@@ -36,88 +35,140 @@ propria no processo de deploy.
 from __future__ import annotations
 
 import logging
+import threading
+import time
+from collections import OrderedDict
 
 _logger = logging.getLogger(__name__)
 
 # Prefixo de namespace Redis — evita colisao com chaves do RQ ("rq:*")
-# e do TaskStore A2A ("a2a:task:*")
-_REDIS_KEY = "events:seen_ids"
+# e do TaskStore A2A ("a2a:task:*"). Uma chave por evento
+# ("events:seen:<id>"), gravada com SET NX EX: claim e TTL numa unica
+# operacao atomica (um Set unico com SADD + EXPIRE separados podia ficar
+# sem TTL se o EXPIRE falhasse, e o TTL valia para o set inteiro).
+_REDIS_KEY_PREFIX = "events:seen:"
 
-# TTL do set de idempotencia: 24h. Mesmo evento reentregue depois de 24h
-# (raro, mas possivel em brokers com politica de retry longa) sera
-# reprocessado — aceitavel dado que o objetivo e deduplicar entregas
-# rapidas, nao auditoria de longo prazo.
+# Ciclo de vida de um cloudevents.id (B-03):
+#   is_duplicate() -> "processing" com TTL = lease (claim)
+#   mark_completed() -> "done" com TTL de 24h
+#   release()        -> apaga (falha observada: reentrega aceita)
+# Se o processo morrer entre o claim e a conclusao, o lease expira e a
+# reentrega do broker volta a ser aceita - sem isso o evento ficaria
+# bloqueado como "duplicado" por 24h.
+#
+# TTL de "done": 24h. Mesmo evento reentregue depois de 24h (raro, mas
+# possivel em brokers com politica de retry longa) sera reprocessado —
+# aceitavel dado que o objetivo e deduplicar entregas rapidas.
 _IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60
+_PROCESSING = "processing"
+_DONE = "done"
+
+
+def _processing_lease_seconds() -> int:
+    """Lease do claim: cobre o watchdog do diagnostico com folga."""
+    from app.config import settings
+
+    return int(settings.diagnosis_timeout_seconds) + 120
+
+
+# Fallback em memoria (LRU) quando Redis nao esta disponivel - mantem a
+# deduplicacao dentro de um unico pod (comportamento pre-P1.1). Guarda
+# o instante de expiracao de cada id; o lock torna check-then-set
+# atomico entre threads (BackgroundTasks, threadpool do FastAPI).
+_LOCAL_SEEN_MAX = 2_000
+_local_seen: OrderedDict[str, float] = OrderedDict()
+_local_lock = threading.Lock()
+
+
+def _local_claim(event_id: str) -> bool:
+    """Registra event_id no LRU local com lease. Retorna True se ja existia."""
+    now = time.monotonic()
+    with _local_lock:
+        expires_at = _local_seen.get(event_id)
+        if expires_at is not None and expires_at > now:
+            return True
+        _local_seen[event_id] = now + _processing_lease_seconds()
+        _local_seen.move_to_end(event_id)
+        if len(_local_seen) > _LOCAL_SEEN_MAX:
+            _local_seen.popitem(last=False)
+        return False
+
 
 # Lazy: evita import de redis no startup quando REDIS_URL nao esta
 # configurada (mesmo padrao de _load_queue() em consumer.py e
 # _get_redis_client() em a2a/task_store.py)
 _redis_client = None
-_redis_available: bool | None = None  # None = nao verificado ainda
+# Instante (monotonic) ate o qual nao tentamos reconectar apos uma falha
+# de conexao - antes a indisponibilidade era permanente ate o restart.
+_redis_retry_after: float = 0.0
+_REDIS_RETRY_SECONDS = 30.0
 
 
 def _get_client():
     """Retorna o cliente Redis, criando-o na primeira chamada.
-    Retorna None se Redis nao estiver disponivel ou configurado."""
-    global _redis_client, _redis_available
+    Retorna None se Redis nao estiver configurado ou estiver indisponivel;
+    apos uma falha, tenta reconectar a cada _REDIS_RETRY_SECONDS."""
+    global _redis_client, _redis_retry_after
 
-    if _redis_available is False:
-        return None
     if _redis_client is not None:
         return _redis_client
 
     from app.config import settings
 
-    if not settings.redis_url:
-        _redis_available = False
+    if not settings.redis_url or time.monotonic() < _redis_retry_after:
         return None
 
     try:
         import redis
 
-        _redis_client = redis.Redis.from_url(settings.redis_url, socket_connect_timeout=2)
-        # Ping para verificar conectividade na primeira chamada
-        _redis_client.ping()
-        _redis_available = True
+        client = redis.Redis.from_url(settings.redis_url, socket_connect_timeout=2)
+        # Ping para verificar conectividade antes de usar
+        client.ping()
+        _redis_client = client
         return _redis_client
     except Exception as exc:  # noqa: BLE001
         _logger.warning(
             "[idempotency] Redis nao disponivel — idempotencia distribuida "
-            "desabilitada (fallback: sem deduplicacao entre pods). "
-            "Configure REDIS_URL para habilitar. erro=%s",
+            "desabilitada por %ss (fallback: dedup so dentro do pod). erro=%s",
+            int(_REDIS_RETRY_SECONDS),
             exc,
         )
-        _redis_available = False
+        _redis_retry_after = time.monotonic() + _REDIS_RETRY_SECONDS
         return None
 
 
-def is_duplicate(event_id: str) -> bool:
-    """Verifica se o evento ja foi visto e registra o ID no Redis Set.
+def is_duplicate(event_id: str | None) -> bool:
+    """Verifica se o evento ja foi visto e, se nao, faz o claim dele.
 
-    Retorna True se o evento ja foi processado (duplicado), False se e novo.
+    Retorna True se o evento ja foi concluido ou esta em processamento
+    (lease ativo), False se e novo - nesse caso o caller passa a ser o
+    dono do evento e DEVE chamar mark_completed() no sucesso ou
+    release() na falha.
 
-    Semantica atomica: SADD retorna 1 (novo) ou 0 (duplicado) em uma
-    operacao atomica, sem race condition entre pods.
+    Semantica atomica: SET NX EX cria a chave do evento com TTL numa unica
+    operacao, sem race condition entre pods e sem chave orfa sem TTL.
 
-    Se Redis nao estiver disponivel, retorna False (sem deduplicacao) —
-    mesmo comportamento do set em memoria pre-P1.1 para um unico pod.
+    Evento sem id (None/"") nunca e deduplicado - melhor processar duas
+    vezes do que descartar um evento valido. Sem Redis, usa o LRU em
+    memoria (dedup apenas dentro do pod).
     """
+    if not event_id:
+        return False
     client = _get_client()
     if client is None:
-        return False  # fallback: nao deduplica, processa normalmente
+        return _local_claim(event_id)
 
     try:
-        # SADD retorna o numero de elementos adicionados (1 = novo, 0 = duplicado)
-        added = client.sadd(_REDIS_KEY, event_id)
-        if added == 0:
+        # SET NX EX: True se a chave foi criada (evento novo), None se ja existia
+        created = client.set(
+            _REDIS_KEY_PREFIX + event_id, _PROCESSING, nx=True, ex=_processing_lease_seconds()
+        )
+        if not created:
             _logger.info(
                 "[idempotency] Evento duplicado detectado — ignorando. cloudevents.id=%s",
                 event_id,
             )
             return True
-        # Renova o TTL a cada novo evento inserido — garante que o set
-        # nao expire enquanto eventos recentes ainda estao sendo processados
-        client.expire(_REDIS_KEY, _IDEMPOTENCY_TTL_SECONDS)
         return False
     except Exception as exc:  # noqa: BLE001
         _logger.warning(
@@ -128,6 +179,50 @@ def is_duplicate(event_id: str) -> bool:
             exc,
         )
         return False  # fail-open: prefere reprocessar a perder evento
+
+
+def mark_completed(event_id: str | None) -> None:
+    """Converte o claim em "done" por 24h - chamado apos o processamento
+    do evento concluir com sucesso."""
+    if not event_id:
+        return
+    with _local_lock:
+        if event_id in _local_seen:
+            _local_seen[event_id] = time.monotonic() + _IDEMPOTENCY_TTL_SECONDS
+    client = _get_client()
+    if client is None:
+        return
+    try:
+        client.set(_REDIS_KEY_PREFIX + event_id, _DONE, ex=_IDEMPOTENCY_TTL_SECONDS)
+    except Exception as exc:  # noqa: BLE001
+        _logger.warning(
+            "[idempotency] Falha ao marcar cloudevents.id=%s como concluido - "
+            "uma reentrega apos o lease sera reprocessada. erro=%s",
+            event_id,
+            exc,
+        )
+
+
+def release(event_id: str | None) -> None:
+    """Desfaz o claim de is_duplicate() - chamado quando o processamento
+    do evento falhou, para que uma reentrega (Event Mesh, AMQP Modified,
+    retry do RQ ou reprocessamento manual a partir do DLQ) seja aceita."""
+    if not event_id:
+        return
+    with _local_lock:
+        _local_seen.pop(event_id, None)
+    client = _get_client()
+    if client is None:
+        return
+    try:
+        client.delete(_REDIS_KEY_PREFIX + event_id)
+    except Exception as exc:  # noqa: BLE001
+        _logger.warning(
+            "[idempotency] Falha ao liberar cloudevents.id=%s no Redis - "
+            "reentrega sera descartada ate o lease expirar. erro=%s",
+            event_id,
+            exc,
+        )
 
 
 def _warn_if_redis_missing_with_replicas() -> None:

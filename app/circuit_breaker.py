@@ -37,6 +37,32 @@ from dataclasses import dataclass
 
 _logger = logging.getLogger(__name__)
 
+# A-08: Lua script para incremento atomico de falhas (evita race condition
+# read-modify-write em deploys com replicas > 1).
+# KEYS[1] = chave Redis (cb:<ns>:<key>)
+# ARGV[1] = threshold (int)
+# ARGV[2] = ttl em segundos (int)
+# ARGV[3] = now em epoch UTC (float como string)
+# Retorna: [failures_str, opened_at_str_ou_vazio]
+_LUA_RECORD_FAILURE = """
+local key = KEYS[1]
+local threshold = tonumber(ARGV[1])
+local ttl = tonumber(ARGV[2])
+local now = ARGV[3]
+
+local failures = redis.call('HINCRBY', key, 'consecutive_failures', 1)
+local opened_at = redis.call('HGET', key, 'opened_at')
+
+if failures >= threshold and (not opened_at or opened_at == '' or opened_at == false) then
+    redis.call('HSET', key, 'opened_at', now)
+    opened_at = now
+end
+
+redis.call('EXPIRE', key, ttl)
+return {tostring(failures), opened_at or ''}
+"""
+
+
 # Redis nao e importado no nivel de modulo — lazy init igual ao padrao
 # do projeto (idempotency.py, a2a/task_store.py).
 _redis_client = None
@@ -197,23 +223,50 @@ class CircuitBreaker:
         # Tambem limpa fallback em-memoria
         self._states.pop(key, None)
 
-    def record_failure(self, key: str, failure_threshold: int) -> None:
-        # Tenta Redis primeiro
-        state = self._read_state_redis(key)
-        use_redis = state is not None
-        if not use_redis:
-            state = self._state_memory(key)
+    def record_failure(
+        self, key: str, failure_threshold: int, cooldown_seconds: float = 300.0
+    ) -> None:
+        """Registra falha de forma atomica no Redis (A-08).
 
+        Usa Lua script para garantir que o incremento e a abertura do circuito
+        sejam operacoes atomicas — sem race condition em deploys com N replicas.
+        Fallback para estado em-memoria quando Redis nao esta disponivel.
+        """
+        client = _get_redis_client()
+        if client is not None:
+            try:
+                rkey = self._redis_key(key)
+                ttl = max(int(cooldown_seconds * 10), 3600)
+                now = time.time()
+                result = client.eval(
+                    _LUA_RECORD_FAILURE,
+                    1,  # numero de KEYS
+                    rkey,  # KEYS[1]
+                    str(failure_threshold),  # ARGV[1]
+                    str(ttl),  # ARGV[2]
+                    str(now),  # ARGV[3]
+                )
+                # result = [failures_bytes, opened_at_bytes]
+                _logger.debug(
+                    "[circuit_breaker] record_failure atomico key=%s failures=%s opened_at=%s",
+                    key,
+                    result[0],
+                    result[1],
+                )
+                return
+            except Exception as exc:  # noqa: BLE001
+                _logger.warning(
+                    "[circuit_breaker] Falha no Lua record_failure key=%s — fallback em-memoria. erro=%s",
+                    key,
+                    exc,
+                )
+
+        # Fallback em-memoria (sem atomicidade, mas sem Redis nao ha replicas)
+        state = self._state_memory(key)
         state.consecutive_failures += 1
         if state.consecutive_failures >= failure_threshold:
-            state.opened_at = time.time()  # A1: epoch UTC, comparavel entre pods
-
-        if use_redis:
-            # cooldown_seconds nao e conhecido aqui — usa 300s como TTL base
-            # (o TTL real sera renovado em is_open/record_failure subsequentes)
-            self._write_state_redis(key, state, cooldown_seconds=300.0)
-        else:
-            self._states[key] = state
+            state.opened_at = time.time()
+        self._states[key] = state
 
     def consecutive_failures(self, key: str) -> int:
         state = self._read_state_redis(key)

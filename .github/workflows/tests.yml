@@ -32,6 +32,13 @@ jobs:
         # Lê a versão de .python-version (3.12.13), a mesma do ambiente local
         run: uv python install
 
+
+      - name: Instalar deps de sistema (python-qpid-proton / A-07)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake make gcc libssl-dev libffi-dev libsasl2-dev libsasl2-2
+
       - name: Sincronizar dependências
         run: uv sync --dev
 
@@ -68,12 +75,35 @@ jobs:
       - name: Instalar Python
         run: uv python install
 
+
+      - name: Instalar deps de sistema (python-qpid-proton / A-07)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake make gcc libssl-dev libffi-dev libsasl2-dev libsasl2-2
+
       - name: Sincronizar dependências
         run: uv sync --dev
 
+      # `--no-emit-project` nao e' opcional. `uv export` inclui o proprio
+      # projeto como requirement editavel (file:///...), e o pip-audit instala
+      # as dependencias com `--require-hashes`; um editavel nao tem hash, entao
+      # o comando morria com "the editable requirement ... cannot be installed
+      # when requiring hashes" e nao auditava NADA. Como o step e'
+      # continue-on-error, o job `security` ficava verde sobre uma auditoria
+      # que nunca rodou — o `continue-on-error` foi mantido para CVEs sem fix
+      # disponivel, mas ele estava mascarando tambem o proprio erro do
+      # ferramenta. Foi assim que 6 CVEs reais (urllib3 2.7.0, pypdf 6.15.0)
+      # sobreviveram a varios pushes; o gate so foi visto quando o comando foi
+      # rodado na mao. Agora roda de verdade e reporta "No known
+      # vulnerabilities found".
       - name: pip-audit — CVEs nas dependências
         continue-on-error: true
-        run: uv run pip-audit --requirement <(uv export --no-dev --format requirements-txt)
+        run: |
+          req="$(mktemp -t requirements-ci-XXXXXX.txt)"
+          uv export --no-dev --no-emit-project --format requirements-txt > "$req"
+          uv run pip-audit --requirement "$req"
+          rm -f "$req"
 
       - name: bandit — SAST Python
         run: uv run bandit -r app/ -ll -f json -o bandit-report.json || uv run bandit -r app/ -ll
@@ -137,16 +167,16 @@ jobs:
     # (BAAI/bge-small-en-v1.5, local, sem GPU, sem Ollama) tanto na
     # ingestao (scripts.ingest) quanto na consulta (eval_rag.py).
     services:
-      qdrant:
-        image: qdrant/qdrant:v1.19.0
-        ports:
-          - 6333:6333
-        options: >-
-          --health-cmd "curl -sf http://localhost:6333/healthz"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-          --health-start-period 15s
+       qdrant:
+         image: qdrant/qdrant:v1.19.0
+         ports:
+           - 6333:6333
+         options: >-
+           --health-cmd "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:6333/healthz')\""
+           --health-interval 10s
+           --health-timeout 5s
+           --health-retries 10
+           --health-start-period 15s
 
     steps:
       - name: Checkout

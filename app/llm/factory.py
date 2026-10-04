@@ -55,6 +55,12 @@ import httpx
 from app.config import Settings, settings
 from app.exceptions import ConfigurationError
 
+# DA-45: tabela de capacidades por ORIGIN real. Importar daqui (e nao de
+# app.llm.gateway) e' obrigatorio: o gateway importa o factory, entao o
+# factory importando o gateway viraria ciclo.
+from app.llm.capabilities import should_send_seed
+from app.llm.origins import resolve_provider_origin
+
 logger = logging.getLogger(__name__)
 
 # Excecoes que sinalizam "o provider esta inalcancavel agora" (rede,
@@ -80,6 +86,25 @@ def get_chat_model(model_name: str | None = None, config: Settings | None = None
     """
     cfg = config or settings
     provider = cfg.llm_provider
+
+    # DA-46: modo gerenciado (LLM_REGISTRY_DB=true) — resolve modelo,
+    # base_url e credencial a partir do registro (app/admin/) em vez do
+    # .env. FAIL-CLOSED: se o registro nao tiver um modelo habilitado
+    # para a origem em uso (ou, p/ origem cloud, uma credencial
+    # cifrada), a chamada e rejeitada — nunca cai de volta para o .env.
+    if cfg.llm_registry_db:
+        from app.admin.runtime import resolve_runtime_model
+
+        resolved = resolve_runtime_model(provider, model_name or cfg.llm_model, cfg)
+        if resolved is None:
+            _origin = resolve_provider_origin(provider, cfg) or "(origem desconhecida)"
+            raise ConfigurationError(
+                f"llm_registry_db=true: nenhum modelo habilitado para a origem "
+                f"'{_origin}' (provider '{provider}') — registre o modelo (e a "
+                "credencial cifrada, para origem cloud) em /admin antes de usar "
+                "o modo gerenciado."
+            )
+        cfg = _apply_registry_resolution(provider, cfg, resolved)
 
     if provider == "ollama":
         from langchain_ollama import ChatOllama
@@ -114,12 +139,26 @@ def get_chat_model(model_name: str | None = None, config: Settings | None = None
                 "- instale com: uv sync --extra openai"
             ) from exc
 
+        # DA-2: seed=42 por padrao, mas so quando o DESTINO aceita o
+        # campo. Este e' o unico branch que precisa consultar a tabela de
+        # capacidades: e' o unico que alcanca um endpoint
+        # OpenAI-compatible de terceiro, onde `seed` pode nao existir
+        # (Gemini responde 400 e recusa a request INTEIRA). Ollama e Azure
+        # tem contrato proprio e seguem com seed=42 fixo acima/abaixo.
+        #
+        # `llm_send_seed=None` significa "pergunte a tabela" - e' o estado
+        # que mantem DA-2 como default. Tratar None como False (a
+        # verdadeabilidade ingenua de antes) desligava a invariante de
+        # determinismo em TODO provider, por causa de um so incompativel.
+        _origin = resolve_provider_origin("openai", cfg)
+        _send_seed = should_send_seed(_origin, cfg.llm_send_seed)
+
         return ChatOpenAI(
             model=model_name or cfg.llm_model,
             api_key=cfg.openai_api_key,
             base_url=cfg.openai_base_url or None,
             temperature=0.0,
-            seed=42,
+            seed=42 if _send_seed else None,
             request_timeout=cfg.llm_request_timeout_seconds,
         )
 
@@ -157,6 +196,39 @@ def get_chat_model(model_name: str | None = None, config: Settings | None = None
         )
 
     raise ConfigurationError(f"llm_provider desconhecido: {provider!r}")
+
+
+def _apply_registry_resolution(provider: str, cfg: Settings, resolved: dict) -> Settings:
+    """Sobrescreve o Settings com o que o registro resolveu (DA-46).
+
+    `resolved` vem de app/admin/runtime.py e deve conter model_id,
+    base_url e (para origem cloud) api_key. Campos mapeados por provider
+    para que os branches de get_chat_model continuem lendo os mesmos
+    atributos de sempre."""
+    if provider == "ollama":
+        return cfg.model_copy(
+            update={
+                "llm_model": resolved["model_id"],
+                "ollama_host": resolved.get("base_url") or cfg.ollama_host,
+            }
+        )
+    if provider == "openai":
+        return cfg.model_copy(
+            update={
+                "llm_model": resolved["model_id"],
+                "openai_base_url": resolved.get("base_url") or cfg.openai_base_url,
+                "openai_api_key": resolved.get("api_key") or cfg.openai_api_key,
+            }
+        )
+    if provider == "azure_openai":
+        return cfg.model_copy(
+            update={
+                "azure_openai_deployment": resolved["model_id"],
+                "azure_openai_endpoint": resolved.get("base_url") or cfg.azure_openai_endpoint,
+                "azure_openai_api_key": resolved.get("api_key") or cfg.azure_openai_api_key,
+            }
+        )
+    return cfg
 
 
 def invoke_with_hybrid_fallback(build_and_invoke, model_name=None, config=None):

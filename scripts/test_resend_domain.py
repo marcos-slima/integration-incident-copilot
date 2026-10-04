@@ -59,7 +59,7 @@ async def main():
                         email=settings.smtp_from,
                         phone="+5531987554658",
                         password="minhasenha123",
-                        created_by="admin-api",
+                        created_by="<redact>",
                     ),
                     session,
                 )

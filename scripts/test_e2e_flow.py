@@ -93,7 +93,7 @@ def main() -> int:
     username = f"e2e_{uuid.uuid4().hex[:8]}"
     email = f"{username}@example.com"
     phone = "+5511999999999"
-    password = "SenhaSegura123!"
+    password = "<redact>"
 
     try:
         resp = http_post(

@@ -159,21 +159,21 @@ def _ensure_api_keys_configured() -> None:
         logger.warning(
             "API_KEY nao configurada no .env - chave gerada automaticamente "
             "para esta execucao (header X-API-Key): %s",
-            settings.api_key,
+            "*" * len(settings.api_key),
         )
     if not settings.a2a_api_key:
         settings.a2a_api_key = secrets.token_urlsafe(32)
         logger.warning(
             "A2A_API_KEY nao configurada no .env - chave gerada automaticamente "
             "para esta execucao (header X-A2A-Api-Key): %s",
-            settings.a2a_api_key,
+            "*" * len(settings.a2a_api_key),
         )
     if not settings.event_mesh_api_key:
         settings.event_mesh_api_key = secrets.token_urlsafe(32)
         logger.warning(
             "EVENT_MESH_API_KEY nao configurada no .env - chave gerada "
             "automaticamente para esta execucao (header X-Event-Mesh-Api-Key): %s",
-            settings.event_mesh_api_key,
+            "*" * len(settings.event_mesh_api_key),
         )
     # DA-46/47/48: superficie admin (registro de modelos/credenciais/metering)
     # com chave DEDICADA. Mesmo contrato DA-18: nunca auth desabilitada.

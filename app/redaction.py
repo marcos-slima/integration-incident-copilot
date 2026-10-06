@@ -34,6 +34,12 @@ import re
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
+# SEC-04: remove chars invisíveis Unicode que podem ocultar PII
+# \u200B = zero-width space, \u200C = zero-width non-joiner,
+# \u200D = zero-width joiner, \uFEFF = BOM marker,
+# \u200E = LTR mark, \u200F = RTL mark
+_REMOVE_INVISIBLE_RE = re.compile(r"[\u200B\u200C\u200D\u200E\u200F\uFEFF]")
+
 # E-mail: padrao RFC-simplificado suficiente para o proposito de
 # redaction (nao precisa validar e-mail, so reconhecer o formato).
 _EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
@@ -147,10 +153,17 @@ def _redact_cpf_digits_with_context(text: str) -> str:
 def redact_pii_text(text: str | None) -> str:
     """Substitui e-mail/CPF/numero de IDoc por marcadores explicitos.
     None ou string vazia devolve string vazia (mesmo contrato de
-    `sanitize_untrusted_input`)."""
+    `sanitize_untrusted_input`).
+
+    SEC-04: remove chars invisíveis Unicode antes de aplicar regex, para
+    evitar que PII oculto com \u200b, \u200c, \u200d ou \ufeff escape da
+    redação."""
     if not text:
         return ""
-    redacted = text
+    # Remove chars invisíveis Unicode: zero-width space/non-joiner/joiner e BOM
+    # Isso garante que PII escondido com chars invisíveis seja detectado
+    text_clean = _REMOVE_INVISIBLE_RE.sub("", text)
+    redacted = text_clean
     for pattern, marker in _REDACTION_PATTERNS:
         redacted = pattern.sub(marker, redacted)
     # CPF sem pontuacao: verificado por ultimo, com contexto obrigatorio

@@ -65,7 +65,7 @@ services:
     # DA-41: .env já montado via volume (line 85), então env_file removido.
     # Sem isso, "docker compose config" falha em checkout limpo (.env ainda não criado).
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       <<: *common-env
     # §3.8: restart: unless-stopped — reinicia automaticamente apos
@@ -119,7 +119,7 @@ services:
       start_period: 10s
     restart: unless-stopped
     ports:
-      - "${QDRANT_HOST_PORT:-6333}:6333"
+      - "127.0.0.1:${QDRANT_HOST_PORT:-6333}:6333"
     volumes:
       - qdrant_data:/qdrant/storage
 
@@ -140,7 +140,7 @@ services:
       start_period: 15s
     restart: unless-stopped
     ports:
-      - "${POSTGRES_HOST_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
     environment:
       POSTGRES_DB: iic
       POSTGRES_USER: iic
@@ -157,7 +157,7 @@ services:
     profiles: ["observability"]
     restart: unless-stopped
     ports:
-      - "${GRAFANA_HOST_PORT:-3001}:3000"
+      - "127.0.0.1:${GRAFANA_HOST_PORT:-3001}:3000"
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?REQUIRED_SET_IN_ENV}
       GF_USERS_ALLOW_SIGN_UP: "false"
@@ -218,8 +218,8 @@ services:
       start_period: 30s
     restart: unless-stopped
     ports:
-      - "7474:7474"
-      - "7687:7687"
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:7687:7687"
     environment:
       # Avaliacao externa (curto prazo, item 6): sem default fraco -
       # NEO4J_PASSWORD tinha um fallback "changeme123" aqui, que

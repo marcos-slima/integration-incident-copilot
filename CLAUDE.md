@@ -288,6 +288,7 @@ docs/               # índice em README.md; ARCHITECTURE.md, GETTING_STARTED.md,
 | DA-57 | Fontes de busca web viram configuração: `web_search_sources` (uma linha por `interface_type`) substitui os dois mapas literais de `app/agent/nodes.py`; `WEB_SEARCH_POLICY=approved` passa a exigir linha habilitada — **fail-closed, sem fallback em código**. O gate `connector_reachable` ganha a **7ª superfície** (seed da migration 008) e a **8ª** (`<select name="connector_type">` de `app/admin/templates/systems.html`, que omitia `successfactors` e `po` e fazia a correlação DA-50 cair no fallback) | `app/admin/models.py` (`WebSearchSource`), `app/admin/repository.py`, `app/admin/routes.py` + `ui.py` (`/admin/api/web-search-sources`, `/admin/web-search`), `app/services/web_search_sources.py`, `app/agent/nodes.py` (`_web_search_allowed`), `app/admin/templates/systems.html`, `alembic/versions/008_*.py`, `app/evaluation/gates.py` |
 | DA-58 | Mapa de cobertura produto SAP × mecanismo, **calculado** de dados versionados (27 linhas × 9 mecanismos) em vez de tabela mantida à mão: 3 níveis (`dedicated` / `generic` / `absent`) porque "cliente OData alcançaria" não é "conector de S/4HANA". Os dois eixos (capacidade do produto = afirmação sem fonte; cobertura do repo = fato verificável) são independentes, e `unknown` ≠ `none`. Gate `connector_coverage` reprova por **incoerência**, nunca por lacuna | `data/sap_products.yaml`, `data/connector_coverage.yaml`, `app/evaluation/coverage.py`, `scripts/coverage_map.py`, `docs/COVERAGE_MAP.md`, `app/evaluation/gates.py` |
 | DA-59 | Conectores multi-vendor: fluxo completo do pipeline, padrão comum (`fetch(identifier) → ConnectorResult`), checklist de 8 superfícies ao adicionar conector (registry, Literals, supervisor, CLI, UI, seed `web_search_sources`, `connector_coverage.yaml`), e documento consolidado `/docs/CONNECTORS.md` (348 linhas) | `app/connectors/__init__.py`, `app/models.py`, `app/agent/supervisor.py`, `app/cli/diagnose.py`, `app/admin/templates/systems.html`, `app/admin/models.py`, `data/connector_coverage.yaml`, `docs/CONNECTORS.md` |
+| DA-60 | Criptografia em repouso de `evidence_json` com Fernet (`LLM_CREDENTIALS_MASTER_KEY`) + migration idempotente `009_encrypt_evidence_json.py` | `app/admin/crypto.py`, `app/services/incident_recorder.py`, `app/admin/routes.py`, `alembic/versions/009_encrypt_evidence_json.py` |
 
 **DAs candidatas (sem implementação ainda):**
 - DA-31: SAP AI Agent Hub registration (MCP + A2A) — bloqueada: exige tenant Kyma
@@ -298,6 +299,45 @@ docs/               # índice em README.md; ARCHITECTURE.md, GETTING_STARTED.md,
 > já tem seção em `docs/ARCHITECTURE.md`.
 
 ---
+
+### 46. Criptografia em repouso de `evidence_json` com Fernet (DA-60)
+
+**O problema.** O campo `evidence_json` (JSONB) da tabela `incidents` armazena
+estruturas sensíveis (códigos de erro, traces, paths, payloads): dados que
+podem expor caminhos de sistema, credenciais em memória ou traces internos.
+O field era **sem criptografia em repouso**, o que violava a política de
+soberania de dados (DA-39) e não atendia ao padrão já adotado para
+credenciais (DA-47/DA-48 com Fernet e `LLM_CREDENTIALS_MASTER_KEY`).
+
+O problema foi detectado em auditoria de segurança (DATA-02), que exigiu
+migration para cifrar os dados já presentes e garantir que novas gravações
+sejam cifradas automaticamente.
+
+**O caso de uso.** Aplicações com compliance rigoroso exigem que dados de
+incidentes, mesmo non-PII, sejam armazenados com criptografia em repouso. O
+`evidence_json` é um dos campos mais sensíveis porque contém o **contexto
+completo** do diagnóstico: traces, códigos de erro, payloads. Um backup ou
+disco comprometido sem criptografia exporiria esse contexto.
+
+**A solução.** Migration `009_encrypt_evidence_json.py`:
+
+- **Upgrade**: percorre todos os incidentes, aplica Fernet com `LLM_CREDENTIALS_MASTER_KEY` ao campo `evidence_json`, deixa token pré-existente (prefixo `gAAA`) como está (idempotência)
+- **Downgrade**: remove a criptografia, devolve JSONB no formato original
+- **Detecção de tokens Fernet**: strings começando com `gAAA` são saltadas no upgrade (recriptografar gera token diferente mesmo com mesma chave)
+
+**Implementação.**
+
+1. `app/admin/crypto.py:70-95`: funções `encrypt_evidence()` e `decrypt_evidence()` com Fernet, suportando `dict`, `list`, `str` (cifrado/não-cifrado)
+2. `app/services/incident_recorder.py:40-51`: `_encrypt_evidence()` chamado no `build_incident_row()` antes de persistir
+3. `app/admin/routes.py:653-658`: decrypt ao ler `/incidents/{id}?detail=true`
+4. `alembic/versions/009_encrypt_evidence_json.py`: migration idempotente com detecção de tokens Fernet
+
+**Limitações (aceitas):**
+
+- `decrypt_evidence()` em SQLite (sem `LLM_CREDENTIALS_MASTER_KEY`) devolve valor original, sem decifra (log de warning)
+- Migration idempotente evita recriptografia, mas token Fernet mudaria se recriptografar (é comportamento esperado)
+- downgrade com dados Fernet deve ser feito com cautela em produção (perda irreversível de criptografia)
+
 
 ## Invariantes que NÃO devem ser alterados sem DA formal
 

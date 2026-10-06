@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
+from app.services.incident_recorder import _encrypt_evidence
 
 # ---------------------------------------------------------------------------
 # Modelo ORM
@@ -180,7 +181,7 @@ class IncidentRepository:
             llm_model=llm_model,
             prompt_version=prompt_version,
             prompt_digest=prompt_digest,
-            evidence_json=evidence_json,
+            evidence_json=_encrypt_evidence(evidence_json),
         )
         self._session.add(incident)
         await self._session.flush()  # obter id sem commit (commit pelo get_db_session)

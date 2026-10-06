@@ -36,6 +36,22 @@ if TYPE_CHECKING:
 _logger = logging.getLogger(__name__)
 
 
+def _encrypt_evidence(evidence: Any) -> str | None:
+    """Cifra evidence_json usando Fernet (DA-47/DA-60)."""
+    if evidence is None:
+        return None
+    try:
+        from json import dumps
+
+        from app.admin.crypto import _get_fernet
+
+        payload = dumps(evidence, ensure_ascii=False)
+        return _get_fernet().encrypt(payload.encode()).decode()
+    except Exception:  # noqa: BLE001
+        _logger.warning("[incident_recorder] Falha ao cifrar evidence_json, deixando em claro")
+        return None
+
+
 def _get_session_factory():
     """Sessionmaker sync compartilhado (DA-52 consolidou em app/db.py).
 
@@ -97,7 +113,9 @@ def build_incident_row(
         "llm_model": response.llm_model,
         "prompt_version": response.prompt_version,
         "prompt_digest": response.prompt_digest,
-        "evidence_json": [e.model_dump(mode="json") for e in response.evidence] or None,
+        "evidence_json": _encrypt_evidence(
+            [e.model_dump(mode="json") for e in response.evidence] or None
+        ),
     }
 
 

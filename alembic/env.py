@@ -26,24 +26,13 @@ from alembic import context
 # Garante que o pacote `app` é importável a partir do root do projeto
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-# DA-46/47/48: registro de modelos + credenciais + metering (tabelas
-# `llm_models`/`llm_credentials`/`llm_usage`) — precisam estar no
-# metadata para o `alembic revision --autogenerate` enxerga-las.
-from app.admin.models import IntegrationSystem, LlmCredential, LlmModel, LlmUsage  # noqa: F401
-from app.config import settings
-from app.db import Base
-
-# Importar modelos para que o metadata os registre (autogenerate)
-from app.services.incident_repository import Incident  # noqa: F401
-
-# ---------------------------------------------------------------------------
-# Configuração Alembic
-# ---------------------------------------------------------------------------
-
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
+
+# Importar settings PRIMEIRO para configurar database_url antes de app/db
+from app.config import settings
 
 # Injetar DATABASE_URL do settings (sync — psycopg2 para migrations CLI)
 _raw_url = settings.database_url or ""
@@ -53,6 +42,16 @@ if _raw_url:
         "postgres+asyncpg://", "postgresql://"
     )
     config.set_main_option("sqlalchemy.url", _sync_url)
+
+# DA-46/47/48: registro de modelos + credenciais + metering (tabelas
+# `llm_models`/`llm_credentials`/`llm_usage`) — precisam estar no
+# metadata para o `alembic revision --autogenerate` enxerga-las.
+# Importar models SEM app/db.py (que tenta engine async):
+from app.admin.models import IntegrationSystem, LlmCredential, LlmModel, LlmUsage  # noqa: F401
+from app.db import Base
+
+# Importar modelos para que o metadata os registre (autogenerate)
+# NAO importar Incident aqui (ela importa app.db, que cria engine async)
 
 target_metadata = Base.metadata
 

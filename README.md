@@ -184,6 +184,7 @@ final.
 | 57 | [43](#decisoes-de-arquitetura) | Fontes de busca web como configuração (`web_search_sources`): `WEB_SEARCH_POLICY=approved` deixa de ser no-op |
 | 58 | [44](#decisoes-de-arquitetura) | Mapa de cobertura produto SAP × mecanismo, calculado de dados versionados: 3 níveis (`dedicated` / `generic` / `absent`) em vez de um booleano |
 | 59 | [45](#decisoes-de-arquitetura) | Conectores multi-vendor: fluxo completo, padrão comum, checklist de 8 superfícies ao adicionar conector, documento consolidado `/docs/CONNECTORS.md` |
+| 60 | [46](#decisoes-de-arquitetura) | Criptografia em repouso de `evidence_json` com Fernet (`LLM_CREDENTIALS_MASTER_KEY`) + migration idempotente `009_encrypt_evidence_json.py` |
 
 ## Auditoria de Processamento Ponta a Ponto
 
@@ -2564,5 +2565,76 @@ cada conector (`tests/test_ota*.py`, `tests/test_rfc*.py`, etc). Esta DA
 adiciona **documentação**, não código. O gate `connector_reachable` (DA-51)
 e `connector_coverage` (DA-51) já cobrem as superfícies 7 e 8; o resto é
 convenção de código (padrão `ConnectorResult`) e testes unitários individuais.
+
+---
+
+### 46. Criptografia em repouso de `evidence_json` com Fernet (DA-60)
+
+**O problema.** O campo `evidence_json` (JSONB) da tabela `incidents` armazena
+estruturas sensíveis (códigos de erro, traces, paths, payloads): dados que
+podem expor caminhos de sistema, credenciais em memória ou traces internos.
+O field era **sem criptografia em repouso**, o que violava a política de
+soberania de dados (DA-39) e não atendia ao padrão já adotado para
+credenciais (DA-47/DA-48 com Fernet e `LLM_CREDENTIALS_MASTER_KEY`).
+
+O problema foi detectado em auditoria de segurança (DATA-02), que exigiu
+migration para cifrar os dados já presentes e garantir que novas gravações
+sejam cifradas automaticamente.
+
+**O caso de uso.** Aplicações com compliance rigoroso exigem que dados de
+incidentes, mesmo non-PII, sejam armazenados com criptografia em repouso. O
+`evidence_json` é um dos campos mais sensíveis porque contém o **contexto
+completo** do diagnóstico: traces, códigos de erro, payloads. Um backup ou
+disco comprometido sem criptografia exporia esse contexto.
+
+**A solução.** Migration `009_encrypt_evidence_json.py`:
+
+- **Upgrade**: percorre todos os incidentes, aplica Fernet com `LLM_CREDENTIALS_MASTER_KEY` ao campo `evidence_json`, deixa token pré-existente (prefixo `gAAA`) como está (idempotência)
+- **Downgrade**: remove a criptografia, devolve JSONB no formato original
+- **Detecção de tokens Fernet**: strings começando com `gAAA` são saltadas no upgrade (recriptografar gera token diferente mesmo com mesma chave)
+- **Conversão de tipos**: `dict`/`list` (SQLite, ou Postgres sem migration) são devolvidos direto; strings não cifradas tentam JSON parse first
+- **Integração com `incident_recorder.py`**: nova função `_encrypt_evidence()` adicionada, `evidence_json` passa por criptografia ao persistir
+- **Integração com `incident_repository.py`**: `routes.py:653-658` descriptografa `evidence_json` só para `/incidents/{id}?detail=true` (não lista)
+
+**Mudanças de código:**
+
+- `app/admin/crypto.py`: funções `encrypt_evidence()` e `decrypt_evidence()` com Fernet
+- `app/services/incident_recorder.py:40-51`: `_encrypt_evidence()` adicionado, `evidence_json` cifrado ao persistir
+- `app/admin/routes.py:653-658`: `decrypt_evidence()` aplicado apenas em detalhes (não lista, para evitar perda de desempenho)
+- `alembic/versions/009_encrypt_evidence_json.py`: migration com lógica de atualização em batch e idempotência
+- `alembic/env.py`: reescrito para configurar URL sync (`asyncpg`→`psycopg`) antes de importar models (sem carregar engine async)
+
+**Requisitos:**
+
+- `LLM_CREDENTIALS_MASTER_KEY` em `.env` (string base64 de 44 caracteres, gerada uma vez)
+- PostgreSQL ≥ 14 (suporte a JSONB)
+- `psycopg` (v3) instalado para Alembic interagir com `DATABASE_URL=postgresql+asyncpg://`
+- **Nunca compartilhar a master key** — backup seguro, access control estrito
+- Migration executa uma vez; downgrade só em emergência (perda de dados cifrados)
+
+**Invariante de qualidade.** O gatilho `evidence_json` deve ser cifrado com
+Fernet antes de persistir; se `LLM_CREDENTIALS_MASTER_KEY` não estiver
+configurada, o `incident_recorder` registra aviso e grava em claro (fallback
+de desastre, não o ideal). O downgrade desfaz a proteção e não deve ser
+executado em produção.
+
+**Limitações (deliberadamente registradas):**
+
+- Migration só afeta PostgreSQL (SQLite usa `test_detalhe_de_incidente` com dados em claro)
+- Descriptografia ocorre só em `/incidents/{id}?detail=true`, não em `/incidents` (lista)
+- `LLM_CREDENTIALS_MASTER_KEY` não é rotacionada automaticamente — rotação requer recriptografia manual
+
+**Bugs encontrados no caminho:**
+
+- **psycopg v2 vs v3**: initially usado `psycopg2-binary`, mas `psycopg` (v3) é o recommendado para `DATABASE_URL=postgresql+asyncpg://`
+- **dict vs string JSONB**: psycopg adapta dict nativamente para JSONB, mas string Fernet precisa ser passada como JSON string (`json.dumps()`)
+- **list vs dict**: fixture SQLite grava `evidence_json` como `list[dict]`, não string — `decrypt_evidence()` precisa handle `list`, `dict` e `str`
+- **NameError em alembic/env.py**: import de `config` após `app.db` causava `NameError: name 'config' is not defined` — reescrito para configurar URL sync antes
+
+**Por que esta DA tem migration e não só código.** A criptografia de dados
+existentes exige migration: não se pode apenas adicionar a função de encrypt;
+os dados já gravados (potencialmente milhares de linhas) precisam ser
+processados. Migration garantido idempotência (re-run não quebra dados) e
+downgrade (emergency rollback).
 
 ---

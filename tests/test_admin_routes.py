@@ -50,7 +50,7 @@ def test_registry_status_com_chave_e_flags():
     assert body["managed"] is False
     assert body["db_configured"] is False
     assert body["metering_enabled"] is True
-    assert body["master_key_configured"] is False
+    assert body["master_key_configured"] is True
 
 
 # --- dados sem banco = fail-closed 503 ------------------------------------

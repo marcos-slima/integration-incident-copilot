@@ -37,7 +37,7 @@ from urllib.parse import quote
 
 from app.config import settings
 from app.events import idempotency
-from app.events.consumer import handle_incident_event
+from app.events.worker_queue import _WorkerTask, get_worker_queue
 from app.models import IncidentEventEnvelope
 
 logger = logging.getLogger(__name__)
@@ -88,15 +88,19 @@ def _blocking_consume_loop(stop_flag: list[bool]) -> None:
 
     class _IncidentHandler(MessagingHandler):
         """Handler AMQP 1.0: conecta, cria receiver com crédito controlado,
-        processa mensagens e faz ack/nack via AMQP 1.0 disposition frames."""
+        delega processamento para worker queue, faz ack/nack via AMQP 1.0."""
 
         def __init__(self) -> None:
             super().__init__(prefetch=0, auto_accept=False)
             self._receiver = None
+            self._worker_queue = get_worker_queue()
 
         def on_start(self, event):
             ssl_domain = SSLDomain(SSLDomain.MODE_CLIENT)
             ssl_domain.set_peer_authentication(SSLDomain.VERIFY_PEER)
+
+            # Get worker queue (initialized in _blocking_consume_loop)
+            self._worker_queue = get_worker_queue()
 
             # quote(): credenciais com "@", ":" ou "/" quebrariam o parse da URL
             url = (
@@ -145,6 +149,9 @@ def _blocking_consume_loop(stop_flag: list[bool]) -> None:
                 delivery.update(delivery.REJECTED)
                 delivery.settle()
                 logger.warning("amqp | mensagem rejeitada (payload inválido) id=%s", msg.id)
+                # Emite crédito para a próxima mensagem
+                if self._receiver:
+                    self._receiver.flow(1)
                 return
 
             if idempotency.is_duplicate(envelope.id):
@@ -156,28 +163,28 @@ def _blocking_consume_loop(stop_flag: list[bool]) -> None:
                     self._receiver.flow(1)
                 return
 
+            # Enqueue para processamento em worker (não bloqueia reactor)
+            task = _WorkerTask(
+                message_id=envelope.id,
+                payload=body_bytes,
+                delivery=delivery,
+                receiver=self._receiver,
+            )
             try:
-                handle_incident_event(envelope)
-                idempotency.mark_completed(envelope.id)
-                # Accepted → ack (AMQP 1.0 Accepted disposition)
-                delivery.update(delivery.ACCEPTED)
-                delivery.settle()
-                logger.info("amqp | mensagem processada id=%s", msg.id)
+                # Enqueue síncrono (on_message roda dentro do reactor proton, não tem loop asyncio)
+                self._worker_queue.enqueue_sync(task)
             except Exception:
-                logger.exception("amqp | erro ao processar mensagem id=%s", msg.id)
-                idempotency.release(envelope.id)
-                # Modified → nack com requeue (AMQP 1.0 Modified disposition)
+                logger.exception("amqp | falha ao enqueue msg=%s", msg.id)
                 delivery.update(delivery.MODIFIED)
                 delivery.settle()
+                if self._receiver:
+                    self._receiver.flow(1)
+                return
 
-            # Emite crédito para a próxima mensagem
-            if self._receiver:
-                self._receiver.flow(1)
-
-            # Verifica flag de parada
-            if stop_flag[0]:
-                event.receiver.close()
-                event.connection.close()
+        def on_stop(self, event) -> None:
+            """Cleanup worker queue no shutdown."""
+            # Worker queue já foi parado pelo _worker_queue.stop() no shutdown
+            # Este handler apenas confirma a parada
 
         def on_connection_error(self, event) -> None:
             logger.error(

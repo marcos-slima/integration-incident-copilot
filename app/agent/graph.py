@@ -167,8 +167,8 @@ def _invoke_graph_with_timeout(initial_state: CopilotState) -> CopilotState:
     codigo sincrono sem pontos de cancelamento - documentada aqui em
     vez de fingida como cancelamento de verdade."""
 
-    # DA-59: admission control antes de submeter ao pool
-    if not _graph_invoke_semaphore.acquire(blocking=False):
+    acquired = _graph_invoke_semaphore.acquire(blocking=False)
+    if not acquired:
         raise DiagnosisTimeoutError(
             "Service unavailable: too many concurrent diagnoses. "
             "Tente novamente em alguns segundos."
@@ -184,7 +184,8 @@ def _invoke_graph_with_timeout(initial_state: CopilotState) -> CopilotState:
             "nao terminou a tempo."
         ) from exc
     finally:
-        _graph_invoke_semaphore.release()
+        if acquired:
+            _graph_invoke_semaphore.release()
 
 
 @observe_span(name="sap_copilot_diagnosis")

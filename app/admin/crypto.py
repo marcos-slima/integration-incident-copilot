@@ -21,6 +21,7 @@ Decisoes:
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from app.config import settings
 from app.exceptions import ConfigurationError
@@ -75,6 +76,49 @@ def decrypt_secret(token: str) -> str:
         raise ConfigurationError(
             "Falha ao decifrar credencial do registro (DA-47). Confirme que "
             "LLM_CREDENTIALS_MASTER_KEY e a mesma usada na gravacao da chave."
+        ) from exc
+
+
+def encrypt_evidence(evidence: Any) -> str | None:
+    """Cifra evidence_json (list[dict]) usando Fernet (DA-60)."""
+    if evidence is None:
+        return None
+    try:
+        from json import dumps
+
+        payload = dumps(evidence, ensure_ascii=False)
+        return _get_fernet().encrypt(payload.encode()).decode()
+    except Exception:  # noqa: BLE001
+        logger.warning("[crypto] Falha ao cifrar evidence_json, deixando em claro")
+        return None
+
+
+def decrypt_evidence(token: str | dict | list | None) -> list[dict] | None:
+    """Decifra um token Fernet de evidence_json (DA-60)."""
+    # Se já é uma estrutura Python (dict ou list), devolve direto
+    # (suporte a dados antigos, sqlite ou SQLite sem cifra)
+    if isinstance(token, (dict, list)):
+        return token
+    if not token:
+        return None
+    # Se não é string cifrada (não começa com "gAAA"), tenta JSON direto
+    # (suporte a dados antigos ou ambientes sem criptografia)
+    if isinstance(token, str) and not token.startswith("gAAA"):
+        try:
+            from json import loads
+
+            return loads(token)
+        except Exception:  # noqa: BLE001
+            return None
+    try:
+        from json import loads
+
+        payload = _get_fernet().decrypt(token.encode()).decode()
+        return loads(payload)
+    except Exception as exc:
+        raise ConfigurationError(
+            "Falha ao decifrar evidence_json (DA-60). Confirme que "
+            "LLM_CREDENTIALS_MASTER_KEY e a mesma usada na gravacao."
         ) from exc
 
 

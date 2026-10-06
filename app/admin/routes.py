@@ -21,6 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin.correlation import build_system_index, correlate
+from app.admin.crypto import decrypt_evidence
 from app.admin.models import WebUser
 from app.admin.repository import AdminRepository
 from app.admin.security import verify_admin_key
@@ -650,7 +651,7 @@ def _incident_out(
     }
     if detail:
         out["description"] = incident.description
-        out["evidence"] = incident.evidence_json or []
+        out["evidence"] = decrypt_evidence(incident.evidence_json) if incident.evidence_json else []
     return out
 
 

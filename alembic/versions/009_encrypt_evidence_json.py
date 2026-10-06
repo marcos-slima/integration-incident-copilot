@@ -11,8 +11,10 @@ de erro, traces, paths de sistemas) e precisa de criptografia em repouso.
 Decisiones:
 - Fernet (DA-47): mesmo sistema usado para llm_credentials — consistência
   e reused de infra já validada.
-- Key master: LLM_CREDENTIALS_MASTER_KEY (existe no .env.example:120).
-  Se ausente, a migration falha com ConfigurationError.
+- Key master: LLM_CREDENTIALS_MASTER_KEY. So e exigida quando ha linhas
+  com evidencia em claro; banco novo (CI) migra sem a chave.
+- A PII reconhecivel e redigida antes de cifrar (mesma regra do runtime,
+  app/admin/crypto.py::encrypt_evidence).
 - Encrypt all rows: não há dados sensíveis em evidence_json que possam
   ser lidos sem criptografia — todos os registros devem ser cifrados.
 - Safe to run: a migration e' idempotente (re-encrypt com mesma key
@@ -33,7 +35,6 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
 
 import sqlalchemy as sa
 
@@ -48,79 +49,47 @@ branch_labels = None
 depends_on = None
 
 
-def _encrypt_evidence(evidence: Any) -> str | None:
-    """Cifra evidence_json e devolve token Fernet ou None."""
-    if evidence is None:
-        return None
-    try:
-        payload = json.dumps(evidence, ensure_ascii=False)
-        return _get_fernet().encrypt(payload.encode()).decode()
-    except Exception:  # noqa: BLE001
-        logger.warning("[migration] Falha ao cifrar evidence_json, deixando em claro")
-        return None
-
-
 def upgrade() -> None:
-    # 1. Verifica que a master key está configurada (levanta ConfigurationError se faltar)
     conn = op.get_bind()
+    rows = conn.execute(sa.text("SELECT id, evidence_json FROM incidents")).fetchall()
+    pendentes = [
+        (row[0], row[1])
+        for row in rows
+        if row[1] is not None and not (isinstance(row[1], str) and row[1].startswith("gAAA"))
+    ]
+    if not pendentes:
+        # Banco novo (CI) ou ja migrado: nada a cifrar, a chave nao e exigida.
+        logger.info("[migration 009] nenhuma evidencia em claro - nada a fazer")
+        return
+
+    from app.admin.crypto import encrypt_evidence
+
     try:
         _get_fernet()
     except Exception as exc:
         raise RuntimeError(
-            "LLM_CREDENTIALS_MASTER_KEY não configurada (DA-60). Defina no .env e reinicie alembic."
+            f"{len(pendentes)} incidente(s) com evidence_json em claro e "
+            "LLM_CREDENTIALS_MASTER_KEY ausente/invalida (DA-60). Defina a chave no "
+            ".env e rode o alembic de novo."
         ) from exc
 
-    # 2. Atualiza linha por linha (não pode ser pure SQL pois usa criptografia)
-    total = 0
-    updated = 0
-
-    # Get all incidents ids
-    result = conn.execute(sa.text("SELECT id, evidence_json FROM incidents"))
-    rows = result.fetchall()
-
-    for row in rows:
-        total += 1
-        incident_id = row[0]
-        evidence_json = row[1]
-
-        # Skip if already encrypted or None
-        if evidence_json is None:
-            continue
-
-        # Try to detect if already encrypted (Fernet tokens begin with "gAAA"):
-        # Se ja for um token Fernet, pula (migration idempotente)
-        if isinstance(evidence_json, str) and evidence_json.startswith("gAAA"):
-            logger.debug("[migration] Incident %s ja cifrado, pulando", incident_id)
-            continue
-
-        # Encrypt
-        encrypted = _encrypt_evidence(evidence_json)
-        if encrypted is None:
-            continue
-
-        # Update row (JSONB field requires JSON type, not raw string)
-        # Encrypted token é uma string, mas JSONB aceita strings como JSON válido
-        # É preciso enviar como JSON string (doble quoted)
-        json_value = json.dumps(encrypted, ensure_ascii=False)
+    for incident_id, evidence_json in pendentes:
+        # encrypt_evidence redige PII antes de cifrar (mesma regra do runtime).
+        token = encrypt_evidence(evidence_json)
         conn.execute(
             sa.text("UPDATE incidents SET evidence_json = :enc WHERE id = :id"),
-            {"enc": json_value, "id": incident_id},
+            # JSONB aceita string JSON: o token vira um valor string no documento.
+            {"enc": json.dumps(token, ensure_ascii=False), "id": incident_id},
         )
-        updated += 1
-
-        if total % 1000 == 0:
-            logger.info("[migration] Encrypt evidence_json: %d linhas processadas", total)
-
-    logger.info(
-        "[migration] Encrypt evidence_json: %d linhas processadas, %d cifradas",
-        total,
-        updated,
-    )
+    logger.info("[migration 009] %d evidencia(s) cifradas", len(pendentes))
 
 
 def downgrade() -> None:
     """Desfaz criptografia de evidence_json (apenas para rollback imediato)."""
     conn = op.get_bind()
+    rows = conn.execute(sa.text("SELECT id, evidence_json FROM incidents")).fetchall()
+    if not any(isinstance(r[1], str) and r[1].startswith("gAAA") for r in rows):
+        return  # nada cifrado: a chave nao e exigida
 
     try:
         fernet = _get_fernet()
@@ -129,9 +98,6 @@ def downgrade() -> None:
             "LLM_CREDENTIALS_MASTER_KEY não configurada (DA-60 downgrade). "
             "Impossível decifrar Evidence."
         ) from exc
-
-    result = conn.execute(sa.text("SELECT id, evidence_json FROM incidents"))
-    rows = result.fetchall()
 
     total = 0
     decompressed = 0

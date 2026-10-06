@@ -80,46 +80,53 @@ def decrypt_secret(token: str) -> str:
 
 
 def encrypt_evidence(evidence: Any) -> str | None:
-    """Cifra evidence_json (list[dict]) usando Fernet (DA-60)."""
+    """DA-60: cifra evidence_json (lista de dicts) com Fernet.
+
+    A PII reconhecivel (e-mail, CPF, numero de IDoc) e redigida ANTES de
+    cifrar: quem tem a chave (a API admin decifra para a tela de
+    incidentes) nao precisa ver o dado pessoal, e o cifrado nao vira um
+    cofre de PII. Sem master key levanta ConfigurationError - perder a
+    evidencia em silencio (o comportamento anterior devolvia None e logava
+    "deixando em claro") nao e uma opcao. O boot ja exige a chave quando
+    DATABASE_URL esta configurada (app/main.py).
+    """
     if evidence is None:
         return None
-    try:
-        from json import dumps
+    from json import dumps
 
-        payload = dumps(evidence, ensure_ascii=False)
-        return _get_fernet().encrypt(payload.encode()).decode()
-    except Exception:  # noqa: BLE001
-        logger.warning("[crypto] Falha ao cifrar evidence_json, deixando em claro")
-        return None
+    from app.redaction import redact_pii_deep
+
+    payload = dumps(redact_pii_deep(evidence), ensure_ascii=False)
+    return _get_fernet().encrypt(payload.encode()).decode()
 
 
 def decrypt_evidence(token: str | dict | list | None) -> list[dict] | None:
-    """Decifra um token Fernet de evidence_json (DA-60)."""
-    # Se já é uma estrutura Python (dict ou list), devolve direto
-    # (suporte a dados antigos, sqlite ou SQLite sem cifra)
+    """Inverso de encrypt_evidence (DA-60).
+
+    Linhas anteriores a migration 009 (ou gravadas sem cifra) chegam como
+    lista/dict ja decodificados pelo JSONB e sao devolvidas como estao.
+    String: tenta Fernet; se nao for token Fernet valido mas for JSON,
+    trata como legado; senao levanta ConfigurationError (chave errada).
+    """
+    if token is None or token == "":
+        return None
     if isinstance(token, (dict, list)):
         return token
-    if not token:
-        return None
-    # Se não é string cifrada (não começa com "gAAA"), tenta JSON direto
-    # (suporte a dados antigos ou ambientes sem criptografia)
-    if isinstance(token, str) and not token.startswith("gAAA"):
-        try:
-            from json import loads
+    from json import JSONDecodeError, loads
 
-            return loads(token)
-        except Exception:  # noqa: BLE001
-            return None
+    from cryptography.fernet import InvalidToken
+
     try:
-        from json import loads
-
         payload = _get_fernet().decrypt(token.encode()).decode()
-        return loads(payload)
-    except Exception as exc:
-        raise ConfigurationError(
-            "Falha ao decifrar evidence_json (DA-60). Confirme que "
-            "LLM_CREDENTIALS_MASTER_KEY e a mesma usada na gravacao."
-        ) from exc
+    except InvalidToken as exc:
+        try:
+            return loads(token)
+        except JSONDecodeError:
+            raise ConfigurationError(
+                "Falha ao decifrar evidence_json (DA-60). Confirme que "
+                "LLM_CREDENTIALS_MASTER_KEY e a mesma usada na gravacao."
+            ) from exc
+    return loads(payload)
 
 
 def mask_secret(plaintext: str) -> str:

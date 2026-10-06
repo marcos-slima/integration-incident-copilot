@@ -26,6 +26,7 @@ import logging
 import uuid
 from typing import TYPE_CHECKING, Any
 
+from app.admin.crypto import encrypt_evidence
 from app.config import settings
 from app.db import get_sync_session_factory
 from app.redaction import redact_pii_text
@@ -34,22 +35,6 @@ if TYPE_CHECKING:
     from app.models import DiagnosisResponse, IncidentRequest
 
 _logger = logging.getLogger(__name__)
-
-
-def _encrypt_evidence(evidence: Any) -> str | None:
-    """Cifra evidence_json usando Fernet (DA-47/DA-60)."""
-    if evidence is None:
-        return None
-    try:
-        from json import dumps
-
-        from app.admin.crypto import _get_fernet
-
-        payload = dumps(evidence, ensure_ascii=False)
-        return _get_fernet().encrypt(payload.encode()).decode()
-    except Exception:  # noqa: BLE001
-        _logger.warning("[incident_recorder] Falha ao cifrar evidence_json, deixando em claro")
-        return None
 
 
 def _get_session_factory():
@@ -113,7 +98,8 @@ def build_incident_row(
         "llm_model": response.llm_model,
         "prompt_version": response.prompt_version,
         "prompt_digest": response.prompt_digest,
-        "evidence_json": _encrypt_evidence(
+        # DA-60: redigido e cifrado (app/admin/crypto.py::encrypt_evidence)
+        "evidence_json": encrypt_evidence(
             [e.model_dump(mode="json") for e in response.evidence] or None
         ),
     }

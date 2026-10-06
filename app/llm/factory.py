@@ -75,7 +75,39 @@ logger = logging.getLogger(__name__)
 TRANSPORT_FAILURE_EXCEPTIONS = (ConnectionError, httpx.ConnectError, httpx.TimeoutException)
 
 
-def get_chat_model(model_name: str | None = None, config: Settings | None = None):
+def resolve_registry_config(cfg: Settings, model_name: str | None = None) -> Settings:
+    """DA-46: no modo gerenciado (LLM_REGISTRY_DB=true) devolve o Settings
+    com modelo, base_url e credencial vindos do registro (app/admin/);
+    fora dele devolve `cfg` intacto.
+
+    Separado de get_chat_model para o AI Gateway avaliar a politica de
+    soberania sobre o destino FINAL (validacao 2026-10-06, GOV-01): o
+    base_url do registro e texto livre do admin e pode apontar para outra
+    origem que a do .env.
+
+    FAIL-CLOSED: sem modelo habilitado para a origem (ou, p/ origem cloud,
+    sem credencial cifrada) a chamada e rejeitada - nunca cai para o .env.
+    """
+    if not cfg.llm_registry_db:
+        return cfg
+    provider = cfg.llm_provider
+    from app.admin.runtime import resolve_runtime_model
+
+    resolved = resolve_runtime_model(provider, model_name or cfg.llm_model, cfg)
+    if resolved is None:
+        _origin = resolve_provider_origin(provider, cfg) or "(origem desconhecida)"
+        raise ConfigurationError(
+            f"llm_registry_db=true: nenhum modelo habilitado para a origem "
+            f"'{_origin}' (provider '{provider}') — registre o modelo (e a "
+            "credencial cifrada, para origem cloud) em /admin antes de usar "
+            "o modo gerenciado."
+        )
+    return _apply_registry_resolution(provider, cfg, resolved)
+
+
+def get_chat_model(
+    model_name: str | None = None, config: Settings | None = None, registry_resolved: bool = False
+):
     """Retorna uma instancia de `BaseChatModel` (LangChain) configurada
     conforme `config.llm_provider` (default: `settings` global).
 
@@ -87,24 +119,8 @@ def get_chat_model(model_name: str | None = None, config: Settings | None = None
     cfg = config or settings
     provider = cfg.llm_provider
 
-    # DA-46: modo gerenciado (LLM_REGISTRY_DB=true) — resolve modelo,
-    # base_url e credencial a partir do registro (app/admin/) em vez do
-    # .env. FAIL-CLOSED: se o registro nao tiver um modelo habilitado
-    # para a origem em uso (ou, p/ origem cloud, uma credencial
-    # cifrada), a chamada e rejeitada — nunca cai de volta para o .env.
-    if cfg.llm_registry_db:
-        from app.admin.runtime import resolve_runtime_model
-
-        resolved = resolve_runtime_model(provider, model_name or cfg.llm_model, cfg)
-        if resolved is None:
-            _origin = resolve_provider_origin(provider, cfg) or "(origem desconhecida)"
-            raise ConfigurationError(
-                f"llm_registry_db=true: nenhum modelo habilitado para a origem "
-                f"'{_origin}' (provider '{provider}') — registre o modelo (e a "
-                "credencial cifrada, para origem cloud) em /admin antes de usar "
-                "o modo gerenciado."
-            )
-        cfg = _apply_registry_resolution(provider, cfg, resolved)
+    if not registry_resolved:
+        cfg = resolve_registry_config(cfg, model_name)
 
     if provider == "ollama":
         from langchain_ollama import ChatOllama

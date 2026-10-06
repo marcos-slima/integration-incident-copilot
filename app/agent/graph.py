@@ -217,9 +217,10 @@ def run_diagnosis(
         # sempre o rotulo generico do conector ("OData", "SAP CAP"), nunca a
         # chave do catalogo. Ver app/services/incident_recorder.py.
         "connector_source_system": request.connector_source_system,
-        # DA-43/GOV-01: propaga entire incident_request para classify_sensitivity
-        # poder ler sensitivity_level, pii_detected, redaction_applied
-        "incident_request": request,
+        # DA-43/GOV-01: classificacao declarada pelo cliente; so ELEVA a
+        # heuristica (app/llm/gateway.py::classify_sensitivity).
+        "sensitivity_level": request.sensitivity_level,
+        "pii_detected": request.pii_detected,
         "llm_model": llm_model or settings.llm_model,
         "debug": debug,
         "incident_id": incident_id,

@@ -12,7 +12,7 @@
   <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
       <h3 style="margin: 0; color: var(--text);">Lista de Usuários</h3>
-      <button class="btn btn-primary" onclick="loadUsers()">🔄 Recarregar</button>
+      <button id="reload-btn" class="btn btn-primary">🔄 Recarregar</button>
     </div>
 
     <div style="overflow-x: auto;">
@@ -38,7 +38,7 @@
 
   <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--text);">Novo Usuário</h3>
   <div class="card">
-    <form id="newuser" onsubmit="return addUser(event)">
+    <form id="newuser">
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
         <div class="form-group">
           <label>Usuário *</label>
@@ -70,6 +70,33 @@
 </main>
 
 <script>
+  document.addEventListener('DOMContentLoaded', function() {
+    loadUsers();
+
+    document.getElementById('reload-btn').addEventListener('click', loadUsers);
+    document.getElementById('newuser').addEventListener('submit', function(e) {
+      e.preventDefault();
+      addUser(e);
+    });
+
+    document.addEventListener('click', function(e) {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+
+      const action = btn.dataset.action;
+      const userId = btn.dataset.id;
+
+      if (action === 'reissue-email') {
+        reissue(userId, 'email-token');
+      } else if (action === 'reissue-phone') {
+        reissue(userId, 'phone-code');
+      } else if (action === 'set-status') {
+        setStatus(userId, btn.dataset.value);
+      } else if (action === 'delete') {
+        delUser(userId);
+      }
+    });
+  });
 function userPill(status) {
   const cls = status === 'active' ? 'status-active' : (status === 'disabled' ? 'status-offline' : 'status-degraded');
   return `<span class="status-badge ${cls}">${escapeHtml(status)}</span>`;
@@ -105,14 +132,14 @@ function loadUsers() {
       const tr = document.createElement('tr');
       const actions = [];
       if (u.status === 'pending_email')
-        actions.push(`<button onclick="reissue('${u.id}','email-token')" class="btn" style="padding: 0.4rem 0.8rem; background: var(--border);">✉️</button>`);
+        actions.push(`<button data-id="${u.id}" data-action="reissue-email" class="btn" style="padding: 0.4rem 0.8rem; background: var(--border);">✉️</button>`);
       if (u.status === 'pending_phone')
-        actions.push(`<button onclick="reissue('${u.id}','phone-code')" class="btn" style="padding: 0.4rem 0.8rem; background: var(--border);">📱</button>`);
+        actions.push(`<button data-id="${u.id}" data-action="reissue-phone" class="btn" style="padding: 0.4rem 0.8rem; background: var(--border);">📱</button>`);
       if (u.status === 'active')
-        actions.push(`<button onclick="setStatus('${u.id}','disabled')" class="btn btn-danger" style="padding: 0.4rem 0.8rem;">🚫</button>`);
+        actions.push(`<button data-id="${u.id}" data-action="set-status" data-value="disabled" class="btn btn-danger" style="padding: 0.4rem 0.8rem;">🚫</button>`);
       if (u.status === 'disabled')
-        actions.push(`<button onclick="setStatus '${u.id}','active')" class="btn btn-success" style="padding: 0.4rem 0.8rem;">✅</button>`);
-      actions.push(`<button onclick="delUser('${u.id}')" class="btn btn-danger" style="padding: 0.4rem 0.8rem;">🗑️</button>`);
+        actions.push(`<button data-id="${u.id}" data-action="set-status" data-value="active" class="btn btn-success" style="padding: 0.4rem 0.8rem;">✅</button>`);
+      actions.push(`<button data-id="${u.id}" data-action="delete" class="btn btn-danger" style="padding: 0.4rem 0.8rem;">🗑️</button>`);
       tr.innerHTML = `
         <td style="font-weight: 500;">${escapeHtml(u.username)}</td>
         <td style="font-family: monospace; font-size: 0.9rem;">${escapeHtml(u.email)}</td>
@@ -191,25 +218,44 @@ function reissue(id, kind) {
 }
 
 function setStatus(id, status) {
+  const btn = event.currentTarget;
+  const originalText = btn.textContent;
+  btn.textContent = '...';
+  btn.disabled = true;
+
   adminFetch(`/admin/api/users/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) })
-    .then(r => { if (!r.ok) throw new Error(r.status); loadUsers(); })
+    .then(r => {
+      if (!r.ok) throw new Error(r.status);
+      loadUsers();
+    })
     .catch(e => {
       const msg = document.getElementById('msg');
       msg.textContent = e.message;
       msg.style.display = 'block';
+    })
+    .finally(() => {
+      btn.textContent = originalText;
+      btn.disabled = false;
     });
 }
 
 function delUser(id) {
+  const btn = event.currentTarget;
+  const originalText = btn.textContent;
+  btn.textContent = '...';
+  btn.disabled = true;
+
   adminFetch(`/admin/api/users/${id}`, { method: 'DELETE' })
     .then(r => { if (!r.ok && r.status !== 204) throw new Error(r.status); loadUsers(); })
     .catch(e => {
       const msg = document.getElementById('msg');
       msg.textContent = e.message;
       msg.style.display = 'block';
+    })
+    .finally(() => {
+      btn.textContent = originalText;
+      btn.disabled = false;
     });
 }
-
-loadUsers();
 </script>
 {% endblock %}

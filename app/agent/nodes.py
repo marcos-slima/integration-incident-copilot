@@ -314,25 +314,45 @@ def web_search_node(state: CopilotState) -> CopilotState:
 # com "global flags not at the start of the expression" assim que mais
 # de um padrao com (?i) e unido. Case-insensitive agora e aplicado uma
 # unica vez via re.IGNORECASE no re.compile (ver _get_injection_re).
+# Adicionados padroes em portugues (PT-BR) para cobrir casos locais.
 _INJECTION_PATTERNS = [
-    # Instrucoes diretas ao modelo
+    # Instrucoes diretas ao modelo (english + portugues)
     r"ignore\s+(all\s+)?(previous|prior|above)\s+instructions?",
+    r"(ignorar|desconsiderar|esquecer)\s+(todas\s+as\s+|todos\s+os\s+)?((?:instrucoes|comandos)\s+(anteriores|precedentes|acima)|precedentes|instrucoes)",
     r"disregard\s+(all\s+)?(previous|prior|above)\s+instructions?",
+    r"disconsiderar\s+(todas\s+as\s+)?(instrucoes\s+(anteriores|precedentes|acima)|precedentes)",
     r"forget\s+(all\s+)?(previous|prior|above)\s+instructions?",
+    r"esquecer\s+(todas\s+as\s+)?(instrucoes\s+(anteriores|precedentes|acima)|precedentes)",
     r"you\s+are\s+now\s+a",
+    r"voce\s+(agora\s+)?e\s+(um|uma)",
     r"act\s+as\s+(a\s+)?(?:different|new|another)",
+    r"atuar\s+como\s+(um|uma)\s+(novo|nova|diferente)",
     r"new\s+instructions?:",
+    r"instrucoes?\s+(novo|nova|anteriores|precedentes|acima)\s*:",
     r"system\s*:\s*you",
     r"\[system\]",
     r"\<\s*system\s*\>",
-    # Exfiltracao de dados
+    # Exfiltracao de dados (english + portugues)
     r"print\s+(all\s+)?(your\s+)?(system\s+)?prompt",
+    r"imprimir\s+(seu\s+)?prompt\s+(de\s+sistema)?",
     r"reveal\s+(your\s+)?(system\s+)?prompt",
+    r"revelar\s+(seu\s+)?prompt\s+(de\s+sistema)?",
     r"show\s+(me\s+)?(your\s+)?(instructions?|prompt|context)",
-    # Jailbreak comum
+    r"mostrar\s+(me\s+)?(suas\s+)?(instrucoes?|prompt|contexto)",
+    # Jailbreak comum (english + portugues)
     r"DAN\s+mode",
+    r"modo\s+DAN",
     r"developer\s+mode",
+    r"modo\s+desenvolvedor",
     r"jailbreak",
+    r"quebra\s+de\s+restricoes?",
+    # Outros padrões comuns (english + portugues)
+    r"you\s+must\s+now\s+(?:output|generate|create)",
+    r"voce\s+(deve|precisa)\s+(agora\s+)?(?:gerar|criar|emitir)",
+    r"ignore\s+all\s+previous\s+commands",
+    r"ignorar\s+todas\s+as\s+comandos\s+anteriores",
+    r"you\s+are\s+a\s+(?:hacker|attacker|enemy)",
+    r"voce\s+e\s+(um|uma)\s+(hacker|atirador|inimigo)",
 ]
 
 _INJECTION_RE = None
@@ -371,6 +391,10 @@ def sanitize_untrusted_input(text: str | None, field_name: str = "input") -> str
     """
     if not text:
         return ""
+
+    # Remove chars de largura zero (Zero Widthjoiner, Zero Width Non-Joiner,
+    # Byte Order Mark, etc.) que podem ser usados para evadir regex
+    text = re.sub(r"[\u200B\u200C\u200D\uFEFF\u00AD]", "", text)
 
     original_len = len(text)
     pattern = _get_injection_re()

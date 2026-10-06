@@ -56,7 +56,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db import get_db_session
-from app.rate_limit import limiter
+from app.rate_limit import limiter, request_client_identity_for_auth_endpoints
 from app.webusers import verify_login_db
 
 # Padrao da casa (padrao do admin desde DA-46): Annotated evita B008 de
@@ -240,7 +240,7 @@ def _users() -> dict[str, WebUser]:
 
 
 @router.post("/login")
-@limiter.limit("5/minute")
+@limiter.limit("5/minute", key_func=request_client_identity_for_auth_endpoints)
 async def login(
     request: Request,
     body: LoginRequest,
@@ -311,7 +311,7 @@ def whoami(request: Request) -> dict[str, str | bool | int]:
 
 
 @router.post("/verify/email")
-@limiter.limit("5/minute")
+@limiter.limit("5/minute", key_func=request_client_identity_for_auth_endpoints)
 async def verify_email(
     request: Request, body: VerifyEmailRequest, db: DbDep
 ) -> dict[str, str | bool | int]:
@@ -342,7 +342,7 @@ async def verify_email(
 
 
 @router.post("/verify/phone")
-@limiter.limit("5/minute")
+@limiter.limit("5/minute", key_func=request_client_identity_for_auth_endpoints)
 async def verify_phone(
     request: Request, body: VerifyPhoneRequest, db: DbDep
 ) -> dict[str, str | bool | int]:

@@ -212,18 +212,20 @@ def contract_drift_event(drift: DriftResult, contract: Contract):
 |---|---|---|
 | **breaking** | Property removed, type changed | ✅ Sim |
 | **additive** | New property added | ❌ Não |
-| **cosmetic** | Property renamed (renaming) | ❌ Não |
+| **cosmetic** | Property renamed (renaming), namespace/version change | ❌ Não |
+| **none** | No changes detected | ❌ Não |
 
 **Rationale:**
 - Breaking: clients quebram
 - Additive: backward compatível
-- Cosmetic: renamed é *cosmético* se alias mantido (DA-52)
+- Cosmetic: renamed é *cosmético* se alias mantido; namespace/version mudam fingerprint mas não contrato (DA-52)
+- None: baseline sem observação (UNVERIFIED) ou contrato igual (CLEAN)
 
 ## DA-52: Armadilhas Evitadas
 
-1. **Fingerprint nunca bruto XML** →Properties ordenadas, namespace ignored
-2. **Baseline append-only** → Sem FK, histórico completo
-3. **Só breaking abre incidente** → additive/cosmetic só logging
+1. **Fingerprint nunca bruto XML** → Properties ordenadas, namespace ignored
+2. **Baseline append-only** → Sem FK, histórico completo (ver migration 005)
+3. **Só breaking abre incidente** → additive/cosmetic/none só logging
 4. **Fingerprints persistentes** → Comparação entre versões
 
 ## Exemplo Completo
@@ -263,25 +265,29 @@ if drift.breaking:
 
 ```sql
 CREATE TABLE system_contracts (
-    id SERIAL PRIMARY KEY,
-    system_key VARCHAR(255) NOT NULL,
-    interface_type VARCHAR(50) NOT NULL,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    system_key VARCHAR(64) NOT NULL,
+    connector_type VARCHAR(32) NOT NULL,
+    contract_kind VARCHAR(32) NOT NULL,
     fingerprint VARCHAR(64) NOT NULL,
-    fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    contract JSONB NOT NULL,
+    entity_count INTEGER NOT NULL DEFAULT 0,
+    property_count INTEGER NOT NULL DEFAULT 0,
+    observation_status VARCHAR(32) NOT NULL,
+    observed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    notes TEXT,
+    CONSTRAINT uq_system_contracts_key_observed UNIQUE (system_key, observed_at)
 );
 
 -- Index para lookup
-CREATE INDEX idx_system_contracts_system_key ON system_contracts(system_key);
-
--- Append-only: NENHUM UPDATE/DELETE (verificado por trigger)
-CREATE OR REPLACE FUNCTION prevent_contract_update()
-RETURNS TRIGGER AS $$
-BEGIN
-    RAISE EXCEPTION 'system_contracts is append-only';
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trigger_prevent_contract_update
-BEFORE UPDATE OR DELETE ON system_contracts
-FOR EACH ROW EXECUTE FUNCTION prevent_contract_update();
+CREATE INDEX ix_system_contracts_key_observed ON system_contracts(system_key, observed_at);
+CREATE INDEX ix_system_contracts_system_key ON system_contracts(system_key);
+CREATE INDEX ix_system_contracts_fingerprint ON system_contracts(fingerprint);
+CREATE INDEX ix_system_contracts_observed_at ON system_contracts(observed_at);
 ```
+
+**Key properties:**
+- `observation_status`: `clean` | `drift` | `first_observation` | `unverified` (no row when unverified)
+- `contract_kind`: `odata_v4` | `rfc_function_module` | `idoc`
+- Append-only by application logic (no FK, no triggers, no CHECK constraints)
+- `fingerprint` is SHA-256 hex (16 chars) of normalized contract JSON

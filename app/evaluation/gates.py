@@ -685,8 +685,11 @@ def _iter_docs(root: Path) -> list[Path]:
 
 
 def _markdown_docs(root: Path) -> list[Path]:
-    """docs/ mais os dois markdown da raiz que fazem indice do conjunto."""
-    docs = _iter_docs(root)
+    """docs/ mais os dois markdown da raiz que fazem indice do conjunto.
+
+    Exclui docs de aula (DA_AULA_*.md) que contem exemplos ficticios e
+    definicoes que sao parte do tutorial, nao do modulo production-ready."""
+    docs = [d for d in _iter_docs(root) if not d.name.startswith("DA_AULA_")]
     for extra in (Path("README.md"), Path("CLAUDE.md")):
         if (root / extra).is_file():
             docs.append(root / extra)
@@ -767,7 +770,7 @@ def check_docs_code_references(root: Path = REPO_ROOT) -> list[Finding]:
                 padroes = (
                     rf"^\s*(?:async\s+)?def\s+{re.escape(simbolo)}\b",
                     rf"^\s*{re.escape(simbolo)}\s*(?::[^=\n]+)?=",
-                    rf"^\s*(?:class|{re.escape(simbolo)})\b",
+                    rf"^\s*(?:class|def|async\s+def)\s+{re.escape(simbolo)}\b",
                 )
                 if not any(re.search(p, fonte, flags=re.MULTILINE) for p in padroes):
                     problemas.append(

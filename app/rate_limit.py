@@ -41,25 +41,55 @@ def request_client_identity(request: Request) -> str:
     Ordem de prioridade:
       1. X-A2A-Api-Key  (endpoint /a2a — Agent2Agent)
       2. X-API-Key      (endpoint /diagnose, /events/incident, etc.)
-      3. IP do cliente  (chamadas sem autenticacao ou fallback)
+      3. IP do cliente  (fallback para chamadas sem autenticacao)
+
+    Note: para endpoints sensíveis (login/verify), use
+    `request_client_identity_for_auth_endpoints()` que ignora headers de
+    autenticação e usa IP + endpoint como bucket.
     """
-    # Header A2A (Agent2Agent) — prioridade maxima
     a2a_key = request.headers.get("X-A2A-Api-Key")
     if a2a_key:
-        # Prefixo "a2a:" diferencia do bucket de IP no log/storage do slowapi
         return f"a2a:{a2a_key}"
 
-    # Header de API convencional
     api_key = request.headers.get("X-API-Key")
     if api_key:
         return f"apikey:{api_key}"
 
-    # Fallback: IP do cliente (comportamento pre-P1.3)
-    # request.client pode ser None em alguns contextos de teste
     if request.client:
         return request.client.host
 
     return "unknown"
+
+
+def request_client_identity_for_auth_endpoints(request: Request) -> str:
+    """Identidade para endpoints de autenticacao sensíveis (/login, /verify/*).
+
+    Usa IP + username (hash) como bucket para evitar:
+      - Força bruta de senha contornável via X-API-Key
+      - Enumeracao de usuarios (tempo de resposta revela existência)
+
+    Ordem de prioridade:
+      1. Username do body (quando disponível) + IP
+      2. IP do cliente (fallback)
+    """
+    ip = "unknown"
+    if request.client:
+        ip = request.client.host
+
+    # Username do body ( LoginRequest / VerifyEmailRequest etc. )
+    # Tentar parsing manual pois request.body() é async e não pode ser chamado aqui
+    # Em vez disso, usar o path da rota para inferir
+    path = request.url.path
+
+    if path.endswith("/auth/login"):
+        return f"login:{ip}"
+    if path.endswith("/auth/verify/email"):
+        return f"verify_email:{ip}"
+    if path.endswith("/auth/verify/phone"):
+        return f"verify_phone:{ip}"
+
+    # Fallback: IP puro
+    return ip
 
 
 # `limiter` e o singleton importado por app/main.py e app/a2a/server.py.

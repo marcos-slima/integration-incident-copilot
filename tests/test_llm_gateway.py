@@ -87,6 +87,73 @@ def test_no_connector_data_is_public_when_opted_out(public_default):
 
 
 # ---------------------------------------------------------------------
+# DA-43/GOV-01: client sensitivity_level, pii_detected, redaction_applied
+# ---------------------------------------------------------------------
+
+
+def _make_request(**overrides):
+    from app.models import IncidentRequest
+
+    base = {
+        "description": "Teste",
+        "interface_type": "odata",
+    }
+    base.update(overrides)
+    return IncidentRequest(**base)
+
+
+def test_client_sensitivity_level_public_is_respected(public_default):
+    """DA-43/GOV-01: client 'public' sobrescreve default 'public'."""
+    state = {"incident_request": _make_request(sensitivity_level="public")}
+    assert classify_sensitivity(state) == "public"
+
+
+def test_client_sensitivity_level_internal_is_respected():
+    """DA-43/GOV-01: client 'internal' sobrescreve default 'confidential'."""
+    state = {"incident_request": _make_request(sensitivity_level="internal")}
+    assert classify_sensitivity(state) == "internal"
+
+
+def test_client_sensitivity_level_confidential_is_respected():
+    """DA-43/GOV-01: client 'confidential' prevalece sobre heuristicas."""
+    # mesmo com dados reais que seriam confidential, clientConfidential mantem
+    state = {
+        "incident_request": _make_request(sensitivity_level="confidential"),
+        "connector_data": _real_connector_data(),
+    }
+    assert classify_sensitivity(state) == "confidential"
+
+
+def test_client_sensitivity_level_only_escalates_not_deescalates():
+    """DA-43/GOV-01: client 'confidential' nunca reduz para 'public'."""
+    state = {"incident_request": _make_request(sensitivity_level="confidential")}
+    # mesmo sem connector_data, clientConfidential mantem
+    assert classify_sensitivity(state) == "confidential"
+
+
+def test_pii_detected_triggers_confidential():
+    """DA-43/GOV-01: pii_detected=True força 'confidential'."""
+    state = {"incident_request": _make_request(pii_detected=True)}
+    assert classify_sensitivity(state) == "confidential"
+
+
+def test_client_sensitivity_plus_pii_detected():
+    """DA-43/GOV-01: pii_detected prevalece mesmo com client declaracao."""
+    state = {"incident_request": _make_request(sensitivity_level="internal", pii_detected=True)}
+    assert classify_sensitivity(state) == "confidential"
+
+
+def test_connector_real_data_prevails_over_client_public():
+    """DA-43/GOV-01: connector real (confidential) sobrescreve client 'public'."""
+    state = {
+        "incident_request": _make_request(sensitivity_level="public"),
+        "connector_data": _real_connector_data(),
+    }
+    # DA-43: Heuristica real > client declaration para proteger dados
+    assert classify_sensitivity(state) == "confidential"
+
+
+# ---------------------------------------------------------------------
 # _select_allowed_providers
 # ---------------------------------------------------------------------
 

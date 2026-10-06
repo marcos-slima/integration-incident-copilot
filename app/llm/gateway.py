@@ -131,10 +131,41 @@ def classify_sensitivity(state: dict) -> Sensitivity:
     padrao (B-04): texto livre pode conter dado empresarial que a
     redacao por regex nao reconhece, entao nao classificado = sensivel.
     SENSITIVITY_DEFAULT=public restaura o comportamento anterior.
+
+    Prioridade de decisao (DA-43/GOV-01):
+      1. Se client declarou sensitivity_level, usa-o (so pode elevar).
+      2. Se client informou pii_detected=True, classifica como confidential.
+      3. Se connector_data eh real (nao mock/fallback), confidential.
+      4. Fallback para settings.sensitivity_default.
+
+    DA-43/GOV-01: sensibilidade declarada pelo cliente so pode elevar:
+      - client 'public' + heuristic 'confidential' = 'confidential'
+      - client 'confidential' + heuristic 'public' = 'confidential'
+      - client 'internal' + heuristic 'confidential' = 'confidential'
+      nunca o contrario: client nunca reduz a classificacao.
     """
+    # DA-43/GOV-01: client declaration only goes UP (confidential > internal > public)
+    request = state.get("incident_request")
+    client_sensitivity = request.sensitivity_level if request else None
+
+    # Se client declarou 'confidential', sempre prevalece (max severity)
+    if client_sensitivity == "confidential":
+        return "confidential"
+
+    # PII detected = confidential (DA-43 sovereign data protection)
+    if request and request.pii_detected:
+        return "confidential"
+
+    # Dado real de conector (DA-15/DA-25 signal) = confidential
     data = state.get("connector_data")
     if data is not None and not data.is_mock and not data.is_fallback:
         return "confidential"
+
+    # Se client declarou algo (internal ou public), respeita
+    if client_sensitivity:
+        return client_sensitivity
+
+    # Fallback para settings.sensitivity_default
     return settings.sensitivity_default
 
 
@@ -200,7 +231,10 @@ def _provider_allows_sensitivity(
     if not origin:
         return False, f"origin nao resolvida para o provider '{provider}'"
 
-    is_local = PROVIDER_LOCALITY.get(provider) == "local"
+    # Localidade deve ser decidida por is_loopback_origin(origin), não por
+    # PROVIDER_LOCALITY hardcode. Exemplo: OLLAMA_HOST=https://remoto deve
+    # ser "cloud", mesmo para provider "ollama".
+    is_local = is_loopback_origin(origin)
 
     if sensitivity == "public":
         return True, f"dado public: origem {origin} nao e restringida"

@@ -273,6 +273,52 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 
+class CspMiddleware:
+    """Adiciona Content-Security-Policy header em responses HTML da Admin UI."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        response_started = False
+        headers = []
+
+        async def send_with_csp(message):
+            nonlocal response_started, headers
+
+            if message["type"] == "http.response.start":
+                response_started = True
+                headers = message.get("headers", [])
+                content_type = b""
+                for h, v in headers:
+                    if h.lower() == b"content-type":
+                        content_type = v
+                        break
+
+                if b"text/html" in content_type:
+                    csp_headers = [
+                        (
+                            b"content-security-policy",
+                            b"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; frame-ancestors 'none'",
+                        ),
+                        (b"x-content-type-options", b"nosniff"),
+                        (b"x-frame-options", b"DENY"),
+                        (b"x-xss-protection", b"1; mode=block"),
+                    ]
+                    message["headers"] = headers + csp_headers
+
+            await send(message)
+
+        await self.app(scope, receive, send_with_csp)
+
+
+app.add_middleware(CspMiddleware)
+
+
 @app.exception_handler(DiagnosisTimeoutError)
 def _diagnosis_timeout_handler(request: Request, exc: DiagnosisTimeoutError):
     """Avaliacao externa (curto prazo, item 4): converte o watchdog de
@@ -385,7 +431,7 @@ def _probe_infra_services() -> dict[str, str]:
             from langfuse import get_client
 
             client = get_client()
-            client.projects.get_many()
+            client.auth_check()
             results["langfuse"] = "ok"
         except Exception:  # noqa: BLE001 - qualquer falha = degradado
             results["langfuse"] = "degraded"
@@ -405,9 +451,8 @@ def _probe_infra_services() -> dict[str, str]:
                     auth=(settings.neo4j_user, settings.neo4j_password),
                     connection_timeout=1,
                 )
-                with driver.cursor() as cursor:
-                    cursor.execute("RETURN 1 AS val")
-                    cursor.fetchone()
+                with driver.session() as session:
+                    session.run("RETURN 1 AS val").single()
                 results["neo4j"] = "ok"
             except Exception:  # noqa: BLE001 - qualquer falha = degradado
                 results["neo4j"] = "degraded"

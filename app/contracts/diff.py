@@ -96,8 +96,12 @@ class Change:
             return f"{target} reduziu MaxLength: {self.old} -> {self.new}"
         if self.kind == "max_length_increased":
             return f"{target} aumentou MaxLength: {self.old} -> {self.new}"
+        if self.kind == "max_length_added":
+            return f"{target} passou a ter MaxLength: {self.new}"
         if self.kind == "key_relaxed":
             return f"{target} deixou de ser chave"
+        if self.kind == "key_added":
+            return f"{target} passou a ser chave"
         if self.kind == "abstract":
             return f"{target} passou a ser abstrata (nao pode mais ser instanciada)"
         if self.kind == "entity_removed":
@@ -204,7 +208,9 @@ def _diff_properties(entity_name: str, before: Property, after: Property) -> lis
                 hint="clientes OData tendem a quebrar na troca de tipo; valide o consumidor antes de aceitar",
             )
         )
-    if before.nullable and not after.nullable:
+    before_nullable = before.nullable if before.nullable is not None else True
+    after_nullable = after.nullable if after.nullable is not None else True
+    if before_nullable and not after_nullable:
         changes.append(
             Change(
                 severity=SEVERITY_BREAKING,
@@ -216,7 +222,7 @@ def _diff_properties(entity_name: str, before: Property, after: Property) -> lis
                 hint="consumidor que mandava null agora recebe rejeicao",
             )
         )
-    elif not before.nullable and after.nullable:
+    elif not before_nullable and after_nullable:
         changes.append(
             Change(
                 severity=SEVERITY_ADDITIVE,
@@ -225,29 +231,46 @@ def _diff_properties(entity_name: str, before: Property, after: Property) -> lis
                 property=before.name,
             )
         )
-    if before.max_length is not None and after.max_length is not None:
-        if after.max_length < before.max_length:
+    before_max_len = before.max_length
+    after_max_len = after.max_length
+    if before_max_len is None:
+        before_max_len = -1
+    if after_max_len is None:
+        after_max_len = -1
+    if before_max_len != -1 and after_max_len != -1:
+        if after_max_len < before_max_len:
             changes.append(
                 Change(
                     severity=SEVERITY_BREAKING,
                     kind="max_length_reduced",
                     entity=entity_name,
                     property=before.name,
-                    old=str(before.max_length),
-                    new=str(after.max_length),
+                    old=str(before_max_len),
+                    new=str(after_max_len),
                 )
             )
-        elif after.max_length > before.max_length:
+        elif after_max_len > before_max_len:
             changes.append(
                 Change(
                     severity=SEVERITY_ADDITIVE,
                     kind="max_length_increased",
                     entity=entity_name,
                     property=before.name,
-                    old=str(before.max_length),
-                    new=str(after.max_length),
+                    old=str(before_max_len),
+                    new=str(after_max_len),
                 )
             )
+    elif before_max_len == -1 and after_max_len != -1:
+        changes.append(
+            Change(
+                severity=SEVERITY_ADDITIVE,
+                kind="max_length_added",
+                entity=entity_name,
+                property=before.name,
+                old="null",
+                new=str(after_max_len),
+            )
+        )
     if before.key and not after.key:
         changes.append(
             Change(
@@ -256,6 +279,16 @@ def _diff_properties(entity_name: str, before: Property, after: Property) -> lis
                 entity=entity_name,
                 property=before.name,
                 hint="campo saiu da chave: consultas por chave podem alterar o resultado",
+            )
+        )
+    if not before.key and after.key:
+        changes.append(
+            Change(
+                severity=SEVERITY_BREAKING,
+                kind="key_added",
+                entity=entity_name,
+                property=before.name,
+                hint="campo entrou na chave: consultas por chave podem alterar o resultado",
             )
         )
     return changes
@@ -404,17 +437,28 @@ def diff_contracts(before: Contract | None, after: Contract) -> DriftReport:
                 )
             )
 
+    # Detecta mudancas cosméticas: atualmente o modelo normalizado
+    # ignora anotacoes/namespace/versao (sao volateis por design),
+    # mas a constante SEVERITY_COSMETIC e' mantida para quando
+    # o modelo evoluir e novos campos entrarem (anotacao, etc).
+    cosmetic_changes: list[Change] = []
+
+    all_changes = changes + cosmetic_changes
+
+    # Determina severidade global: breaking > additive > cosmetic > none
     severity = SEVERITY_NONE
-    for change in changes:
+    for change in all_changes:
         if SEVERITY_ORDER[change.severity] > SEVERITY_ORDER[severity]:
             severity = change.severity
 
+    # Se apenas mudancas cosméticas, o status e' DRIFT mas o incidente NAO e' aberto
+    # (observe.py::to_incident_data filtra breaking+is_breaking).
     status = ObservationStatus.CLEAN if severity == SEVERITY_NONE else ObservationStatus.DRIFT
     return DriftReport(
         system_key="",
         status=status,
         severity=severity,
-        changes=tuple(changes),
+        changes=tuple(all_changes),
         fingerprint_before=before.fingerprint(),
         fingerprint_after=after.fingerprint(),
         kind=after.kind,

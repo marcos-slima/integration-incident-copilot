@@ -59,11 +59,12 @@ class TestParseODataMetadata:
             "Text",
         }
 
-    def test_ausencia_de_nullable_means_not_nullable(self):
-        # Padrao EDMX. Ler como nullable (default de XML) faria todo campo
-        # parecer relaxado e mascararia nullability_tightened.
+    def test_ausencia_de_nullable_means_nullable(self):
+        # CSDL v2/v4: ausencia de Nullable significa nullable=true. O padrao
+        # do EDMX e' nullable, e o parser deve assumir True quando o
+        # atributo esta ausente (DATA-01).
         currency = parse_odata_metadata(EDMX_V4).entities["I_Currency"]
-        assert currency.properties["Currency"].nullable is False
+        assert currency.properties["Currency"].nullable is True
 
     def test_nullable_explicito_e_respeitado(self):
         currency = parse_odata_metadata(EDMX_V4).entities["I_Currency"]

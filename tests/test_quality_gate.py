@@ -647,6 +647,20 @@ def test_docs_code_references_aceita_ponto_de_debug_valido(tmp_path: Path) -> No
     assert not [f for f in check_docs_code_references(root) if f.is_failure]
 
 
+def test_docs_code_references_acusa_classe_inexistente(tmp_path: Path) -> None:
+    r"""Regressao QA-01: o padrao anterior `^\s*(?:class|SIMBOLO)\b` aprovava
+    qualquer linha `class X`, mesmo se o simbolo citado nao existia."""
+    root = _docs_root(tmp_path)
+    (root / "app").mkdir()
+    (root / "app/x.py").write_text(
+        "class Real:\n    pass\n\ndef outra_coisa():\n    pass\n", encoding="utf-8"
+    )
+    (root / "docs/T.md").write_text("`app/x.py::fantasma`\n", encoding="utf-8")
+
+    falhas = [f for f in check_docs_code_references(root) if f.is_failure]
+    assert "fantasma nao definido" in falhas[0].message
+
+
 def test_docs_code_references_acusa_md_fantasma(tmp_path: Path) -> None:
     """O caso real: dez citacoes, em tres docs e em docstrings de codigo,
     apontavam para um `learnings.md` que NUNCA existiu no historico."""

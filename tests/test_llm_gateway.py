@@ -87,70 +87,103 @@ def test_no_connector_data_is_public_when_opted_out(public_default):
 
 
 # ---------------------------------------------------------------------
-# DA-43/GOV-01: client sensitivity_level, pii_detected, redaction_applied
+# DA-43/GOV-01: sensibilidade declarada pelo cliente (so eleva) e registry
 # ---------------------------------------------------------------------
 
 
-def _make_request(**overrides):
+def test_client_public_e_respeitado_quando_padrao_tambem_e_public(public_default):
+    assert classify_sensitivity({"sensitivity_level": "public"}) == "public"
+
+
+def test_client_public_nao_rebaixa_padrao_confidential():
+    """GOV-01 (validacao 2026-10-06): a declaracao do cliente so ELEVA."""
+    assert classify_sensitivity({"sensitivity_level": "public"}) == "confidential"
+
+
+@pytest.mark.parametrize("nivel", ["internal", "confidential", "secret"])
+def test_client_nao_publico_eleva_mesmo_com_padrao_public(public_default, nivel):
+    assert classify_sensitivity({"sensitivity_level": nivel}) == "confidential"
+
+
+def test_pii_detected_eleva_mesmo_com_padrao_public(public_default):
+    assert classify_sensitivity({"pii_detected": True}) == "confidential"
+
+
+def test_connector_real_prevalece_sobre_client_public(public_default):
+    state = {"sensitivity_level": "public", "connector_data": _real_connector_data()}
+    assert classify_sensitivity(state) == "confidential"
+
+
+def test_campos_de_sensibilidade_sobrevivem_ao_stategraph():
+    """Regressao GOV-01: o StateGraph(CopilotState) descarta chaves fora do
+    schema - a versao anterior gravava `incident_request`, que sumia antes
+    do primeiro node."""
+    from langgraph.graph import END, StateGraph
+
+    from app.agent.state import CopilotState
+
+    visto = {}
+
+    def probe(state):
+        visto.update(state)
+        return {}
+
+    g = StateGraph(CopilotState)
+    g.add_node("probe", probe)
+    g.set_entry_point("probe")
+    g.add_edge("probe", END)
+    g.compile().invoke({"description": "x", "sensitivity_level": "secret", "pii_detected": True})
+    assert visto["sensitivity_level"] == "secret"
+    assert visto["pii_detected"] is True
+    assert classify_sensitivity(visto) == "confidential"
+
+
+def test_run_diagnosis_propaga_sensibilidade_do_request(monkeypatch):
+    import app.agent.graph as graph_mod
     from app.models import IncidentRequest
 
-    base = {
-        "description": "Teste",
-        "interface_type": "odata",
-    }
-    base.update(overrides)
-    return IncidentRequest(**base)
+    capturado = {}
+
+    def fake_invoke(initial_state):
+        capturado.update(initial_state)
+        raise RuntimeError("parar aqui")
+
+    monkeypatch.setattr(graph_mod, "_invoke_graph_with_timeout", fake_invoke)
+    req = IncidentRequest(description="erro", sensitivity_level="secret", pii_detected=True)
+    with pytest.raises(RuntimeError, match="parar aqui"):
+        graph_mod.run_diagnosis(req)
+    assert capturado["sensitivity_level"] == "secret"
+    assert capturado["pii_detected"] is True
 
 
-def test_client_sensitivity_level_public_is_respected(public_default):
-    """DA-43/GOV-01: client 'public' sobrescreve default 'public'."""
-    state = {"incident_request": _make_request(sensitivity_level="public")}
-    assert classify_sensitivity(state) == "public"
+def test_registry_com_destino_remoto_e_barrado_para_confidential(monkeypatch):
+    """GOV-01: no modo gerenciado o base_url do registro (texto livre do
+    admin) e reavaliado. Ollama do .env em loopback, registro apontando
+    para host remoto: dado confidencial nao sai."""
+    from app.llm import factory, gateway
 
-
-def test_client_sensitivity_level_internal_is_respected():
-    """DA-43/GOV-01: client 'internal' sobrescreve default 'confidential'."""
-    state = {"incident_request": _make_request(sensitivity_level="internal")}
-    assert classify_sensitivity(state) == "internal"
-
-
-def test_client_sensitivity_level_confidential_is_respected():
-    """DA-43/GOV-01: client 'confidential' prevalece sobre heuristicas."""
-    # mesmo com dados reais que seriam confidential, clientConfidential mantem
-    state = {
-        "incident_request": _make_request(sensitivity_level="confidential"),
-        "connector_data": _real_connector_data(),
-    }
-    assert classify_sensitivity(state) == "confidential"
-
-
-def test_client_sensitivity_level_only_escalates_not_deescalates():
-    """DA-43/GOV-01: client 'confidential' nunca reduz para 'public'."""
-    state = {"incident_request": _make_request(sensitivity_level="confidential")}
-    # mesmo sem connector_data, clientConfidential mantem
-    assert classify_sensitivity(state) == "confidential"
-
-
-def test_pii_detected_triggers_confidential():
-    """DA-43/GOV-01: pii_detected=True força 'confidential'."""
-    state = {"incident_request": _make_request(pii_detected=True)}
-    assert classify_sensitivity(state) == "confidential"
-
-
-def test_client_sensitivity_plus_pii_detected():
-    """DA-43/GOV-01: pii_detected prevalece mesmo com client declaracao."""
-    state = {"incident_request": _make_request(sensitivity_level="internal", pii_detected=True)}
-    assert classify_sensitivity(state) == "confidential"
-
-
-def test_connector_real_data_prevails_over_client_public():
-    """DA-43/GOV-01: connector real (confidential) sobrescreve client 'public'."""
-    state = {
-        "incident_request": _make_request(sensitivity_level="public"),
-        "connector_data": _real_connector_data(),
-    }
-    # DA-43: Heuristica real > client declaration para proteger dados
-    assert classify_sensitivity(state) == "confidential"
+    cfg = Settings(
+        _env_file=None,
+        llm_provider="ollama",
+        llm_fallback_provider="",
+        ollama_host="http://127.0.0.1:11434",
+        llm_registry_db=True,
+    )
+    monkeypatch.setattr(
+        "app.admin.runtime.resolve_runtime_model",
+        lambda provider, model, c: {
+            "model_id": "m",
+            "base_url": "https://gpu.terceiro.example.com",
+        },
+    )
+    chamado = []
+    monkeypatch.setattr(gateway, "get_chat_model", lambda **kw: chamado.append(kw))
+    monkeypatch.setattr(factory, "get_chat_model", lambda **kw: chamado.append(kw))
+    with pytest.raises(PolicyViolationError, match="destino resolvido pelo registro"):
+        gateway.invoke_via_gateway(
+            lambda llm: None, state={"description": "x"}, prompt_text="x", config=cfg
+        )
+    assert chamado == []
 
 
 # ---------------------------------------------------------------------

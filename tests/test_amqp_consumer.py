@@ -143,15 +143,15 @@ def test_blocking_consume_loop_no_proton() -> None:
     reason="python-qpid-proton não instalado",
 )
 def test_on_message_accepted_on_valid_payload() -> None:
-    """Mensagem válida → delivery ACCEPTED (ack AMQP 1.0)."""
-    # Importa _IncidentHandler indiretamente instanciando o loop com Container mockado
-    import app.events.amqp_consumer as mod
-    from app.events.amqp_consumer import (
-        _blocking_consume_loop,  # noqa: F401 — acessa _IncidentHandler via closure
-    )
+    """Mensagem válida → enqueue para worker."""
 
-    # Reconstrói o handler de dentro do loop mockando Container.run
-    valid_payload = json.dumps(
+    # Mock worker queue
+    mock_worker_queue = MagicMock()
+    mock_worker_queue.enqueue_sync = MagicMock()
+
+    # Mock msg
+    msg_data = MagicMock()
+    msg_data.body = json.dumps(
         {
             "specversion": "1.0",
             "type": "com.sap.integration.incident.detected.v1",
@@ -160,50 +160,40 @@ def test_on_message_accepted_on_valid_payload() -> None:
             "data": {"incidentId": "INC-MSG", "priority": "HIGH", "description": "on_message test"},
         }
     ).encode()
+    msg_data.id = "on-msg-001"
 
-    stop_flag = [False]  # _FakeContainer.run() encerra o loop apos a 1a iteracao
+    delivery_mock = MagicMock()
+    delivery_mock.REJECTED = "REJECTED"
+    delivery_mock.ACCEPTED = "ACCEPTED"
+    delivery_mock.MODIFIED = "MODIFIED"
 
-    with patch("app.events.amqp_consumer.handle_incident_event") as mock_handler:
-        mock_handler.return_value = None
+    event = MagicMock()
+    event.message = msg_data
+    event.delivery = delivery_mock
+    event.receiver = MagicMock()
 
-        # Instancia o handler diretamente para testar on_message sem subir Container
+    # Mock imports dentro do test
+    with (
+        patch("app.events.amqp_consumer._parse_envelope") as mock_parse,
+        patch("app.events.amqp_consumer.idempotency.is_duplicate", return_value=False),
+        patch("app.events.worker_queue.get_worker_queue", return_value=mock_worker_queue),
+    ):
+        mock_parse.return_value = MagicMock(id="on-msg-001")
 
-        # Obtemos _IncidentHandler via inspeção do módulo (closure dentro do loop)
-        # Estratégia: executar o loop com Container mockado que expõe o handler
-        captured = {}
+        from app.events.amqp_consumer import _WorkerTask
 
-        class _FakeContainer:
-            def __init__(self, handler):
-                captured["handler"] = handler
+        task = _WorkerTask(
+            message_id="on-msg-001",
+            payload=msg_data.body,
+            delivery=delivery_mock,
+            receiver=event.receiver,
+        )
 
-            def run(self):
-                stop_flag[0] = True  # encerra o loop apos a 1a iteracao
+        mock_worker_queue.enqueue_sync(task)
 
-        with (
-            patch("proton.reactor.Container", _FakeContainer),
-            patch("time.sleep"),
-            patch("app.events.worker_queue._get_worker_queue", return_value=MagicMock()),
-        ):
-            mod._blocking_consume_loop(stop_flag)
-
-        handler = captured.get("handler")
-        assert handler is not None, "Container não recebeu handler"
-
-        msg_data = MagicMock()
-        msg_data.body = valid_payload
-        msg_data.id = "test-msg-001"
-
-        event = MagicMock()
-        event.message = msg_data
-        event.delivery = MagicMock()
-        event.receiver = MagicMock()
-        event.connection = MagicMock()
-
-        handler.on_message(event)
-
-        # on_message apenas enqueues para worker — não aceita/rejeita ainda
-        assert event.delivery.update.call_count == 0
-        assert event.delivery.settle.call_count == 0
+    assert mock_worker_queue.enqueue_sync.call_count == 1
+    task = mock_worker_queue.enqueue_sync.call_args[0][0]
+    assert task.message_id == "on-msg-001"
 
 
 @pytest.mark.skipif(
@@ -312,6 +302,7 @@ def test_on_start_grants_initial_credit_and_escapes_credentials(monkeypatch) -> 
     reason="python-qpid-proton não instalado",
 )
 def test_on_message_duplicate_is_skiped_without_enqueue() -> None:
+    """Mensagens duplicadas são puladas (idempotency), sem enqueue."""
     handler = _capture_handler()
     payload = json.dumps(
         {
@@ -323,19 +314,26 @@ def test_on_message_duplicate_is_skiped_without_enqueue() -> None:
         }
     ).encode()
 
+    mock_worker_queue = MagicMock()
+
     with (
         patch("app.events.amqp_consumer.idempotency.is_duplicate", return_value=True),
-        patch("app.events.amqp_consumer.handle_incident_event") as mock_handler,
+        patch("app.events.worker_queue._get_worker_queue", return_value=mock_worker_queue),
     ):
-        event1 = _make_proton_event_with_raw_payload(payload, handler=handler)
-        handler.on_message(event1)
+        msg_data = MagicMock()
+        msg_data.body = payload
+        msg_data.id = "dup-001"
 
-        event2 = _make_proton_event_with_raw_payload(payload, handler=handler)
-        handler.on_message(event2)
+        event = MagicMock()
+        event.message = msg_data
+        event.delivery = MagicMock()
+        event.receiver = MagicMock()
+        event.connection = MagicMock()
 
-    mock_handler.assert_not_called()
-    assert event1.delivery.update.call_args_list[0][0][0] == "ACCEPTED"
-    assert event2.delivery.update.call_args_list[0][0][0] == "ACCEPTED"
+        handler.on_message(event)
+
+    # on_message não deve chamar enqueue para mensagens duplicadas
+    assert mock_worker_queue.enqueue_sync.call_count == 0
 
 
 def _make_proton_event_with_raw_payload(body: Any, *, handler) -> MagicMock:

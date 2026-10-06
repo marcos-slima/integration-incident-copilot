@@ -130,6 +130,7 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
+    "browser: precisa de Playwright + Chromium; pulado quando ausentes (tests/test_admin_ui_browser.py)",
     "integration: requer stack local viva (Qdrant/Ollama); pulado automaticamente se indisponivel",
     # Avaliacao externa (medio prazo, item 7): smoke test do GraphRAG
     # contra um Neo4j REAL (nao o FakeSession de tests/test_graph_store.py).

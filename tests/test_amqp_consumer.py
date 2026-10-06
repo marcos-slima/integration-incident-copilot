@@ -6,14 +6,14 @@ em thread pool (run_in_executor). Os testes cobrem:
   - AmqpConsumerTask.start: task criada/não criada conforme AMQP_ENABLED
   - AmqpConsumerTask.stop: encerramento gracioso
   - _blocking_consume_loop: comportamento com proton não instalado
-  - _IncidentHandler.on_message: ack/reject/modified via Proton deliveries
+  - handler: credito, timer de parada, RQ, e um broker AMQP 1.0 real em
+    processo (aceite, reentrega, DMQ, payload invalido, paralelismo)
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -134,229 +134,205 @@ def test_blocking_consume_loop_no_proton() -> None:
 
 
 # ---------------------------------------------------------------------------
-# _IncidentHandler.on_message — ack, reject e modified via Proton delivery
+# Handler (validacao 2026-10-06, REL-01/N-04): unidade + broker AMQP 1.0 real
 # ---------------------------------------------------------------------------
 
+proton = pytest.importorskip("proton")
 
-@pytest.mark.skipif(
-    not __import__("importlib").util.find_spec("proton"),
-    reason="python-qpid-proton não instalado",
-)
-def test_on_message_accepted_on_valid_payload() -> None:
-    """Mensagem válida → enqueue para worker."""
+import socket
+import threading
+import time
 
-    # Mock worker queue
-    mock_worker_queue = MagicMock()
-    mock_worker_queue.enqueue_sync = MagicMock()
+from proton import Message
+from proton.handlers import MessagingHandler
+from proton.reactor import Container
 
-    # Mock msg
-    msg_data = MagicMock()
-    msg_data.body = json.dumps(
+import app.events.amqp_consumer as mod
+
+
+def _payload(event_id: str) -> str:
+    return json.dumps(
         {
             "specversion": "1.0",
             "type": "com.sap.integration.incident.detected.v1",
             "source": "/sap/s4hana",
-            "id": "on-msg-001",
-            "data": {"incidentId": "INC-MSG", "priority": "HIGH", "description": "on_message test"},
+            "id": event_id,
+            "data": {"incidentId": "INC-1", "priority": "HIGH", "description": "IDoc 51"},
         }
-    ).encode()
-    msg_data.id = "on-msg-001"
-
-    delivery_mock = MagicMock()
-    delivery_mock.REJECTED = "REJECTED"
-    delivery_mock.ACCEPTED = "ACCEPTED"
-    delivery_mock.MODIFIED = "MODIFIED"
-
-    event = MagicMock()
-    event.message = msg_data
-    event.delivery = delivery_mock
-    event.receiver = MagicMock()
-
-    # Mock imports dentro do test
-    with (
-        patch("app.events.amqp_consumer._parse_envelope") as mock_parse,
-        patch("app.events.amqp_consumer.idempotency.is_duplicate", return_value=False),
-        patch("app.events.worker_queue.get_worker_queue", return_value=mock_worker_queue),
-    ):
-        mock_parse.return_value = MagicMock(id="on-msg-001")
-
-        from app.events.amqp_consumer import _WorkerTask
-
-        task = _WorkerTask(
-            message_id="on-msg-001",
-            payload=msg_data.body,
-            delivery=delivery_mock,
-            receiver=event.receiver,
-        )
-
-        mock_worker_queue.enqueue_sync(task)
-
-    assert mock_worker_queue.enqueue_sync.call_count == 1
-    task = mock_worker_queue.enqueue_sync.call_args[0][0]
-    assert task.message_id == "on-msg-001"
+    )
 
 
-@pytest.mark.skipif(
-    not __import__("importlib").util.find_spec("proton"),
-    reason="python-qpid-proton não instalado",
-)
-def test_on_message_invalid_payload_rejected_by_parser() -> None:
-    """Payload inválido → delivery REJECTED (sem requeue)."""
-    from proton import Delivery
-
-    import app.events.amqp_consumer as mod
-
-    stop_flag = [False]
-    captured = {}
-
-    class _FakeContainer:
-        def __init__(self, handler):
-            captured["handler"] = handler
-
-        def run(self):
-            stop_flag[0] = True
-
-    with (
-        patch("proton.reactor.Container", _FakeContainer),
-        patch("time.sleep"),
-        patch("app.events.worker_queue._get_worker_queue", return_value=MagicMock()),
-    ):
-        mod._blocking_consume_loop(stop_flag)
-
-    handler = captured["handler"]
-    assert handler is not None
-
-    msg_data = MagicMock()
-    msg_data.body = b"not-valid-json"
-    msg_data.id = "invalid-msg"
-
-    delivery_mock = MagicMock()
-    delivery_mock.REJECTED = Delivery.REJECTED
-    delivery_mock.ACCEPTED = Delivery.ACCEPTED
-    delivery_mock.MODIFIED = Delivery.MODIFIED
-
-    event = MagicMock()
-    event.message = msg_data
-    event.delivery = delivery_mock
-    event.receiver = MagicMock()
-    event.connection = MagicMock()
-
-    handler.on_message(event)
-
-    call_args = event.delivery.update.call_args[0][0]
-    assert call_args == Delivery.REJECTED
-    event.delivery.settle.assert_called()
-
-
-@pytest.mark.skipif(
-    not __import__("importlib").util.find_spec("proton"),
-    reason="python-qpid-proton não instalado",
-)
-def _capture_handler():
-    import app.events.amqp_consumer as mod
-
-    stop_flag = [False]
-    captured = {}
-
-    class _FakeContainer:
-        def __init__(self, handler):
-            captured["handler"] = handler
-
-        def run(self):
-            stop_flag[0] = True
-
-    with (
-        patch("proton.reactor.Container", _FakeContainer),
-        patch("time.sleep"),
-        patch("app.events.worker_queue._get_worker_queue", return_value=MagicMock()),
-    ):
-        mod._blocking_consume_loop(stop_flag)
-    return captured["handler"]
-
-
-@pytest.mark.skipif(
-    not __import__("importlib").util.find_spec("proton"),
-    reason="python-qpid-proton não instalado",
-)
 def test_on_start_grants_initial_credit_and_escapes_credentials(monkeypatch) -> None:
     """create_receiver() do proton nao aceita "credit" (TypeError); com
     prefetch=0 o credito inicial precisa vir de receiver.flow()."""
-    monkeypatch.setattr("app.events.amqp_consumer.settings.amqp_username", "user@corp")
-    monkeypatch.setattr("app.events.amqp_consumer.settings.amqp_password", "p@ss/w:rd")
-    monkeypatch.setattr("app.events.amqp_consumer.settings.amqp_prefetch", 3)
-    handler = _capture_handler()
-
+    monkeypatch.setattr(mod.settings, "amqp_username", "user@corp")
+    monkeypatch.setattr(mod.settings, "amqp_password", "p@ss/w:rd")
+    monkeypatch.setattr(mod.settings, "amqp_prefetch", 3)
+    handler = mod._make_handler([False], executor=None)
     event = MagicMock()
     receiver = event.container.create_receiver.return_value
     handler.on_start(event)
-
     _, kwargs = event.container.create_receiver.call_args
     assert "credit" not in kwargs
     receiver.flow.assert_called_once_with(3)
-    url = event.container.connect.call_args.args[0]
-    assert "user%40corp:p%40ss%2Fw%3Ard@" in url
+    assert "user%40corp:p%40ss%2Fw%3Ard@" in event.container.connect.call_args.args[0]
+    event.container.schedule.assert_called_once()  # timer que observa o stop_flag
 
 
-@pytest.mark.skipif(
-    not __import__("importlib").util.find_spec("proton"),
-    reason="python-qpid-proton não instalado",
-)
-def test_on_message_duplicate_is_skiped_without_enqueue() -> None:
-    """Mensagens duplicadas são puladas (idempotency), sem enqueue."""
-    handler = _capture_handler()
-    payload = json.dumps(
-        {
-            "specversion": "1.0",
-            "type": "com.sap.integration.incident.detected.v1",
-            "source": "/sap/s4hana",
-            "id": "dup-001",
-            "data": {"incidentId": "INC-DUP", "priority": "LOW", "description": "dup test"},
-        }
-    ).encode()
+class _Broker(MessagingHandler):
+    """Broker AMQP 1.0 minimo: uma fila, reentrega com delivery_count+1 em
+    MODIFIED/RELEASED e registro das dispositions recebidas."""
 
-    mock_worker_queue = MagicMock()
+    def __init__(self, url: str, bodies: list[str]) -> None:
+        super().__init__(auto_accept=False)
+        self.url = url
+        self.pending = [(b, 0) for b in bodies]
+        self.outcomes: list[tuple[str, int]] = []
+        self.sender = None
+        self.inflight: dict[str, tuple[str, int]] = {}
+        self.acceptor = None
 
-    with (
-        patch("app.events.amqp_consumer.idempotency.is_duplicate", return_value=True),
-        patch("app.events.worker_queue._get_worker_queue", return_value=mock_worker_queue),
-    ):
-        msg_data = MagicMock()
-        msg_data.body = payload
-        msg_data.id = "dup-001"
+    def on_start(self, event):
+        self.acceptor = event.container.listen(self.url)
 
-        event = MagicMock()
-        event.message = msg_data
-        event.delivery = MagicMock()
-        event.receiver = MagicMock()
-        event.connection = MagicMock()
+    def on_link_opening(self, event):
+        if event.link.is_sender:
+            event.link.source.address = event.link.remote_source.address
+            self.sender = event.link
 
-        handler.on_message(event)
+    def on_sendable(self, event):
+        self._pump()
 
-    # on_message não deve chamar enqueue para mensagens duplicadas
-    assert mock_worker_queue.enqueue_sync.call_count == 0
+    def _pump(self):
+        while self.sender is not None and self.sender.credit and self.pending:
+            body, count = self.pending.pop(0)
+            msg = Message(body=body, id=f"m-{len(self.outcomes)}-{count}")
+            msg.delivery_count = count
+            dlv = self.sender.send(msg)
+            self.inflight[str(dlv.tag)] = (body, count)
+
+    def _record(self, event, outcome):
+        body, count = self.inflight.pop(str(event.delivery.tag), ("?", -1))
+        self.outcomes.append((outcome, count))
+        if outcome == "released":
+            self.pending.append((body, count + 1))
+        event.delivery.settle()
+        self._pump()
+
+    def on_accepted(self, event):
+        self._record(event, "accepted")
+
+    def on_rejected(self, event):
+        self._record(event, "rejected")
+
+    def on_released(self, event):  # MODIFIED e RELEASED chegam aqui
+        self._record(event, "released")
+
+    def stop(self):
+        if self.acceptor:
+            self.acceptor.close()
+        if self.sender:
+            self.sender.connection.close()
 
 
-def _make_proton_event_with_raw_payload(body: Any, *, handler) -> MagicMock:
-    """Monta event Proton com payload cru (string/bytes/dict)."""
-    from proton import Message
+def _free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
 
-    msg = Message()
-    msg.body = body
-    msg.id = "test-msg-id"
 
-    delivery = MagicMock()
-    delivery.ACCEPTED = "ACCEPTED"
-    delivery.REJECTED = "REJECTED"
-    delivery.MODIFIED = "MODIFIED"
+def _run_consumer_against_broker(monkeypatch, bodies, diagnose, *, expect, timeout=20):
+    port = _free_port()
+    url = f"127.0.0.1:{port}"
+    broker = _Broker(url, bodies)
+    broker_container = Container(broker)
+    bt = threading.Thread(target=broker_container.run, daemon=True)
+    bt.start()
+    time.sleep(0.3)
 
-    receiver = MagicMock()
-    receiver.flow = MagicMock()
+    monkeypatch.setattr(mod, "_connection_url", lambda: f"amqp://{url}")
+    monkeypatch.setattr(mod, "_ssl_domain", lambda: None)
+    monkeypatch.setattr(mod.settings, "redis_url", "")
+    monkeypatch.setattr(mod.settings, "amqp_queue", "incidents")
+    monkeypatch.setattr(mod.settings, "amqp_prefetch", 2)
+    monkeypatch.setattr(mod.settings, "amqp_max_redeliveries", 2)
+    monkeypatch.setattr(mod.settings, "amqp_reconnect_delay", 0)
+    monkeypatch.setattr("app.events.consumer.handle_incident_event", diagnose)
+    monkeypatch.setattr(mod.idempotency, "is_duplicate", lambda _id: False)
+    monkeypatch.setattr(mod.idempotency, "mark_completed", lambda _id: None)
+    monkeypatch.setattr(mod.idempotency, "release", lambda _id: None)
 
-    connection = MagicMock()
+    stop = [False]
+    ct = threading.Thread(target=mod._blocking_consume_loop, args=(stop,), daemon=True)
+    ct.start()
+    deadline = time.time() + timeout
+    while time.time() < deadline and len(broker.outcomes) < expect:
+        time.sleep(0.05)
+    t0 = time.time()
+    stop[0] = True
+    ct.join(timeout=5)
+    stopped_in = time.time() - t0
+    broker_container.stop()
+    return broker.outcomes, ct.is_alive(), stopped_in
 
+
+def test_broker_real_mensagens_sao_processadas_e_aceitas(monkeypatch) -> None:
+    """Regressao N-04: com a worker queue nunca iniciada, a 1a mensagem
+    ficava pendurada e nada mais era consumido."""
+    calls: list[str] = []
+    outcomes, alive, stopped_in = _run_consumer_against_broker(
+        monkeypatch,
+        [_payload(f"ev-{i}") for i in range(5)],
+        lambda env: calls.append(env.id),
+        expect=5,
+    )
+    assert [o for o, _ in outcomes] == ["accepted"] * 5
+    assert sorted(calls) == [f"ev-{i}" for i in range(5)]
+    assert not alive and stopped_in < 3  # para mesmo sem mensagens chegando
+
+
+def test_broker_real_diagnostico_lento_nao_bloqueia_reactor(monkeypatch) -> None:
+    """Com prefetch=2 e diagnostico de 1 s, duas mensagens processam em
+    paralelo (o reactor segue livre para receber e liquidar)."""
+    outcomes, _, _ = _run_consumer_against_broker(
+        monkeypatch,
+        [_payload("a"), _payload("b")],
+        lambda env: time.sleep(1.0),
+        expect=2,
+        timeout=10,
+    )
+    assert [o for o, _ in outcomes] == ["accepted", "accepted"]
+
+
+def test_broker_real_falha_reentrega_e_vai_para_dmq(monkeypatch) -> None:
+    """Falha -> MODIFIED (broker reentrega com delivery_count+1);
+    em amqp_max_redeliveries=2 a mensagem e REJECTED (DMQ)."""
+
+    def _falha(_env):
+        raise RuntimeError("LLM fora")
+
+    outcomes, _, _ = _run_consumer_against_broker(
+        monkeypatch, [_payload("poison")], _falha, expect=3
+    )
+    assert outcomes == [("released", 0), ("released", 1), ("rejected", 2)]
+
+
+def test_broker_real_payload_invalido_rejeitado(monkeypatch) -> None:
+    outcomes, _, _ = _run_consumer_against_broker(
+        monkeypatch, ["nao-e-json{"], lambda env: None, expect=1
+    )
+    assert outcomes == [("rejected", 0)]
+
+
+def test_com_redis_enfileira_no_rq_e_aceita(monkeypatch) -> None:
+    jobs: list[dict] = []
+    monkeypatch.setattr(mod.settings, "redis_url", "redis://fake")
+    monkeypatch.setattr("app.queue.enqueue_incident_event", lambda d: jobs.append(d) or "job-1")
+    handler = mod._make_handler([False], executor=None)
+    handler._receiver = MagicMock()
     event = MagicMock()
-    event.message = msg
-    event.delivery = delivery
-    event.receiver = receiver
-    event.connection = connection
-    return event
+    event.message = Message(body=_payload("rq-1"))
+    handler.on_message(event)
+    assert jobs and jobs[0]["id"] == "rq-1"
+    event.delivery.update.assert_called_once_with(proton.Delivery.ACCEPTED)
+    handler._receiver.flow.assert_called_once_with(1)

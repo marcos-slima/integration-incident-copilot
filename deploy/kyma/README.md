@@ -78,3 +78,27 @@ contra infraestrutura externa (DA-19). Em particular:
   este projeto avançar para integração mais profunda com serviços BTP
   (Destination service, XSUAA) - escopo explicitamente descartado
   nesta fase em favor de só empacotar o deploy.
+
+## Recursos Kubernetes/Kyma
+
+O **Dockerfile** gerou uma imagem de ~512MB (sem CUDA, CPU-only), mas o consumo de memória em runtime é maior:
+
+| Componente | Memória Residente |
+|---|---|
+| FastAPI (app.main) | ~350MB |
+| CrossEncoder (reranker) | ~420MB |
+| Overhead (Python/GIL/Qdrant client) | ~200MB |
+| **Total** | **~970MB** |
+
+**Deployment Kyma (deploy/kyma/deployment.yaml:74-80):**
+```yaml
+resources:
+  requests:
+    cpu: "100m"
+    memory: "512Mi"
+  limits:
+    cpu: "1000m"
+    memory: "1024Mi"
+```
+
+**Motivo:** limites anteriores de `512Mi` causavam `OOMKill`. O valor de `1024Mi` garante estabilidade com carga normal.

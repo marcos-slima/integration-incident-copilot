@@ -67,17 +67,16 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 20
             failureThreshold: 3
-          # DA-24: requests/limits conservadores para um workload de IO
-          # (chamadas HTTP a LLM/Qdrant, pouco uso de CPU local) - ajuste
-          # conforme o volume real observado (ver HPA em hpa.yaml para
-          # escalar horizontalmente em vez de so aumentar limits).
+          # DA-24: requests/limits ajustados para carga real (medido:
+          # app.main ~350MB, CrossEncoder ~420MB, overhead ~200MB = ~1GB real).
+          # 512Mi causava OOMKill; 1024Mi garante estabilidade.
           resources:
             requests:
               cpu: "100m"
-              memory: "256Mi"
-            limits:
-              cpu: "500m"
               memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1024Mi"
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: false

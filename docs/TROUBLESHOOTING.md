@@ -134,7 +134,7 @@ print('vectors:', info.vectors_count)
 
 | Causa | Correção |
 |---|---|
-| Coleção vazia (nenhum documento ingerido) | Execute `uv run python -m app.rag.ingest` ou siga [INGEST_REFERENCE.md](INGEST_REFERENCE.md). |
+| Coleção vazia (nenhum documento ingerido) | Execute `uv run python -m app.rag.ingest` (opções em `python -m app.rag.ingest --help`). |
 | `QDRANT_URL` incorreto | Verifique `.env`; padrão local: `http://localhost:6333`. |
 | Modelo de embedding diferente do usado na ingestão | O modelo é fixado na coleção; reingerir com o modelo correto ou recriar a coleção. |
 | Colecao ingerida diferente da que o runtime espera | Nao ha variavel de ambiente para o nome da colecao: os nomes sao constantes em `app/rag/retriever.py::COLLECTIONS` (`sap_incident_docs`, `sap_reference_library`), escolhidas pelo `--target` da ingestão (`incidents`/`reference`/`all`). O sintoma e' ter ingerido so `--target incidents` e o runtime cair no fallback de `reference`. Reingira com `--target all`. |

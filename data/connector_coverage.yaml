@@ -55,7 +55,7 @@ coverage:
     dedicated_to: null
     generic_for: [S/4HANA, ECC, IBP, EWM, TM, GTS, Commerce, Sales/Service Cloud, Datasphere, BW/4HANA, SAC, RAP, Kyma, SuccessFactors, CAP]
     mechanisms: [odata, apis, soap]
-    note: "Cliente OData genérico (v2 com OAuth2 para CPI/Integration Suite, v4 sem autenticação para SAP CAP). Aponta para qualquer serviço que exponha OData. A matriz diz que o produto tem OData; NAO diz que este conector foi validado contra ele — exceto CAP, onde o cassette real `cap_odata_v4_query.json` comprova o uso."
+    note: "Cliente OData generico. Aponta para qualquer servico que exponha OData. A matriz diz que o produto tem OData; NAO diz que este conector foi validado contra ele — nenhum foi."
 
   - connector: rfc
     dedicated_to: null

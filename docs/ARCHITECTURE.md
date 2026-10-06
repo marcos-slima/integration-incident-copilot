@@ -344,7 +344,7 @@ GraphRAG.
 ## A2A (Agent2Agent) - interoperabilidade externa
 
 `app/a2a/` implementa a proposta arquivada em
-[docs/a2a-interoperability-layer.md](a2a-interoperability-layer.md)
+a proposta original da camada A2A (documento interno, fora do repositório)
 (ler esse documento para o contexto de negocio completo e a ressalva
 sobre a GA inbound do Joule, prevista para Q4/2026 e ainda nao
 disponivel). Em resumo tecnico:

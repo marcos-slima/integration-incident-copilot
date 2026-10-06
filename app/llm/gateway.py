@@ -62,7 +62,11 @@ from app.admin.metering import attach_metering, record_usage_observed  # DA-48
 from app.circuit_breaker import CircuitBreaker
 from app.config import Settings, settings
 from app.exceptions import ConfigurationError
-from app.llm.factory import TRANSPORT_FAILURE_EXCEPTIONS, get_chat_model
+from app.llm.factory import (
+    TRANSPORT_FAILURE_EXCEPTIONS,
+    get_chat_model,
+    resolve_registry_config,
+)
 
 # DA-45: as duas funcoes passaram a morar em app/llm/origins.py porque o
 # factory tambem precisa delas e nao pode importar este modulo (o gateway
@@ -118,55 +122,40 @@ class PolicyViolationError(ConfigurationError):
 circuit_breaker = CircuitBreaker(namespace="llm")  # DA-41: Redis distribuido
 
 
+# Ordem das classificacoes declaraveis pelo cliente (IncidentRequest).
+_SENSITIVITY_RANK = {"public": 0, "internal": 1, "confidential": 2, "secret": 3}
+
+
 def classify_sensitivity(state: dict) -> Sensitivity:
-    """DA-26: classifica o incidente como 'confidential' ou 'public'
+    """DA-26/DA-43: classifica o incidente como 'confidential' ou 'public'
     para decidir se pode ser roteado a um provider cloud.
 
-    Mesmo sinal ja usado em evidence_strength (DA-15) e no Evidence/
-    Trust Layer (DA-25): dado real de conector (nao mock, nao
-    fallback) e informacao de sistema de producao (status, codigo de
-    erro, mensagem reais) - tratado como confidential por padrao.
-    Sem dado real de conector (so descricao/logs/payload enviados pelo
-    usuario), vale settings.sensitivity_default - "confidential" por
-    padrao (B-04): texto livre pode conter dado empresarial que a
-    redacao por regex nao reconhece, entao nao classificado = sensivel.
-    SENSITIVITY_DEFAULT=public restaura o comportamento anterior.
+    Heuristica (fontes observaveis):
+      * dado real de conector (nao mock, nao fallback) -> confidential
+        (status, codigo e mensagem reais de producao, mesmo sinal do DA-15);
+      * `pii_detected=True` declarado pelo cliente -> confidential;
+      * caso contrario, settings.sensitivity_default ("confidential" por
+        padrao, B-04: texto livre pode conter dado que a redacao por regex
+        nao reconhece).
 
-    Prioridade de decisao (DA-43/GOV-01):
-      1. Se client declarou sensitivity_level, usa-o (so pode elevar).
-      2. Se client informou pii_detected=True, classifica como confidential.
-      3. Se connector_data eh real (nao mock/fallback), confidential.
-      4. Fallback para settings.sensitivity_default.
+    A classificacao declarada pelo cliente (`sensitivity_level`) so ELEVA:
+    o resultado e o maximo entre declarado e heuristica. `internal` e
+    `secret` contam como nao-publico. Um cliente que declara `public` nao
+    rebaixa o padrao `confidential` (validacao 2026-10-06, GOV-01).
 
-    DA-43/GOV-01: sensibilidade declarada pelo cliente so pode elevar:
-      - client 'public' + heuristic 'confidential' = 'confidential'
-      - client 'confidential' + heuristic 'public' = 'confidential'
-      - client 'internal' + heuristic 'confidential' = 'confidential'
-      nunca o contrario: client nunca reduz a classificacao.
+    Os campos chegam pelo estado do grafo (`CopilotState.sensitivity_level`
+    e `.pii_detected`, preenchidos em graph.py::run_diagnosis).
     """
-    # DA-43/GOV-01: client declaration only goes UP (confidential > internal > public)
-    request = state.get("incident_request")
-    client_sensitivity = request.sensitivity_level if request else None
-
-    # Se client declarou 'confidential', sempre prevalece (max severity)
-    if client_sensitivity == "confidential":
-        return "confidential"
-
-    # PII detected = confidential (DA-43 sovereign data protection)
-    if request and request.pii_detected:
-        return "confidential"
-
-    # Dado real de conector (DA-15/DA-25 signal) = confidential
     data = state.get("connector_data")
-    if data is not None and not data.is_mock and not data.is_fallback:
-        return "confidential"
-
-    # Se client declarou algo (internal ou public), respeita
-    if client_sensitivity:
-        return client_sensitivity
-
-    # Fallback para settings.sensitivity_default
-    return settings.sensitivity_default
+    real_connector = data is not None and not data.is_mock and not data.is_fallback
+    heuristic = (
+        "confidential"
+        if real_connector or state.get("pii_detected")
+        else settings.sensitivity_default
+    )
+    declared = state.get("sensitivity_level")
+    rank = max(_SENSITIVITY_RANK.get(heuristic, 2), _SENSITIVITY_RANK.get(declared or "public", 2))
+    return "public" if rank == 0 else "confidential"
 
 
 def _estimate_tokens(text: str) -> int:
@@ -447,7 +436,25 @@ def invoke_via_gateway(
             continue
 
         provider_cfg = cfg.model_copy(update={"llm_provider": provider})
-        llm = get_chat_model(model_name=model_name, config=provider_cfg)
+        # GOV-01 (validacao 2026-10-06): no modo gerenciado o registro troca
+        # base_url/credencial (texto livre do admin). A politica e reavaliada
+        # sobre o destino FINAL, nao so sobre a origin do .env.
+        provider_cfg = resolve_registry_config(provider_cfg, model_name)
+        final_ok, final_reason = _provider_allows_sensitivity(provider, sensitivity, provider_cfg)
+        if not final_ok:
+            logger.warning(
+                "AI Gateway audit: provider=%s sensitivity=%s status=policy_rejected_after_registry "
+                "reason=%s",
+                provider,
+                sensitivity,
+                final_reason,
+            )
+            last_error = PolicyViolationError(
+                f"AI Gateway: destino resolvido pelo registro para '{provider}' "
+                f"nao e permitido para dado '{sensitivity}': {final_reason}"
+            )
+            continue
+        llm = get_chat_model(model_name=model_name, config=provider_cfg, registry_resolved=True)
 
         # DA-48: anexa o callback de captura de tokens reais (usage) das
         # respostas do model. Best-effort: sem DATABASE_URL ou sem

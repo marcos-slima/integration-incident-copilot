@@ -67,6 +67,11 @@ class CopilotState(TypedDict, total=False):
     # no contrato - propagado ate o recorder para populacao de
     # connector_source_system com o valor informado quando presente.
     connector_source_system: str | None
+    # DA-43/GOV-01: classificacao declarada pelo cliente (IncidentRequest).
+    # Precisa estar AQUI: o StateGraph(CopilotState) descarta chaves que nao
+    # estao no schema, e classify_sensitivity() le estes dois campos.
+    sensitivity_level: str | None
+    pii_detected: bool | None
     llm_model: str
     # DA-22: dominio do sub-agente especialista que vai tratar o
     # diagnostico ("sap" | "saas" | "generic"), decidido pelo

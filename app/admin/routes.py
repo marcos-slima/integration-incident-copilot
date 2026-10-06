@@ -771,7 +771,7 @@ async def create_user(payload: UserCreate, session: SessionReq) -> dict[str, Any
             email=payload.email,
             phone=payload.phone,
             password=payload.password,
-            created_by="<redact>",
+            created_by="admin-api",
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from None

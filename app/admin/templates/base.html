@@ -88,7 +88,7 @@
   <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
     <label style="margin: 0; font-weight: 500; color: var(--text);">ADMIN_API_KEY (salva no sessionStorage):</label>
     <input id="adminkey" type="password" size="50" placeholder="cole a chave admin" autocomplete="off" style="flex: 1; min-width: 200px;">
-    <button class="btn btn-primary" onclick="saveKey()">💾 Salvar</button>
+    <button class="btn btn-primary" data-click="saveKey">💾 Salvar</button>
   </div>
   <p style="margin-top: 0.75rem; margin-bottom: 0; color: var(--text); opacity: 0.7; font-size: 0.9rem;">Enviar como <code>X-API-Admin-Key</code>. Nada é salvo no servidor.</p>
 </div>
@@ -97,37 +97,7 @@
 {% block content %}{% endblock %}
 </main>
 
-<script>
-function saveKey() {
-  const v = document.getElementById('adminkey').value.trim();
-  if (!v) { sessionStorage.removeItem('adminKey'); return; }
-  sessionStorage.setItem('adminKey', v);
-  location.reload();
-}
-function adminFetch(path, opts) {
-  opts = opts || {};
-  opts.headers = Object.assign({}, opts.headers || {});
-  const k = sessionStorage.getItem('adminKey');
-  if (k) opts.headers['X-API-Admin-Key'] = k;
-  opts.headers['Content-Type'] = 'application/json';
-  return fetch(path, opts);
-}
-function restoreKeyLabel() {
-  const k = sessionStorage.getItem('adminKey');
-  const el = document.getElementById('adminkey');
-  if (el && k) el.value = k;
-}
-function escapeHtml(s) {
-  const div = document.createElement('div');
-  div.textContent = s == null ? '' : String(s);
-  return div.innerHTML;
-}
-function pill(status) {
-  const cls = status === 'active' ? 'status-active' : (status === 'degraded' ? 'status-degraded' : 'status-offline');
-  return `<span class="status-badge ${cls}">${escapeHtml(status)}</span>`;
-}
-restoreKeyLabel();
-</script>
+<script src="/admin/static/admin.js" defer></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -27,7 +27,7 @@ from app.connectors import connector_status
 from app.events import idempotency
 from app.events.amqp_consumer import amqp_consumer  # DA-32
 from app.events.consumer import handle_incident_event_async
-from app.exceptions import DiagnosisTimeoutError
+from app.exceptions import ConfigurationError, DiagnosisTimeoutError
 from app.llm.gateway import describe_effective_policy
 from app.mcp.server import build_mcp_asgi_app
 from app.mcp.server import mcp as mcp_server
@@ -208,9 +208,30 @@ def _ensure_graph_rag_password_configured() -> None:
         )
 
 
+def _ensure_evidence_key_configured() -> None:
+    """DA-60: com persistencia ligada (DATABASE_URL) a evidencia de cada
+    incidente e cifrada com LLM_CREDENTIALS_MASTER_KEY. Sem a chave o
+    recorder nao teria como gravar a evidencia - falha no boot em vez de
+    perder o dado em silencio a cada diagnostico."""
+    if not settings.database_url:
+        return
+    from app.admin.crypto import _get_fernet
+
+    try:
+        _get_fernet()
+    except ConfigurationError as exc:
+        raise ConfigurationError(
+            "DATABASE_URL configurada sem LLM_CREDENTIALS_MASTER_KEY valida: a "
+            "evidencia dos incidentes e cifrada em repouso (DA-60). Gere com "
+            '`python -c "from cryptography.fernet import Fernet; '
+            'print(Fernet.generate_key().decode())"` e fixe no .env.'
+        ) from exc
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _ensure_api_keys_configured()
+    _ensure_evidence_key_configured()
     # DA-54: segredo HMAC dos cookies de sessao — vazio gera efemero
     # com WARNING, mesmo padrao DA-18 (nunca cookie sem assinatura)
     ensure_session_secret_configured()
@@ -273,44 +294,46 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 
+# Paginas servidas por este app (Admin UI Jinja2 e o bundle React) nao tem
+# <script> inline nem handlers on*: todo JS vem de arquivo do proprio origin
+# (/admin/static/*.js, /assets/*.js). As fontes do bundle React vem do Google
+# Fonts (frontend/src/index.css), por isso os dois hosts abaixo.
+_CSP_POLICY = (
+    b"default-src 'self'; script-src 'self'; "
+    b"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+    b"font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; "
+    b"connect-src 'self'; object-src 'none'; base-uri 'self'; "
+    b"form-action 'self'; frame-ancestors 'none'"
+)
+# Swagger/ReDoc do FastAPI carregam JS e CSS de cdn.jsdelivr.net e usam
+# script inline: a CSP estrita os deixaria em branco. Ficam de fora da
+# politica (M-15 recomenda desliga-los em producao).
+_CSP_EXEMPT_PREFIXES = ("/docs", "/redoc")
+
+
 class CspMiddleware:
-    """Adiciona Content-Security-Policy header em responses HTML da Admin UI."""
+    """Content-Security-Policy e cabecalhos de endurecimento em respostas HTML."""
 
     def __init__(self, app):
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http":
+        if scope["type"] != "http" or scope.get("path", "").startswith(_CSP_EXEMPT_PREFIXES):
             await self.app(scope, receive, send)
             return
 
-        response_started = False
-        headers = []
-
         async def send_with_csp(message):
-            nonlocal response_started, headers
-
             if message["type"] == "http.response.start":
-                response_started = True
-                headers = message.get("headers", [])
-                content_type = b""
-                for h, v in headers:
-                    if h.lower() == b"content-type":
-                        content_type = v
-                        break
-
+                headers = list(message.get("headers", []))
+                content_type = next((v for h, v in headers if h.lower() == b"content-type"), b"")
                 if b"text/html" in content_type:
-                    csp_headers = [
-                        (
-                            b"content-security-policy",
-                            b"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; frame-ancestors 'none'",
-                        ),
+                    headers += [
+                        (b"content-security-policy", _CSP_POLICY),
                         (b"x-content-type-options", b"nosniff"),
                         (b"x-frame-options", b"DENY"),
-                        (b"x-xss-protection", b"1; mode=block"),
+                        (b"referrer-policy", b"same-origin"),
                     ]
-                    message["headers"] = headers + csp_headers
-
+                    message["headers"] = headers
             await send(message)
 
         await self.app(scope, receive, send_with_csp)
@@ -776,7 +799,13 @@ def agent_card() -> dict:
 app.include_router(auth_router)  # DA-54: /auth/login, /auth/logout, /auth/session
 app.include_router(a2a_router)
 app.include_router(admin_router)  # DA-46/47/48: /admin/api/* (ADMIN_API_KEY)
-app.include_router(admin_ui_router)  # /admin pages (shell Jinja2, dados via API)
+app.include_router(admin_ui_router)
+# JS/CSS da Admin UI (CSP `script-src 'self'` proibe script inline).
+app.mount(
+    "/admin/static",
+    StaticFiles(directory=str(Path(__file__).parent / "admin" / "static")),
+    name="admin-static",
+)  # /admin pages (shell Jinja2, dados via API)
 
 # DA-19: servidor MCP montado em /mcp - ver app/mcp/server.py para o
 # contrato de ferramentas (diagnose_incident, list_connectors) e a

@@ -92,6 +92,10 @@ def latest_contract(session: Any, system_key: str) -> SystemContract | None:
     `None` = primeira vez. O chamador traduz isso para
     `ObservationStatus.FIRST_OBSERVATION`; e' o `None` que impede
     "sem drift" sem comparacao.
+
+    Erro de banco e' tratado pelo chamador (`observe.py::_load_baseline`), que
+    loga e devolve `None` (nao propaga excecao). Aqui, `None` e' exclusivamente
+    "nao encontrado".
     """
     statement = (
         select(SystemContract)

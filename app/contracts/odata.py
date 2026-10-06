@@ -44,7 +44,7 @@ def _local(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
 
 
-def _bool_attr(element: ET.Element, name: str, default: bool = False) -> bool:
+def _bool_attr(element: ET.Element, name: str, default: bool = True) -> bool:
     raw = element.get(name)
     if raw is None:
         return default
@@ -87,10 +87,10 @@ def _parse_property(element: ET.Element) -> Property:
     return Property(
         name=element.get("Name") or "",
         type_name=type_name,
-        # Ausencia de Nullable no EDMX significa NOT nullable. Ler como
-        # True (default de XML) inverteria a semantica e faria todo campo
-        # parecer relaxado.
-        nullable=_bool_attr(element, "Nullable", default=False),
+        # CSDL v2/v4: absence of Nullable means nullable=true. Omitting the
+        # attribute is the common case, and defaulting to False inverted the
+        # semantics (DATA-01).
+        nullable=_bool_attr(element, "Nullable", default=True),
         max_length=_int_attr(element, "MaxLength"),
         key=_is_key(element),
         navigation=navigation,

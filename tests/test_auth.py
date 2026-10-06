@@ -216,3 +216,27 @@ class TestParseWebUsers:
         users = parse_web_users(f"marcos:{hash_password('correta')}")
         assert verify_password(users, "marcos", "correta") is True
         assert verify_password(users, "marcos", "errada") is False
+
+
+def test_login_rate_limit_com_x_api_key_nao_e_contornado() -> None:
+    """SEC-03: rate limit deve funcionar mesmo com X-API-Key inventado.
+
+    Antes da correção, o rate limiter usava `X-API-Key` como bucket,
+    permitindo força bruta ilimitada enviando chaves diferentes.
+    Agora, endpoints sensíveis (/login, /verify/*/phone) usam
+    IP + endpoint como bucket, ignorando headers de autenticação."""
+    limiter.reset()
+    api_keys = [f"fake-key-{i}" for i in range(10)]
+
+    for i, key in enumerate(api_keys, 1):
+        response = client.post(
+            "/auth/login",
+            json={"username": "admin", "password": "errada"},
+            headers={"X-API-Key": key},
+        )
+        if i < 6:
+            assert response.status_code == 401, (
+                f"Tentativa {i} deve ser 401 (rate limit ainda não atingido)"
+            )
+        else:
+            assert response.status_code == 429, f"Tentativa {i} deve ser 429 (rate limit ativo)"

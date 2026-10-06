@@ -193,12 +193,19 @@ class TestAdditive:
     def test_nullable_relaxado_e_additive(self):
         # `key=True` mantido de proposito: soltar a chave junto seria
         # `key_relaxed` (breaking) e mudaria o que o teste mede.
-        after = contract(
-            keep_properties={
-                "MessageId": Property("MessageId", "Edm.String", nullable=True, key=True)
-            }
+        before_props = {
+            "StatusText": Property("StatusText", "Edm.String", nullable=True, max_length=80),
+            "MessageId": Property("MessageId", "Edm.String", nullable=False, key=True),
+        }
+        after_props = {
+            "StatusText": Property("StatusText", "Edm.String", nullable=True, max_length=80),
+            "MessageId": Property("MessageId", "Edm.String", nullable=True, key=True),
+        }
+        before = Contract(
+            kind=KIND_ODATA, entities={"I_Message": Entity("I_Message", before_props)}
         )
-        report = diff_contracts(contract(), after)
+        after = Contract(kind=KIND_ODATA, entities={"I_Message": Entity("I_Message", after_props)})
+        report = diff_contracts(before, after)
         assert report.severity == SEVERITY_ADDITIVE
         assert "nullability_relaxed" in kinds(list(report.changes))
 

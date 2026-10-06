@@ -56,14 +56,14 @@ class Property:
 
     `nullable` e' o valor ABSOLUTO observado, nao um delta: e' assim que o
     contrato editado se compara com o anterior sem ambiguidade. Ausencia de
-    atributo no XML significa nao-nulo (padrao EDMX), e `None` e' reservado
+    atributo no XML significa nullable=true (padrao EDMX), e `None` e' reservado
     para "o contrato nao diz" -- que no $metadata nunca acontece, mas num
     descricao de RFC mais pobre pode.
     """
 
     name: str
     type_name: str
-    nullable: bool = False
+    nullable: bool = True
     max_length: int | None = None
     key: bool = False
     navigation: bool = False

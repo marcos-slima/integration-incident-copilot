@@ -25,6 +25,26 @@ Configuração (via variáveis de ambiente / .env):
     AMQP_QUEUE=integration/incidents  # Topic Endpoint ou Queue no Solace
     AMQP_PREFETCH=1                   # créditos de link (QoS AMQP 1.0)
     AMQP_RECONNECT_DELAY=5            # segundos entre reconexões
+
+Processamento (validacao 2026-10-06, REL-01/N-04):
+    O reactor do proton e single-thread e NAO pode bloquear: heartbeat do
+    link, entrega de credito e disposition dependem dele. O diagnostico
+    (ate diagnosis_timeout_seconds) roda fora dele:
+
+    * com REDIS_URL: a mensagem vira job RQ (app/queue.py::enqueue_incident_event,
+      o mesmo caminho do webhook /events/incident). Enqueue ok -> ACCEPTED;
+      a deduplicacao e o retry ficam com o worker RQ.
+    * sem REDIS_URL: ThreadPoolExecutor com max_workers = AMQP_PREFETCH. A
+      conclusao volta ao reactor por EventInjector (ApplicationEvent
+      "diagnosis_done"); so ali o Delivery e liquidado e o credito devolvido
+      - objetos do proton nunca sao tocados fora da thread do reactor.
+
+    Falha -> MODIFIED com delivery-failed (o broker incrementa delivery-count
+    e reentrega). Ao atingir AMQP_MAX_REDELIVERIES a mensagem e REJECTED,
+    que no Solace/Event Mesh vai para a DMQ configurada na fila - a
+    "mensagem envenenada" sai do loop.
+    Parada: um timer de 1 s no reactor checa o stop_flag e fecha o link,
+    mesmo sem mensagens chegando.
 """
 
 from __future__ import annotations
@@ -32,15 +52,18 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from urllib.parse import quote
 
 from app.config import settings
 from app.events import idempotency
-from app.events.worker_queue import _WorkerTask, get_worker_queue
 from app.models import IncidentEventEnvelope
 
 logger = logging.getLogger(__name__)
+
+_DONE_EVENT = "diagnosis_done"
+_STOP_CHECK_SECONDS = 1.0
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -61,19 +84,180 @@ def _parse_envelope(body: bytes) -> IncidentEventEnvelope | None:
         return None
 
 
-def _blocking_consume_loop(stop_flag: list[bool]) -> None:
-    """Loop de consumo AMQP 1.0 síncrono (roda em thread pool via executor).
+def _body_bytes(body_raw: Any) -> bytes:
+    if isinstance(body_raw, str):
+        return body_raw.encode()
+    if isinstance(body_raw, (bytes, bytearray)):
+        return bytes(body_raw)
+    return json.dumps(body_raw).encode()
 
-    Usa python-qpid-proton (Apache Qpid Proton) — implementação de referência
-    AMQP 1.0, compatível com Solace Cloud / SAP Event Mesh.
+
+def _connection_url() -> str:
+    # quote(): credenciais com "@", ":" ou "/" quebrariam o parse da URL
+    return (
+        f"amqps://{quote(settings.amqp_username, safe='')}"
+        f":{quote(settings.amqp_password, safe='')}"
+        f"@{settings.amqp_host}:{settings.amqp_port}"
+    )
+
+
+def _ssl_domain():
+    from proton import SSLDomain
+
+    ssl_domain = SSLDomain(SSLDomain.MODE_CLIENT)
+    ssl_domain.set_peer_authentication(SSLDomain.VERIFY_PEER)
+    return ssl_domain
+
+
+def _run_diagnosis(envelope: IncidentEventEnvelope) -> bool:
+    """Roda no executor (fora do reactor). True = sucesso."""
+    from app.events.consumer import handle_incident_event
+
+    try:
+        handle_incident_event(envelope)
+    except Exception:
+        logger.exception("amqp | diagnostico falhou cloudevents.id=%s", envelope.id)
+        idempotency.release(envelope.id)
+        return False
+    idempotency.mark_completed(envelope.id)
+    return True
+
+
+def _make_handler(stop_flag: list[bool], executor: ThreadPoolExecutor | None):
+    """Constroi o MessagingHandler (import do proton e tardio: dependencia
+    opcional). Separado do loop para ser testavel sem broker."""
+    from proton import Delivery
+    from proton.handlers import MessagingHandler
+    from proton.reactor import ApplicationEvent, EventInjector
+
+    class _IncidentHandler(MessagingHandler):
+        def __init__(self) -> None:
+            super().__init__(prefetch=0, auto_accept=False)
+            self._receiver = None
+            self._connection = None
+            self._injector = None
+
+        # -- ciclo de vida -------------------------------------------------
+        def on_start(self, event):
+            self._connection = event.container.connect(
+                _connection_url(),
+                ssl_domain=_ssl_domain(),
+                reconnect=False,  # reconexão gerenciada no _blocking_consume_loop
+            )
+            # create_receiver() nao aceita "credit": com prefetch=0 o credito
+            # inicial e emitido via flow() - sem isso o broker nao entrega nada.
+            self._receiver = event.container.create_receiver(self._connection, settings.amqp_queue)
+            self._receiver.flow(settings.amqp_prefetch)
+            self._injector = EventInjector()
+            event.container.selectable(self._injector)
+            event.container.schedule(_STOP_CHECK_SECONDS, self)
+            logger.info(
+                "amqp | conectado (AMQP 1.0) host=%s queue=%s",
+                settings.amqp_host,
+                settings.amqp_queue,
+            )
+
+        def on_timer_task(self, event):
+            if stop_flag[0]:
+                self._close()
+            else:
+                event.container.schedule(_STOP_CHECK_SECONDS, self)
+
+        def _close(self) -> None:
+            if self._receiver is not None:
+                self._receiver.close()
+            if self._connection is not None:
+                self._connection.close()
+            if self._injector is not None:
+                self._injector.close()
+
+        # -- disposition (sempre na thread do reactor) ------------------
+        def _settle(self, delivery, outcome) -> None:
+            if outcome == Delivery.MODIFIED:
+                # delivery-failed: o broker conta a tentativa (delivery-count)
+                delivery.local.failed = True
+            delivery.update(outcome)
+            delivery.settle()
+            if self._receiver is not None and not stop_flag[0]:
+                self._receiver.flow(1)
+
+        # -- mensagens ---------------------------------------------------
+        def on_message(self, event) -> None:
+            msg = event.message
+            delivery = event.delivery
+            body = _body_bytes(msg.body)
+            logger.info("amqp | mensagem recebida id=%s size=%d", msg.id, len(body))
+
+            envelope = _parse_envelope(body)
+            if envelope is None:
+                logger.warning("amqp | mensagem rejeitada (payload inválido) id=%s", msg.id)
+                self._settle(delivery, Delivery.REJECTED)
+                return
+
+            # delivery_count conta as entregas ANTERIORES (0 na primeira).
+            tentativas = int(getattr(msg, "delivery_count", 0) or 0)
+            if tentativas >= settings.amqp_max_redeliveries:
+                logger.error(
+                    "amqp | cloudevents.id=%s falhou %d vezes - REJECTED (vai para a DMQ do broker)",
+                    envelope.id,
+                    tentativas,
+                )
+                self._settle(delivery, Delivery.REJECTED)
+                return
+
+            if settings.redis_url:
+                self._enqueue_rq(envelope, delivery)
+                return
+
+            if idempotency.is_duplicate(envelope.id):
+                logger.info("amqp | mensagem duplicada descartada cloudevents.id=%s", envelope.id)
+                self._settle(delivery, Delivery.ACCEPTED)
+                return
+
+            injector = self._injector
+
+            def _done(fut) -> None:
+                ok = (not fut.cancelled()) and fut.exception() is None and fut.result() is True
+                injector.trigger(ApplicationEvent(_DONE_EVENT, delivery=delivery, subject=ok))
+
+            executor.submit(_run_diagnosis, envelope).add_done_callback(_done)
+
+        def _enqueue_rq(self, envelope: IncidentEventEnvelope, delivery) -> None:
+            from app.queue import enqueue_incident_event
+
+            try:
+                job_id = enqueue_incident_event(envelope.model_dump(mode="json"))
+            except Exception:
+                logger.exception("amqp | falha ao enfileirar no RQ cloudevents.id=%s", envelope.id)
+                self._settle(delivery, Delivery.MODIFIED)
+                return
+            logger.info("amqp | enfileirado no RQ cloudevents.id=%s job=%s", envelope.id, job_id)
+            self._settle(delivery, Delivery.ACCEPTED)
+
+        def on_diagnosis_done(self, event) -> None:
+            self._settle(event.delivery, Delivery.ACCEPTED if event.subject else Delivery.MODIFIED)
+
+        # -- erros -------------------------------------------------------
+        def on_connection_error(self, event) -> None:
+            logger.error("amqp | erro de conexão AMQP 1.0: %s", event.connection.condition)
+
+        def on_transport_error(self, event) -> None:
+            logger.error("amqp | erro de transporte AMQP 1.0: %s", event.transport.condition)
+
+        def on_disconnected(self, event) -> None:
+            if not stop_flag[0]:
+                logger.warning("amqp | desconectado — reconexão gerenciada pelo loop externo")
+
+    return _IncidentHandler()
+
+
+def _blocking_consume_loop(stop_flag: list[bool]) -> None:
+    """Loop de consumo AMQP 1.0 (roda numa thread via run_in_executor).
 
     stop_flag é uma lista de um elemento [False] — mutável por referência,
-    permite que a coroutine asyncio sinalize parada para esta thread sem
-    mecanismo de sincronização mais complexo.
+    permite que a coroutine asyncio sinalize parada para esta thread.
     """
     try:
-        from proton import Message, SSLDomain
-        from proton.handlers import MessagingHandler
         from proton.reactor import Container
     except ImportError as exc:
         logger.error(
@@ -84,137 +268,31 @@ def _blocking_consume_loop(stop_flag: list[bool]) -> None:
         )
         return
 
-    delay = settings.amqp_reconnect_delay
+    import time
 
-    class _IncidentHandler(MessagingHandler):
-        """Handler AMQP 1.0: conecta, cria receiver com crédito controlado,
-        delega processamento para worker queue, faz ack/nack via AMQP 1.0."""
-
-        def __init__(self) -> None:
-            super().__init__(prefetch=0, auto_accept=False)
-            self._receiver = None
-            self._worker_queue = get_worker_queue()
-
-        def on_start(self, event):
-            ssl_domain = SSLDomain(SSLDomain.MODE_CLIENT)
-            ssl_domain.set_peer_authentication(SSLDomain.VERIFY_PEER)
-
-            # Get worker queue (initialized in _blocking_consume_loop)
-            self._worker_queue = get_worker_queue()
-
-            # quote(): credenciais com "@", ":" ou "/" quebrariam o parse da URL
-            url = (
-                f"amqps://{quote(settings.amqp_username, safe='')}"
-                f":{quote(settings.amqp_password, safe='')}"
-                f"@{settings.amqp_host}:{settings.amqp_port}"
-            )
-            conn = event.container.connect(
-                url,
-                ssl_domain=ssl_domain,
-                reconnect=False,  # reconexão gerenciada no _blocking_consume_loop
-            )
-            # Receiver com credit controlado (equivalente ao prefetch AMQP 0.9.1).
-            # create_receiver() nao aceita "credit" - com prefetch=0 no handler,
-            # o credito inicial precisa ser emitido explicitamente via flow(),
-            # senao o broker nunca entrega mensagens.
-            self._receiver = event.container.create_receiver(conn, settings.amqp_queue)
-            self._receiver.flow(settings.amqp_prefetch)
-            logger.info(
-                "amqp | conectado (AMQP 1.0) host=%s queue=%s",
-                settings.amqp_host,
-                settings.amqp_queue,
-            )
-
-        def on_message(self, event) -> None:
-            msg: Message = event.message
-            delivery = event.delivery
-
-            body_raw = msg.body
-            if isinstance(body_raw, str):
-                body_bytes = body_raw.encode()
-            elif isinstance(body_raw, (bytes, bytearray)):
-                body_bytes = bytes(body_raw)
-            else:
-                body_bytes = json.dumps(body_raw).encode()
-
-            logger.info(
-                "amqp | mensagem recebida id=%s size=%d",
-                msg.id,
-                len(body_bytes),
-            )
-
-            envelope = _parse_envelope(body_bytes)
-            if envelope is None:
-                # payload inválido → rejected (AMQP 1.0 Rejected disposition)
-                delivery.update(delivery.REJECTED)
-                delivery.settle()
-                logger.warning("amqp | mensagem rejeitada (payload inválido) id=%s", msg.id)
-                # Emite crédito para a próxima mensagem
-                if self._receiver:
-                    self._receiver.flow(1)
-                return
-
-            if idempotency.is_duplicate(envelope.id):
-                # Ja processado (ou em processamento) - ack para o broker parar de reenviar
-                delivery.update(delivery.ACCEPTED)
-                delivery.settle()
-                logger.info("amqp | mensagem duplicada descartada cloudevents.id=%s", envelope.id)
-                if self._receiver:
-                    self._receiver.flow(1)
-                return
-
-            # Enqueue para processamento em worker (não bloqueia reactor)
-            task = _WorkerTask(
-                message_id=envelope.id,
-                payload=body_bytes,
-                delivery=delivery,
-                receiver=self._receiver,
-            )
+    executor = (
+        None
+        if settings.redis_url
+        else ThreadPoolExecutor(
+            max_workers=max(1, settings.amqp_prefetch), thread_name_prefix="amqp-diag"
+        )
+    )
+    try:
+        while not stop_flag[0]:
             try:
-                # Enqueue síncrono (on_message roda dentro do reactor proton, não tem loop asyncio)
-                self._worker_queue.enqueue_sync(task)
-            except Exception:
-                logger.exception("amqp | falha ao enqueue msg=%s", msg.id)
-                delivery.update(delivery.MODIFIED)
-                delivery.settle()
-                if self._receiver:
-                    self._receiver.flow(1)
-                return
-
-        def on_stop(self, event) -> None:
-            """Cleanup worker queue no shutdown."""
-            # Worker queue já foi parado pelo _worker_queue.stop() no shutdown
-            # Este handler apenas confirma a parada
-
-        def on_connection_error(self, event) -> None:
-            logger.error(
-                "amqp | erro de conexão AMQP 1.0: %s",
-                event.connection.condition,
-            )
-
-        def on_transport_error(self, event) -> None:
-            logger.error(
-                "amqp | erro de transporte AMQP 1.0: %s",
-                event.transport.condition,
-            )
-
-        def on_disconnected(self, event) -> None:
+                Container(_make_handler(stop_flag, executor)).run()
+            except Exception as exc:  # noqa: BLE001
+                logger.error("amqp | erro no container AMQP 1.0: %s", exc)
             if not stop_flag[0]:
-                logger.warning("amqp | desconectado — reconexão gerenciada pelo loop externo")
-
-    while not stop_flag[0]:
-        try:
-            container = Container(_IncidentHandler())
-            container.run()  # blocking — roda até on_disconnected ou erro
-        except Exception as exc:  # noqa: BLE001
-            logger.error("amqp | erro no container AMQP 1.0: %s", exc)
-
-        if not stop_flag[0]:
-            logger.info("amqp | aguardando %ds antes de reconectar", delay)
-            import time
-
-            time.sleep(delay)
-
+                logger.info(
+                    "amqp | aguardando %ds antes de reconectar", settings.amqp_reconnect_delay
+                )
+                time.sleep(settings.amqp_reconnect_delay)
+    finally:
+        if executor is not None:
+            # Diagnosticos em curso terminam; os nao liquidados sao reentregues
+            # pelo broker quando o link fecha (at-least-once).
+            executor.shutdown(wait=False, cancel_futures=True)
     logger.info("amqp | loop de consumo encerrado")
 
 

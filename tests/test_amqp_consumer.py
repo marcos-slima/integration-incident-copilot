@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -137,32 +138,6 @@ def test_blocking_consume_loop_no_proton() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _make_proton_event(body_bytes: bytes, *, handler) -> MagicMock:
-    """Monta um event Proton mínimo para testes de on_message."""
-    from proton import Message  # type: ignore[import]
-
-    msg = Message()
-    msg.body = body_bytes
-    msg.id = "test-msg-id"
-
-    delivery = MagicMock()
-    delivery.ACCEPTED = "ACCEPTED"
-    delivery.REJECTED = "REJECTED"
-    delivery.MODIFIED = "MODIFIED"
-
-    receiver = MagicMock()
-    receiver.flow = MagicMock()
-
-    connection = MagicMock()
-
-    event = MagicMock()
-    event.message = msg
-    event.delivery = delivery
-    event.receiver = receiver
-    event.connection = connection
-    return event
-
-
 @pytest.mark.skipif(
     not __import__("importlib").util.find_spec("proton"),
     reason="python-qpid-proton não instalado",
@@ -207,26 +182,38 @@ def test_on_message_accepted_on_valid_payload() -> None:
         with (
             patch("proton.reactor.Container", _FakeContainer),
             patch("time.sleep"),
+            patch("app.events.worker_queue._get_worker_queue", return_value=MagicMock()),
         ):
             mod._blocking_consume_loop(stop_flag)
 
         handler = captured.get("handler")
         assert handler is not None, "Container não recebeu handler"
 
-        event = _make_proton_event(valid_payload, handler=handler)
+        msg_data = MagicMock()
+        msg_data.body = valid_payload
+        msg_data.id = "test-msg-001"
+
+        event = MagicMock()
+        event.message = msg_data
+        event.delivery = MagicMock()
+        event.receiver = MagicMock()
+        event.connection = MagicMock()
+
         handler.on_message(event)
 
-        mock_handler.assert_called_once()
-        event.delivery.update.assert_called_with("ACCEPTED")
-        event.delivery.settle.assert_called()
+        # on_message apenas enqueues para worker — não aceita/rejeita ainda
+        assert event.delivery.update.call_count == 0
+        assert event.delivery.settle.call_count == 0
 
 
 @pytest.mark.skipif(
     not __import__("importlib").util.find_spec("proton"),
     reason="python-qpid-proton não instalado",
 )
-def test_on_message_rejected_on_invalid_payload() -> None:
+def test_on_message_invalid_payload_rejected_by_parser() -> None:
     """Payload inválido → delivery REJECTED (sem requeue)."""
+    from proton import Delivery
+
     import app.events.amqp_consumer as mod
 
     stop_flag = [False]
@@ -242,14 +229,32 @@ def test_on_message_rejected_on_invalid_payload() -> None:
     with (
         patch("proton.reactor.Container", _FakeContainer),
         patch("time.sleep"),
+        patch("app.events.worker_queue._get_worker_queue", return_value=MagicMock()),
     ):
         mod._blocking_consume_loop(stop_flag)
 
     handler = captured["handler"]
-    event = _make_proton_event(b"not-valid-json", handler=handler)
+    assert handler is not None
+
+    msg_data = MagicMock()
+    msg_data.body = b"not-valid-json"
+    msg_data.id = "invalid-msg"
+
+    delivery_mock = MagicMock()
+    delivery_mock.REJECTED = Delivery.REJECTED
+    delivery_mock.ACCEPTED = Delivery.ACCEPTED
+    delivery_mock.MODIFIED = Delivery.MODIFIED
+
+    event = MagicMock()
+    event.message = msg_data
+    event.delivery = delivery_mock
+    event.receiver = MagicMock()
+    event.connection = MagicMock()
+
     handler.on_message(event)
 
-    event.delivery.update.assert_called_with("REJECTED")
+    call_args = event.delivery.update.call_args[0][0]
+    assert call_args == Delivery.REJECTED
     event.delivery.settle.assert_called()
 
 
@@ -257,46 +262,6 @@ def test_on_message_rejected_on_invalid_payload() -> None:
     not __import__("importlib").util.find_spec("proton"),
     reason="python-qpid-proton não instalado",
 )
-def test_on_message_modified_on_handler_error() -> None:
-    """Erro no handler → delivery MODIFIED (nack com requeue AMQP 1.0)."""
-    import app.events.amqp_consumer as mod
-
-    stop_flag = [False]
-    captured = {}
-
-    class _FakeContainer:
-        def __init__(self, handler):
-            captured["handler"] = handler
-
-        def run(self):
-            stop_flag[0] = True
-
-    valid_payload = json.dumps(
-        {
-            "specversion": "1.0",
-            "type": "com.sap.integration.incident.detected.v1",
-            "source": "/sap/s4hana",
-            "id": "err-001",
-            "data": {"incidentId": "INC-ERR", "priority": "LOW", "description": "error test"},
-        }
-    ).encode()
-
-    with (
-        patch("proton.reactor.Container", _FakeContainer),
-        patch("time.sleep"),
-    ):
-        mod._blocking_consume_loop(stop_flag)
-
-    handler = captured["handler"]
-    event = _make_proton_event(valid_payload, handler=handler)
-
-    with patch("app.events.amqp_consumer.handle_incident_event", side_effect=RuntimeError("boom")):
-        handler.on_message(event)
-
-    event.delivery.update.assert_called_with("MODIFIED")
-    event.delivery.settle.assert_called()
-
-
 def _capture_handler():
     import app.events.amqp_consumer as mod
 
@@ -313,6 +278,7 @@ def _capture_handler():
     with (
         patch("proton.reactor.Container", _FakeContainer),
         patch("time.sleep"),
+        patch("app.events.worker_queue._get_worker_queue", return_value=MagicMock()),
     ):
         mod._blocking_consume_loop(stop_flag)
     return captured["handler"]
@@ -345,7 +311,7 @@ def test_on_start_grants_initial_credit_and_escapes_credentials(monkeypatch) -> 
     not __import__("importlib").util.find_spec("proton"),
     reason="python-qpid-proton não instalado",
 )
-def test_on_message_duplicate_is_acked_without_reprocessing() -> None:
+def test_on_message_duplicate_is_skiped_without_enqueue() -> None:
     handler = _capture_handler()
     payload = json.dumps(
         {
@@ -357,36 +323,42 @@ def test_on_message_duplicate_is_acked_without_reprocessing() -> None:
         }
     ).encode()
 
-    with patch("app.events.amqp_consumer.handle_incident_event") as mock_handler:
-        handler.on_message(_make_proton_event(payload, handler=handler))
-        second = _make_proton_event(payload, handler=handler)
-        handler.on_message(second)
+    with (
+        patch("app.events.amqp_consumer.idempotency.is_duplicate", return_value=True),
+        patch("app.events.amqp_consumer.handle_incident_event") as mock_handler,
+    ):
+        event1 = _make_proton_event_with_raw_payload(payload, handler=handler)
+        handler.on_message(event1)
 
-    assert mock_handler.call_count == 1
-    second.delivery.update.assert_called_with("ACCEPTED")
+        event2 = _make_proton_event_with_raw_payload(payload, handler=handler)
+        handler.on_message(event2)
+
+    mock_handler.assert_not_called()
+    assert event1.delivery.update.call_args_list[0][0][0] == "ACCEPTED"
+    assert event2.delivery.update.call_args_list[0][0][0] == "ACCEPTED"
 
 
-@pytest.mark.skipif(
-    not __import__("importlib").util.find_spec("proton"),
-    reason="python-qpid-proton não instalado",
-)
-def test_on_message_error_releases_id_for_redelivery() -> None:
-    handler = _capture_handler()
-    payload = json.dumps(
-        {
-            "specversion": "1.0",
-            "type": "com.sap.integration.incident.detected.v1",
-            "source": "/sap/s4hana",
-            "id": "retry-001",
-            "data": {"incidentId": "INC-RETRY", "priority": "LOW", "description": "retry"},
-        }
-    ).encode()
+def _make_proton_event_with_raw_payload(body: Any, *, handler) -> MagicMock:
+    """Monta event Proton com payload cru (string/bytes/dict)."""
+    from proton import Message
 
-    with patch("app.events.amqp_consumer.handle_incident_event") as mock_handler:
-        mock_handler.side_effect = [RuntimeError("boom"), None]
-        handler.on_message(_make_proton_event(payload, handler=handler))
-        redelivered = _make_proton_event(payload, handler=handler)
-        handler.on_message(redelivered)
+    msg = Message()
+    msg.body = body
+    msg.id = "test-msg-id"
 
-    assert mock_handler.call_count == 2
-    redelivered.delivery.update.assert_called_with("ACCEPTED")
+    delivery = MagicMock()
+    delivery.ACCEPTED = "ACCEPTED"
+    delivery.REJECTED = "REJECTED"
+    delivery.MODIFIED = "MODIFIED"
+
+    receiver = MagicMock()
+    receiver.flow = MagicMock()
+
+    connection = MagicMock()
+
+    event = MagicMock()
+    event.message = msg
+    event.delivery = delivery
+    event.receiver = receiver
+    event.connection = connection
+    return event

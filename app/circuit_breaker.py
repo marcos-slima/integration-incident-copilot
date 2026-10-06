@@ -53,7 +53,7 @@ local now = ARGV[3]
 local failures = redis.call('HINCRBY', key, 'consecutive_failures', 1)
 local opened_at = redis.call('HGET', key, 'opened_at')
 
-if failures >= threshold and (not opened_at or opened_at == '' or opened_at == false) then
+if failures >= threshold then
     redis.call('HSET', key, 'opened_at', now)
     opened_at = now
 end

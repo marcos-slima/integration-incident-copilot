@@ -8,7 +8,7 @@
 > Pré-requisito: stack local no ar (via `docker compose up -d` na raiz
 do projeto, Ollama ativo) e o projeto aberto no VS Code com o
 `.vscode/launch.json` já configurado (ver Fase 4 do
-`docs/PROCESSO_DESENVOLVIMENTO.md`).
+o processo de desenvolvimento, documento interno fora do repositório).
 
 > **Nota de atualização:** este tutorial foi escrito quando o projeto
 > tinha só 2 conectores (OData/RFC, ambos mock) e 4 nodes no grafo. Hoje
@@ -206,7 +206,7 @@ Breakpoint em `results = client.query_points(...)`.
 2. Step Over (F10) na chamada — é aqui que a rede vai até o Qdrant (`http://127.0.0.1:6333`)
 3. Depois: expanda `results` — cada item tem `.payload["source"]`, `.payload["text"]`, `.score`. **O `score` é a peça mais importante aqui** — foi ele que decidiu, na comparação `0.904` vs `0.559`, qual documento vence
 
-**Pergunta:** "o retriever está de fato retornando o documento certo, com margem de confiança suficiente, ou está empatado com outro candidato?" — isso foi exatamente o que caçamos manualmente quando descobrimos o bug de mistura de contexto (ver `docs/PROCESSO_DESENVOLVIMENTO.md`, Fase 3).
+**Pergunta:** "o retriever está de fato retornando o documento certo, com margem de confiança suficiente, ou está empatado com outro candidato?" — isso foi exatamente o que caçamos manualmente quando descobrimos o bug de mistura de contexto (ver o processo de desenvolvimento (documento interno), Fase 3).
 
 ### BP5 — Node de diagnóstico (chamada ao LLM)
 

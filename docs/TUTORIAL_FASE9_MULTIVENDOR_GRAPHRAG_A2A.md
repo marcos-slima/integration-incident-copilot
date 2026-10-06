@@ -16,7 +16,7 @@ Ao final da Fase 8, uma pergunta direta ("alguma dívida técnica em
 relação ao genai-engineering-template?") revelou uma lista concreta de
 itens documentados como "reservado para uso futuro" ou "arquivado" em
 várias partes do projeto (GraphRAG em `ARCHITECTURE.md`, a proposta A2A
-em `a2a-interoperability-layer.md`, 3 dos 4 conectores multi-vendor de referência
+na proposta da camada A2A (documento interno), 3 dos 4 conectores multi-vendor de referência
 ainda mock). Em vez de deixar isso como débito permanente, esta fase
 fecha cada item com código real e testado — ou, onde o "real de
 verdade" dependia de infraestrutura externa indisponível neste
@@ -46,7 +46,7 @@ por fazer".
 | `docker-compose.yml` | Serviço `neo4j` sob profile opt-in `graphrag` |
 | `.env.example` | Variáveis dos 3 conectores novos + GraphRAG + A2A |
 | `.vscode/launch.json` | +3 debug configs de conector, +2 de pytest focado |
-| `docs/a2a-interoperability-layer.md` | Status atualizado: arquivada → implementada |
+| proposta da camada A2A (documento interno) | Status atualizado: arquivada → implementada |
 
 ## 3. Testando os conectores novos
 
@@ -163,6 +163,6 @@ valor errado: HTTP 401).
   `docs/ARCHITECTURE.md` sobre por que isso não é dívida técnica neste
   momento.
 - A lista de ferramentas de sustentação de infraestrutura pessoal
-  (`docs/ferramentas-sustentacao-ecossistema.md`) não faz parte desta
+  (documento interno de ferramentas de sustentação) não faz parte desta
   fase — é backlog de tooling de operação, não de arquitetura da
   solução, e tratá-la junto seria dispersão de escopo.

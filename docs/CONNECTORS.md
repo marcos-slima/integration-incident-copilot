@@ -66,16 +66,16 @@ Nenhum código precisa mudar: o conector detecta o modo automaticamente.
 
 | item | valor |
 |---|---|
-| **Sistemas** | SAP CPI, Integration Suite, CAP (Cloud Application Programming Model) |
-| **API** | OData v2 (oauth2_client_credentials) / OData v4 (sem autenticação) |
-| **Identificador** | Nome do iFlow, MPL ID, entidade CAP (ex: `PO-APPROVAL-00042`) |
-| **Credenciais `.env` (OData v2)** | `OAUTH2_CLIENT_ID`, `OAUTH2_CLIENT_SECRET`, `OAUTH2_TOKEN_URL`, `ODATA_BASE_URL` |
+| **Sistemas** | SAP CPI, Integration Suite |
+| **API** | OData v2 (oauth2_client_credentials) |
+| **Identificador** | Nome do iFlow, MPL ID |
+| **Credenciais `.env`** | `OAUTH2_CLIENT_ID`, `OAUTH2_CLIENT_SECRET`, `OAUTH2_TOKEN_URL`, `ODATA_BASE_URL` |
 | **Modo mock** | ✅ Sim (via `httpx.MockTransport`) |
-| **Validado** | ✅ Mock; ✅ SAP CAP (OData v4 via cassette real) |
+| **Validado** | ✅ Mock; ❌ Real (sem instância CPI) |
 
 **Observações:**
-- OAuth2 Client Credentials flow (OData v2 para CPI/Integration Suite)
-- Suporta OData v4 sem autenticação (para SAP CAP via cassette `tests/cassettes/cap_odata_v4_query.json`)
+- OAuth2 Client Credentials flow
+- SAP CAP (OData v4) é atendido pelo conector `cap` (`app/connectors/cap_connector.py`), não por este; o cassette `tests/cassettes/cap_odata_v4_query.json` é usado por `tests/test_cap_connector.py`
 - Parser EDMX ($metadata) para contrato (DA-52)
 - Fingerprint canônico Features/Entities/Properties como tuple ordenada
 

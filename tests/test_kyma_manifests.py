@@ -125,3 +125,13 @@ def test_worker_consumes_diagnosis_queue_with_shared_config():
     refs = {next(iter(ref.values()))["name"] for ref in container["envFrom"]}
     assert refs == {"sap-integration-copilot-config", "sap-integration-copilot-secrets"}
     assert doc["spec"]["template"]["spec"]["securityContext"]["runAsNonRoot"] is True
+
+
+def test_configmap_sem_referencia_dollar_parenteses():
+    """Validacao 2026-10-06 (N-08): o kubelet so expande $(VAR) em
+    env[].value, command e args. Em valor de ConfigMap lido via envFrom o
+    processo recebe o texto literal "$(REDIS_PASSWORD)"."""
+    doc = _load("configmap.yaml")
+    literais = {k: v for k, v in doc["data"].items() if "$(" in str(v)}
+    assert literais == {}, f"valores nao seriam expandidos: {sorted(literais)}"
+    assert "REDIS_URL" not in doc["data"] and "NEO4J_PASSWORD" not in doc["data"]

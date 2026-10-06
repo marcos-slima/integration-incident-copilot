@@ -1355,3 +1355,22 @@ def test_connector_coverage_entra_no_run_all(tmp_path: Path) -> None:
     transforma uma checagem em barreira."""
     assert "connector_coverage" in GATES
     assert GATES["connector_coverage"] is check_connector_coverage
+
+
+def test_link_para_doc_git_ignored_conta_como_quebrado(tmp_path: Path) -> None:
+    """Validacao 2026-10-06 (CI-01): na maquina do autor o doc ignorado
+    existe e o gate passava; no CI (clone limpo) reprovava. Agora o arquivo
+    ignorado conta como inexistente nos dois lugares."""
+    import subprocess
+
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    (tmp_path / ".gitignore").write_text("docs/PRIVADO.md\n")
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "PRIVADO.md").write_text("# privado\n")
+    (tmp_path / "docs" / "PUBLICO.md").write_text("Veja [o privado](PRIVADO.md) e `PRIVADO.md`.\n")
+    from app.evaluation import gates
+
+    markup = gates.check_docs_markup_integrity(tmp_path)
+    refs = gates.check_docs_code_references(tmp_path)
+    assert markup[0].is_failure and "PRIVADO.md" in markup[0].message
+    assert refs[0].is_failure and "PRIVADO.md" in refs[0].message

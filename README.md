@@ -3,7 +3,6 @@
 [![tests](https://github.com/marcos-lima/integration-incident-copilot/actions/workflows/tests.yml/badge.svg)](https://github.com/marcos-lima/integration-incident-copilot/actions/workflows/tests.yml)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-> 📋 Veja o [processo de desenvolvimento](docs/PROCESSO_DESENVOLVIMENTO.md) seguido neste projeto, fase por fase.
 >
 > 📚 Índice de toda a documentação: **[docs/README.md](docs/README.md)** — por onde começar, o que é referência atual e o que é registro histórico.
 
@@ -78,7 +77,7 @@ conectores).
 - **API**: FastAPI + Pydantic
 - **A2A**: Agent Card + servidor JSON-RPC 2.0 (`app/a2a/`), em paralelo
   ao REST, mesma orquestração por trás — ver
-  [proposta original](docs/a2a-interoperability-layer.md)
+  proposta original (documento interno, fora do repositório)
 - **Orquestração**: LangGraph
 - **LLM Gateway**: plugável — Ollama (default, local-first), OpenAI ou
   Azure OpenAI (`app/llm/factory.py`), sem trocar código do grafo
@@ -269,7 +268,7 @@ mais confiável sob incerteza.
 > `qwen3-coder-next:latest` após paridade técnica no promptfoo
 > (10/10 PASS, `concurrency: 1`). A comparação acima segue válida como
 > registro histórico do critério usado — `qwen2.5-coder:32b` não é mais
-> o modelo em produção. Ver `docs/PROCESSO_DESENVOLVIMENTO.md` Fase 12.
+> o modelo em produção. Registro da Fase 12 no processo de desenvolvimento (documento interno, fora do repositório).
 
 ### 5. Observabilidade real com Langfuse (nota informal — sem DA)
 
@@ -536,7 +535,7 @@ ressalva já aplicada ao `RFCConnector._fetch_real`.
 ### 14. Camada A2A (Agent2Agent) implementada, com a ressalva de GA preservada (DA-14)
 
 **Contexto:** a proposta em
-[docs/a2a-interoperability-layer.md](docs/a2a-interoperability-layer.md)
+a proposta original da camada A2A (documento interno, fora do repositório)
 estava arquivada desde antes da Fase 8, com dois pré-requisitos
 explícitos para sair do papel: conectores SAP fechados e suíte de
 testes automatizada madura. As Fases 7/8 (e a seção 12 acima)
@@ -2587,49 +2586,30 @@ incidentes, mesmo non-PII, sejam armazenados com criptografia em repouso. O
 completo** do diagnóstico: traces, códigos de erro, payloads. Um backup ou
 disco comprometido sem criptografia exporia esse contexto.
 
-**A solução.** Migration `009_encrypt_evidence_json.py`:
+**A solução.**
 
-- **Upgrade**: percorre todos os incidentes, aplica Fernet com `LLM_CREDENTIALS_MASTER_KEY` ao campo `evidence_json`, deixa token pré-existente (prefixo `gAAA`) como está (idempotência)
-- **Downgrade**: remove a criptografia, devolve JSONB no formato original
-- **Detecção de tokens Fernet**: strings começando com `gAAA` são saltadas no upgrade (recriptografar gera token diferente mesmo com mesma chave)
-- **Conversão de tipos**: `dict`/`list` (SQLite, ou Postgres sem migration) são devolvidos direto; strings não cifradas tentam JSON parse first
-- **Integração com `incident_recorder.py`**: nova função `_encrypt_evidence()` adicionada, `evidence_json` passa por criptografia ao persistir
-- **Integração com `incident_repository.py`**: `routes.py:653-658` descriptografa `evidence_json` só para `/incidents/{id}?detail=true` (não lista)
+- `app/admin/crypto.py::encrypt_evidence` **redige a PII reconhecível** (e-mail, CPF, número de IDoc; `app/redaction.py::redact_pii_deep`) e cifra com Fernet (`LLM_CREDENTIALS_MASTER_KEY`). Quem decifra (a API admin, para a tela de incidentes) não recebe o dado pessoal.
+- Sem master key, `encrypt_evidence` levanta `ConfigurationError` em vez de devolver `None`. A versão anterior perdia a evidência em silêncio e logava "deixando em claro". O boot falha quando `DATABASE_URL` está configurada sem a chave (`app/main.py::_ensure_evidence_key_configured`).
+- `decrypt_evidence` aceita linhas legadas (lista/dict do JSONB, ou texto JSON) e levanta `ConfigurationError` quando o token não decifra com a chave atual.
+- `app/services/incident_recorder.py::build_incident_row` e `app/services/incident_repository.py` usam a mesma função (havia três cópias).
+- Migration `009_encrypt_evidence_json.py`:
+  - **upgrade** cifra só as linhas em claro, com a mesma redação do runtime;
+  - banco novo, ou já migrado, sobe **sem exigir a chave** (o job de migrações do CI não tem chave);
+  - com linhas pendentes e sem chave, falha com uma mensagem que diz quantas linhas estão pendentes.
+  - **Downgrade** decifra e só exige a chave quando há linhas cifradas.
+  - Exercitado contra PostgreSQL 16 real na validação de 2026-10-06.
 
-**Mudanças de código:**
+**Limitações (aceitas):**
 
-- `app/admin/crypto.py`: funções `encrypt_evidence()` e `decrypt_evidence()` com Fernet
-- `app/services/incident_recorder.py:40-51`: `_encrypt_evidence()` adicionado, `evidence_json` cifrado ao persistir
-- `app/admin/routes.py:653-658`: `decrypt_evidence()` aplicado apenas em detalhes (não lista, para evitar perda de desempenho)
-- `alembic/versions/009_encrypt_evidence_json.py`: migration com lógica de atualização em batch e idempotência
-- `alembic/env.py`: reescrito para configurar URL sync (`asyncpg`→`psycopg`) antes de importar models (sem carregar engine async)
+- A redação é por regex: dado empresarial fora dos padrões (nomes, números de contrato) continua dentro do cifrado.
+- A detecção de "já cifrado" na migration usa o prefixo `gAAA` dos tokens Fernet.
+- Downgrade em produção devolve a evidência em claro. Use só para rollback imediato.
 
-**Requisitos:**
+**Requisitos.**
 
-- `LLM_CREDENTIALS_MASTER_KEY` em `.env` (string base64 de 44 caracteres, gerada uma vez)
-- PostgreSQL ≥ 14 (suporte a JSONB)
-- `psycopg` (v3) instalado para Alembic interagir com `DATABASE_URL=postgresql+asyncpg://`
-- **Nunca compartilhar a master key** — backup seguro, access control estrito
-- Migration executa uma vez; downgrade só em emergência (perda de dados cifrados)
-
-**Invariante de qualidade.** O gatilho `evidence_json` deve ser cifrado com
-Fernet antes de persistir; se `LLM_CREDENTIALS_MASTER_KEY` não estiver
-configurada, o `incident_recorder` registra aviso e grava em claro (fallback
-de desastre, não o ideal). O downgrade desfaz a proteção e não deve ser
-executado em produção.
-
-**Limitações (deliberadamente registradas):**
-
-- Migration só afeta PostgreSQL (SQLite usa `test_detalhe_de_incidente` com dados em claro)
-- Descriptografia ocorre só em `/incidents/{id}?detail=true`, não em `/incidents` (lista)
-- `LLM_CREDENTIALS_MASTER_KEY` não é rotacionada automaticamente — rotação requer recriptografia manual
-
-**Bugs encontrados no caminho:**
-
-- **psycopg v2 vs v3**: initially usado `psycopg2-binary`, mas `psycopg` (v3) é o recommendado para `DATABASE_URL=postgresql+asyncpg://`
-- **dict vs string JSONB**: psycopg adapta dict nativamente para JSONB, mas string Fernet precisa ser passada como JSON string (`json.dumps()`)
-- **list vs dict**: fixture SQLite grava `evidence_json` como `list[dict]`, não string — `decrypt_evidence()` precisa handle `list`, `dict` e `str`
-- **NameError em alembic/env.py**: import de `config` após `app.db` causava `NameError: name 'config' is not defined` — reescrito para configurar URL sync antes
+- `LLM_CREDENTIALS_MASTER_KEY` no `.env` sempre que `DATABASE_URL` estiver configurada (Fernet key de 44 caracteres; nunca compartilhar, backup seguro).
+- Alembic usa `psycopg2` (dependência do projeto). `alembic/env.py` força `postgresql+psycopg2://` porque o SQLAlchemy 2.1 passou a usar psycopg v3 como driver padrão de `postgresql://`, e o psycopg v3 não está nas dependências.
+- A master key não é rotacionada automaticamente. A rotação exige decifrar com a chave antiga e cifrar com a nova.
 
 **Por que esta DA tem migration e não só código.** A criptografia de dados
 existentes exige migration: não se pode apenas adicionar a função de encrypt;

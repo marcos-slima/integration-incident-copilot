@@ -1,43 +1,56 @@
-# Rate Limiting — DA-03
+# Rate limiting
 
-## Overview
-The API implements rate limiting to prevent abuse (brute force, DoS). The implementation uses **SlowAPI** with Redis backend (with in-memory fallback when Redis is unavailable).
+Implementação: [SlowAPI](https://slowapi.readthedocs.io/) em `app/rate_limit.py`,
+aplicada pelo `SlowAPIMiddleware` (`app/main.py`) e por decorators
+`@limiter.limit(...)` nas rotas.
 
-## Configuration
+> Este documento substitui a versão de 2026-10-06, que descrevia "1000 RPS",
+> "backend Redis" e "username+IP" — nada disso existe no código. Ele também
+> se rotulava "DA-03", número que já pertence à DA-3 (guardrails em código).
+> Rate limiting não tem DA própria.
 
-### Rate Limit Threshold
-- **Default**: 1000 requests per second (RPS) per client
-- **Bucket key**: `IP:endpoint` (not API key)
+## Limites em vigor
 
-### Endpoint-Specific Limits
-Auth endpoints (`/auth/login`, `/auth/verify/email`, `/auth/verify/phone`) use **username+IP hybrid** to prevent:
-- Password brute force via different API keys
-- User enumeration (timing attacks reveal user existence)
+| Rota | Limite | Chave do bucket |
+|---|---|---|
+| `POST /auth/login`, `POST /auth/verify/email`, `POST /auth/verify/phone` | 5/minuto | `login:<IP>`, `verify_email:<IP>`, `verify_phone:<IP>` (`request_client_identity_for_auth_endpoints`) |
+| `POST /diagnose`, `POST /diagnose/async`, `POST /events/incident`, `POST /incidents/{id}/verify` | 10/minuto | `request_client_identity` (ver abaixo) |
+| `POST /a2a` | 10/minuto | `request_client_identity` |
+| Demais rotas | 60/minuto (`default_limits`) | `request_client_identity` |
 
-### Key Functions
-- `app/rate_limit.py:64` — `request_client_identity_for_auth_endpoints()` — identifies clients for sensitive endpoints
-- `app/rate_limit.py:98` — `limiter` singleton — applied via `SlowAPIMiddleware` in `app/main.py:104`
+`request_client_identity` usa, nesta ordem: o valor do header `X-A2A-Api-Key`
+(`a2a:<valor>`), o valor de `X-API-Key` (`apikey:<valor>`) e, por último, o IP.
 
-### Fallback Behavior
-When Redis is unavailable:
-- Falls back to in-memory storage
-- Rate limits still enforced (per-process only — not distributed)
-- No errors raised; requests rate-limited based on available data
+## Armazenamento
 
-## Testing
+O `Limiter` é criado sem `storage_uri`, então os contadores ficam **em memória,
+por processo**. Com várias réplicas (HPA no Kyma), cada pod conta separadamente.
+Também não há Redis aqui, mesmo com `REDIS_URL` configurada.
 
-### Manual Test
+## Limitações conhecidas (abertas)
+
+- **Força bruta de chave de API.** O bucket das rotas protegidas é o próprio
+  header enviado pelo cliente, e a autenticação recusa a chave inválida
+  **antes** do decorator contar a tentativa. Resultado: tentativas com
+  `X-API-Key` inválida não recebem 429 (70 tentativas seguidas em `/diagnose`
+  sem nenhum 429, na validação de 2026-10-06).
+- **Enumeração de usuário por tempo.** O login de um usuário inexistente
+  responde em ~0,05 ms; o de um existente com senha errada, em ~160 ms
+  (PBKDF2 só roda quando o usuário existe). O limite por IP não resolve isso.
+- **Atrás de proxy.** Sem `--proxy-headers`/`forwarded-allow-ips` no uvicorn,
+  atrás do Istio todos os clientes compartilham o IP do sidecar e, portanto,
+  o mesmo bucket de login.
+- **Sem limite por usuário ou por código** em `/auth/verify/phone` (código de
+  6 dígitos).
+
+## Teste manual
+
 ```bash
-# Test rate limiting (1000 RPS threshold)
-ab -n 1010 -c 10 http://localhost:8000/diagnose -H "X-API-Key: test" -H "Content-Type: application/json" -d '{"incident":"test"}'
+# 6a tentativa de login no mesmo minuto, mesmo IP -> 429
+for i in $(seq 1 6); do
+  curl -s -o /dev/null -w "%{http_code}\n" -X POST http://127.0.0.1:8000/auth/login \
+    -H "Content-Type: application/json" -d '{"username":"x","password":"y"}'
+done
 ```
 
-### Expected Behavior
-- First ~1000 requests succeed
-- Remaining requests return `429 Too Many Requests`
-
-## References
-- **DA-03**: Rate limit policy
-- `app/rate_limit.py` — implementation
-- `app/main.py:95-120` — middleware setup
-- SlowAPI docs: https://slowapi.readthedocs.io/
+Teste automatizado: `tests/test_auth.py` (bucket do login independe de `X-API-Key`).

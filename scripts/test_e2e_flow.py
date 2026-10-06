@@ -14,6 +14,7 @@ Uso:
 from __future__ import annotations
 
 import os
+import secrets
 import sys
 import time
 import uuid
@@ -93,7 +94,8 @@ def main() -> int:
     username = f"e2e_{uuid.uuid4().hex[:8]}"
     email = f"{username}@example.com"
     phone = "+5511999999999"
-    password = "<redact>"
+    # Senha do usuario de teste vem do ambiente (nunca versionada).
+    password = os.environ.get("IIC_E2E_PASSWORD") or secrets.token_urlsafe(16)
 
     try:
         resp = http_post(

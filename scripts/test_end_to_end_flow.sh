@@ -6,7 +6,8 @@ set -euo pipefail
 
 BACKEND="http://127.0.0.1:8000"
 API_KEY="${IIC_API_KEY:-test-api-key}"
-ADMIN_KEY="${IIC_ADMIN_KEY:-test-admin-key}"
+ADMIN_KEY="${IIC_ADMIN_KEY:?defina IIC_ADMIN_KEY com o ADMIN_API_KEY do .env}"
+E2E_PASSWORD="${IIC_E2E_PASSWORD:-$(python3 -c 'import secrets;print(secrets.token_urlsafe(16))')}"
 
 echo "=== Teste End-to-End: Fluxo completo de ativação ==="
 
@@ -17,7 +18,7 @@ USER_RESP=$(curl -s -X POST "${BACKEND}/admin/api/users" \
   -H "Content-Type: application/json" \
   -d '{
     "email": "e2e_test@example.com",
-    "password": "<redact>",
+    "password": "'"${E2E_PASSWORD}"'",
     "name": "Teste End-to-End"
   }')
 USER_ID=$(echo "$USER_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
@@ -62,7 +63,7 @@ echo "- Código SMS confirmado"
 echo "- Realizando login..."
 LOGIN_RESP=$(curl -s -X POST "${BACKEND}/auth/login" \
   -H "Content-Type: application/json" \
-  -d "{\"email\": \"e2e_test@example.com\", \"password\": \"<redact>\"}")
+  -d "{\"email\": \"e2e_test@example.com\", \"password\": \"${E2E_PASSWORD}\"}")
 SESSION_ID=$(echo "$LOGIN_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['session_id'])")
 echo "  Session ID: ${SESSION_ID:0:40}..."
 

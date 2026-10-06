@@ -66,3 +66,11 @@ docs/INGEST_REFERENCE.md
 
 # Relatórios/auditorias gerados manualmente (não versionados)
 ARCHITECTURE_REVIEW.md
+
+# Validacao 2026-10-06: artefatos locais que nao podem ir para o repositorio
+# publico (relatorios de auditoria com mapa de segredos, scripts manuais com
+# dados pessoais/senhas reais).
+docs/AUDITORIA_COMPLETA_*.md
+docs/VALIDACAO_*.md
+scripts/test_resend_domain.py
+scripts/redact_docs_secrets.py

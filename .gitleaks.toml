@@ -28,3 +28,54 @@ name = "Integration Incident Copilot - politica de segredos"
 #
 # Qualquer allowlist futura deve ser path-scoped (regex de path), nunca um
 # regex de segredo global.
+
+# ---------------------------------------------------------------------------
+# Regras proprias (validacao 2026-10-06). As regras default nao reconhecem os
+# segredos deste projeto: chaves urlsafe sem prefixo de vendor e senhas em
+# URLs de conexao. As duas fugas reais (ADMIN_API_KEY num doc de teste e a
+# senha do Postgres num script) passaram pelo hook por isso.
+# ---------------------------------------------------------------------------
+
+[[rules]]
+id = "iic-admin-api-key-literal"
+description = "Valor literal no header X-API-Admin-Key (use variavel de ambiente)"
+regex = '''(?i)x-api-admin-key["']?\s*[:=]\s*["']?([A-Za-z0-9_\-]{12,})'''
+secretGroup = 1
+keywords = ["x-api-admin-key"]
+  [rules.allowlist]
+  # identificadores de variavel (ADMIN_API_KEY, ADMIN_KEY) nao sao segredos
+  regexes = ['''^[A-Z][A-Z0-9_]*$''', '''(?i)(change-?me|required|placeholder|example|exemplo|your-|sua_|troque|fake|test|teste|dummy|xxx|algum-valor)''', '''^(os\.environ|os\.getenv|settings\.)''']
+
+[[rules]]
+id = "iic-env-secret-assignment"
+description = "Atribuicao literal de segredo do .env (ADMIN_API_KEY, API_KEY, SESSION_SECRET, *_PASSWORD, master key)"
+regex = '''(?:ADMIN_API_KEY|A2A_API_KEY|EVENT_MESH_API_KEY|SESSION_SECRET|LLM_CREDENTIALS_MASTER_KEY|POSTGRES_PASSWORD|NEO4J_PASSWORD|REDIS_PASSWORD|SMTP_PASSWORD)\s*[:=]\s*["']?([^\s"'$<{#?(\-][^\s"'$<{#(]{7,})'''
+secretGroup = 1
+keywords = ["_api_key", "session_secret", "master_key", "_password"]
+  [rules.allowlist]
+  regexes = ['''(?i)(change-?me|required|placeholder|example|exemplo|your-|sua_|troque|fake|test|teste|dummy|xxx|algum-valor)''', '''^(os\.environ|os\.getenv|settings\.)''']
+
+[[rules]]
+id = "iic-db-url-password"
+description = "Senha embutida em URL de conexao (postgres/redis/bolt)"
+regex = '''(?i)(?:postgres(?:ql)?(?:\+\w+)?|redis|rediss|bolt|neo4j)://[^:\s/@]*:([^@\s$<{/]{8,})@'''
+secretGroup = 1
+keywords = ["://"]
+  [rules.allowlist]
+  regexes = ['''(?i)(change-?me|required|placeholder|example|exemplo|your-|sua_|troque|fake|test|teste|dummy|xxx|algum-valor)''', '''^(os\.environ|os\.getenv|settings\.)''', '''(?i)^(password|senha|secret)$''']
+
+[[rules]]
+id = "iic-legacy-admin-key-prefix"
+description = "Formato da chave admin antiga"
+regex = '''HomolAdmin-[a-z0-9]{20,}'''
+keywords = ["homoladmin-"]
+
+[[rules]]
+id = "iic-literal-password-scripts-docs"
+description = "Senha literal em scripts/docs/deploy (scripts manuais costumam copiar a senha real)"
+regex = '''(?i)["']?(?:password|senha)["']?\s*[:=]\s*["']([^"'\s$<{]{8,})["']'''
+secretGroup = 1
+path = '''^(scripts|docs|deploy)/'''
+keywords = ["password", "senha"]
+  [rules.allowlist]
+  regexes = ['''(?i)(change-?me|required|placeholder|example|exemplo|your-|sua_|troque|fake|test|teste|dummy|xxx|algum-valor|qualquer)''']

@@ -268,7 +268,7 @@ docs/               # índice em README.md; ARCHITECTURE.md, GETTING_STARTED.md,
 | DA-33 | Rule Engine determinístico (pré-filtro LLM, 21 regras SAP) | `agent/rules.py` |
 | DA-38 | `EMBEDDING_BACKEND=fastembed` para o job de avaliação RAG no CI, que não tem Ollama | `rag/retriever.py` |
 | DA-39 | Política de soberania de dados no AI Gateway (`strict` / `cloud_with_dlp`) | `config.py` + `llm/gateway.py` |
-| DA-40 | Migração aiormq (AMQP 0.9.1) → python-qpid-proton (AMQP 1.0), com wrapper asyncio | `events/amqp_consumer.py` |
+| DA-40 | Migração aiormq (AMQP 0.9.1) → python-qpid-proton (AMQP 1.0), com wrapper asyncio. Diagnóstico **fora do reactor** (RQ com `REDIS_URL`, senão `ThreadPoolExecutor`); disposition só na thread do reactor via `EventInjector`; `AMQP_MAX_REDELIVERIES` → REJECTED (DMQ); timer de parada (validação 2026-10-06) | `events/amqp_consumer.py` |
 | DA-41 | Circuit breaker com backend Redis compartilhado (fallback em memória sem infra obrigatória) | `circuit_breaker.py` |
 | DA-42 | Escala calibrada por sigmoid para o rerank score (nenhum consumer usa o score cru) | `rag/retriever.py` + `agent/escalation.py` |
 | DA-43 | Soberania de dados por origin real, fail-closed | `llm/gateway.py` + `GET /llm/policy` |
@@ -319,24 +319,24 @@ incidentes, mesmo non-PII, sejam armazenados com criptografia em repouso. O
 completo** do diagnóstico: traces, códigos de erro, payloads. Um backup ou
 disco comprometido sem criptografia exporiria esse contexto.
 
-**A solução.** Migration `009_encrypt_evidence_json.py`:
+**A solução.**
 
-- **Upgrade**: percorre todos os incidentes, aplica Fernet com `LLM_CREDENTIALS_MASTER_KEY` ao campo `evidence_json`, deixa token pré-existente (prefixo `gAAA`) como está (idempotência)
-- **Downgrade**: remove a criptografia, devolve JSONB no formato original
-- **Detecção de tokens Fernet**: strings começando com `gAAA` são saltadas no upgrade (recriptografar gera token diferente mesmo com mesma chave)
-
-**Implementação.**
-
-1. `app/admin/crypto.py:70-95`: funções `encrypt_evidence()` e `decrypt_evidence()` com Fernet, suportando `dict`, `list`, `str` (cifrado/não-cifrado)
-2. `app/services/incident_recorder.py:40-51`: `_encrypt_evidence()` chamado no `build_incident_row()` antes de persistir
-3. `app/admin/routes.py:653-658`: decrypt ao ler `/incidents/{id}?detail=true`
-4. `alembic/versions/009_encrypt_evidence_json.py`: migration idempotente com detecção de tokens Fernet
+- `app/admin/crypto.py::encrypt_evidence` **redige a PII reconhecível** (e-mail, CPF, número de IDoc; `app/redaction.py::redact_pii_deep`) e cifra com Fernet (`LLM_CREDENTIALS_MASTER_KEY`). Quem decifra (a API admin, para a tela de incidentes) não recebe o dado pessoal.
+- Sem master key, `encrypt_evidence` levanta `ConfigurationError` em vez de devolver `None`. A versão anterior perdia a evidência em silêncio e logava "deixando em claro". O boot falha quando `DATABASE_URL` está configurada sem a chave (`app/main.py::_ensure_evidence_key_configured`).
+- `decrypt_evidence` aceita linhas legadas (lista/dict do JSONB, ou texto JSON) e levanta `ConfigurationError` quando o token não decifra com a chave atual.
+- `app/services/incident_recorder.py::build_incident_row` e `app/services/incident_repository.py` usam a mesma função (havia três cópias).
+- Migration `009_encrypt_evidence_json.py`:
+  - **upgrade** cifra só as linhas em claro, com a mesma redação do runtime;
+  - banco novo, ou já migrado, sobe **sem exigir a chave** (o job de migrações do CI não tem chave);
+  - com linhas pendentes e sem chave, falha com uma mensagem que diz quantas linhas estão pendentes.
+  - **Downgrade** decifra e só exige a chave quando há linhas cifradas.
+  - Exercitado contra PostgreSQL 16 real na validação de 2026-10-06.
 
 **Limitações (aceitas):**
 
-- `decrypt_evidence()` em SQLite (sem `LLM_CREDENTIALS_MASTER_KEY`) devolve valor original, sem decifra (log de warning)
-- Migration idempotente evita recriptografia, mas token Fernet mudaria se recriptografar (é comportamento esperado)
-- downgrade com dados Fernet deve ser feito com cautela em produção (perda irreversível de criptografia)
+- A redação é por regex: dado empresarial fora dos padrões (nomes, números de contrato) continua dentro do cifrado.
+- A detecção de "já cifrado" na migration usa o prefixo `gAAA` dos tokens Fernet.
+- Downgrade em produção devolve a evidência em claro. Use só para rollback imediato.
 
 
 ## Invariantes que NÃO devem ser alterados sem DA formal

@@ -677,11 +677,51 @@ ADMIN_SYSTEMS_FORM = Path("app/admin/templates/systems.html")
 COVERAGE_MAP_DOC = Path("docs/COVERAGE_MAP.md")
 
 
+def _git_ignored(root: Path, paths: list[Path]) -> set[Path]:
+    """Subconjunto de `paths` que o .gitignore exclui (vazio sem git).
+
+    Validacao 2026-10-06 (CI-01): os gates de documentacao liam e aceitavam
+    arquivos git-ignored. Na maquina do autor passavam; no CI (clone limpo,
+    sem esses arquivos) reprovavam. Agora um arquivo ignorado conta como
+    inexistente nos dois lugares - o resultado nao depende de qual copia
+    do repo roda o gate.
+    """
+    if not paths or not (root / ".git").exists():
+        return set()
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(root), "check-ignore", "--stdin", "-z"],
+            input="\0".join(str(p.relative_to(root)) for p in paths),
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        ).stdout
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return set()
+    return {root / item for item in out.split("\0") if item}
+
+
+def _published(root: Path, path: Path) -> bool:
+    """Existe E vai para o repositorio (nao e git-ignored)."""
+    try:
+        path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return path.exists()
+    return path.exists() and path.resolve() not in {
+        p.resolve() for p in _git_ignored(root, [path.resolve()])
+    }
+
+
 def _iter_docs(root: Path) -> list[Path]:
     docs = root / DOCS_DIR
     if not docs.is_dir():
         return []
-    return sorted(docs.rglob("*.md"))
+    todos = sorted(docs.rglob("*.md"))
+    ignorados = _git_ignored(root, todos)
+    return [d for d in todos if d not in ignorados]
 
 
 def _markdown_docs(root: Path) -> list[Path]:
@@ -717,7 +757,7 @@ def check_docs_markup_integrity(root: Path = REPO_ROOT) -> list[Finding]:
         for alvo in re.findall(r"\]\(([^)#\s]+\.md)\)", texto):
             if alvo.startswith(("http://", "https://")):
                 continue
-            if not (doc.parent / alvo).resolve().exists():
+            if not _published(root, (doc.parent / alvo).resolve()):
                 problemas.append(f"{doc.relative_to(root)}: link quebrado -> {alvo}")
 
     if problemas:
@@ -786,7 +826,7 @@ def check_docs_code_references(root: Path = REPO_ROOT) -> list[Finding]:
         for citacao in set(_MD_CITACAO.findall(texto)):
             citacao = citacao.lstrip("/")
             bases = (root, root / "docs", root / "data" / "sample_docs", doc.parent)
-            if not any((base / citacao).exists() for base in bases):
+            if not any(_published(root, base / citacao) for base in bases):
                 problemas.append(
                     f"{doc.relative_to(root)}: cita {citacao} que nao existe em lugar nenhum"
                 )

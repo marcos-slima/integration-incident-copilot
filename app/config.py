@@ -437,6 +437,8 @@ class Settings(BaseSettings):
     amqp_queue: str = "integration/incidents"
     amqp_prefetch: int = 1
     amqp_reconnect_delay: int = 5
+    # Entregas com falha antes de REJECTED (DMQ do broker). Ver app/events/amqp_consumer.py.
+    amqp_max_redeliveries: int = 3
 
     # Persistência de incidentes (Fase 1 Observabilidade Grafana)
     # Opt-in: vazio = sem PostgreSQL (app sobe normalmente sem DB).

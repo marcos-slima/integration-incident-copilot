@@ -43,7 +43,12 @@ def test_admin_api_chave_errada():
     assert r.status_code == 401
 
 
-def test_registry_status_com_chave_e_flags():
+def test_registry_status_com_chave_e_flags(monkeypatch):
+    # Nao depender do .env do desenvolvedor (conftest carrega o .env local;
+    # em clone limpo/CI nao ha master key e o teste falhava).
+    from cryptography.fernet import Fernet
+
+    monkeypatch.setattr(settings, "llm_credentials_master_key", Fernet.generate_key().decode())
     r = client.get("/admin/api/registry/status", headers=_auth())
     assert r.status_code == 200
     body = r.json()

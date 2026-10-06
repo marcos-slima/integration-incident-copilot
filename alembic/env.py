@@ -38,9 +38,15 @@ from app.config import settings
 _raw_url = settings.database_url or ""
 if _raw_url:
     # Alembic CLI usa psycopg2 (sync) — garantir dialeto correto
-    _sync_url = _raw_url.replace("postgresql+asyncpg://", "postgresql://").replace(
-        "postgres+asyncpg://", "postgresql://"
-    )
+    # psycopg2 EXPLICITO: o SQLAlchemy 2.1 trocou o driver padrao de
+    # "postgresql://" para psycopg (v3), que nao e dependencia do projeto -
+    # sem isso `alembic upgrade head` (inclusive no CI) falha com
+    # ModuleNotFoundError. Mesma regra de app/db.py::_sync_url.
+    _sync_url = _raw_url
+    for _prefix in ("postgresql+asyncpg://", "postgres+asyncpg://", "postgresql://", "postgres://"):
+        if _raw_url.startswith(_prefix):
+            _sync_url = "postgresql+psycopg2://" + _raw_url[len(_prefix) :]
+            break
     config.set_main_option("sqlalchemy.url", _sync_url)
 
 # DA-46/47/48: registro de modelos + credenciais + metering (tabelas

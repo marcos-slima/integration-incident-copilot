@@ -36,7 +36,7 @@ from app.agent.nodes import (
 from app.agent.state import CopilotState
 from app.agent.supervisor import supervisor_node
 from app.config import settings
-from app.exceptions import DiagnosisTimeoutError
+from app.exceptions import DiagnosisOverloadedError, DiagnosisTimeoutError
 from app.models import DiagnosisResponse, IncidentRequest
 from app.services.incident_recorder import record_incident
 
@@ -167,14 +167,21 @@ def _invoke_graph_with_timeout(initial_state: CopilotState) -> CopilotState:
     codigo sincrono sem pontos de cancelamento - documentada aqui em
     vez de fingida como cancelamento de verdade."""
 
-    acquired = _graph_invoke_semaphore.acquire(blocking=False)
-    if not acquired:
-        raise DiagnosisTimeoutError(
+    if not _graph_invoke_semaphore.acquire(blocking=False):
+        raise DiagnosisOverloadedError(
             "Service unavailable: too many concurrent diagnoses. "
             "Tente novamente em alguns segundos."
         )
-
-    future: Future[CopilotState] = _graph_invoke_pool.submit(get_graph().invoke, initial_state)
+    try:
+        future: Future[CopilotState] = _graph_invoke_pool.submit(get_graph().invoke, initial_state)
+    except BaseException:
+        _graph_invoke_semaphore.release()
+        raise
+    # A vaga so volta quando a THREAD termina, nao quando o caller desiste.
+    # Liberar no `finally` (versao anterior) devolvia a vaga com o grafo
+    # ainda rodando apos o timeout: o semaforo deixava de limitar a
+    # concorrencia real e as chamadas novas ficavam na fila do executor.
+    future.add_done_callback(lambda _f: _graph_invoke_semaphore.release())
     try:
         return future.result(timeout=settings.diagnosis_timeout_seconds)
     except FutureTimeoutError as exc:
@@ -183,9 +190,6 @@ def _invoke_graph_with_timeout(initial_state: CopilotState) -> CopilotState:
             "(settings.diagnosis_timeout_seconds) - o pipeline de retrieval/GraphRAG/LLM "
             "nao terminou a tempo."
         ) from exc
-    finally:
-        if acquired:
-            _graph_invoke_semaphore.release()
 
 
 @observe_span(name="sap_copilot_diagnosis")

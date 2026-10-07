@@ -80,7 +80,18 @@ async def handle_jsonrpc(
 
     request_id = body.get("id")
 
+    # SEC-03: limite de falhas por IP (app/auth_guard.py), como nas outras chaves.
+    from app import auth_guard
+
+    ip = request.client.host if request.client else None
+    if auth_guard.too_many_failures("a2a", ip):
+        return JSONResponse(
+            _jsonrpc_error(request_id, -32000, "Too many failed authentication attempts"),
+            status_code=429,
+            headers={"Retry-After": "60"},
+        )
     if not _check_auth(x_a2a_api_key):
+        auth_guard.register_failure("a2a", ip)
         return JSONResponse(
             _jsonrpc_error(request_id, -32000, "Unauthorized: X-A2A-Api-Key ausente ou invalido"),
             status_code=401,

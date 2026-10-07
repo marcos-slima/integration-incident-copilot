@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import secrets
 
-from fastapi import HTTPException, Security, status
+from fastapi import Request, Security
 from fastapi.security import APIKeyHeader
 
 from app.config import settings
@@ -24,14 +24,20 @@ logger = logging.getLogger(__name__)
 admin_key_header = APIKeyHeader(name="X-API-Admin-Key", auto_error=False)
 
 
-def verify_admin_key(admin_key: str | None = Security(admin_key_header)) -> None:
-    """Dependency das rotas /admin/*. Comparacao com compare_digest
-    (mesmo padrao de verify_api_key, DA-18): nao vaza tamanho/prefixo."""
-    if not secrets.compare_digest(admin_key or "", settings.admin_api_key or ""):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="X-API-Admin-Key invalida ou ausente",
-        )
+def verify_admin_key(
+    admin_key: str | None = Security(admin_key_header), request: Request = None
+) -> None:
+    """Dependency das rotas /admin/*. compare_digest (DA-18) + limite de
+    falhas por IP (SEC-03, app/auth_guard.py)."""
+    from app import auth_guard
+
+    auth_guard.check_key(
+        admin_key,
+        settings.admin_api_key,
+        scope="admin",
+        request=request,
+        detail="X-API-Admin-Key invalida ou ausente",
+    )
 
 
 def ensure_admin_key_configured() -> None:

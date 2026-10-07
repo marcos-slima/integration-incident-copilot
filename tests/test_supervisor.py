@@ -2,6 +2,8 @@
 pelo supervisor - sem LLM, 100% testavel. Cobre a prioridade
 interface_type > palavra-chave na descricao > generic."""
 
+import pytest
+
 from app.agent.supervisor import classify_domain, supervisor_node
 
 
@@ -135,3 +137,37 @@ def test_classify_domain_po_por_descricao_livre():
         )
         == "sap"
     )
+
+
+# ---------------------------------------------------------------------------
+# Validacao 2026-10-07 (M-01): termos casam como palavra inteira
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "description",
+    [
+        "O usuario verifica o pedido e a tela fica lenta no portal Salesforce",
+        "Falha OAuth conforme RFC 6749 ao chamar API do Workday",
+        "Johanna reportou erro no webhook",
+        "o cliente desapareceu do cadastro",
+        "erro no rfc-7231 de cache HTTP",
+    ],
+)
+def test_m01_sem_falso_positivo_sap(description):
+    assert classify_domain({"interface_type": None, "description": description}) == "generic"
+
+
+@pytest.mark.parametrize(
+    "description",
+    [
+        "destino RFC SM59 sem resposta",
+        "chamada RFC falhou com timeout",
+        "conta contrato no FI-CA nao compensou",
+        "falha ao integrar com S/4HANA",
+        "mensagem presa no PI/PO",
+        "BAPI_IDOC_STATUS retornou erro",
+    ],
+)
+def test_m01_termos_sap_continuam_casando(description):
+    assert classify_domain({"interface_type": None, "description": description}) == "sap"

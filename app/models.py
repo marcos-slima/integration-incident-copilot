@@ -297,6 +297,19 @@ class DiagnosisResponse(BaseModel):
             "prazo, item 5): 'Metricas e feedback'."
         ),
     )
+    # Validacao 2026-10-07 (M-26): o sinal da DA-44 existia e era testado,
+    # mas nada no pipeline o chamava. Agora e calculado em todo diagnostico
+    # e devolvido - INFORMATIVO: nenhuma chamada a modelo pago acontece por
+    # causa dele (o tier 3 continua fora do escopo da DA-44).
+    escalation: dict | None = Field(
+        default=None,
+        description=(
+            "Sinal deterministico de escalonamento (DA-44, "
+            "app/agent/escalation.py): should_escalate, reason, tier, "
+            "abstained, top_evidence, connector_real. Informativo - o "
+            "pipeline nao escala sozinho para um modelo pago."
+        ),
+    )
 
 
 class VerifyIncidentRequest(BaseModel):

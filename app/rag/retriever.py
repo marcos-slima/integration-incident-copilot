@@ -454,7 +454,8 @@ def _retrieve_unified(
     # se consulta reference_library tambem.
     incidents_has_strong_match = any(h["score"] >= score_threshold for h in incidents_hits)
 
-    if not incidents_has_strong_match:
+    # M-24: fallback desligavel (conteudo de terceiros em demo publica).
+    if not incidents_has_strong_match and settings.reference_library_fallback_enabled:
         client = _get_qdrant_client()
         try:
             ref_info = client.get_collection("sap_reference_library")

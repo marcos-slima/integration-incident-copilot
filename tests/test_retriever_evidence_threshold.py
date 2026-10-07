@@ -9,6 +9,8 @@ Qdrant/Ollama reais (ver tests/test_retriever.py para os testes de
 integracao que precisam de infra viva).
 """
 
+import pytest
+
 import app.rag.retriever as retriever_module
 from app.rag.retriever import _evidence_admission_score, _retrieve_unified
 
@@ -35,18 +37,22 @@ def test_admission_score_uses_rerank_when_higher_than_cosine():
     # moderado (0.47) - o documento deve ser admitido pelo rerank_score
     # clampado, nao pelo cosseno fraco.
     hit = _hit("doc.md", score=0.47, rerank_score=8.5)
-    assert _evidence_admission_score(hit) == 1.0  # clampado
+    # RAG-01 (2026-10-07): o logit passa pela sigmoid de rerank(), nao por clamp
+    assert _evidence_admission_score(hit) > 0.99
 
 
-def test_admission_score_clamps_negative_rerank_to_zero():
+def test_admission_score_reranker_negativo_veta_mesmo_com_cosseno():
+    # RAG-01 (2026-10-07): com reranker, a decisao e dele. Antes o cosseno
+    # "vencia" e admitia o que o cross-encoder julgou irrelevante.
     hit = _hit("doc.md", score=0.3, rerank_score=-5.0)
-    # rerank negativo clampa pra 0.0, mas cosseno (0.3) ainda vence
-    assert _evidence_admission_score(hit) == 0.3
+    assert _evidence_admission_score(hit) < 0.01
 
 
-def test_admission_score_picks_max_of_both_signals():
+def test_admission_score_usa_o_reranker_e_nao_o_maximo():
+    import math
+
     hit = _hit("doc.md", score=0.2, rerank_score=0.6)
-    assert _evidence_admission_score(hit) == 0.6
+    assert _evidence_admission_score(hit) == pytest.approx(1 / (1 + math.exp(-0.6)))
 
 
 # ---------------------------------------------------------------------

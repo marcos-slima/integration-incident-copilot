@@ -43,7 +43,7 @@ from app.rag.embedding_guard import (
     stamp_collection,
     verify_collection_embedding,
 )
-from app.rag.retriever import _FastEmbedWrapper
+from app.rag.retriever import _FastEmbedWrapper, embedding_identity, new_sparse_model
 from app.rag.retriever import _get_embeddings as get_query_embeddings
 
 # §4.5 (avaliacao externa §3.5): pymupdf4llm.use_layout(False) desativa
@@ -124,7 +124,7 @@ def _get_sparse_model() -> SparseTextEmbedding:
     # contra duas threads fazendo isso simultaneamente.
     with _sparse_model_lock:
         if _sparse_model is None:
-            _sparse_model = SparseTextEmbedding(model_name=SPARSE_MODEL_NAME)
+            _sparse_model = new_sparse_model()
     return _sparse_model
 
 
@@ -277,11 +277,13 @@ def ensure_collection(
         # incomparaveis - a busca passaria a devolver respostas
         # plausiveis e erradas em vez de erro. Aqui a identidade do
         # modelo e' conferida contra a collection lateral de identidade.
+        _prov, _modelo = embedding_identity()
         aviso_embedding = verify_collection_embedding(
             client,
             collection_name,
-            expected_model=embedding_model,
+            expected_model=_modelo,
             expected_size=vector_size,
+            provider=_prov,
         )
         if aviso_embedding:
             print(f"AVISO: {aviso_embedding}")
@@ -332,7 +334,7 @@ def ensure_collection(
         # Um ingest interrompido no meio deixa a collection com metadado,
         # e o proximo run sabe o que espera; gravar so no fim deixaria
         # uma collection meio-ingestada indistinguivel de uma vergine.
-        stamp_collection(client, collection_name, embedding_model)
+        stamp_collection(client, collection_name, *_identidade_para_carimbo())
         # Payload indexes para campos usados em filtros — melhora performance
         # à medida que a collection cresce (Qdrant docs: payload indexes).
         for field_name, field_schema in [
@@ -377,8 +379,9 @@ def stamp_existing_collection(client: QdrantClient, collection_name: str, embedd
     if collection_name not in existing:
         return
     vector_size = probe_vector_size(embeddings)
+    _prov, _modelo = embedding_identity()
     aviso = verify_collection_embedding(
-        client, collection_name, expected_model=EMBEDDING_MODEL, expected_size=vector_size
+        client, collection_name, expected_model=_modelo, expected_size=vector_size, provider=_prov
     )
     if aviso:
         print(f"AVISO: {aviso}")
@@ -386,7 +389,13 @@ def stamp_existing_collection(client: QdrantClient, collection_name: str, embedd
             f"[DA-45] {collection_name}: gravando identidade do embedding corrente "
             f"('{EMBEDDING_MODEL}') — migracao de collection pre-DA-45."
         )
-    stamp_collection(client, collection_name, EMBEDDING_MODEL)
+    stamp_collection(client, collection_name, *_identidade_para_carimbo())
+
+
+def _identidade_para_carimbo() -> tuple[str, str]:
+    """(modelo, provider) na ordem de stamp_collection(client, nome, model, provider)."""
+    prov, modelo = embedding_identity()
+    return modelo, prov
 
 
 def deterministic_point_id(document_id: str, chunk_index: int) -> str:
@@ -541,7 +550,7 @@ def run_ingest(
     # aqui significa que a identidade ausente NAO era divergencia: e
     # collection pre-DA-45 no embedding corrente, ou nao gravada. Nos
     # dois casos o gravar agora e' a acao que fecha o buraco.
-    stamp_collection(client, cfg["collection"], EMBEDDING_MODEL)
+    stamp_collection(client, cfg["collection"], *_identidade_para_carimbo())
 
     # Carrega o BM25 antes do paralelismo; o acesso posterior e somente para
     # gerar vetores, nao para inicializar/downloadar o modelo em varias threads.

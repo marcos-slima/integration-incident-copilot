@@ -431,4 +431,58 @@ def test_format_graph_context_for_prompt_does_not_group_verified_with_unverified
     text = format_graph_context_for_prompt([verified, unverified])
     assert "(ja ocorreu 2x)" not in text
     assert "VERIFICADA" in text
-    assert "causa raiz confirmada anteriormente" in text
+    assert "hipotese anterior com evidencia forte (NAO verificada" in text
+
+
+def test_ai01_prune_nunca_apaga_incidente_verificado():
+    """AI-01 (validacao 2026-10-07): verificado por humano com
+    is_grounded=false era apagado pelo prune, contra o que o README promete."""
+    from app.rag.graph_store import _PRUNE_UNGROUNDED_QUERY
+
+    assert "coalesce(i.verified, false) = false" in _PRUNE_UNGROUNDED_QUERY
+
+
+def test_ai01_grounded_sem_verificacao_nao_vira_fato_no_prompt():
+    from app.rag.graph_store import RelatedIncident, format_graph_context_for_prompt
+
+    texto = format_graph_context_for_prompt(
+        [
+            RelatedIncident(
+                interface_identifier="X",
+                source_system="SAP",
+                root_cause="hipotese do LLM",
+                matched_document=None,
+                evidence_strength=0.9,
+                is_grounded=True,
+                verified=False,
+            )
+        ]
+    )
+    assert "confirmada anteriormente" not in texto
+    assert "NAO verificada" in texto
+
+
+def test_priv01_descricao_redigida_antes_de_ir_ao_grafo(monkeypatch):
+    from app.rag import graph_store
+
+    chamadas = []
+
+    class _Sess:
+        def run(self, query, **params):
+            chamadas.append(params)
+            return iter([])
+
+    graph_store.upsert_incident_graph(
+        incident_id="i1",
+        description="cliente ana@corp.com CPF 123.456.789-09",
+        interface_type="odata",
+        identifier="Y",
+        source_system="SAP",
+        root_cause="x",
+        confidence=0.1,
+        matched_document=None,
+        evidence_strength=0.1,
+        session=_Sess(),
+    )
+    desc = next(c["description"] for c in chamadas if "description" in c)
+    assert "ana@corp.com" not in desc and "123.456.789-09" not in desc

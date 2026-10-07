@@ -376,7 +376,6 @@ def verify_once(
     chave = (collection_name, embedding_fingerprint(model, provider))
     if chave in _VERIFIED:
         return
-    _VERIFIED.add(chave)
     aviso = verify_collection_embedding(
         client,
         collection_name,
@@ -384,6 +383,11 @@ def verify_once(
         expected_size=expected_size,
         provider=provider,
     )
+    # So entra no cache DEPOIS de verificar (validacao 2026-10-07, R15):
+    # antes a chave era gravada antes da checagem, entao a 1a chamada
+    # levantava EmbeddingMismatchError e todas as seguintes passavam em
+    # silencio contra a collection incompativel.
+    _VERIFIED.add(chave)
     if aviso:
         _logger.warning("DA-45 embedding: %s", aviso)
 

@@ -1,6 +1,6 @@
 {
   "measured_by": "promptfoo (promptfooconfig.yaml) via scripts/promptfoo_provider.py, que chama run_diagnosis real",
-  "measurement": "10/10 no dataset de avaliacao (Fase 12, DA-4/8/12)",
+  "measurement": "10/10 no promptfooconfig.yaml da Fase 12 (DA-4/8/12). Validacao 2026-10-07 (M-21): a suite atual tem 11 casos, 4 resolvidos pelo rule engine (nao medem o LLM) - metadata.path no YAML; e o modelo de producao reprovou o caso 'queue manager' do promptfooconfig.compare.yaml. Re-medir antes de citar o placar.",
   "note": "O harness do promptfoo NAO tem copia do prompt: ele executa o pipeline de producao, entao este digest medido e' o digest em producao. Se o digest divergir daqui, o prompt foi mexido depois da medicao e o 10/10 nao descreve mais o que roda. Regrave com: uv run python scripts/quality_gate.py --write-prompt-baseline",
   "prompt_digest": "62b9b62050c1d9b8757be656e5c1d4b625e713d611749b93cd5347b93e6a0851",
   "prompt_name": "diagnosis",

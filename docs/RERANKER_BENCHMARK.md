@@ -10,6 +10,26 @@ formalmente contra alternativas — inclusive alternativas
 majoritariamente em português, enquanto `ms-marco-MiniLM-L-6-v2` foi
 treinado só em inglês (dataset MS MARCO).
 
+> **Re-execução de 2026-10-07 (validação, M-20).** O resultado original
+> (abaixo) usou 13 consultas e apresentou "+7pp Hit@1" para uma diferença de
+> **uma consulta**. Com o dataset atual (18 consultas in-scope) o quadro é:
+>
+> | Modelo | Hit@1 | MRR@5 | Latência média | vs. L-6 (McNemar exato) | IC 95% da diferença de Hit@1 |
+> |---|---|---|---|---|---|
+> | ms-marco-L6 (baseline) | 16/18 (0,89) | 0,94 | 1 725 ms | — | — |
+> | ms-marco-L12 | 16/18 (0,89) | 0,94 | 3 362 ms | p = 1,0 (0 × 0) | [0,000, 0,000] |
+> | **mmarco-mMiniLMv2** (produção) | 17/18 (0,94) | 0,97 | 2 497 ms | p = 1,0 (1 × 0) | [+0,000, +0,167] |
+> | bge-reranker-base | 17/18 (0,94) | 0,96 | 8 925 ms | p = 1,0 (2 × 1) | [−0,111, +0,222] |
+>
+> Leitura honesta: nenhum candidato é estatisticamente melhor que o
+> baseline neste dataset; o mmarco segue em produção por ser **multilíngue**
+> (consultas em PT-BR) e mais rápido que os outros multilíngues/maiores, não
+> por "acertar mais". Latência medida em CPU deste ambiente (sem GPU); os
+> números absolutos não se comparam com os da execução original. Os dados
+> por consulta e as estatísticas (`vs_baseline`) estão em
+> `data/eval/reranker_benchmark_results.json`; o gate `reranker_invariant`
+> passa a avisar quando a vantagem não é significativa.
+
 Este documento registra a metodologia, os resultados e a recomendação
 resultante. O script que produziu os números está em
 `scripts/benchmark_rerankers.py`; os dados brutos por query estão em

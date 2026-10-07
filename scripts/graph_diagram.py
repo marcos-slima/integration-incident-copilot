@@ -23,8 +23,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DOC = ROOT / "docs" / "ARCHITECTURE.md"
-# O README mostra so a forma default; o ARCHITECTURE mostra as duas.
-README = ROOT / "README.md"
+# Os READMEs mostram so a forma default; o ARCHITECTURE mostra as duas.
+README = ROOT / "README.md"  # ingles
+README_PT = ROOT / "README.pt-BR.md"
 MARCA_INICIO = "<!-- grafo-gerado:inicio (scripts/graph_diagram.py --write; nao editar a mao) -->"
 MARCA_FIM = "<!-- grafo-gerado:fim -->"
 
@@ -43,6 +44,20 @@ DESCRICAO = {
     "__end__": "DiagnosisResponse<br/>+ escalation (DA-44)<br/>+ record_incident",
 }
 
+DESCRICAO_EN = {
+    "__start__": "run_diagnosis",
+    "supervisor": "supervisor<br/>classify_domain: sap / saas / generic<br/>(deterministic, no LLM)",
+    "connector": "connector<br/>get_connector(interface_type).fetch(identifier)<br/>real system or demo scenario",
+    "retrieve": "retrieve<br/>hybrid RAG + reranker<br/>(reference_library fallback)",
+    "graph_enrich": "graph_enrich<br/>Neo4j history<br/>(only human-verified is fact)",
+    "sap_diagnose": "sap_diagnose<br/>rule engine; else LLM via gateway<br/>+ guardrails + evidence",
+    "saas_diagnose": "saas_diagnose<br/>rule engine; else LLM via gateway<br/>+ guardrails + evidence",
+    "generic_diagnose": "generic_diagnose<br/>rule engine; else LLM via gateway<br/>+ guardrails + evidence",
+    "graph_write": "graph_write<br/>stores hypothesis in Neo4j<br/>(redacted description)",
+    "report": "report<br/>Markdown report",
+    "__end__": "DiagnosisResponse<br/>+ escalation (DA-44)<br/>+ record_incident",
+}
+
 # Rotulo da aresta condicional, por no de destino: o valor de agent_domain
 # que leva ate ele em app/agent/graph.py::_route_to_specialist.
 ROTA = {
@@ -55,13 +70,14 @@ FORMAS = (
     (False, "Default: GRAPH_RAG_ENABLED=false"),
     (True, "Com GraphRAG: GRAPH_RAG_ENABLED=true"),
 )
+FORMA_EN = ((False, "Default: GRAPH_RAG_ENABLED=false"),)
 
 
 def _id(no: str) -> str:
     return {"__start__": "inicio", "__end__": "fim"}.get(no, no)
 
 
-def mermaid(graph_rag: bool) -> str:
+def mermaid(graph_rag: bool, descricao: dict[str, str] | None = None) -> str:
     """Mermaid de uma forma do grafo, com ordem estavel (diff legivel)."""
     from app.agent import graph as grafo
     from app.config import settings
@@ -73,13 +89,14 @@ def mermaid(graph_rag: bool) -> str:
     finally:
         settings.graph_rag_enabled = anterior
 
-    faltando = set(g.nodes) - set(DESCRICAO)
+    descricao = descricao or DESCRICAO
+    faltando = set(g.nodes) - set(descricao)
     if faltando:
         raise SystemExit(f"no(s) sem descricao em scripts/graph_diagram.py: {sorted(faltando)}")
 
     linhas = ["flowchart TD"]
     for no in g.nodes:
-        texto = DESCRICAO[no]
+        texto = descricao[no]
         forma = '(["{}"])' if no in ("__start__", "__end__") else '["{}"]'
         linhas.append(f"    {_id(no)}{forma.format(texto)}")
     for aresta in sorted(g.edges, key=lambda e: (e.source, e.target)):
@@ -91,17 +108,23 @@ def mermaid(graph_rag: bool) -> str:
     return "\n".join(linhas)
 
 
-def bloco(formas: tuple[tuple[bool, str], ...] = FORMAS) -> str:
+def bloco(
+    formas: tuple[tuple[bool, str], ...] = FORMAS, descricao: dict[str, str] | None = None
+) -> str:
     partes = [MARCA_INICIO]
     for graph_rag, titulo in formas:
-        partes += ["", f"**{titulo}**", "", "```mermaid", mermaid(graph_rag), "```"]
+        partes += ["", f"**{titulo}**", "", "```mermaid", mermaid(graph_rag, descricao), "```"]
     partes += ["", MARCA_FIM]
     return "\n".join(partes)
 
 
 def alvos() -> list[tuple[Path, str]]:
     """(documento, bloco esperado) para cada documento que exibe o grafo."""
-    return [(DOC, bloco()), (README, bloco(FORMAS[:1]))]
+    return [
+        (DOC, bloco()),
+        (README_PT, bloco(FORMAS[:1])),
+        (README, bloco(FORMA_EN, DESCRICAO_EN)),
+    ]
 
 
 def _bloco_no_doc(texto: str) -> re.Match[str] | None:

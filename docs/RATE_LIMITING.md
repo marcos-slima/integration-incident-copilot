@@ -18,8 +18,11 @@ aplicada pelo `SlowAPIMiddleware` (`app/main.py`) e por decorators
 | `POST /a2a` | 10/minuto | `request_client_identity` |
 | Demais rotas | 60/minuto (`default_limits`) | `request_client_identity` |
 
-`request_client_identity` usa, nesta ordem: o valor do header `X-A2A-Api-Key`
-(`a2a:<valor>`), o valor de `X-API-Key` (`apikey:<valor>`) e, por último, o IP.
+`request_client_identity` usa, nesta ordem: `X-A2A-Api-Key` (`a2a:<hash>`),
+`X-API-Key` (`apikey:<hash>`) e, por último, o IP. O header só define o bucket
+quando a chave é **válida** (comparada com `A2A_API_KEY`/`API_KEY`); chave
+inválida ou ausente cai no bucket do IP. `<hash>` são os 16 primeiros
+caracteres hex do SHA-256 da chave — a chave crua nunca vira chave do storage.
 
 ## Armazenamento
 
@@ -29,19 +32,30 @@ Também não há Redis aqui, mesmo com `REDIS_URL` configurada.
 
 ## Limitações conhecidas (abertas)
 
-- **Força bruta de chave de API.** O bucket das rotas protegidas é o próprio
-  header enviado pelo cliente, e a autenticação recusa a chave inválida
-  **antes** do decorator contar a tentativa. Resultado: tentativas com
-  `X-API-Key` inválida não recebem 429 (70 tentativas seguidas em `/diagnose`
-  sem nenhum 429, na validação de 2026-10-06).
-- **Enumeração de usuário por tempo.** O login de um usuário inexistente
-  responde em ~0,05 ms; o de um existente com senha errada, em ~160 ms
-  (PBKDF2 só roda quando o usuário existe). O limite por IP não resolve isso.
-- **Atrás de proxy.** Sem `--proxy-headers`/`forwarded-allow-ips` no uvicorn,
-  atrás do Istio todos os clientes compartilham o IP do sidecar e, portanto,
-  o mesmo bucket de login.
-- **Sem limite por usuário ou por código** em `/auth/verify/phone` (código de
-  6 dígitos).
+- **Contadores por processo.** Ver "Armazenamento": com várias réplicas, o
+  limite efetivo é N × o configurado.
+- **Atrás de proxy, depende de configuração.** O `CMD` do `Dockerfile` já roda
+  o uvicorn com `--proxy-headers` (DEP-01), mas ele só confia no
+  `X-Forwarded-For` vindo dos IPs em `FORWARDED_ALLOW_IPS` (default do uvicorn:
+  `127.0.0.1,::1`). Atrás do Istio, defina as faixas internas do cluster
+  (`deploy/kyma/configmap.yaml`); sem isso, todos os clientes compartilham o
+  IP do sidecar e o mesmo bucket. Nunca use `*`: o cliente passaria a escolher
+  o próprio "IP".
+
+## Resolvido (SEC-03, validação 2026-10-07)
+
+- **Força bruta de chave de API.** As dependencies de chave recusam antes do
+  decorator contar, então `app/auth_guard.py` conta cada falha por IP e por
+  superfície (`api`, `event_mesh`, `admin`, `a2a`) numa janela fixa de 60 s;
+  acima de `AUTH_FAILURES_PER_MINUTE` (default 10) a resposta vira 429. Com
+  `REDIS_URL` o contador é compartilhado entre réplicas; sem Redis, fica em
+  memória do processo.
+- **Enumeração de usuário por tempo.** Usuário inexistente agora roda
+  `burn_password_check` (`app/auth.py`): o mesmo PBKDF2 contra um sal
+  descartável, com custo igual ao de um usuário existente com senha errada.
+- **Código de telefone sem limite.** Cada código vigente aceita no máximo
+  `PHONE_CODE_MAX_ATTEMPTS` erros (default 5, `app/webusers.py`); depois é
+  invalidado e só o admin reemite, com a mesma resposta genérica.
 
 ## Teste manual
 

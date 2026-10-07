@@ -2,7 +2,7 @@
   {
     "key": "ms-marco-L6",
     "hf_id": "cross-encoder/ms-marco-MiniLM-L-6-v2",
-    "notes": "Baseline atual de producao (app/rag/retriever.py::RERANKER_MODEL). Ingles apenas (MS MARCO).",
+    "notes": "Baseline da comparacao (modelo de producao antes da DA-29). Ingles apenas (MS MARCO).",
     "ok": true,
     "error": null,
     "hit_at_1": 0.8888888888888888,

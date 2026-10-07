@@ -41,11 +41,13 @@ resultante. O script que produziu os números está em
   (fallback da collection `incidents`), **chunked com os mesmos
   parâmetros de produção** (`MarkdownTextSplitter`, `chunk_size=500`,
   `chunk_overlap=50` — ver `app/rag/ingest.py::TARGETS["incidents"]`)
-  — 10 documentos → 40 chunks.
-- **Queries + relevância**: os 13 casos *in-scope* de
-  `data/eval/rag_eval_dataset.json` (os 2 casos `out_of_scope` foram
-  excluídos — não têm documento relevante, então não fazem sentido
-  para comparar rerankers).
+  — na execução original, 10 documentos → 40 chunks (na re-execução de
+  2026-10-07, 15 documentos).
+- **Queries + relevância**: os casos *in-scope* de
+  `data/eval/rag_eval_dataset.json` — 13 na execução original (2 casos
+  `out_of_scope` excluídos); na re-execução de 2026-10-07, 18 *in-scope*
+  (10 `out_of_scope` excluídos). Casos `out_of_scope` não têm documento
+  relevante, então não fazem sentido para comparar rerankers.
 - **Protocolo**: cada modelo reranqueia o **corpus inteiro** (não um
   pool pré-filtrado por um primeiro estágio) para cada query — isola a
   qualidade do reranker em si, sem a variável do retriever híbrido.
@@ -83,7 +85,7 @@ específica, não por decisão de que não valeria a pena.
 
 | Chave | Modelo (Hugging Face) | Notas |
 |---|---|---|
-| `ms-marco-L6` | `cross-encoder/ms-marco-MiniLM-L-6-v2` | **Baseline de produção atual.** Inglês apenas (MS MARCO). |
+| `ms-marco-L6` | `cross-encoder/ms-marco-MiniLM-L-6-v2` | **Baseline da comparação** (era o modelo de produção antes da DA-29). Inglês apenas (MS MARCO). |
 | `ms-marco-L12` | `cross-encoder/ms-marco-MiniLM-L-12-v2` | Mesma família do baseline, mais profundo (12 camadas vs. 6). Inglês apenas. |
 | `mmarco-mMiniLMv2` | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` | Treinado no mMARCO (MS MARCO traduzido, incluindo português) — candidato multilíngue leve. |
 | `bge-reranker-base` | `BAAI/bge-reranker-base` | Multilíngue (100+ idiomas, incluindo PT), maior que os demais (~1.1GB). |
@@ -97,7 +99,8 @@ específica, não por decisão de que não valeria a pena.
 | **`mmarco-mMiniLMv2`** | **0.92** | 1.00 | **0.96** | **0.97** | **1195ms** | **1255ms** | +430MB | 117.6M |
 | `bge-reranker-base` | 0.92 | 1.00 | 0.96 | 0.97 | 4171ms | 4281ms | +379MB | 278.0M |
 
-(Latência = tempo da chamada `predict()` reranqueando os 40 chunks do
+(Tabela da execução original, 13 casos in-scope. Latência = tempo da
+chamada `predict()` reranqueando os 40 chunks do
 corpus inteiro por query, não só os poucos candidatos que o pipeline
 de produção normalmente passa ao reranker após a fusão RRF — um limite
 superior conservador, não o tempo real esperado em produção.)
@@ -116,42 +119,48 @@ aparece (Hit@1, MRR@5, nDCG@5).
 
 Motivos:
 
-1. **Melhor em toda métrica de qualidade** — Hit@1 sobe de 0.85 para
+1. **Na execução original (13 casos), melhor em toda métrica de
+   qualidade** (ver a nota de re-execução de 2026-10-07 no topo: com 18
+   casos a diferença não é significativa) — Hit@1 sobe de 0.85 para
    0.92, MRR@5 de 0.92 para 0.96, nDCG@5 de 0.94 para 0.97. Faz
    sentido: as queries reais são majoritariamente em português
    (jargão técnico às vezes em inglês, ex: "IDoc", "iFlow"), e o
    baseline nunca viu português durante o treino.
 2. **Empata em qualidade com `bge-reranker-base`** (mesmos 4 números),
-   mas é **3.5x mais rápido** (1195ms vs. 4171ms) e usa menos da
+   mas é **3.5x mais rápido que o bge** (1195ms vs. 4171ms) e usa menos da
    metade dos parâmetros (117M vs. 278M) — sem custo de qualidade
    observado neste dataset, a versão menor é estritamente melhor
-   escolha para latência de produção.
+   escolha para latência de produção. Em relação ao L-6, porém, o
+   mmarco é **mais lento**: ~1,5x na execução original (1195ms vs.
+   787ms) e ~1,45x na re-execução de 2026-10-07 (2497ms vs. 1725ms).
 3. Continua sendo um modelo pequeno o suficiente para rodar em CPU
    sem GPU dedicada, mesma premissa operacional do projeto hoje.
 
-Esta troca **não foi aplicada** neste PR — é uma recomendação
-documentada, pendente de decisão do operador (trocar um modelo de
-produção com base em 13 casos de avaliação é uma amostra pequena;
-idealmente cresceria o dataset de avaliação antes de trocar o
-default). Trocar é uma mudança de uma linha
-(`RERANKER_MODEL = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"`) —
-sem nenhuma outra mudança de código necessária, já que `rerank()` só
-depende do nome do modelo sendo compatível com a interface
-`CrossEncoder.predict()`, que todos os 4 candidatos satisfazem.
+Esta troca **foi aplicada** (DA-29): hoje
+`RERANKER_MODEL = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"` em
+`app/rag/retriever.py`. Foi uma mudança de uma linha, sem nenhuma outra
+mudança de código, já que `rerank()` só depende do nome do modelo ser
+compatível com a interface `CrossEncoder.predict()`, que todos os 4
+candidatos satisfazem. A re-execução de 2026-10-07 (18 casos) mostrou
+que a diferença de qualidade em relação ao L-6 **não é
+estatisticamente significativa** (McNemar exato, p = 1,0); a escolha
+foi mantida pelo suporte multilíngue (consultas em PT-BR), não por
+ganho de acerto comprovado.
 
 ## Não-objetivos desta fase
 
 - `BAAI/bge-reranker-v2-m3` (multilíngue, mais forte, ~2.2GB) não foi
   testado por risco de recursos nesta máquina específica — candidato
   natural para uma rodada futura com mais RAM/disco disponível.
-- O dataset de avaliação (13 casos in-scope) é pequeno — suficiente
+- O dataset de avaliação (13 casos in-scope na execução original; 18
+  hoje) é pequeno — suficiente
   para uma comparação relativa entre modelos, mas não para afirmar
   significância estatística. Crescer `data/eval/rag_eval_dataset.json`
   com mais casos (especialmente casos com múltiplos documentos
   relevantes, onde Recall@5 deixaria de saturar em 1.00) melhoraria a
   confiança deste benchmark.
 - Latência medida é do reranker reranqueando o corpus inteiro (40
-  chunks), não do pool reduzido que o pipeline de produção
+  chunks na execução original), não do pool reduzido que o pipeline de produção
   normalmente passa após a fusão RRF (`_retrieve_unified`,
   `app/rag/retriever.py`) — um limite superior, não uma medida de
   latência end-to-end de produção.

@@ -224,7 +224,7 @@ scripts/            # benchmark_rerankers.py, generate_reports.py,
                     # coverage_map.py (DA-58: gera docs/COVERAGE_MAP.md),
                     # graph_diagram.py (gera o grafo Mermaid de ARCHITECTURE.md e README.md),
                     # quality_gate.py (DA-51)
-docs/               # índice em README.md; ARCHITECTURE.md, GETTING_STARTED.md,
+docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_ARQUITETURA.md, GETTING_STARTED.md,
                     # TUTORIAL_ARQUETURA_DEBUG.md, TROUBLESHOOTING.md,
                     # QUALITY_GATES.md, COVERAGE_MAP.md (DA-58, GERADO),
                     # CASOS_DE_USO.md (cenários medidos por testes), CONNECTORS.md
@@ -236,7 +236,7 @@ docs/               # índice em README.md; ARCHITECTURE.md, GETTING_STARTED.md,
 
 ## Decisões de Arquitetura (DAs) — resumo
 
-> Para detalhes completos: `README.md` (seção "Decisões de Arquitetura").
+> Para detalhes completos: `docs/DECISOES_DE_ARQUITETURA.md` (índice + prosa de cada DA; até 2026-10-07 ficava no `README.md`).
 
 | DA | O que é | Onde vive |
 |---|---|---|
@@ -354,7 +354,7 @@ disco comprometido sem criptografia exporiria esse contexto.
 11. Rota `require_loopback` e `require_loopback=False` são mutuamente exclusivos — `local_lab` apontando para a internet, e `enterprise_azure` apontando para loopback, falham no boot
 12. **Correlação incidente↔sistema é fail-closed** — `app/admin/correlation.py` só resolve por `connector_type` quando há UM único candidato; com 2+ devolve `ambiguous` com a lista. Nenhuma superfície (UI, API, dashboard) escolhe um sistema por conta própria (DA-50)
 13. `verified` ≠ `verified_at` — `POST /incidents/{id}/verify` grava `verified_at` sempre, mas `diagnosis_correct=None` fica NULL. Coagir para `True` infla a acurácia nos dashboards (DA-50)
-14. **Gate de qualidade roda junto com a suite** — `uv run python scripts/quality_gate.py` (DA-51) valida dataset de avaliação, corpus, invariante do reranker, configs do promptfoo, a lista de DAs candidatas **e o livro-razão das DAs em três direções**: `implemented_das_documented` (prosa ↔ registro), `das_index_current` (índice do README) e `da_registered` (DA citada em `app/`, `scripts/`, `alembic/` tem linha na tabela). A terceira direção só existe porque nove DAs estavam fora do registro com a prosa apenas na docstring — `uv run python scripts/quality_gate.py` (DA-51) valida dataset de avaliação, corpus, invariante do reranker, configs do promptfoo, a lista de DAs candidatas, **a documentação das DAs** (inclusive `da_registered`: DA citada no código sem linha na tabela reprova) (`implemented_das_documented` + `das_index_current`: DA registrada sem prosa localizável reprova, assim como seção órfã). Prosa de decisão mora no `README.md` (`### N. Título (DA-N)`); `docs/ARCHITECTURE.md` é local alternativo declarado para DA-32/33/34/35. DAs entregues juntas compartilham uma seção (`(DA-46/47/48)`). `docs/QUALITY_GATES.md` documenta o que eles NÃO cobrem
+14. **Gate de qualidade roda junto com a suite** — `uv run python scripts/quality_gate.py` (DA-51) valida dataset de avaliação, corpus, invariante do reranker, configs do promptfoo, a lista de DAs candidatas **e o livro-razão das DAs em três direções**: `implemented_das_documented` (prosa ↔ registro), `das_index_current` (índice de `docs/DECISOES_DE_ARQUITETURA.md`) e `da_registered` (DA citada em `app/`, `scripts/`, `alembic/` tem linha na tabela). A terceira direção só existe porque nove DAs estavam fora do registro com a prosa apenas na docstring — `uv run python scripts/quality_gate.py` (DA-51) valida dataset de avaliação, corpus, invariante do reranker, configs do promptfoo, a lista de DAs candidatas, **a documentação das DAs** (inclusive `da_registered`: DA citada no código sem linha na tabela reprova) (`implemented_das_documented` + `das_index_current`: DA registrada sem prosa localizável reprova, assim como seção órfã). Prosa de decisão mora em `docs/DECISOES_DE_ARQUITETURA.md` (`### N. Título (DA-N)`); `docs/ARCHITECTURE.md` é local alternativo declarado para DA-32/33/34/35. DAs entregues juntas compartilham uma seção (`(DA-46/47/48)`). `docs/QUALITY_GATES.md` documenta o que eles NÃO cobrem
 15. **Ausência de evidência nunca é "sem drift"** — a DA-52 tem **quatro** estados (`clean`, `drift`, `first_observation`, `unverified`) e `unverified` é um deles. `first_observation` (sem baseline) e `unverified` (sem leitura) são distintos de `clean`, e `unverified` nunca abre incidente nem grava/apaga baseline
 16. **`system_contracts` é append-only e sem FK** para `integration_systems` — histórico de observação, não cadastro. Migration 005; desde a 011 um trigger nega UPDATE/DELETE (TRUNCATE segue permitido)
 17. **Só `breaking` abre incidente** de drift; additive não. Rename provável é **breaking com `hint`** (`app/contracts/diff.py::_pair_renames`): para o consumidor o efeito é o mesmo de remover o campo, e o hint evita dois alarmes. `cosmetic` não é emitido hoje (a normalização descarta anotação/versão/namespace, invariante 18). Breaking cuja entrega falha **não grava baseline**: a próxima observação re-detecta e reemite (validação 2026-10-07)
@@ -396,12 +396,12 @@ disco comprometido sem criptografia exporiria esse contexto.
 
 1. Implementar e validar com testes
 2. Adicionar entrada na tabela de DAs acima neste `CLAUDE.md`
-3. Adicionar seção `### N. Título (DA-N)` no `README.md` com problema/solução/limitações
+3. Adicionar seção `### N. Título (DA-N)` em `docs/DECISOES_DE_ARQUITETURA.md` com problema/solução/limitações
    — o `(DA-N)` é obrigatório: sem ele a prosa existe mas é invisível para qualquer
    busca por número, que foi exatamente o que aconteceu com 15 seções. DAs entregues
    na mesma mudança podem compartilhar a seção (`(DA-46/47/48)`)
-4. Acrescentar a linha `| DA-N | ... |` na tabela acima e a entrada no **índice** do `README.md`
-   (seção `## Decisões de Arquitetura`). Os dois gates reprovam o build se algum dos dois faltar
+4. Acrescentar a linha `| DA-N | ... |` na tabela acima e a entrada no **índice** de `docs/DECISOES_DE_ARQUITETURA.md`
+   (seção `## Índice`). Os dois gates reprovam o build se algum dos dois faltar
 5. Commitar com prefixo `feat(DA-N):` no commit message
 
 ---

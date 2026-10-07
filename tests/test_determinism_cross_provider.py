@@ -14,7 +14,7 @@ honra `seed` em chamadas live, Ollama tem suporte variavel por modelo,
 AzureOpenAI herda o comportamento do OpenAI) e nao pode ser validado
 em testes unitarios sem chamadas reais de rede.
 
-Ver DA-02 (secao 2 do README.md) e factory.py para a decisao de
+Ver DA-02 (secao 2 de docs/DECISOES_DE_ARQUITETURA.md) e factory.py para a decisao de
 seed=42/temperature=0.0 para todos os providers.
 """
 

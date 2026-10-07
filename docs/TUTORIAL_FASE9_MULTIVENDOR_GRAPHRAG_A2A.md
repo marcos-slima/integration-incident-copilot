@@ -40,9 +40,9 @@ por fazer".
 | `app/a2a/task_manager.py` | Ciclo de vida de task A2A → `run_diagnosis()` |
 | `app/a2a/server.py` | Servidor JSON-RPC 2.0 (`POST /a2a`) |
 | `app/main.py` | Monta `/a2a` e `GET /.well-known/agent-card.json` |
-| `tests/test_connectors.py` | +14 testes (Salesforce, Workday, Ariba, OData real) |
-| `tests/test_graph_store.py` | 9 testes do GraphRAG (sessão Neo4j fake) |
-| `tests/test_a2a.py` | 9 testes da camada A2A (`TestClient` + `diagnosis_fn` stub) |
+| `tests/test_connectors.py` | +14 testes na época da Fase 9 (Salesforce, Workday, Ariba, OData real) |
+| `tests/test_graph_store.py` | 9 testes na época da Fase 9 (sessão Neo4j fake) |
+| `tests/test_a2a.py` | 9 testes na época da Fase 9 (`TestClient` + `diagnosis_fn` stub) |
 | `docker-compose.yml` | Serviço `neo4j` sob profile opt-in `graphrag` |
 | `.env.example` | Variáveis dos 3 conectores novos + GraphRAG + A2A |
 | `.vscode/launch.json` | +3 debug configs de conector, +2 de pytest focado |
@@ -70,7 +70,7 @@ seguem `<SISTEMA>_<CAMPO>`, ex. `SALESFORCE_INSTANCE_URL`,
 Python.
 
 Rodar só os testes de conector: `uv run pytest tests/test_connectors.py -v`
-(22 testes, todos sem infraestrutura externa).
+(22 testes na época da Fase 9, todos sem infraestrutura externa).
 
 ## 4. Ativando o GraphRAG de verdade
 
@@ -78,12 +78,18 @@ Por default, `GRAPH_RAG_ENABLED=false` — o grafo LangGraph roda
 exatamente igual a antes desta fase (dois nodes a menos). Para ativar:
 
 ```bash
-# 1. Sobe o Neo4j real (NAO sobe com "docker compose up" default)
-docker compose --profile graphrag up -d neo4j
-
-# 2. No .env:
+# 1. No .env, ANTES de subir o container. NEO4J_PASSWORD nao tem mais
+#    default no docker-compose.yml (${NEO4J_PASSWORD:?...}); sem ela o
+#    compose recusa subir. POSTGRES_PASSWORD e GRAFANA_PASSWORD tambem
+#    sao exigidas pela interpolacao do compose, mesmo com os profiles
+#    "observability" inativos.
 echo "GRAPH_RAG_ENABLED=true" >> .env
-echo "NEO4J_PASSWORD=changeme123" >> .env   # mesmo valor do docker-compose.yml, ou o que voce definiu
+echo "NEO4J_PASSWORD=<sua-senha-forte>" >> .env
+echo "POSTGRES_PASSWORD=<sua-senha-postgres>" >> .env   # se ainda nao definida
+echo "GRAFANA_PASSWORD=<sua-senha-grafana>" >> .env     # se ainda nao definida
+
+# 2. Sobe o Neo4j real (NAO sobe com "docker compose up" default)
+docker compose --profile graphrag up -d neo4j
 
 # 3. Cria as constraints (uma vez)
 uv run python -m app.rag.graph_store --init
@@ -107,7 +113,9 @@ a ponta contra um Neo4j real não foi.
 
 ## 5. Testando a camada A2A manualmente
 
-Com a API no ar (`uv run uvicorn app.main:app --reload`):
+Com a API no ar (`uv run uvicorn app.main:app --reload`) e a chave A2A
+exportada no shell (`export A2A_API_KEY=<valor do .env ou do log de startup>`
+— ver o parágrafo de autenticação abaixo):
 
 ```bash
 # Agent Card
@@ -116,6 +124,7 @@ curl -s http://127.0.0.1:8000/.well-known/agent-card.json | python3 -m json.tool
 # Enviar uma mensagem (executa o diagnostico e retorna a task ja completed)
 curl -s -X POST http://127.0.0.1:8000/a2a \
   -H "Content-Type: application/json" \
+  -H "X-A2A-Api-Key: $A2A_API_KEY" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
@@ -131,6 +140,7 @@ curl -s -X POST http://127.0.0.1:8000/a2a \
 # Consultar a task pelo id retornado acima (result.id)
 curl -s -X POST http://127.0.0.1:8000/a2a \
   -H "Content-Type: application/json" \
+  -H "X-A2A-Api-Key: $A2A_API_KEY" \
   -d '{"jsonrpc": "2.0", "id": 2, "method": "tasks/get", "params": {"id": "<TASK_ID_AQUI>"}}' \
   | python3 -m json.tool
 ```
@@ -159,9 +169,10 @@ valor errado: HTTP 401).
 - A camada A2A não foi testada contra um cliente A2A externo de
   verdade (ex: um orquestrador real usando uma SDK A2A) — só via
   `curl`/`TestClient` simulando o formato de mensagem documentado.
-- `app/services/` continua vazio, deliberadamente — ver a nota em
-  `docs/ARCHITECTURE.md` sobre por que isso não é dívida técnica neste
-  momento.
+- `app/services/` continuava vazio na época da Fase 9, deliberadamente.
+  *(Histórico: hoje o pacote contém `incident_recorder.py`,
+  `incident_repository.py` e `web_search_sources.py` — ver
+  `docs/ARCHITECTURE.md` para o estado atual.)*
 - A lista de ferramentas de sustentação de infraestrutura pessoal
   (documento interno de ferramentas de sustentação) não faz parte desta
   fase — é backlog de tooling de operação, não de arquitetura da

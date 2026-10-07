@@ -65,9 +65,10 @@ reordenados por um cross-encoder. Termos técnicos exatos
 
 **5. Diagnóstico (LLM com guardrails de código)** — o documento recuperado
 fundamenta o modelo (`qwen3-coder-next`, MoE 80B/3B ativos). A confiança é
-ajustada deterministicamente em código, nunca no prompt: identificador não
-reconhecido pelo conector limita a confiança a 0.4; sem documento acima do
-threshold, a 0.3.
+ajustada deterministicamente em código, nunca no prompt: o teto é sempre
+`evidence_strength + 0.25`; identificador não reconhecido pelo conector
+(fallback) limita a 0.4; sem documento, conector ou regra, a 0.3; e um
+`matched_source` citado que não foi recuperado é anulado e limita a 0.3.
 
 **6. Evidence layer** — cada afirmação na resposta carrega proveniência:
 conector real (`system_observed`), mock (`simulated`), documento RAG
@@ -101,8 +102,11 @@ Cada credencial na camada dela (DA-18 + DA-54):
   login com aviso.
 - **Máquina/integração** — header `X-API-Key` em `/diagnose`,
   `/llm/policy` e `/incidents/{id}/verify` (DA-18). Se `API_KEY` estiver
-  vazia no `.env`, uma chave aleatória é gerada no startup e logada em
-  nível WARNING — o endpoint nunca fica aberto sem chave.
+  vazia no `.env`, uma chave aleatória é gerada no startup e o WARNING a
+  loga **mascarada** (`****`) — o endpoint nunca fica aberto, mas a chave
+  não é recuperável: fixe `API_KEY` no `.env`. Com `REQUIRE_AUTH=true`, o
+  processo **recusa subir** sem `API_KEY`, `A2A_API_KEY` e
+  `EVENT_MESH_API_KEY` configuradas.
 
 Chaves por superfície (credenciais de máquina — a UI web **não** usa
 nenhuma delas):
@@ -112,7 +116,11 @@ nenhuma delas):
 | `/diagnose`, `/llm/policy`, `/incidents/{id}/verify`, `/mcp` | `X-API-Key` | `API_KEY` |
 | `/a2a` | `X-A2A-Api-Key` | `A2A_API_KEY` |
 | `POST /events/incident` | `X-Event-Mesh-Api-Key` | `EVENT_MESH_API_KEY` |
-| `/admin` e `/admin/api/*` | `X-API-Admin-Key` | `ADMIN_API_KEY` |
+| `/admin/api/*` | `X-API-Admin-Key` | `ADMIN_API_KEY` |
+
+As páginas `/admin/*` são telas sem dado; todo dado vem de `/admin/api/*`.
+A chave admin digitada na UI fica no `sessionStorage` do navegador e é
+enviada em cada chamada.
 
 Login de usuário (cookie de sessão): `POST /auth/login` (usuário+senha →
 cookie), `POST /auth/logout`, `GET /auth/session` (quem está logado). O
@@ -121,10 +129,12 @@ login é **fail-closed**: sem nenhuma fonte de usuário, 401 sempre.
 **De onde vêm os usuários (DA-55):** o admin mantém a tabela `web_users`
 (tela `/admin/users`, chave admin), e a primeira entrada de cada um exige
 **ativação em duas etapas**: token enviado ao e-mail (24h) e depois código
-de 6 dígitos enviado ao telefone (10 min) — ambos confirmados na própria
-tela de login ("Ativar conta"). Até haver SMTP/provedor de SMS
-configurados, o token/código sai **out-of-band**: aparece ao admin na
-tela `/admin/users`, que entrega ao usuário pelo canal que controlar.
+de 6 dígitos para o telefone (10 min) — ambos confirmados na própria
+tela de login ("Ativar conta"). O token de e-mail sai pelo `EMAIL_PROVIDER`
+(`mailpit`/`resend`); só sem provedor ou com falha de envio ele aparece ao
+admin na tela `/admin/users`. O código de telefone não tem provedor de SMS
+e **sempre** sai **out-of-band**: aparece ao admin, que o entrega ao
+usuário pelo canal que controlar.
 O `.env` (`WEB_UI_USERS`, DA-54) segue valendo como bootstrap do
 operador — o operador nunca fica trancado fora.
 
@@ -134,19 +144,21 @@ usuários (`/admin/users`) usa a `X-API-Admin-Key` (DA-46), não a sessão.
 
 ### Interface web
 
-A UI em `http://localhost:8000` tem três telas:
+A UI em `http://localhost:8000` tem uma tela de login e três telas de trabalho:
 
 **Tela de login** (antes de qualquer outra, DA-54) — usuário + senha; sem
 sessão, nada do app renderiza. Depois dela:
 
 **Diagnóstico** — formulário limpo (só o incidente: descrição, sistema de
-origem com os 10 conectores, identificador opcional) — credencial nenhuma
-na mão do usuário; o cookie de sessão HttpOnly flui sozinho.
+origem com os 10 conectores, identificador opcional), com anexo de arquivo
+(`.txt`/`.log`/`.xml`/`.json`/`.csv`, até 50 KB, enviado como `logs` ou
+`payload`) e campos avançados `logs`/`payload` — credencial nenhuma na mão
+do usuário; o cookie de sessão HttpOnly flui sozinho.
 
 **Histórico** — diagnósticos da sessão atual, com confiança e causa raiz.
 
 **Status da stack** — estado dos conectores (real vs. demo/mock) e da
-infraestrutura (LLM, RAG, GraphRAG, A2A).
+infraestrutura (provider LLM, GraphRAG, Langfuse e fila RQ).
 
 ### API REST
 
@@ -155,24 +167,24 @@ curl -X POST http://localhost:8000/diagnose \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
   -d '{
-    "description": "IDoc travado com status 51 no sistema de destino",
-    "interface_type": "rfc",
-    "identifier": "RFC-IDOC-51-DEMO"
+    "description": "iFlow chamando OData API_SALES_ORDER_SRV sem $filter estoura o limite de 30 s ao trazer ~45.000 registros",
+    "interface_type": "odata"
   }'
 ```
 
-Resposta (campos principais):
+Sem identificador e sem regra casando, o caso vai ao LLM. Resposta (campos
+principais, valores ilustrativos):
 
 ```json
 {
-  "probable_root_cause": "O material 4711 não está cadastrado no centro 1000...",
+  "probable_root_cause": "Query OData sem $filter/$top traz volume excessivo...",
   "model_confidence": 0.95,
-  "diagnosis_confidence": 0.95,
-  "next_steps": ["Verificar existência do material 4711 via MM03", "..."],
-  "matched_source": "idoc_status_51.md",
+  "diagnosis_confidence": 0.79,
+  "next_steps": ["Adicionar $filter e paginação ($top/$skip) na query", "..."],
+  "matched_source": "odata_timeout_cpi.md",
   "evidence_strength": 0.83,
   "llm_model": "qwen3-coder-next:latest",
-  "prompt_version": "v1.3",
+  "prompt_version": "1.0.0",
   "prompt_digest": "sha256:...",
   "incident_id": "8f14e45f-ea...",
   "trace_id": "...",
@@ -182,11 +194,15 @@ Resposta (campos principais):
 
 Campos que merecem atenção:
 
-- **`diagnosis_confidence` vs `model_confidence`** — a primeira já passou
-  pelos guardrails; a segunda é o que o modelo disse de si. Se divergirem,
-  algum guardrail agiu.
+- **`diagnosis_confidence` vs `model_confidence`** — `model_confidence` é a
+  autoavaliação do LLM já limitada pelos guardrails de código;
+  `diagnosis_confidence = evidence_strength × model_confidence` (acima,
+  0.83 × 0.95 ≈ 0.79) e é o valor recomendado para automação. Divergirem é
+  normal.
 - **`prompt_digest`/`prompt_version` em `null`** — a rule engine respondeu
-  sem LLM. Não é erro: é o caminho rápido e determinístico.
+  sem LLM (`matched_source` `rule_engine:<categoria>`, `llm_provider_used`
+  `rule_engine`; ex.: "IDoc travado com status 51" casa a regra
+  `sap_idoc_status_51`). Não é erro: é o caminho rápido e determinístico.
 - **`incident_id`** — guarde-o para o loop de verificação (abaixo).
 - Request aceita ainda: `logs`, `payload`, `sensitivity_level`
   (`public`/`internal`/`confidential`/`secret`). Ele **só eleva** a
@@ -196,11 +212,12 @@ Campos que merecem atenção:
   `connector_source_system` (`system_key` do catálogo admin, melhora a
   correlação do incidente, DA-50).
 
-**Diagnóstico assíncrono** — mesmo corpo, resposta imediata com `job_id`:
+**Diagnóstico assíncrono** — mesmo corpo, resposta imediata com `job_id`.
+Exige `REDIS_URL` e um worker RQ (profile `async`); sem isso, 503:
 
 ```bash
 curl -X POST http://localhost:8000/diagnose/async -H "X-API-Key: $API_KEY" ...
-curl http://localhost:8000/diagnose/async/{job_id}
+curl http://localhost:8000/diagnose/async/{job_id} -H "X-API-Key: $API_KEY"
 ```
 
 ### Linha de comando
@@ -235,9 +252,12 @@ descobrir como chamar este — está em
 
 ### Eventos — diagnóstico orientado a evento
 
-- **Webhook:** `POST /events/incident` recebe CloudEvents 1.0 (`specversion`,
-  `id` e `source` obrigatórios), autenticado por `X-Event-Mesh-Api-Key`
-  (`EVENT_MESH_API_KEY`), e dispara `run_diagnosis()` sem ninguém chamar curl (DA-23).
+- **Webhook:** `POST /events/incident` recebe CloudEvents 1.0
+  (obrigatórios: `specversion=1.0`, `id`, `source`,
+  `type=com.sap.integration.incident.detected.v1` e `data.description`),
+  autenticado por `X-Event-Mesh-Api-Key` (`EVENT_MESH_API_KEY`), e dispara
+  `run_diagnosis()` sem ninguém chamar curl (DA-23). Com `REDIS_URL`, o
+  evento é enfileirado e o 202 devolve `job_id`.
 - **AMQP 1.0:** consumidor assíncrono via Solace Cloud (`app/events/
   amqp_consumer.py`), para quem já tem event mesh corporativo.
 
@@ -251,7 +271,7 @@ curl -X POST http://localhost:8000/incidents/{incident_id}/verify \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
   -d '{
-    "root_cause": "Material 4711 ausente no centro 1000",
+    "root_cause": "Query OData sem $filter/paginação",
     "verified_by": "human",
     "correct": true
   }'
@@ -261,7 +281,8 @@ curl -X POST http://localhost:8000/incidents/{incident_id}/verify \
   quando só a causa foi confirmada, mas o desfecho ainda não (forçar `true`
   infla a acurácia dos dashboards, DA-50).
 - `verified_by`: `human` ou `system`.
-- Opcionalmente `trace_id` para pontuar o trace no Langfuse.
+- Opcionalmente `trace_id` para pontuar o trace no Langfuse (exige também
+  `correct` não nulo).
 
 O histórico verificado aparece em `http://localhost:8000/admin/incidents`,
 correlacionado ao sistema integrado quando `connector_source_system` foi
@@ -269,13 +290,16 @@ informado.
 
 ### Administração
 
-A UI admin (`/admin`, header `X-API-Admin-Key`) expõe:
+A UI admin (`/admin`; dados via `/admin/api/*` com `X-API-Admin-Key`) expõe:
 
 - **Models** — registro de modelos/credenciais por ORIGEM, com status
 - **Usage** — metering de tokens **reais** (usage_metadata), não estimativa
 - **Systems** — catálogo de sistemas integrados e sua correlação com
   incidentes (DA-49/50)
 - **Incidents** — histórico persistido de diagnósticos com verificação
+- **Users** (`/admin/users`) — usuários da UI web e ativação (DA-55)
+- **Web search** (`/admin/web-search`) — fontes de busca web por
+  `interface_type`, fail-closed (DA-57)
 
 Operações auxiliares por script:
 
@@ -530,8 +554,10 @@ colorido na UI:
 Situações em que a confiança é reduzida automaticamente, independente da
 análise do LLM:
 
-- Identificador não reconhecido pelo conector → confiança máxima de **0.4**
-- Nenhum documento recuperado acima do threshold → confiança máxima de **0.3**
+- Sempre → teto de **`evidence_strength` + 0.25**
+- Identificador não reconhecido pelo conector (fallback) → máximo **0.4**
+- Sem documento recuperado, sem conector e sem regra → máximo **0.3**
+- `matched_source` citado que não foi recuperado → anulado, máximo **0.3**
 - Conector em modo demo/mock → não limita a confiança, mas a evidência vem
   marcada `simulated`
 
@@ -584,9 +610,9 @@ O que aparece ali:
   (DA-18); `422` é corpo rejeitado pela validação (ex.:
   `interface_type` inválido); `429` é rate limit (10/min por IP).
 - **WARNING de chave gerada no startup.** Se `API_KEY` está vazia no `.env`,
-  o log de startup imprime a chave aleatória gerada para o processo:
-  `docker logs integration-incident-copilot-api-1 2>&1 | grep API_KEY`.
-  Ela vale até o restart seguinte — fixe no `.env` para estabilizar.
+  o processo gera uma chave aleatória e o log a mostra **mascarada** — ela
+  não é recuperável do log. Corrija fixando `API_KEY` no `.env` (com
+  `REQUIRE_AUTH=true` o processo nem sobe sem ela).
 - **Decisões do LLM Gateway:** rota por sensibilidade do dado (DA-43),
   circuit breaker abrindo/fechando e orçamento (DA-26) — em nível
   `INFO`/`WARNING`.
@@ -644,11 +670,12 @@ Não é log bruto: é o histórico **consultável** de cada diagnóstico.
 Padrão Kubernetes — o access log é o mesmo da seção 1, só muda onde ele vive:
 
 ```bash
-kubectl logs -n integration-incident-copilot deployment/api
-kubectl logs -n integration-incident-copilot deployment/worker
+kubectl logs -n integration-incident-copilot deployment/integration-incident-copilot
+kubectl logs -n integration-incident-copilot deployment/integration-incident-copilot-worker
 ```
 
-O namespace e os deployments (`api`, `worker`) estão nos manifestos de
+O namespace e os deployments (`integration-incident-copilot`,
+`integration-incident-copilot-worker`) estão nos manifestos de
 `deploy/kyma/`.
 
 ---

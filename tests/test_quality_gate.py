@@ -380,6 +380,12 @@ class TestPromptfooComparison:
         assert "fail" not in _severities(findings)
 
 
+def _decisoes(root):
+    """Prosa e indice das DAs (docs/DECISOES_DE_ARQUITETURA.md desde 2026-10-07)."""
+    (root / "docs").mkdir(exist_ok=True)
+    return root / "docs" / "DECISOES_DE_ARQUITETURA.md"
+
+
 class TestDocumentedDas:
     """A prosa de decisao existia; o rotulo (DA-N) nao.
 
@@ -395,12 +401,12 @@ class TestDocumentedDas:
         assert not [f for f in check_index_current() if f.is_failure]
 
     def test_da_registrada_sem_prosa_reprova(self, tmp_path):
-        readme = tmp_path / "README.md"
+        readme = _decisoes(tmp_path)
         readme.write_text("## Decisões de Arquitetura\n\n### 1. Coisa (DA-1)\n", encoding="utf-8")
         (tmp_path / "CLAUDE.md").write_text(
             "| DA | O que é |\n|---|---|\n| DA-1 | a |\n| DA-2 | b |\n", encoding="utf-8"
         )
-        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs").mkdir(exist_ok=True)
         (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
         falhas = [f for f in check_documented_das(tmp_path) if f.is_failure]
         assert len(falhas) == 1
@@ -409,33 +415,33 @@ class TestDocumentedDas:
     def test_secao_orfa_no_readme_reprova(self, tmp_path):
         """Sentido inverso: `(DA-9)` no README sem linha no registro do
         CLAUDE.md e' prosa orfa — o proximo registrador nao vai acha-la."""
-        (tmp_path / "README.md").write_text(
+        _decisoes(tmp_path).write_text(
             "## Decisões de Arquitetura\n\n### 1. Coisa (DA-1/9)\n", encoding="utf-8"
         )
         (tmp_path / "CLAUDE.md").write_text(
             "| DA | O que é |\n|---|---|\n| DA-1 | a |\n", encoding="utf-8"
         )
-        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs").mkdir(exist_ok=True)
         (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
         falhas = [f for f in check_documented_das(tmp_path) if f.is_failure]
         assert len(falhas) == 1
         assert "DA-9" in falhas[0].message
 
     def test_architecture_e_local_alternativo_aceito(self, tmp_path):
-        (tmp_path / "README.md").write_text(
+        _decisoes(tmp_path).write_text(
             "## Decisões de Arquitetura\n\n### 1. Coisa (DA-1)\n", encoding="utf-8"
         )
         (tmp_path / "CLAUDE.md").write_text(
             "| DA | O que é |\n|---|---|\n| DA-1 | a |\n| DA-32 | b |\n", encoding="utf-8"
         )
-        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs").mkdir(exist_ok=True)
         (tmp_path / "docs/ARCHITECTURE.md").write_text(
             "# arq\n\n## AMQP (DA-32)\n", encoding="utf-8"
         )
         assert not [f for f in check_documented_das(tmp_path) if f.is_failure]
 
     def test_indice_dessincronizado_reprova(self, tmp_path):
-        (tmp_path / "README.md").write_text(
+        _decisoes(tmp_path).write_text(
             "## Decisões de Arquitetura\n\n"
             "| DA | Seção | O que é |\n|---|---|---|\n"
             "| 1 | [1](#decisoes-de-arquitetura) | a |\n\n"
@@ -445,7 +451,7 @@ class TestDocumentedDas:
         (tmp_path / "CLAUDE.md").write_text(
             "| DA | O que é |\n|---|---|\n| DA-1 | a |\n| DA-2 | b |\n", encoding="utf-8"
         )
-        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs").mkdir(exist_ok=True)
         (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
         falhas = [f for f in check_index_current(tmp_path) if f.is_failure]
         assert len(falhas) == 1
@@ -460,7 +466,7 @@ class TestDocumentedDas:
         prosa e' que falta. Se os dois reprovassem pela mesma causa, a
         segunda falha seria ruido.
         """
-        (tmp_path / "README.md").write_text(
+        _decisoes(tmp_path).write_text(
             "## Decisões de Arquitetura\n\n"
             "| DA | Seção | O que é |\n|---|---|---|\n"
             "| 1 | [1](#decisoes-de-arquitetura) | a |\n"
@@ -471,7 +477,7 @@ class TestDocumentedDas:
         (tmp_path / "CLAUDE.md").write_text(
             "| DA | O que é |\n|---|---|\n| DA-1 | a |\n| DA-2 | b |\n", encoding="utf-8"
         )
-        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs").mkdir(exist_ok=True)
         (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
 
         assert not [f for f in check_index_current(tmp_path) if f.is_failure]
@@ -487,14 +493,14 @@ class TestDocumentedDas:
         indice = (
             "| DA | Seção | O que é |\n|---|---|---|\n| 1 | [1](#decisoes-de-arquitetura) | a |\n\n"
         )
-        (tmp_path / "README.md").write_text(
+        _decisoes(tmp_path).write_text(
             "## Decisões de Arquitetura\n\n" + indice + indice + "### 1. Coisa (DA-1)\n",
             encoding="utf-8",
         )
         (tmp_path / "CLAUDE.md").write_text(
             "| DA | O que é |\n|---|---|\n| DA-1 | a |\n", encoding="utf-8"
         )
-        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs").mkdir(exist_ok=True)
         (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
         falhas = [f for f in check_index_current(tmp_path) if f.is_failure]
         assert len(falhas) == 1
@@ -505,7 +511,7 @@ class TestDocumentedDas:
         """O numero da coluna "Seção" nunca era conferido: um indice stale
         apontava DA-53 para a secao 37 quando a real era 38, e o gate
         passava porque 37 EXISTIA — secao vizinha tambem e' um numero."""
-        (tmp_path / "README.md").write_text(
+        _decisoes(tmp_path).write_text(
             "## Decisões de Arquitetura\n\n"
             "| DA | Seção | O que é |\n|---|---|---|\n"
             "| 1 | [2](#decisoes-de-arquitetura) | a |\n"
@@ -516,7 +522,7 @@ class TestDocumentedDas:
         (tmp_path / "CLAUDE.md").write_text(
             "| DA | O que é |\n|---|---|\n| DA-1 | a |\n| DA-2 | b |\n", encoding="utf-8"
         )
-        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs").mkdir(exist_ok=True)
         (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
         falhas = [f for f in check_index_current(tmp_path) if f.is_failure]
         assert len(falhas) == 1
@@ -525,7 +531,7 @@ class TestDocumentedDas:
     def test_indice_architecture_falso_reprova(self, tmp_path):
         """Rotulo ARCHITECTURE sem prosa em docs/ARCHITECTURE.md manda o
         leitor para o arquivo errado — o heading existe no README, nao la."""
-        (tmp_path / "README.md").write_text(
+        _decisoes(tmp_path).write_text(
             "## Decisões de Arquitetura\n\n"
             "| DA | Seção | O que é |\n|---|---|---|\n"
             "| 1 | ARCHITECTURE | a |\n\n"
@@ -535,7 +541,7 @@ class TestDocumentedDas:
         (tmp_path / "CLAUDE.md").write_text(
             "| DA | O que é |\n|---|---|\n| DA-1 | a |\n", encoding="utf-8"
         )
-        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs").mkdir(exist_ok=True)
         (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
         falhas = [f for f in check_index_current(tmp_path) if f.is_failure]
         assert len(falhas) == 1
@@ -1365,7 +1371,7 @@ def test_link_para_doc_git_ignored_conta_como_quebrado(tmp_path: Path) -> None:
 
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     (tmp_path / ".gitignore").write_text("docs/PRIVADO.md\n")
-    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs").mkdir(exist_ok=True)
     (tmp_path / "docs" / "PRIVADO.md").write_text("# privado\n")
     (tmp_path / "docs" / "PUBLICO.md").write_text("Veja [o privado](PRIVADO.md) e `PRIVADO.md`.\n")
     from app.evaluation import gates

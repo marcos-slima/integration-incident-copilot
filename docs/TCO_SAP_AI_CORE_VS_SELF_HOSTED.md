@@ -52,12 +52,12 @@ milhões a US$ 1 bilhão, dependendo da complexidade.
 *Fonte: [Cost of Running Local LLM: Break-Even Guide 2026](https://aisuperior.com/cost-of-running-local-llm/).*
 
 O `SAP Integration Copilot` já roda nessa faixa hoje (Ollama +
-Qwen2.5-Coder 32B local), como prova de conceito em produção, não como
+qwen3-coder-next, default em `app/config.py`), como prova de conceito em produção, não como
 projeção teórica.
 
 ## Onde este projeto se encaixa
 
-O `app/llm/factory.py` (LLM Gateway) deste projeto não força a escolha
+O LLM Gateway (`app/llm/gateway.py`, sobre a factory `app/llm/factory.py`) deste projeto não força a escolha
 entre "100% local" ou "100% nuvem": o mesmo grafo de diagnóstico roda
 sobre Ollama local (default, sem custo de API), ou sobre uma
 assinatura OpenAI/Azure OpenAI que o cliente já tenha — sem reescrever

@@ -46,7 +46,9 @@ def _mermaid(texto: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(("doc", "esperado"), graph_diagram.alvos(), ids=["ARCHITECTURE", "README"])
+@pytest.mark.parametrize(
+    ("doc", "esperado"), graph_diagram.alvos(), ids=["ARCHITECTURE", "README.pt-BR", "README"]
+)
 def test_bloco_do_grafo_no_doc_e_o_gerado(doc, esperado):
     atual = re.search(
         re.escape(graph_diagram.MARCA_INICIO) + r".*?" + re.escape(graph_diagram.MARCA_FIM),
@@ -69,6 +71,7 @@ def test_todo_no_do_grafo_tem_descricao(graph_rag):
     finally:
         settings.graph_rag_enabled = anterior
     assert nos <= set(graph_diagram.DESCRICAO)
+    assert nos <= set(graph_diagram.DESCRICAO_EN)
 
 
 def test_rotulo_das_arestas_condicionais_bate_com_o_roteador():
@@ -224,3 +227,115 @@ def test_limite_do_react_citado_e_o_default_do_settings():
 def test_documentacao_nao_tem_mais_diagrama_ascii():
     for texto in (ARQ, CASOS):
         assert "──►" not in texto
+
+
+# ---------------------------------------------------------------------------
+# Linhagem de evidencia, implantacao e pipeline de avaliacao
+# ---------------------------------------------------------------------------
+
+
+def test_linhagem_cita_todos_os_trust_levels_e_tetos():
+    from app.agent import nodes
+
+    secao = _secao(ARQ, "## Linhagem de evidencia e confianca")
+    niveis = set(
+        re.findall(r'"trust_level":\s*"(\w+)"', inspect.getsource(nodes._assemble_evidence))
+    )
+    niveis |= {"simulated", "system_observed"}  # o conector escolhe entre os dois
+    assert all(n in secao for n in niveis)
+    fonte = inspect.getsource(nodes._apply_confidence_guardrails)
+    tetos = set(re.findall(r"min\(model_confidence, (0\.\d)\)", fonte))
+    assert tetos == {"0.4", "0.3"}
+    for t in tetos:
+        assert t.replace(".", ",") in secao
+    assert f"{nodes.EVIDENCE_CONFIDENCE_MARGIN:.2f}".replace(".", ",") in secao
+
+
+def test_perfis_do_compose_na_tabela_de_implantacao():
+    import yaml
+
+    compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+    secao = _secao(ARQ, "### Local (`docker-compose.yml`)")
+    for nome, servico in compose["services"].items():
+        perfil = (servico.get("profiles") or ["(nenhum)"])[0]
+        linha = next(
+            (
+                linha
+                for linha in secao.splitlines()
+                if linha.startswith(f"| `{perfil}`")
+                or (perfil == "(nenhum)" and linha.startswith("| (nenhum)"))
+            ),
+            None,
+        )
+        assert linha is not None, f"perfil {perfil} fora da tabela"
+        assert f"`{nome}`" in linha, f"servico {nome} fora da linha do perfil {perfil}"
+
+
+def test_diagrama_kyma_bate_com_os_manifests():
+    import yaml
+
+    secao = _secao(ARQ, "### SAP BTP Kyma (`deploy/kyma/`)")
+    bloco = _mermaid(secao)[0]
+    kyma = ROOT / "deploy" / "kyma"
+    kinds = {
+        yaml.safe_load((kyma / r).read_text(encoding="utf-8"))["kind"]
+        for r in yaml.safe_load((kyma / "kustomization.yaml").read_text(encoding="utf-8"))[
+            "resources"
+        ]
+    }
+    assert kinds - {"Namespace", "HorizontalPodAutoscaler"} <= {k for k in kinds if k in bloco}
+    cm = yaml.safe_load((kyma / "configmap.yaml").read_text(encoding="utf-8"))["data"]
+    for chave in re.findall(r"([A-Z_]+)=", bloco):
+        assert chave in cm, f"{chave} citado no diagrama nao esta no ConfigMap"
+        assert f"{chave}={cm[chave]}" in bloco, f"valor de {chave} divergente"
+    hpa = yaml.safe_load((kyma / "hpa.yaml").read_text(encoding="utf-8"))["spec"]
+    assert f"{hpa['minReplicas']} a {hpa['maxReplicas']} pods" in bloco
+
+
+def test_rota_do_llm_no_kyma_e_a_documentada():
+    """O texto diz que, com a configuracao do ConfigMap, dado confidencial
+    so vai para o Azure OpenAI. Se o ConfigMap mudar, o texto precisa mudar."""
+    import yaml
+
+    from app.config import Settings
+    from app.llm import gateway
+
+    cm = yaml.safe_load((ROOT / "deploy/kyma/configmap.yaml").read_text(encoding="utf-8"))["data"]
+    valores = {k.lower(): v for k, v in cm.items() if k.lower() in Settings.model_fields}
+    origem = "https://exemplo.openai.azure.com"
+    valores.update(
+        confidential_allowed_origins=origem,
+        azure_openai_endpoint=origem,
+        azure_openai_api_key="x",
+        azure_openai_deployment="d",
+        openai_api_key="y",
+    )
+    cfg = Settings(_env_file=None, **valores)
+    sel = gateway._select_allowed_providers
+    assert sel("public", cfg.llm_provider, cfg.llm_fallback_provider, cfg) == [
+        "openai",
+        "azure_openai",
+    ]
+    assert sel("confidential", cfg.llm_provider, cfg.llm_fallback_provider, cfg) == ["azure_openai"]
+    assert "confidential -> [azure_openai]" in ARQ
+
+
+def test_pipeline_de_avaliacao_bate_com_os_workflows():
+    import yaml
+
+    from app.evaluation.gates import GATES
+
+    qg = (ROOT / "docs" / "QUALITY_GATES.md").read_text(encoding="utf-8")
+    bloco = _mermaid(_secao(qg, "## Pipeline de avaliacao"))[0]
+    jobs: set[str] = set()
+    for wf in ("tests.yml", "quality.yml"):
+        dados = yaml.safe_load((ROOT / ".github" / "workflows" / wf).read_text(encoding="utf-8"))
+        jobs |= set(dados["jobs"])
+    no_diagrama = set(re.findall(r"<b>([a-z0-9_-]+)</b>", bloco))
+    assert no_diagrama == jobs
+    assert f"{len(GATES)} gates" in bloco
+    for artefato in re.findall(r"(data/[\w/.]+\.json)", bloco):
+        if "index_manifest" not in artefato:  # gerado na maquina do usuario
+            assert (ROOT / artefato).exists() or artefato.endswith("promptfoo_baseline.json"), (
+                artefato
+            )

@@ -24,6 +24,27 @@ cp .env.example .env
 uv sync
 ```
 
+### Senhas exigidas pelo compose
+
+O `docker-compose.yml` usa `${VAR:?...}` para `POSTGRES_PASSWORD`,
+`GRAFANA_PASSWORD` e `NEO4J_PASSWORD`, e o Compose interpola **todos** os
+serviços, inclusive os de perfis inativos. No `.env.example` as três estão
+comentadas: sem defini-las, **qualquer** `docker compose` (até `up -d qdrant`)
+falha com `required variable POSTGRES_PASSWORD is missing a value`. Gere as
+três antes do primeiro comando do compose.
+
+Gere também `LLM_CREDENTIALS_MASTER_KEY` (chave Fernet): com `DATABASE_URL`
+configurada a API **não sobe** sem ela (DA-60), e no modo container o
+compose sempre injeta `DATABASE_URL`.
+
+```bash
+for v in POSTGRES_PASSWORD GRAFANA_PASSWORD NEO4J_PASSWORD; do
+  echo "$v=$(python3 -c 'import secrets;print(secrets.token_urlsafe(24))')" >> .env
+done
+echo "LLM_CREDENTIALS_MASTER_KEY=$(python3 -c 'import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())')" >> .env
+docker compose config -q   # sem saída = interpolação ok
+```
+
 ---
 
 ## 2. Baixe os modelos
@@ -38,12 +59,21 @@ ollama pull nomic-embed-text
 ## 3. Suba a infraestrutura
 
 A infraestrutura vem do `docker-compose.yml` **deste repositório** — não de
-nenhum diretório externo. Dois serviços ficam atrás de perfil, então os
-perfis são explícitos:
+nenhum diretório externo. Sem perfil, só `api` e `qdrant` sobem; o resto é
+opt-in:
+
+| Perfil | Serviços |
+|---|---|
+| (nenhum) | `api`, `qdrant` |
+| `observability` | `postgres`, `grafana`, `reporter` |
+| `async` | `redis`, `worker` (só têm efeito com `REDIS_URL` no `.env`) |
+| `graphrag` | `neo4j` |
+| `container-ollama` | `ollama` |
+| `mailpit` / `messagepit` | `mailpit` / `messagepit` |
 
 ```bash
-# núcleo: Postgres (persistência de incidentes + Grafana), Qdrant, Redis
-docker compose --profile observability up -d qdrant postgres grafana redis
+# Qdrant (obrigatório) + Postgres/Grafana (persistência de incidentes, opcional)
+docker compose --profile observability up -d qdrant postgres grafana
 
 # GraphRAG (opt-in; sem isto o app roda normal, só sem grafo)
 docker compose --profile graphrag up -d neo4j
@@ -51,6 +81,14 @@ docker compose --profile graphrag up -d neo4j
 
 Sobe: Qdrant (`localhost:6333`), Postgres (`localhost:5432`), Neo4j
 (`localhost:7474`, só com o perfil `graphrag`), Grafana (`localhost:3001`).
+
+Com Postgres, aplique as migrations antes de rodar a aplicação. O Alembic lê
+`DATABASE_URL` do `.env` — use a mesma senha gerada no passo 1:
+
+```bash
+echo "DATABASE_URL=postgresql+asyncpg://iic:$(grep ^POSTGRES_PASSWORD= .env | cut -d= -f2-)@127.0.0.1:5432/iic" >> .env
+uv run alembic upgrade head
+```
 
 ---
 
@@ -60,9 +98,11 @@ Sobe: Qdrant (`localhost:6333`), Postgres (`localhost:5432`), Neo4j
 uv run python -m app.rag.ingest --target incidents --reset
 ```
 
-Os documentos de troubleshooting ficam em data/sample_docs/ — essa é a raiz
-da base de conhecimento local. O agente consulta apenas essa base,
-não a internet nem nenhum serviço externo.
+A raiz primária da base de incidentes é `data/knowledge_base/` (recursiva).
+Enquanto ela não existir ou não tiver nenhum `.md`/`.pdf`/`.epub`, o ingest
+usa o fallback `data/sample_docs/` (os casos de exemplo do repositório) —
+é o que acontece num clone novo. O agente consulta essa base local, não a
+internet (a busca web é um fallback opt-in, `WEB_SEARCH_ENABLED`).
 
 ---
 
@@ -95,11 +135,17 @@ NEO4J_URI=bolt://127.0.0.1:7687     # só se GRAPH_RAG_ENABLED=true
 docker compose --profile observability --profile graphrag up -d
 ```
 
-Acesse http://localhost:8000. Aqui **não** edite o `.env` para `127.0.0.1`:
-o `docker-compose.yml` injeta os hosts internos (`qdrant`, `postgres`,
-`neo4j`) por default, e o `host.docker.internal` já aponta para o Ollama da
-máquina. Apontar o `.env` para `127.0.0.1` aqui é o erro clássico — o
-container não enxerga o loopback do host.
+Acesse http://localhost:8000. Aqui o `.env` **não** define os hosts: o
+`x-common-env` do `docker-compose.yml` injeta `QDRANT_URL`, `DATABASE_URL`
+e `NEO4J_URI` com os nomes internos (`qdrant`, `postgres`, `neo4j`) como
+variáveis de ambiente, que têm precedência sobre o `.env` montado no
+container. O container não enxerga o loopback do host, então `127.0.0.1`
+só vale no modo nativo.
+
+O Ollama é o do host, via `OLLAMA_HOST=http://host.docker.internal:11434`
+(fixo em `x-common-env`). Isso só funciona se o Ollama nativo escutar em
+`0.0.0.0` — por padrão o serviço systemd escuta só em `127.0.0.1` e recusa
+o container. Ver [DEPLOY.md](DEPLOY.md), seção 3-B, passo 3.
 
 Se precisar de um Postgres **externo** ao compose (RDS, Cloud SQL, BTP),
 defina `CONTAINER_DATABASE_URL` em vez de `DATABASE_URL`; o mesmo vale para
@@ -109,8 +155,12 @@ defina `CONTAINER_DATABASE_URL` em vez de `DATABASE_URL`; o mesmo vale para
 
 ## 6. Como expandir a base de conhecimento
 
-O agente só sabe o que você ensinar. Cada documento .md em data/sample_docs/
+O agente só sabe o que você ensinar. Cada documento em `data/knowledge_base/`
 é um caso de troubleshooting que o agente pode recuperar e usar no diagnóstico.
+
+> Ao criar o primeiro arquivo em `data/knowledge_base/`, o fallback
+> `data/sample_docs/` deixa de ser lido. Para manter os casos de exemplo,
+> copie-os junto: `mkdir -p data/knowledge_base && cp data/sample_docs/*.md data/knowledge_base/`.
 
 ### Estrutura de um documento
 
@@ -134,8 +184,8 @@ Ação concreta para resolver. Inclua transações SAP e critério de validaçã
 
 ### Exemplo — novo documento
 
-Crie o arquivo dentro de data/sample_docs/ (raiz da base de conhecimento):
-data/sample_docs/bapi_authorization_failure.md
+Crie o arquivo dentro de `data/knowledge_base/` (raiz primária da base):
+data/knowledge_base/bapi_authorization_failure.md
 
 ```markdown
 # Falha de Autorização em BAPI — SAP ABAP
@@ -173,7 +223,7 @@ A partir do próximo diagnóstico, o agente considera o novo caso.
 - Descreva o sintoma como o usuário descreveria ao abrir um chamado
 - Um documento por problema — não agrupe problemas não relacionados
 - Documente cada incidente resolvido — vira base de conhecimento da equipe
-- Formatos suportados: .md (recomendado) e .pdf
+- Formatos suportados: .md (recomendado), .pdf e .epub
 
 ---
 
@@ -211,6 +261,38 @@ SERVICENOW_PASSWORD=senha
 
 ## 8. Provedores LLM alternativos
 
+Antes de trocar o provider, quatro pré-requisitos:
+
+1. **Dependência.** `langchain-openai` é o extra `openai` (vale também para
+   Azure). No modo nativo: `uv sync --extra openai`. A imagem Docker já o
+   inclui.
+2. **Soberania de dados.** O default é `DATA_SOVEREIGNTY_MODE=strict` com
+   `SENSITIVITY_DEFAULT=confidential`: todo incidente é confidencial e só vai
+   para provider local — o gateway **nega** o cloud. Para liberar, as duas
+   variáveis juntas (fail-closed), com a ORIGIN real de destino:
+   ```bash
+   DATA_SOVEREIGNTY_MODE=cloud_with_dlp
+   CONFIDENTIAL_ALLOWED_ORIGINS=https://api.openai.com   # ou https://openrouter.ai, https://recurso.openai.azure.com
+   ```
+   Numa demo sem dado sensível, `SENSITIVITY_DEFAULT=public` também libera
+   (só para incidente sem dado real de conector nem PII declarada). Matriz em
+   vigor: `GET /llm/policy`.
+3. **Modo container.** `LLM_PROVIDER` e `OLLAMA_HOST` são fixos no
+   `x-common-env` do `docker-compose.yml` e sobrepõem o `.env` — mudar o
+   `.env` não troca o provider. Crie um `docker-compose.override.yml` (o
+   Compose o lê automaticamente) e mantenha as credenciais no `.env`:
+   ```yaml
+   services:
+     api:
+       environment:
+         LLM_PROVIDER: openai   # ou azure_openai
+   ```
+   Repita o bloco para `worker` se usar o perfil `async`. Depois:
+   `docker compose up -d api`.
+4. **Embeddings sem GPU.** Sem Ollama, os embeddings também precisam de
+   outra fonte: `EMBEDDING_BACKEND=fastembed` (em processo). Trocar o backend
+   muda o espaço vetorial — reindexe com `--reset` (passo 4).
+
 ```bash
 # OpenAI
 LLM_PROVIDER=openai
@@ -228,6 +310,7 @@ LLM_PROVIDER=openai
 OPENAI_API_KEY=chave-openrouter
 OPENAI_BASE_URL=https://openrouter.ai/api/v1
 LLM_MODEL=qwen/qwen3-coder-next
+EMBEDDING_BACKEND=fastembed
 ```
 
 ---
@@ -238,6 +321,10 @@ LLM_MODEL=qwen/qwen3-coder-next
 ```bash
 export LD_LIBRARY_PATH=/usr/local/sap/nwrfcsdk/lib:$LD_LIBRARY_PATH
 ```
+
+**`required variable POSTGRES_PASSWORD is missing a value`** (ou
+`GRAFANA_PASSWORD`/`NEO4J_PASSWORD`) em qualquer `docker compose`
+Faltam as senhas no `.env` — ver passo 1, "Senhas exigidas pelo compose".
 
 **Qdrant connection refused**
 ```bash

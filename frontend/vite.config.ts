@@ -5,8 +5,11 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      // /diagnose, /health, /.well-known → FastAPI em localhost:8000
+      // /diagnose (inclui /diagnose/async), /auth, /health, /.well-known
+      // → FastAPI em localhost:8000. Sem '/auth' o login (DA-54) caia no
+      // proprio Vite no modo dev (FE-01, validacao 2026-10-07).
       '/diagnose': 'http://localhost:8000',
+      '/auth': 'http://localhost:8000',
       '/health': 'http://localhost:8000',
       '/.well-known': 'http://localhost:8000',
     },

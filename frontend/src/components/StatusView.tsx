@@ -22,6 +22,7 @@ const CONNECTOR_LABELS: Record<InterfaceType, string> = {
   successfactors: 'SuccessFactorsConnector',
   cap: 'CAPConnector',
   apim: 'APIManagementConnector',
+  po: 'POConnector',
 };
 
 // Ordem de exibicao (a mesma do dropdown de conectores em DiagnoseView)
@@ -35,6 +36,7 @@ const CONNECTOR_ORDER: InterfaceType[] = [
   'successfactors',
   'cap',
   'apim',
+  'po',
 ];
 
 function dotClass(s: ConnectorHealthStatus): string {
@@ -98,15 +100,22 @@ export function StatusView() {
         <>
           <div className="status-section">
             <div className="status-section-label">
-              Conectores ({CONNECTOR_ORDER.length})
+              Conectores ({Object.keys(health.connectors).length})
             </div>
-            {CONNECTOR_ORDER.map((name) => {
+            {/* FE-01: a lista vem do /health; CONNECTOR_ORDER so define a ordem.
+                Conector novo no backend aparece mesmo sem rotulo aqui. */}
+            {[
+              ...CONNECTOR_ORDER.filter((n) => n in health.connectors),
+              ...(Object.keys(health.connectors) as InterfaceType[]).filter(
+                (n) => !CONNECTOR_ORDER.includes(n),
+              ),
+            ].map((name) => {
               const info = health.connectors[name];
               return (
                 <div key={name} className="status-row">
                   <span className={`status-dot ${dotClass(info.status)}`} />
                   <span className="status-name" style={{ width: 210 }}>
-                    {CONNECTOR_LABELS[name]}
+                    {CONNECTOR_LABELS[name] ?? name}
                   </span>
                   <span className="status-note">{info.note}</span>
                   <span className="status-tag" style={{ color: tagColor(info.status) }}>

@@ -10,7 +10,8 @@ export type InterfaceType =
   | 'ariba'
   | 'successfactors'
   | 'cap'
-  | 'apim';
+  | 'apim'
+  | 'po';
 
 export interface IncidentRequest {
   description: string;

@@ -463,6 +463,23 @@ def index() -> FileResponse | JSONResponse:
     return FileResponse(str(_STATIC_DIST_INDEX))
 
 
+# Validacao 2026-10-07: o index.html do Vite referencia /favicon.svg e
+# /icons.svg (copiados de frontend/public para a raiz do dist), mas so
+# /assets era servido - todo carregamento da SPA dava 404 no favicon. Lista
+# FECHADA de arquivos: nada de servir a raiz do dist inteira.
+_STATIC_DIST_ROOT_FILES = {"favicon.svg": "image/svg+xml", "icons.svg": "image/svg+xml"}
+
+
+@app.get("/favicon.svg", include_in_schema=False, response_model=None)
+@app.get("/icons.svg", include_in_schema=False, response_model=None)
+def static_root_file(request: Request) -> FileResponse | Response:
+    name = request.url.path.lstrip("/")
+    path = _STATIC_DIST_INDEX.parent / name
+    if name not in _STATIC_DIST_ROOT_FILES or not path.is_file():
+        return Response(status_code=status.HTTP_404_NOT_FOUND)
+    return FileResponse(str(path), media_type=_STATIC_DIST_ROOT_FILES[name])
+
+
 def _probe_infra_services() -> dict[str, str]:
     """Testa conectividade real com Qdrant e Ollama (timeout curto para
     nao tornar o /ready lento). Retorna dict {servico: "ok"|"degraded"}.

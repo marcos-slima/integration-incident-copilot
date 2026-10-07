@@ -15,6 +15,7 @@ existentes (calibrados para cosseno, nao para escala RRF).
 import logging
 import os
 from functools import lru_cache
+from pathlib import Path
 
 import numpy as np
 from fastembed import SparseTextEmbedding, TextEmbedding
@@ -76,10 +77,26 @@ def _get_qdrant_client() -> QdrantClient:
 _EMBEDDING_BACKEND = os.environ.get("EMBEDDING_BACKEND", "ollama").lower()
 
 
+FASTEMBED_MODEL = "BAAI/bge-small-en-v1.5"
+
+
+def embedding_identity() -> tuple[str, str]:
+    """(provider, modelo) do embedder EFETIVO - o que de fato gera os vetores.
+
+    Validacao 2026-10-07 (RAG-01/R15): ingest e retriever carimbavam e
+    verificavam a collection sempre como ("ollama", EMBEDDING_MODEL), mesmo
+    com EMBEDDING_BACKEND=fastembed indexando com bge-small. A identidade
+    gravada mentia sobre o espaco vetorial, que e' exatamente o que o guard
+    DA-45 existe para impedir."""
+    if _EMBEDDING_BACKEND == "fastembed":
+        return "fastembed", FASTEMBED_MODEL
+    return "ollama", EMBEDDING_MODEL
+
+
 class _FastEmbedWrapper:
     """Adaptador minimo de fastembed.TextEmbedding para a interface .embed_query()."""
 
-    def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5") -> None:
+    def __init__(self, model_name: str = FASTEMBED_MODEL) -> None:
         self._model = TextEmbedding(model_name=model_name)
 
     def embed_query(self, text: str) -> list[float]:
@@ -102,9 +119,27 @@ def _get_embeddings() -> "OllamaEmbeddings | _FastEmbedWrapper":
     return OllamaEmbeddings(model=EMBEDDING_MODEL, base_url=settings.ollama_host)
 
 
+def new_sparse_model() -> SparseTextEmbedding:
+    """Instancia o BM25 do fastembed (usado na busca e na ingestao).
+
+    Validacao 2026-10-07 (DEP-01): o fastembed 0.8.x nao carrega o
+    `Qdrant/bm25` do cache offline - a descricao do modelo declara um
+    `model_file` ficticio ("mock.file") que nunca existe no snapshot, e o
+    teste de "esta no cache" falha sempre. Num cluster sem saida para o
+    Hugging Face o retriever quebrava. `FASTEMBED_BM25_PATH` aponta para o
+    snapshot ja baixado (a imagem Docker grava em /app/.cache/bm25); sem a
+    variavel (ou com o diretorio vazio - imagem com PRELOAD_MODELS=0), o
+    comportamento e o de sempre (download sob demanda).
+    """
+    local_path = os.environ.get("FASTEMBED_BM25_PATH", "").strip()
+    if local_path and (Path(local_path) / "config.json").is_file():
+        return SparseTextEmbedding(model_name=SPARSE_MODEL_NAME, specific_model_path=local_path)
+    return SparseTextEmbedding(model_name=SPARSE_MODEL_NAME)
+
+
 @lru_cache(maxsize=1)
 def _get_sparse_model() -> SparseTextEmbedding:
-    return SparseTextEmbedding(model_name=SPARSE_MODEL_NAME)
+    return new_sparse_model()
 
 
 def _sparse_query_vector(query: str) -> SparseVector:
@@ -126,7 +161,8 @@ def _retrieve_hybrid(query: str, collection_name: str, top_k: int) -> list[dict]
     # outro devolve resposta plausivel e ERRADA, nao erro. Verificado uma
     # vez por processo (verify_once) para nao custar uma ida ao Qdrant por
     # query.
-    verify_once(client, collection_name, EMBEDDING_MODEL)
+    _prov, _modelo = embedding_identity()
+    verify_once(client, collection_name, _modelo, provider=_prov)
     dense_query = _get_embeddings().embed_query(query)
     sparse_query = _sparse_query_vector(query)
 
@@ -217,7 +253,8 @@ def _retrieve_dense_only(
 ) -> list[dict]:
     client = _get_qdrant_client()
     # DA-45: mesma verificacao da perna hibrida - ver _retrieve_hybrid.
-    verify_once(client, collection_name, EMBEDDING_MODEL)
+    _prov, _modelo = embedding_identity()
+    verify_once(client, collection_name, _modelo, provider=_prov)
     query_vector = _get_embeddings().embed_query(query)
     results = client.query_points(
         collection_name=collection_name,
@@ -302,30 +339,30 @@ def rerank(query: str, hits: list[dict], top_k: int = RERANKER_TOP_K) -> list[di
 
 
 def _evidence_admission_score(hit: dict) -> float:
-    """DA-25: decide se um candidato reranqueado tem evidencia forte o
-    suficiente para ser admitido na resposta final. Usa o MAIOR entre o
-    cosseno denso (match semantico direto, escala em que
-    score_threshold ja e calibrado) e o rerank_score do cross-encoder
-    normalizado/clampado para [0, 1] (mesma convencao ja usada em
-    _compute_evidence_strength, app/agent/nodes.py) - um documento pode
-    provar relevancia por QUALQUER UM dos dois caminhos, nao so pelo
-    cosseno.
+    """DA-25/DA-42: score que decide se o candidato entra na resposta.
 
-    Corrige o caso relatado na revisao externa: um documento com BM25
-    excelente (match de termo exato, ex: "IDoc status 51") mas cosseno
-    denso moderado (ex: 0.47) era descartado por score_threshold=0.5
-    ANTES do reranker (mais preciso, avalia o par query+chunk de
-    verdade) ter qualquer chance de opinar. Agora, se o reranker
-    considerar o par fortemente relevante, o documento e admitido
-    mesmo com cosseno abaixo do threshold.
+    Com o reranker disponivel, a decisao e' DELE (`rerank_score_calibrated`,
+    sigmoid do logit do cross-encoder, ponto neutro 0.5). Sem reranker, vale
+    o cosseno denso.
+
+    Validacao 2026-10-07 (RAG-01): a versao anterior usava
+    `max(cosseno, sigmoid)`. Um caso fora de escopo com cosseno 0.753 e
+    sigmoid 0.0067 (o reranker dizendo "irrelevante") era ADMITIDO pelo
+    cosseno - e o gate de avaliacao, que mede so o sigmoid, reportava
+    rejeicao. Os grupos de cosseno in-scope e out-of-scope se sobrepoem
+    (ver scripts/eval_rag.py); o sigmoid separa (in-scope >= 0.975,
+    out-of-scope <= 0.050 no dataset de avaliacao). O caso que motivou o
+    `max` (BM25 forte, cosseno baixo) continua coberto: o reranker avalia o
+    par query+chunk e admite se for relevante.
     """
-    rerank_score = hit.get("rerank_score")
-    scores = [hit["score"]]
-    if rerank_score is not None:
-        scores.append(
-            hit.get("rerank_score_calibrated", max(0.0, min(1.0, rerank_score)))
-        )  # DA-42: usa sigmoid calibrado
-    return max(scores)
+    calibrado = hit.get("rerank_score_calibrated")
+    if calibrado is None and hit.get("rerank_score") is not None:
+        # logit cru sem a calibracao (chamador que nao passou por rerank()):
+        # aplica a mesma sigmoid de rerank(), nunca um clamp do logit.
+        calibrado = _sigmoid_calibrate(float(hit["rerank_score"]))
+    if calibrado is not None:
+        return float(calibrado)
+    return float(hit["score"])
 
 
 def _retrieve_unified(

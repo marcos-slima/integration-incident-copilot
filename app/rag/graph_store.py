@@ -39,13 +39,15 @@ que o beneficio nesta fase.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import Any, Protocol
 
 from neo4j.exceptions import DriverError, TransientError
 
 from app.config import settings
+from app.redaction import redact_pii_text
 
 # DA-21: excecoes que sinalizam "Neo4j inalcancavel agora" (conexao
 # recusada, pool esgotado, servidor temporariamente indisponivel) -
@@ -111,22 +113,51 @@ def is_enabled() -> bool:
     return settings.graph_rag_enabled
 
 
-@lru_cache(maxsize=1)
+_driver = None
+_driver_key: tuple | None = None
+
+
 def _get_driver():
-    """Import tardio de `neo4j` - so acontece se GraphRAG estiver
-    habilitado, para nao exigir um Neo4j vivo em nenhum caminho
-    default (mock/demo) do projeto."""
-    from neo4j import GraphDatabase
+    """Driver Neo4j compartilhado (import tardio: so com GraphRAG ligado).
 
-    return GraphDatabase.driver(
-        settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_password)
-    )
+    Um driver por processo (era `lru_cache`), agora recriado se
+    URI/credencial mudarem. O problema real (validacao 2026-10-07, AI-01)
+    eram as SESSOES: cada operacao abria uma e nunca fechava, o que prende
+    conexoes do pool - ver _session_scope."""
+    global _driver, _driver_key
+    chave = (settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password)
+    if _driver is None or _driver_key != chave:
+        from neo4j import GraphDatabase
+
+        if _driver is not None:
+            _driver.close()
+        _driver = GraphDatabase.driver(
+            settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_password)
+        )
+        _driver_key = chave
+    return _driver
 
 
-def _get_session(session: _Neo4jSession | None = None) -> _Neo4jSession:
+def _reset_driver() -> None:
+    global _driver, _driver_key
+    if _driver is not None:
+        _driver.close()
+    _driver, _driver_key = None, None
+
+
+# compatibilidade com quem chamava _get_driver.cache_clear() (era lru_cache)
+_get_driver.cache_clear = _reset_driver  # type: ignore[attr-defined]
+
+
+@contextmanager
+def _session_scope(session: _Neo4jSession | None = None) -> Iterator[_Neo4jSession]:
+    """Usa a sessao recebida (testes, chamador que agrupa operacoes) ou abre
+    uma e FECHA ao sair."""
     if session is not None:
-        return session
-    return _get_driver().session()
+        yield session
+        return
+    with _get_driver().session() as nova:
+        yield nova
 
 
 _CONSTRAINTS = [
@@ -140,9 +171,9 @@ _CONSTRAINTS = [
 
 
 def ensure_constraints(session: _Neo4jSession | None = None) -> None:
-    sess = _get_session(session)
-    for statement in _CONSTRAINTS:
-        sess.run(statement)
+    with _session_scope(session) as sess:
+        for statement in _CONSTRAINTS:
+            sess.run(statement)
 
 
 # A5: consulta para ler as causas raiz VERIFICADAS (via verify_incident)
@@ -251,42 +282,42 @@ def upsert_incident_graph(
     tratar toda gravacao anterior como historico validado."""
     if not interface_type or not identifier:
         return
-    sess = _get_session(session)
+    with _session_scope(session) as sess:
+        # A5: determinacao de is_grounded com cross-validation anti-poisoning.
+        # Passo 1 - threshold base: se a hipotese nao atinge GROUNDED_EVIDENCE_THRESHOLD
+        #   ela sera False sem precisar consultar o historico.
+        # Passo 2 - cross-validation: so executada quando a hipotese atingiria
+        #   is_grounded=True pelo threshold base. Verifica se existe historico VERIFICADO
+        #   que diverge da nova hipotese; se diverge, exige GROUNDED_CROSS_VALIDATION_THRESHOLD
+        #   (0.75) em vez de GROUNDED_EVIDENCE_THRESHOLD (0.5).
+        # Resultado: um LLM fabricando uma causa raiz com evidence_strength entre 0.5 e 0.75
+        #   que contradiz o que humanos ja confirmaram NAO contamina o historico do grafo.
+        base_grounded = evidence_strength >= GROUNDED_EVIDENCE_THRESHOLD
+        if base_grounded:
+            cross_validates = _cross_validate_grounded(
+                root_cause=root_cause,
+                interface_type=interface_type,
+                identifier=identifier,
+                sess=sess,
+            )
+            if not cross_validates:
+                # Hipotese diverge do historico verificado: exige threshold elevado
+                base_grounded = evidence_strength >= GROUNDED_CROSS_VALIDATION_THRESHOLD
 
-    # A5: determinacao de is_grounded com cross-validation anti-poisoning.
-    # Passo 1 - threshold base: se a hipotese nao atinge GROUNDED_EVIDENCE_THRESHOLD
-    #   ela sera False sem precisar consultar o historico.
-    # Passo 2 - cross-validation: so executada quando a hipotese atingiria
-    #   is_grounded=True pelo threshold base. Verifica se existe historico VERIFICADO
-    #   que diverge da nova hipotese; se diverge, exige GROUNDED_CROSS_VALIDATION_THRESHOLD
-    #   (0.75) em vez de GROUNDED_EVIDENCE_THRESHOLD (0.5).
-    # Resultado: um LLM fabricando uma causa raiz com evidence_strength entre 0.5 e 0.75
-    #   que contradiz o que humanos ja confirmaram NAO contamina o historico do grafo.
-    base_grounded = evidence_strength >= GROUNDED_EVIDENCE_THRESHOLD
-    if base_grounded:
-        cross_validates = _cross_validate_grounded(
-            root_cause=root_cause,
+        sess.run(
+            _UPSERT_QUERY,
+            incident_id=incident_id,
+            # PRIV-01: o grafo guardava a descricao crua (e-mail, CPF...)
+            description=redact_pii_text(description),
             interface_type=interface_type,
             identifier=identifier,
-            sess=sess,
+            source_system=source_system or interface_type,
+            root_cause=root_cause,
+            confidence=confidence,
+            matched_document=matched_document,
+            evidence_strength=evidence_strength,
+            is_grounded=base_grounded,
         )
-        if not cross_validates:
-            # Hipotese diverge do historico verificado: exige threshold elevado
-            base_grounded = evidence_strength >= GROUNDED_CROSS_VALIDATION_THRESHOLD
-
-    sess.run(
-        _UPSERT_QUERY,
-        incident_id=incident_id,
-        description=description,
-        interface_type=interface_type,
-        identifier=identifier,
-        source_system=source_system or interface_type,
-        root_cause=root_cause,
-        confidence=confidence,
-        matched_document=matched_document,
-        evidence_strength=evidence_strength,
-        is_grounded=base_grounded,
-    )
 
 
 _VERIFY_QUERY = """
@@ -335,15 +366,15 @@ def verify_incident(
     `incident_id` nao existir no grafo (nada foi verificado)."""
     if not is_enabled():
         return False
-    sess = _get_session(session)
-    result = sess.run(
-        _VERIFY_QUERY,
-        incident_id=incident_id,
-        verified_root_cause=verified_root_cause,
-        verified_by=verified_by,
-    )
-    record = next(iter(result), None)
-    return record is not None
+    with _session_scope(session) as sess:
+        result = sess.run(
+            _VERIFY_QUERY,
+            incident_id=incident_id,
+            verified_root_cause=verified_root_cause,
+            verified_by=verified_by,
+        )
+        record = next(iter(result), None)
+        return record is not None
 
 
 _RELATED_QUERY = """
@@ -392,26 +423,26 @@ def graph_context(
     if not is_enabled() or not interface_type or not identifier:
         return []
 
-    sess = _get_session(session)
-    result = sess.run(
-        _RELATED_QUERY, interface_type=interface_type, identifier=identifier, limit=limit
-    )
-    related = [
-        RelatedIncident(
-            interface_identifier=identifier,
-            source_system=record["source_system"] or interface_type,
-            root_cause=record["root_cause"] or "",
-            matched_document=record["matched_document"],
-            evidence_strength=float(record["evidence_strength"]),
-            is_grounded=bool(record["is_grounded"]),
-            verified=bool(record["verified"]),
-            verified_root_cause=record["verified_root_cause"],
+    with _session_scope(session) as sess:
+        result = sess.run(
+            _RELATED_QUERY, interface_type=interface_type, identifier=identifier, limit=limit
         )
-        for record in result
-    ]
-    if include_ungrounded:
-        return related
-    return [r for r in related if r.is_grounded or r.verified]
+        related = [
+            RelatedIncident(
+                interface_identifier=identifier,
+                source_system=record["source_system"] or interface_type,
+                root_cause=record["root_cause"] or "",
+                matched_document=record["matched_document"],
+                evidence_strength=float(record["evidence_strength"]),
+                is_grounded=bool(record["is_grounded"]),
+                verified=bool(record["verified"]),
+                verified_root_cause=record["verified_root_cause"],
+            )
+            for record in result
+        ]
+        if include_ungrounded:
+            return related
+        return [r for r in related if r.is_grounded or r.verified]
 
 
 def format_graph_context_for_prompt(related: list[RelatedIncident]) -> str:
@@ -463,7 +494,14 @@ def format_graph_context_for_prompt(related: list[RelatedIncident]) -> str:
             label = "causa raiz VERIFICADA (confirmada por humano/sistema)"
             root_cause_text = r.verified_root_cause or r.root_cause
         elif r.is_grounded:
-            label = "causa raiz confirmada anteriormente"
+            # AI-01 (validacao 2026-10-07): `is_grounded` e' um proxy
+            # automatico de evidence_strength, nao confirmacao. Rotular como
+            # "confirmada" fechava o loop: a hipotese do LLM voltava ao prompt
+            # seguinte como fato. So `verified` (humano) e' fato.
+            label = (
+                "hipotese anterior com evidencia forte (NAO verificada por humano - "
+                "considere, mas nao trate como causa confirmada)"
+            )
             root_cause_text = r.root_cause
         else:
             label = "HIPOTESE NAO CONFIRMADA de diagnostico anterior (baixa evidencia - nao trate como fato)"
@@ -482,6 +520,7 @@ def format_graph_context_for_prompt(related: list[RelatedIncident]) -> str:
 _PRUNE_UNGROUNDED_QUERY = """
 MATCH (i:Incident)
 WHERE coalesce(i.is_grounded, false) = false
+  AND coalesce(i.verified, false) = false
   AND i.created_at < datetime() - duration({days: $older_than_days})
 DETACH DELETE i
 RETURN count(i) AS deleted_count
@@ -494,17 +533,17 @@ def prune_ungrounded_hypotheses(
     """Remove hipoteses NAO confirmadas (`is_grounded=false`) gravadas
     ha mais de `older_than_days` dias - manutencao MANUAL, nunca
     automatica (nao e chamada de nenhum node do grafo nem do
-    lifespan). Incidentes `is_grounded=true` (causa raiz confirmada)
+    lifespan). Incidentes `is_grounded=true` ou `verified=true`
     NUNCA sao tocados por esta funcao, sob nenhuma idade - so a
     hipotese fraca que nunca foi corroborada e que so ocupa espaco e
     pode confundir uma leitura manual do grafo. Mesmo principio de
     "nunca deletar sem o operador pedir explicitamente" usado em outras
     partes deste projeto, aplicado aqui no nivel de dado do grafo em
     vez de arquivo. Retorna quantos incidentes foram removidos."""
-    sess = _get_session(session)
-    result = sess.run(_PRUNE_UNGROUNDED_QUERY, older_than_days=older_than_days)
-    record = next(iter(result), None)
-    return int(record["deleted_count"]) if record else 0
+    with _session_scope(session) as sess:
+        result = sess.run(_PRUNE_UNGROUNDED_QUERY, older_than_days=older_than_days)
+        record = next(iter(result), None)
+        return int(record["deleted_count"]) if record else 0
 
 
 if __name__ == "__main__":

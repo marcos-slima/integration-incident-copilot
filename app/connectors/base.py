@@ -96,6 +96,155 @@ ExternalSystemConnector = SAPConnector
 connector_circuit_breaker = CircuitBreaker(namespace="conn")  # DA-41: Redis distribuido
 
 
+def _is_availability_failure(status_code: int) -> bool:
+    """Validacao 2026-10-07 (M-06): so indisponibilidade conta para o breaker.
+
+    5xx e 429 dizem "o sistema nao esta atendendo" - e o que o circuito
+    existe para evitar martelar. 4xx (401/403 de credencial, 404 de
+    identificador) e uma resposta VALIDA de um sistema saudavel; contar como
+    falha abria o circuito por erro de configuracao e passava a esconder o
+    401 real atras de "CIRCUIT_OPEN"."""
+    return status_code >= 500 or status_code == 429
+
+
+def record_response_outcome(source_system: str, status_code: int) -> None:
+    """Registra o resultado de uma resposta HTTP no breaker do conector.
+
+    Antes: `record_success` incondicional depois de qualquer resposta - um
+    servico devolvendo 503 em toda chamada nunca abria o circuito."""
+    if _is_availability_failure(status_code):
+        connector_circuit_breaker.record_failure(
+            source_system,
+            settings.connector_circuit_failure_threshold,
+            settings.connector_circuit_cooldown_seconds,
+        )
+    else:
+        connector_circuit_breaker.record_success(source_system)
+
+
+def record_network_failure(source_system: str) -> None:
+    """Falha de rede (timeout, DNS, conexao recusada): sempre conta."""
+    connector_circuit_breaker.record_failure(
+        source_system,
+        settings.connector_circuit_failure_threshold,
+        settings.connector_circuit_cooldown_seconds,
+    )
+
+
+def json_or_error(
+    response, source_system: str, *, expect: type = dict
+) -> tuple[object, ConnectorResult | None]:
+    """Validacao 2026-10-07 (M-06): `response.json()` sem tratamento.
+
+    Um 200 com corpo HTML (pagina de login de proxy/SSO, pagina de
+    manutencao) ou JSON de outro formato derrubava o diagnostico inteiro com
+    500. Devolve `(dados, None)` ou `(None, ConnectorResult de erro)`."""
+    try:
+        data = response.json()
+    except ValueError:
+        data = None
+    if not isinstance(data, expect):
+        return None, ConnectorResult(
+            source_system=source_system,
+            status="error",
+            error_code="INVALID_RESPONSE",
+            message=(
+                f"{source_system} respondeu HTTP {response.status_code} com corpo que nao e "
+                "o JSON esperado (pagina de login/proxy ou API diferente da configurada?)"
+            ),
+            raw=(response.text or "")[:2000],
+            is_mock=False,
+            is_fallback=True,
+        )
+    return data, None
+
+
+class _TokenCache:
+    """Validacao 2026-10-07 (M-06): token OAuth2 sem cache.
+
+    Cada diagnostico pedia um token novo ao IdP (uma ida a mais na rede por
+    chamada, e IdPs costumam limitar emissao). Cache por (url, client_id),
+    valido ate `expires_in` menos 60 s de folga; sem `expires_in`, 5 min.
+    Por processo - o mesmo nao-objetivo do breaker em memoria."""
+
+    _SAFETY_SECONDS = 60.0
+    _DEFAULT_TTL = 300.0
+
+    def __init__(self) -> None:
+        import threading
+
+        self._lock = threading.Lock()
+        self._items: dict[tuple, tuple[str, float]] = {}
+
+    def get(self, key: tuple, fetch) -> str:
+        """`fetch()` faz o POST ao token endpoint e devolve o `httpx.Response`."""
+        import time
+
+        now = time.monotonic()
+        with self._lock:
+            item = self._items.get(key)
+            if item and item[1] > now:
+                return item[0]
+        response = fetch()
+        response.raise_for_status()
+        try:
+            body = response.json()
+            token = body["access_token"]
+        except (ValueError, KeyError, TypeError) as exc:
+            raise TokenResponseError(
+                "token endpoint respondeu sem access_token (JSON invalido ou outro formato)"
+            ) from exc
+        try:
+            ttl = float(body.get("expires_in") or self._DEFAULT_TTL)
+        except (TypeError, ValueError):
+            ttl = self._DEFAULT_TTL
+        with self._lock:
+            self._items[key] = (token, now + max(0.0, ttl - self._SAFETY_SECONDS))
+        return token
+
+    def clear(self) -> None:
+        with self._lock:
+            self._items.clear()
+
+
+class TokenResponseError(Exception):
+    """Token endpoint respondeu 2xx sem um `access_token` legivel."""
+
+
+oauth_token_cache = _TokenCache()
+
+
+def token_error_result(source_system: str, exc: Exception, label: str) -> ConnectorResult:
+    """Resultado de erro padrao para falha ao obter o token OAuth2.
+
+    401/403 do token endpoint e credencial/configuracao: NAO conta para o
+    breaker (M-06). 5xx/429 conta."""
+    import httpx
+
+    if isinstance(exc, httpx.HTTPStatusError):
+        code = exc.response.status_code
+        if _is_availability_failure(code):
+            record_network_failure(source_system)
+        return ConnectorResult(
+            source_system=source_system,
+            status="error",
+            error_code=str(code),
+            message=f"Falha ao obter token OAuth2 {label}: HTTP {code}",
+            raw=exc.response.text[:2000],
+            is_mock=False,
+            is_fallback=True,
+        )
+    return ConnectorResult(
+        source_system=source_system,
+        status="error",
+        error_code="INVALID_TOKEN_RESPONSE",
+        message=f"Falha ao obter token OAuth2 {label}: {exc}",
+        raw="",
+        is_mock=False,
+        is_fallback=True,
+    )
+
+
 def circuit_breaker_guard(source_system: str) -> ConnectorResult | None:
     """Chamado no INICIO de `_fetch_real(...)` de cada conector, antes
     de abrir a conexao HTTP. Devolve um `ConnectorResult` de erro
@@ -149,7 +298,11 @@ def circuit_breaker_guard(source_system: str) -> ConnectorResult | None:
 # elimina a classe inteira de injection sem exigir escape especifico
 # por protocolo - aspas, "/", "?", "#", espacos etc. nunca chegam a
 # fazer parte da query/URL, entao nao ha o que escapar depois.
-_IDENTIFIER_CHARSET_RE = re.compile(r"^[A-Za-z0-9._-]{1,200}$")
+# Validacao 2026-10-07 (M-05): `re.match` + `$` aceitava "abc\n" (o `$` casa
+# antes de uma quebra de linha final) e o charset deixava passar ".." - que,
+# interpolado no PATH das URLs (Workday, Ariba, SuccessFactors), sobe um
+# nivel no servidor. Agora: fullmatch e nenhum segmento so de pontos.
+_IDENTIFIER_CHARSET_RE = re.compile(r"[A-Za-z0-9._-]{1,200}")
 
 
 def validate_identifier_charset(identifier: str, source_system: str) -> ConnectorResult | None:
@@ -162,15 +315,20 @@ def validate_identifier_charset(identifier: str, source_system: str) -> Connecto
     qualquer identifier SAP/ITSM/CRM real (numero de IDoc, RFC
     destination, CaseNumber, nome de iFlow, numero de PO) ja respeitam
     esse charset - nenhum uso legitimo e afetado."""
-    if not _IDENTIFIER_CHARSET_RE.match(identifier):
+    if (
+        not isinstance(identifier, str)
+        or not _IDENTIFIER_CHARSET_RE.fullmatch(identifier)
+        or ".." in identifier
+        or identifier.strip(".") == ""
+    ):
         return ConnectorResult(
             source_system=source_system,
             status="error",
             error_code="INVALID_IDENTIFIER",
             message=(
                 f"Identificador invalido para {source_system}: aceita so letras, "
-                "numeros, '.', '_' e '-' (1 a 200 caracteres). Caracteres como "
-                "aspas, espacos, '/', '?' ou '#' nao sao permitidos."
+                "numeros, '.', '_' e '-' (1 a 200 caracteres), sem '..'. Caracteres "
+                "como aspas, espacos, quebras de linha, '/', '?' ou '#' nao sao permitidos."
             ),
             raw="",
             is_mock=False,

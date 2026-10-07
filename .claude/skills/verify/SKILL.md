@@ -18,7 +18,7 @@ until curl -s -o /dev/null localhost:8765/health; do sleep 1; done
 - `GET /ready` — readiness: probes Qdrant/Ollama; 503 when a configured service is degraded. Simulate with `OLLAMA_HOST=http://127.0.0.1:1`.
 - `POST /diagnose` (header `X-API-Key`) — full LLM run with `qwen3-coder-next:latest` takes ~80s.
   `interface_type` must be one of odata/rfc/servicenow/salesforce/workday/ariba/successfactors/cap/apim (not `idoc`).
-- `POST /events/incident` (header `X-Event-Mesh-Api-Key`), body `{"type":"com.sap.integration.incident.detected.v1","id":"...","data":{...}}`.
+- `POST /events/incident` (header `X-Event-Mesh-Api-Key`), body `{"specversion":"1.0","type":"com.sap.integration.incident.detected.v1","source":"/sap/cpi","id":"...","data":{...}}` (CloudEvents 1.0: the four attributes are required; dedup key is `source`+`id`).
 - Circuit breaker: isolated Redis (`docker run -d --rm -p 127.0.0.1:6390:6379 redis:7-alpine`), then
   `REDIS_URL=redis://127.0.0.1:6390/0 ODATA_SERVICE_URL=http://127.0.0.1:1/x CONNECTOR_CIRCUIT_FAILURE_THRESHOLD=2 OLLAMA_HOST=http://127.0.0.1:2`;
   calls fail fast (500 from dead Ollama) and `redis-cli hgetall cb:conn:OData` shows the state.

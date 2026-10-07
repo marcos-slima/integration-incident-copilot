@@ -168,15 +168,19 @@ curl -s -X POST http://127.0.0.1:8000/events/incident \
   -H "Content-Type: application/json" \
   -H "X-Event-Mesh-Api-Key: <chave-do-log-ou-do-.env>" \
   -d '{
+        "specversion": "1.0",
         "type": "com.sap.integration.incident.detected.v1",
-        "source": "cpi-monitor",
+        "source": "/sap/cpi/monitor",
+        "id": "evt-0001",
         "data": {"description": "IDoc travado com status 51", "interface_type": "rfc"}
       }'
 ```
 
-Deve retornar o mesmo formato de `DiagnosisResponse` de `/diagnose`. Um
-`type` diferente de `com.sap.integration.incident.detected.v1` retorna
-`422 Unprocessable Content` (formato de evento não reconhecido).
+O envelope segue CloudEvents 1.0: `specversion`, `type`, `source` e `id` são
+obrigatórios, e o par (`source`, `id`) é a chave de deduplicação — reenviar o
+mesmo evento não dispara um segundo diagnóstico. Um `type` diferente de
+`com.sap.integration.incident.detected.v1`, ou a falta de um dos quatro
+atributos, retorna `422 Unprocessable Content`.
 
 ---
 
@@ -190,7 +194,7 @@ Deve retornar o mesmo formato de `DiagnosisResponse` de `/diagnose`. Um
 | Container `api` reinicia sozinho com erro de DNS/`python-discovery` | `uv run` tentando sync sem rede | Ver seção 4 |
 | `401 Unauthorized` em `/diagnose` ou `/a2a` | Header `X-API-Key`/`X-A2A-Api-Key` ausente ou errado (DA-18: chave sempre exigida, gerada automaticamente se não configurada) | Ver a chave gerada no log de startup (`docker logs ... \| grep API_KEY`), ou configure `API_KEY`/`A2A_API_KEY` no `.env` |
 | `401 Unauthorized` em `/events/incident` | Header `X-Event-Mesh-Api-Key` ausente/errado, ou reusando `X-API-Key` por engano (DA-23: chave dedicada, não compartilhada com `/diagnose`/`/a2a`) | Ver a chave gerada no log de startup, ou configure `EVENT_MESH_API_KEY` no `.env` |
-| `422 Unprocessable Content` em `/events/incident` | Campo `type` do evento diferente de `com.sap.integration.incident.detected.v1` (DA-23: único tipo de evento reconhecido hoje) | Ajustar o `type` do payload, ou aguardar suporte a novos tipos de evento em fase futura |
+| `422 Unprocessable Content` em `/events/incident` | Campo `type` diferente de `com.sap.integration.incident.detected.v1` (DA-23: único tipo reconhecido hoje), ou falta `specversion`/`id`/`source` (CloudEvents 1.0) | Ajustar o payload; o corpo do 422 indica o campo (`loc`) sem ecoar o valor enviado |
 | `307 Temporary Redirect` em `POST /mcp` | Faltou a barra final - `app.mount()` do Starlette redireciona `/mcp` → `/mcp/` antes de checar autenticação (comportamento padrão, não é bug do MCP) | Chame `/mcp/` (com barra final) diretamente, ou configure o cliente MCP para seguir redirects |
 | `RuntimeError: Directory 'static/dist/assets' does not exist` | Frontend não buildado / não copiado para a imagem | Ver seção 2 |
 | `Collection 'sap_incident_docs' doesn't exist` | Qdrant do compose está vazio (esperado em ambiente novo) | Ver seção 6 |

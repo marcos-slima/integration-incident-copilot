@@ -137,6 +137,16 @@ def _get_client():
         return None
 
 
+def event_key(envelope) -> str:
+    """Chave de deduplicacao CloudEvents 1.0: o par (source, id).
+
+    Validacao 2026-10-07 (M-16): a especificacao so garante unicidade do
+    `id` DENTRO de uma `source`. Deduplicar so por `id` descartava eventos
+    legitimos de origens diferentes que por acaso repetiam o mesmo id
+    (contadores simples, "1", "2"...)."""
+    return f"{envelope.source}|{envelope.id}"
+
+
 def is_duplicate(event_id: str | None) -> bool:
     """Verifica se o evento ja foi visto e, se nao, faz o claim dele.
 

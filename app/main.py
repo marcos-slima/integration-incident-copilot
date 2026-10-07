@@ -4,8 +4,10 @@ import logging
 import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Security, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
@@ -356,6 +358,36 @@ class CspMiddleware:
 app.add_middleware(CspMiddleware)
 
 
+@app.exception_handler(RequestValidationError)
+def _validation_error_handler(request: Request, exc: RequestValidationError):
+    """Validacao 2026-10-07 (M-15): o 422 padrao do FastAPI devolve o campo
+    `input` de cada erro - o VALOR recebido. Em /diagnose, `payload` e
+    `description` aceitam ate 50 mil caracteres de log, com PII; um erro de
+    validacao devolvia tudo de volta (e para qualquer proxy/log no caminho).
+    Aqui sai so onde e por que falhou."""
+    errors = [
+        {"loc": list(err.get("loc", ())), "msg": err.get("msg", ""), "type": err.get("type", "")}
+        for err in exc.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": errors})
+
+
+@app.exception_handler(Exception)
+def _unhandled_error_handler(request: Request, exc: Exception):
+    """Validacao 2026-10-07 (M-15): 500 sem rastreabilidade. Agora cada erro
+    nao tratado ganha um `error_id`, logado junto com o stack trace - o
+    cliente reporta o id e o operador acha o log. Nenhum detalhe interno
+    (mensagem da excecao, caminho, SQL) vai para a resposta."""
+    error_id = uuid4().hex
+    logger.error(
+        "[erro_interno] error_id=%s %s %s", error_id, request.method, request.url.path, exc_info=exc
+    )
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "erro interno", "error_id": error_id},
+    )
+
+
 @app.exception_handler(DiagnosisOverloadedError)
 def _diagnosis_overloaded_handler(request: Request, exc: DiagnosisOverloadedError):
     """Capacidade esgotada nao e timeout: 503 + Retry-After (o cliente pode
@@ -540,8 +572,21 @@ def _status_body() -> dict:
     }
 
 
+def _caller_is_authenticated(request: Request) -> bool:
+    """Validacao 2026-10-07 (M-15): /health e /ready sao publicos (o kubelet
+    nao manda credencial), mas o corpo listava conectores configurados,
+    provider de LLM, Redis/Langfuse/GraphRAG ligados - reconhecimento de
+    graca para quem varre a porta. Detalhe so para quem ja e cliente
+    legitimo (X-API-Key valida ou sessao web). NAO conta falha no
+    auth_guard: probe sem chave e o caso normal, nao tentativa de ataque."""
+    provided = request.headers.get("X-API-Key")
+    if provided and settings.api_key and secrets.compare_digest(provided, settings.api_key):
+        return True
+    return verify_session_cookie(request) is not None
+
+
 @app.get("/health")
-def health() -> dict:
+def health(request: Request) -> dict:
     """Liveness probe - confirma apenas que o processo FastAPI esta de pe.
     NAO faz chamadas externas (Qdrant/Ollama) e sempre retorna 200.
 
@@ -551,12 +596,15 @@ def health() -> dict:
     Dependencias externas ficam em /ready (readiness).
 
     Tambem devolve o estado dos conectores/infra derivado do .env, que o
-    frontend (StatusView) consulta."""
+    frontend (StatusView) consulta - so para chamador autenticado (M-15).
+    Sem credencial, o corpo e so {"status": "ok"}."""
+    if not _caller_is_authenticated(request):
+        return {"status": "ok"}
     return {"status": "ok", **_status_body()}
 
 
 @app.get("/ready")
-def ready() -> Response:
+def ready(request: Request) -> Response:
     """Readiness probe - probe real em Qdrant/Ollama/Redis (DA-35). Retorna
     503 quando algum servico configurado esta degradado (A-11) ou quando
     uma dependencia obrigatoria do modo ativo nao esta configurada
@@ -571,7 +619,11 @@ def ready() -> Response:
         or (v == "not_applicable" and name not in required)
         for name, v in infra_probes.items()
     )
-    body = {"status": "ok" if all_ok else "degraded", **_status_body(), "services": infra_probes}
+    body: dict = {"status": "ok" if all_ok else "degraded"}
+    if _caller_is_authenticated(request):
+        # M-15: o status code (200/503) e o que o kubelet usa; o detalhe
+        # (quais servicos, quais conectores) so vai para chamador autenticado.
+        body |= {**_status_body(), "services": infra_probes}
     return JSONResponse(
         status_code=status.HTTP_200_OK if all_ok else status.HTTP_503_SERVICE_UNAVAILABLE,
         content=body,

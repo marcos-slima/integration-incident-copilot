@@ -86,14 +86,14 @@ def run_event_job(envelope_data: dict[str, Any]) -> dict[str, Any]:
     from app.models import IncidentEventEnvelope
 
     envelope = IncidentEventEnvelope(**envelope_data)
-    if idempotency.is_duplicate(envelope.id):
+    if idempotency.is_duplicate(idempotency.event_key(envelope)):
         return {"status": "duplicate", "cloudevents_id": envelope.id}
     try:
         result = run_diagnosis(to_incident_request(envelope)).model_dump(mode="json")
     except Exception:
-        idempotency.release(envelope.id)
+        idempotency.release(idempotency.event_key(envelope))
         raise
-    idempotency.mark_completed(envelope.id)
+    idempotency.mark_completed(idempotency.event_key(envelope))
     return result
 
 

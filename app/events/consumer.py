@@ -77,7 +77,7 @@ def _run_diagnosis_background(envelope: IncidentEventEnvelope) -> None:
     event_id = getattr(envelope, "id", None)
     try:
         result = run_diagnosis(to_incident_request(envelope))
-        idempotency.mark_completed(event_id)
+        idempotency.mark_completed(idempotency.event_key(envelope))
         _logger.info(
             "[events] Diagnostico concluido em background — "
             "cloudevents.id=%s diagnosis_confidence=%.2f provider=%s",
@@ -88,7 +88,7 @@ def _run_diagnosis_background(envelope: IncidentEventEnvelope) -> None:
     except Exception:
         # Libera o id: sem isso a reentrega/reprocessamento do mesmo
         # cloudevents.id seria descartado como duplicata.
-        idempotency.release(event_id)
+        idempotency.release(idempotency.event_key(envelope))
         # DLQ: log estruturado com todos os campos para reprocessamento
         # manual. Nao e silencioso - nivel ERROR garante que o operador
         # veja (alertas de log tipicamente filtram por nivel >= ERROR).
@@ -154,7 +154,7 @@ def handle_incident_event_async(
         job_id = enqueue_incident_event(envelope.model_dump(mode="json"))
         return {"status": "queued", "job_id": job_id}
 
-    if idempotency.is_duplicate(event_id):
+    if idempotency.is_duplicate(idempotency.event_key(envelope)):
         _logger.warning(
             "[events] Evento duplicado descartado (idempotencia) — cloudevents.id=%s",
             event_id,

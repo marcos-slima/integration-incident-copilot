@@ -7,7 +7,9 @@ Metodos implementados (subconjunto deliberado do protocolo A2A -
 suficiente para o criterio de aceite da proposta, sem reimplementar
 streaming/push notifications que este agente sincrono nao precisa):
 
-  message/send  - envia uma mensagem, executa o diagnostico (sincrono)
+  message/send  - envia uma mensagem e executa o diagnostico; sincrono por
+                  default, assincrono com params.configuration.blocking=false
+                  (resposta imediata em `working`; consultar com tasks/get)
                   e retorna a task ja em estado terminal
   tasks/get     - consulta uma task pelo id (util para clientes que
                   preferem o padrao poll, mesmo a execucao sendo
@@ -106,7 +108,9 @@ async def handle_jsonrpc(
             return JSONResponse(
                 _jsonrpc_error(request_id, -32602, "Invalid params: 'message' e obrigatorio")
             )
-        task = await task_manager.handle_message(message)
+        configuration = params.get("configuration") or {}
+        blocking = configuration.get("blocking", True) is not False
+        task = await task_manager.handle_message(message, blocking=blocking)
         return JSONResponse(_jsonrpc_result(request_id, task.to_dict()))
 
     if method == "tasks/get":

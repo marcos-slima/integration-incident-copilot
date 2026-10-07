@@ -101,7 +101,12 @@ CAPABILITY_REGISTRY: dict[str, ToolPolicy] = {
         # Pode envolver dado real de conector (nao mock) na resposta -
         # mesma classificacao usada pelo AI Gateway (DA-26).
         data_sensitivity="confidential",
-        timeout_seconds=60.0,
+        # M-27: aplicado de fato (teto do grafo, min com
+        # DIAGNOSIS_TIMEOUT_SECONDS). 60 s cortava diagnosticos com LLM
+        # local (~80 s medidos); 180 s = o default do pipeline.
+        timeout_seconds=180.0,
+        # Retry so em sobrecarga do semaforo (ver server.py).
+        max_retries=1,
     ),
     "list_connectors": ToolPolicy(
         name="list_connectors",

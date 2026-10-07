@@ -95,3 +95,26 @@ def test_m16_mesmo_id_em_origens_diferentes_nao_e_duplicata():
     assert idempotency.is_duplicate(idempotency.event_key(a)) is False
     assert idempotency.is_duplicate(idempotency.event_key(b)) is False
     assert idempotency.is_duplicate(idempotency.event_key(a)) is True
+
+
+# ---------------------------------------------------------------------------
+# M-27: teto de tempo do MCP aplicado ao grafo (nunca acima do global)
+# ---------------------------------------------------------------------------
+
+
+def test_m27_timeout_menor_prevalece(monkeypatch):
+    import time
+
+    from app.agent import graph
+    from app.exceptions import DiagnosisTimeoutError
+
+    class _Lento:
+        def invoke(self, state):
+            time.sleep(0.5)
+            return state
+
+    monkeypatch.setattr(graph, "get_graph", lambda: _Lento())
+    monkeypatch.setattr(graph.settings, "diagnosis_timeout_seconds", 30.0)
+    with pytest.raises(DiagnosisTimeoutError, match="0.05s"):
+        graph._invoke_graph_with_timeout({}, 0.05)
+    time.sleep(0.6)  # deixa a thread terminar e devolver a vaga do semaforo

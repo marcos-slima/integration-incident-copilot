@@ -156,7 +156,9 @@ _graph_invoke_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="diagn
 _graph_invoke_semaphore = threading.Semaphore(4)
 
 
-def _invoke_graph_with_timeout(initial_state: CopilotState) -> CopilotState:
+def _invoke_graph_with_timeout(
+    initial_state: CopilotState, timeout_seconds: float | None = None
+) -> CopilotState:
     """Roda get_graph().invoke(initial_state) com um teto de tempo
     (settings.diagnosis_timeout_seconds) para o pipeline INTEIRO -
     retrieval + GraphRAG + 1-2 chamadas LLM do ReAct + relatorio.
@@ -186,13 +188,16 @@ def _invoke_graph_with_timeout(initial_state: CopilotState) -> CopilotState:
     # ainda rodando apos o timeout: o semaforo deixava de limitar a
     # concorrencia real e as chamadas novas ficavam na fila do executor.
     future.add_done_callback(lambda _f: _graph_invoke_semaphore.release())
+    # M-27: o chamador pode pedir um teto MENOR (ToolPolicy do MCP), nunca maior.
+    limit = settings.diagnosis_timeout_seconds
+    if timeout_seconds is not None:
+        limit = min(limit, timeout_seconds)
     try:
-        return future.result(timeout=settings.diagnosis_timeout_seconds)
+        return future.result(timeout=limit)
     except FutureTimeoutError as exc:
         raise DiagnosisTimeoutError(
-            f"Diagnostico excedeu o timeout de {settings.diagnosis_timeout_seconds}s "
-            "(settings.diagnosis_timeout_seconds) - o pipeline de retrieval/GraphRAG/LLM "
-            "nao terminou a tempo."
+            f"Diagnostico excedeu o timeout de {limit}s - o pipeline de "
+            "retrieval/GraphRAG/LLM nao terminou a tempo."
         ) from exc
 
 
@@ -201,6 +206,7 @@ def run_diagnosis(
     request: IncidentRequest,
     debug: bool = False,
     llm_model: str | None = None,
+    timeout_seconds: float | None = None,
 ) -> DiagnosisResponse:
     """Executa o grafo completo para um incidente.
 
@@ -234,7 +240,11 @@ def run_diagnosis(
         "incident_id": incident_id,
     }
     started_at = time.monotonic()
-    final_state = _invoke_graph_with_timeout(initial_state)
+    final_state = (
+        _invoke_graph_with_timeout(initial_state)
+        if timeout_seconds is None
+        else _invoke_graph_with_timeout(initial_state, timeout_seconds)
+    )
     latency_ms = int((time.monotonic() - started_at) * 1000)
     diagnosis = final_state.get("diagnosis", {})
 

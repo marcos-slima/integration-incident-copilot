@@ -32,7 +32,10 @@ def get_email_sender() -> EmailSender | None:
     if provider == "mailpit":
         from app.notifications.mailpit_email import MailpitEmailSender
 
-        return MailpitEmailSender(host=settings.smtp_host, port=settings.smtp_port)
+        # M-12: SMTP_HOST vazio = o host do servico no compose.
+        return MailpitEmailSender(
+            host=settings.smtp_host or "mailpit", port=settings.smtp_port or 1025
+        )
 
     if provider == "resend":
         from app.notifications.resend_email import ResendEmailSender

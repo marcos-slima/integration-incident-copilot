@@ -175,7 +175,9 @@ def test_failed_diagnosis_becomes_failed_task_not_http_error(monkeypatch):
     body = response.json()
     assert response.status_code == 200  # erro de negocio, nao de transporte
     assert body["result"]["status"]["state"] == "failed"
-    assert "LLM indisponivel" in body["result"]["error"]
+    # M-28: o detalhe interno nao vai ao agente externo; so o error_id.
+    assert "LLM indisponivel" not in body["result"]["error"]
+    assert "error_id=" in body["result"]["error"]
 
 
 def test_a2a_endpoint_requires_api_key_when_configured(monkeypatch):

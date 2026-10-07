@@ -95,6 +95,13 @@ jobs:
       - name: Alembic upgrade head (banco limpo)
         run: uv run alembic upgrade head
 
+      # Validacao 2026-10-07 (DB-01): o metadata do alembic/env.py nao
+      # importava SystemContract nem Incident, e `alembic revision
+      # --autogenerate` propunha DROP TABLE da tabela append-only. `alembic
+      # check` falha se modelos e migrations divergirem em qualquer direcao.
+      - name: Alembic check (modelos == migrations)
+        run: uv run alembic check
+
       - name: Validar as queries dos dashboards no Postgres real
         run: uv run python scripts/validate_dashboards.py --dsn "$DATABASE_URL"
 

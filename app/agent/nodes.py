@@ -307,80 +307,122 @@ def web_search_node(state: CopilotState) -> CopilotState:
     return {"web_search_results": results}
 
 
-# Padroes de prompt injection mais comuns em contexto SAP/LLM
-# Sem "(?i)" por padrao: a partir do Python 3.11, uma flag inline só é
-# valida no INICIO da expressao inteira - repeti-la em cada padrao
-# individual (como estava antes) quebra o re.compile("|".join(...))
-# com "global flags not at the start of the expression" assim que mais
-# de um padrao com (?i) e unido. Case-insensitive agora e aplicado uma
-# unica vez via re.IGNORECASE no re.compile (ver _get_injection_re).
-# Adicionados padroes em portugues (PT-BR) para cobrir casos locais.
+# Padroes de prompt injection (SEC-04, validacao 2026-10-07).
+#
+# Os padroes sao escritos em ASCII minusculo e casam contra uma copia
+# NORMALIZADA do texto (_normalize_for_detection): NFKC (largura total,
+# ligaduras), sem diacriticos ("instruções" -> "instrucoes", "você" ->
+# "voce") e sem caracteres de largura zero. A substituicao volta para as
+# posicoes do texto ORIGINAL - o resto do texto chega ao LLM intacto.
+# Antes so o ASCII exato casava: "Ignore as instruções anteriores" (com
+# acento, imperativo) e "ｉｇｎｏｒｅ previous instructions" passavam.
+#
+# Lista de bloqueio continua sendo defesa em profundidade, nao protecao: o
+# isolamento estrutural (dado nao confiavel fora do papel da instrucao)
+# depende de mudar o prompt e de medir no promptfoo (gate
+# prompt_digest_measured, DA-53).
+_PT_VERBO_IGNORAR = (
+    r"(?:ignor(?:e|a|ar|em)|desconsider(?:e|a|ar|em)|esquec(?:a|e|er|am)"
+    r"|desprez(?:e|a|ar)|descart(?:e|a|ar))"
+)
+_PT_OBJETO = (
+    r"(?:(?:tod[ao]s?\s+)?(?:as|os|suas|tuas|estas|essas)\s+)?"
+    r"(?:instruc(?:ao|oes)|comandos?|regras?|orientac(?:ao|oes)|diretrizes?|prompts?)"
+    r"(?:\s+(?:anteriores|acima|previas|precedentes|iniciais|do\s+sistema|de\s+sistema))?"
+)
 _INJECTION_PATTERNS = [
-    # Instrucoes diretas ao modelo (english + portugues)
-    r"ignore\s+(all\s+)?(previous|prior|above)\s+instructions?",
-    r"(ignorar|desconsiderar|esquecer)\s+(todas\s+as\s+|todos\s+os\s+)?((?:instrucoes|comandos)\s+(anteriores|precedentes|acima)|precedentes|instrucoes)",
-    r"disregard\s+(all\s+)?(previous|prior|above)\s+instructions?",
-    r"disconsiderar\s+(todas\s+as\s+)?(instrucoes\s+(anteriores|precedentes|acima)|precedentes)",
-    r"forget\s+(all\s+)?(previous|prior|above)\s+instructions?",
-    r"esquecer\s+(todas\s+as\s+)?(instrucoes\s+(anteriores|precedentes|acima)|precedentes)",
-    r"you\s+are\s+now\s+a",
-    r"voce\s+(agora\s+)?e\s+(um|uma)",
-    r"act\s+as\s+(a\s+)?(?:different|new|another)",
-    r"atuar\s+como\s+(um|uma)\s+(novo|nova|diferente)",
-    r"new\s+instructions?:",
-    r"instrucoes?\s+(novo|nova|anteriores|precedentes|acima)\s*:",
-    r"system\s*:\s*you",
-    r"\[system\]",
-    r"\<\s*system\s*\>",
-    # Exfiltracao de dados (english + portugues)
-    r"print\s+(all\s+)?(your\s+)?(system\s+)?prompt",
-    r"imprimir\s+(seu\s+)?prompt\s+(de\s+sistema)?",
-    r"reveal\s+(your\s+)?(system\s+)?prompt",
-    r"revelar\s+(seu\s+)?prompt\s+(de\s+sistema)?",
-    r"show\s+(me\s+)?(your\s+)?(instructions?|prompt|context)",
-    r"mostrar\s+(me\s+)?(suas\s+)?(instrucoes?|prompt|contexto)",
-    # Jailbreak comum (english + portugues)
-    r"DAN\s+mode",
-    r"modo\s+DAN",
-    r"developer\s+mode",
-    r"modo\s+desenvolvedor",
-    r"jailbreak",
-    r"quebra\s+de\s+restricoes?",
-    # Outros padrões comuns (english + portugues)
-    r"you\s+must\s+now\s+(?:output|generate|create)",
-    r"voce\s+(deve|precisa)\s+(agora\s+)?(?:gerar|criar|emitir)",
+    # --- ingles ---
+    (
+        r"(?:ignore|disregard|forget|override)\s+(?:all\s+|any\s+)?(?:the\s+|your\s+)?"
+        r"(?:previous|prior|above|earlier|preceding|system)\s+(?:instructions?|prompts?|rules|commands)"
+    ),
     r"ignore\s+all\s+previous\s+commands",
-    r"ignorar\s+todas\s+as\s+comandos\s+anteriores",
+    r"you\s+are\s+now\s+(?:a|an|the)\b",
+    r"from\s+now\s+on,?\s+you\s+(?:are|will|must)",
+    r"act\s+as\s+(?:a\s+)?(?:different|new|another)",
+    r"pretend\s+(?:to\s+be|you\s+are)",
+    r"new\s+instructions?\s*:",
+    r"system\s*:\s*you",
+    r"\[\s*system\s*\]",
+    r"<\s*/?\s*system\s*>",
+    (
+        r"(?:print|reveal|show|repeat|output)\s+(?:me\s+)?(?:all\s+)?(?:your\s+|the\s+)?"
+        r"(?:system\s+)?(?:prompt|instructions?|context)"
+    ),
+    r"you\s+must\s+now\s+(?:output|generate|create|respond)",
     r"you\s+are\s+a\s+(?:hacker|attacker|enemy)",
-    r"voce\s+e\s+(um|uma)\s+(hacker|atirador|inimigo)",
+    r"dan\s+mode",
+    r"developer\s+mode",
+    r"jailbreak",
+    # --- portugues (normalizado: sem acento) ---
+    _PT_VERBO_IGNORAR + r"\s+" + _PT_OBJETO,
+    _PT_VERBO_IGNORAR + r"\s+tudo(?:\s+(?:acima|o\s+que\s+foi\s+dito|anterior|antes))?",
+    (
+        r"(?:a\s+partir\s+de\s+agora,?\s+)?voce\s+(?:agora\s+)?(?:e|sera|passa\s+a\s+ser)"
+        r"\s+(?:um|uma|o|a)\b"
+    ),
+    r"a\s+partir\s+de\s+agora,?\s+(?:voce|responda|aja|atue)",
+    r"(?:aja|atue|atuar|agir)\s+como\s+(?:se\s+fosse\s+)?(?:um|uma|o|a)\b",
+    r"finja\s+(?:ser|que\s+(?:e|voce))",
+    r"novas?\s+instruc(?:ao|oes)\s*:",
+    r"instruc(?:ao|oes)\s+(?:anteriores|precedentes|acima)\s*:",
+    (
+        r"(?:imprim(?:a|ir)|revel(?:e|ar)|mostr(?:e|ar)|repit(?:a|ir)|exib(?:a|ir))\s+(?:me\s+)?"
+        r"(?:o\s+|seu\s+|suas?\s+|as\s+)?(?:prompt|instruc(?:ao|oes)|contexto)"
+    ),
+    r"voce\s+(?:deve|precisa)\s+(?:agora\s+)?(?:gerar|criar|emitir|responder)",
+    r"modo\s+(?:dan|desenvolvedor)",
+    r"quebra\s+de\s+restric(?:ao|oes)",
+    # --- espanhol (LATAM) ---
+    r"(?:ignora|olvida|descarta)\s+(?:todas\s+)?(?:las\s+)?instrucciones\s+(?:anteriores|previas)",
+    r"ahora\s+eres\s+(?:un|una)\b",
 ]
 
 _INJECTION_RE = None
+_INVISIBLE = frozenset("\u200b\u200c\u200d\u200e\u200f\u2060\ufeff\u00ad")
 
 
 def _get_injection_re():
     global _INJECTION_RE
     if _INJECTION_RE is None:
-        import re
-
-        _INJECTION_RE = re.compile("|".join(_INJECTION_PATTERNS), re.IGNORECASE)
+        _INJECTION_RE = re.compile("|".join(f"(?:{p})" for p in _INJECTION_PATTERNS))
     return _INJECTION_RE
+
+
+def _normalize_for_detection(
+    text: str, invisivel_vira_espaco: bool = False
+) -> tuple[str, list[int]]:
+    """Copia normalizada (NFKC, sem diacritico, minuscula) e, para cada
+    caractere dela, o indice do caractere de origem. Caracteres de largura
+    zero somem ("ign\u200bore") ou viram espaco ("previous\u200binstructions");
+    sanitize_untrusted_input testa as duas formas."""
+    import unicodedata
+
+    chars: list[str] = []
+    origem: list[int] = []
+    for i, ch in enumerate(text):
+        if ch in _INVISIBLE:
+            if invisivel_vira_espaco:
+                chars.append(" ")
+                origem.append(i)
+            continue
+        base = unicodedata.normalize("NFKC", ch)
+        for c in unicodedata.normalize("NFD", base):
+            if unicodedata.combining(c):
+                continue
+            for low in c.lower():
+                chars.append(low)
+                origem.append(i)
+    return "".join(chars), origem
 
 
 def sanitize_untrusted_input(text: str | None, field_name: str = "input") -> str:
     """Sanitiza entrada nao confiavel antes de incluir no prompt LLM.
 
-    Remove ou neutraliza padroes de prompt injection conhecidos.
-    Nao e uma protecao completa — defense in depth, nao silver bullet.
-    Campos sanitizados: description, logs, payload, connector_data,
-    chunks do RAG (que podem vir de PDFs externos) e resultados de
-    busca web (paginas de terceiros, mesmo grau de confianca que um
-    PDF externo). Avaliacao externa (nova revisao, P1): antes desta
-    correcao, a docstring ja afirmava isso, mas description e o
-    resultado de busca web eram interpolados CRUS em
-    _build_diagnosis_prompt() - o unico campo de fato nao confiavel
-    (digitado livremente pelo usuario) que chegava ao LLM sem passar
-    por aqui era justamente o mais obvio.
+    Neutraliza padroes conhecidos de prompt injection (ver comentario de
+    _INJECTION_PATTERNS) e redige PII. Defesa em profundidade, nao
+    protecao completa. Campos tratados: description, logs, payload,
+    connector_data, chunks do RAG (PDFs externos) e resultados de busca web.
 
     Args:
         text: Texto a sanitizar
@@ -392,31 +434,35 @@ def sanitize_untrusted_input(text: str | None, field_name: str = "input") -> str
     if not text:
         return ""
 
-    # Remove chars de largura zero (Zero Widthjoiner, Zero Width Non-Joiner,
-    # Byte Order Mark, etc.) que podem ser usados para evadir regex
-    text = re.sub(r"[\u200B\u200C\u200D\uFEFF\u00AD]", "", text)
+    trechos: list[tuple[int, int]] = []
+    for como_espaco in (False, True):
+        normalizado, origem = _normalize_for_detection(text, como_espaco)
+        for m in _get_injection_re().finditer(normalizado):
+            if m.end() > m.start():
+                trechos.append((origem[m.start()], origem[m.end() - 1] + 1))
 
-    original_len = len(text)
-    pattern = _get_injection_re()
-
-    # Substitui padroes de injection por marcador explicito
-    sanitized = pattern.sub("[CONTEUDO_REMOVIDO_INJECTION]", text)
-
-    if len(sanitized) != original_len:
-        import logging
-
+    if trechos:
+        partes: list[str] = []
+        cursor = 0
+        for ini, fim in sorted(trechos):
+            ini = max(ini, cursor)  # sobreposicao com o trecho anterior
+            partes.append(text[cursor:ini])
+            if fim > ini:
+                partes.append("[CONTEUDO_REMOVIDO_INJECTION]")
+            cursor = max(cursor, fim)
+        partes.append(text[cursor:])
+        text = "".join(partes)
         logging.getLogger(__name__).warning(
             "Possivel prompt injection detectado no campo '%s' — conteudo neutralizado",
             field_name,
         )
 
-    # Avaliacao externa (medio prazo, item 4): redaction de PII "antes
-    # do prompt" - e-mail/CPF/numero de IDoc nunca chegam ao LLM neste
-    # campo (ver app/redaction.py). Depois da sanitizacao de injection
-    # (ordem nao importa para correcao, mas mantem os dois tipos de
-    # neutralizacao juntos, no mesmo lugar onde este campo ja era
-    # tratado como nao-confiavel).
-    return redact_pii_text(sanitized)
+    # Caracteres invisiveis restantes saem do texto que vai ao LLM.
+    text = "".join(ch for ch in text if ch not in _INVISIBLE)
+
+    # Avaliacao externa (medio prazo, item 4): redaction de PII "antes do
+    # prompt" - e-mail/CPF/numero de IDoc nunca chegam ao LLM (app/redaction.py).
+    return redact_pii_text(text)
 
 
 # Linhas de excecao relevantes em stack traces SAP/Java/Groovy/XSLT —

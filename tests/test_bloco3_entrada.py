@@ -118,3 +118,17 @@ def test_m27_timeout_menor_prevalece(monkeypatch):
     with pytest.raises(DiagnosisTimeoutError, match="0.05s"):
         graph._invoke_graph_with_timeout({}, 0.05)
     time.sleep(0.6)  # deixa a thread terminar e devolver a vaga do semaforo
+
+
+def test_favicon_da_spa_servido(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app import main
+
+    (tmp_path / "index.html").write_text("<html></html>", encoding="utf-8")
+    (tmp_path / "favicon.svg").write_text("<svg/>", encoding="utf-8")
+    monkeypatch.setattr(main, "_STATIC_DIST_INDEX", tmp_path / "index.html")
+    client = TestClient(main.app)
+    r = client.get("/favicon.svg")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("image/svg+xml")
+    assert client.get("/icons.svg").status_code == 404  # nao existe no tmp

@@ -265,6 +265,9 @@ def emit_incident(report: DriftReport, *, connector_type: str) -> bool:
 
         handle_incident_event(
             IncidentEventEnvelope(
+                # M-16: CloudEvents 1.0 estrito - sem specversion o envelope
+                # e recusado (achado pelo e2e da DA-52 na validacao do Bloco 3).
+                specversion="1.0",
                 type=INCIDENT_DETECTED_EVENT_TYPE,
                 source="schema-drift-detector",
                 # id unico por observacao: CloudEvents exige, e replay

@@ -178,6 +178,12 @@ class Settings(BaseSettings):
     ollama_host: str = "http://127.0.0.1:11434"
     llm_model: str = "qwen3-coder-next:latest"
     embedding_model: str = "nomic-embed-text"
+    # DA-38: "ollama" (default, EMBEDDING_MODEL via Ollama) ou "fastembed"
+    # (BAAI/bge-small-en-v1.5 em processo). Validacao 2026-10-07: era lido so
+    # de os.environ no import do retriever - posto no .env, NAO valia (o
+    # pydantic le o .env para o Settings, mas nao o exporta para o ambiente);
+    # o container e o `uv run` local caiam no Ollama sem aviso.
+    embedding_backend: Literal["ollama", "fastembed"] = "ollama"
 
     # OpenAI / compativel com OpenAI (inclui endpoints locais tipo
     # vLLM/LM Studio que implementam a mesma API) - so relevante se

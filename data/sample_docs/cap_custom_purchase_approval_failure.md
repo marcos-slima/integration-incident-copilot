@@ -23,8 +23,13 @@ externo com HTTP 422, ao inves de processar a aprovacao.
    validacao nova
 
 ## Resolucao tipica
-Corrigir a anotacao `@mandatory`/`@assert.range` no modelo CDS para
-ficar menos restritiva, ou publicar uma nova revisao do endpoint
-(ex: `PurchaseOrderApprovalsV2`) no deploy do CAP, para nao forcar
-clientes ja integrados a se adaptarem de imediato as validacoes mais
-rigidas do modelo de dados.
+Tratar a validacao como regra de negocio, nao como obstaculo: se o
+campo e de fato obrigatorio (ex: `approverId` numa aprovacao), o
+consumidor externo e que precisa ser corrigido para envia-lo - afrouxar
+`@mandatory`/`@assert.range` no CDS para "o erro sumir" deixa passar
+aprovacoes sem aprovador e move o problema para auditoria.
+Se a validacao nova quebrou consumidores que ainda nao podem ser
+atualizados, publicar uma nova revisao do endpoint (ex:
+`PurchaseOrderApprovalsV2`) com a regra nova e manter a anterior por um
+periodo de transicao combinado, com data de desligamento - em vez de
+remover a regra.

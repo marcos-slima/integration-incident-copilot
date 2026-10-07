@@ -36,7 +36,9 @@ QDRANT_URL = settings.qdrant_url
 
 DEFAULT_SCORE_THRESHOLD = 0.5
 HYBRID_PREFETCH_LIMIT = 20  # candidatos por perna (dense/sparse) antes da fusao
-RERANKER_MODEL = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"  # DA-29: mmarco supera baseline em +7pp Hit@1, +4pp MRR@5, 3.5x mais rapido
+# DA-29 (ver docstring de _get_reranker). Mantenha em UMA linha: o gate
+# reranker_invariant le esta atribuicao por regex.
+RERANKER_MODEL = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
 RERANKER_TOP_K = 3  # quantos candidatos retornar apos o reranking
 
 # DA-17: gate denso do fallback para `sap_reference_library` — so consulta a
@@ -279,10 +281,14 @@ def _retrieve_dense_only(
 def _get_reranker() -> CrossEncoder:
     """Carrega o cross-encoder de reranking (cache — carrega uma vez por processo).
 
-    Modelo: mmarco-mMiniLMv2-L12-H384-v1 (multilingual, ~120MB) — escolhido
-    na DA-29 por superar o baseline ms-marco-MiniLM-L-6-v2 em +7pp Hit@1 e
-    +4pp MRR@5 nos incidentes SAP/integração em PT-BR/EN, sendo 3.5x mais
-    rapido que modelos L-12 em FP32 (ver docs/RERANKER_BENCHMARK.md).
+    Modelo: mmarco-mMiniLMv2-L12-H384-v1 (multilingual) — escolhido na DA-29.
+    Re-medido em 2026-10-07 (M-20, 18 consultas in-scope): Hit@1 17/18 contra
+    16/18 do baseline ms-marco-MiniLM-L-6-v2 - UMA consulta de diferenca,
+    McNemar p=1.0, IC95% [+0.000, +0.167]: nao e uma vantagem demonstrada.
+    Latencia media ~1,45x a do L-6 e ~0,74x a do L-12 (3,6x mais rapido so em
+    relacao ao bge-reranker-base). A escolha se sustenta por ser
+    multilingue (consultas em PT-BR), nao por "acertar mais". Ver
+    docs/RERANKER_BENCHMARK.md e data/eval/reranker_benchmark_results.json.
     """
     return CrossEncoder(RERANKER_MODEL)
 
@@ -428,8 +434,11 @@ def _retrieve_unified(
     # motivo de a DA-45 existir. Com corpus maior (o ingest estava em 26%
     # quando medido), reavalie: mais documentos quase synonymous empurram
     # o max dos falsos para cima, e 0.665 pode voltar a vazar.
-    # A reavaliacao e' scripts/calibrate_reference_fallback.py (queries
-    # versionadas — sem ele esta medicao nao era reproduzivel).
+    # Validacao 2026-10-07 (M-23): este comentario citava
+    # scripts/calibrate_reference_fallback.py, que NAO existe no repositorio -
+    # a medicao acima nao e reproduzivel daqui. Ao recalibrar, registre o
+    # indice medido (data/index_manifest.json, gerado pelo ingest: pontos,
+    # identidade do embedding, data) junto com o novo valor.
 
     incidents_hits = _retrieve_hybrid(query, COLLECTIONS["incidents"], top_k)
     all_hits: list[dict] = list(incidents_hits)

@@ -48,8 +48,8 @@
     ],
     "expected_keywords": [
       "paginacao",
-      "top",
-      "filter"
+      "filtro",
+      "timeout"
     ],
     "interface_type": "odata",
     "difficulty": "easy",
@@ -63,7 +63,7 @@
     "expected_keywords": [
       "pool",
       "gateway",
-      "work process"
+      "processos de trabalho"
     ],
     "interface_type": "rfc",
     "difficulty": "medium",
@@ -75,9 +75,9 @@
       "ariba_po_supplier_mismatch.md"
     ],
     "expected_keywords": [
-      "VENDNR",
-      "LIFNR",
-      "CIG"
+      "ANID",
+      "LFA1",
+      "mestre de fornecedor"
     ],
     "interface_type": "ariba",
     "difficulty": "medium",
@@ -90,7 +90,7 @@
     ],
     "expected_keywords": [
       "ITSM",
-      "webhook",
+      "cmdb_ci",
       "RFC"
     ],
     "interface_type": "servicenow",
@@ -103,9 +103,9 @@
       "salesforce_case_sap_sync_failure.md"
     ],
     "expected_keywords": [
-      "OAuth",
+      "middleware",
       "CPI",
-      "sync"
+      "token"
     ],
     "interface_type": "salesforce",
     "difficulty": "medium",
@@ -131,9 +131,9 @@
       "workday_successfactors_sync_error.md"
     ],
     "expected_keywords": [
-      "HCM",
-      "employee",
-      "sync"
+      "Employee Central",
+      "Person_ID_External",
+      "evento de integracao"
     ],
     "interface_type": "workday",
     "difficulty": "hard",
@@ -147,7 +147,7 @@
     "expected_keywords": [
       "material",
       "centro",
-      "MM03"
+      "BD87"
     ],
     "interface_type": "rfc",
     "difficulty": "easy",
@@ -281,5 +281,53 @@
     "interface_type": null,
     "difficulty": "out_of_scope",
     "notes": "fora do escopo — expiracao de certificado de usuario"
+  },
+  {
+    "query": "tile do Fiori Launchpad nao aparece para o usuario apos atribuir catalogo",
+    "expected_sources": [],
+    "expected_keywords": [],
+    "interface_type": null,
+    "difficulty": "out_of_scope",
+    "notes": "validacao 2026-10-07 (M-19): sem documento de Fiori/autorizacao de catalogo na base"
+  },
+  {
+    "query": "job em background cancelado na SM37 por falta de memoria",
+    "expected_sources": [],
+    "expected_keywords": [],
+    "interface_type": null,
+    "difficulty": "out_of_scope",
+    "notes": "validacao 2026-10-07 (M-19): sem documento de jobs/memoria ABAP na base"
+  },
+  {
+    "query": "transporte STMS terminou com codigo de retorno 8 no import",
+    "expected_sources": [],
+    "expected_keywords": [],
+    "interface_type": null,
+    "difficulty": "out_of_scope",
+    "notes": "validacao 2026-10-07 (M-19): sem documento de transporte na base"
+  },
+  {
+    "query": "extracao delta do BW perdeu registros apos reinicializacao",
+    "expected_sources": [],
+    "expected_keywords": [],
+    "interface_type": null,
+    "difficulty": "out_of_scope",
+    "notes": "validacao 2026-10-07 (M-19): sem documento de BW/extracao na base"
+  },
+  {
+    "query": "relatorio de despesas do Concur rejeitado pela politica de viagem",
+    "expected_sources": [],
+    "expected_keywords": [],
+    "interface_type": null,
+    "difficulty": "out_of_scope",
+    "notes": "validacao 2026-10-07 (M-19): sem documento de Concur na base"
+  },
+  {
+    "query": "licenca do sistema SAP expirada na transacao SLICENSE",
+    "expected_sources": [],
+    "expected_keywords": [],
+    "interface_type": null,
+    "difficulty": "out_of_scope",
+    "notes": "validacao 2026-10-07 (M-19): sem documento de licenciamento na base"
   }
 ]

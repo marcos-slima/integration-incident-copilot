@@ -886,7 +886,7 @@ def check_docs_markup_integrity(root: Path = REPO_ROOT) -> list[Finding]:
 
 
 _CODE_REF = re.compile(
-    r"`((?:app|tests|scripts)/[A-Za-z0-9_/]+\.py)(?:::([A-Za-z_][A-Za-z0-9_]*)|:(\d+))`"
+    r"`((?:app|tests|scripts)/[A-Za-z0-9_/]+\.py)(?:::([A-Za-z_][A-Za-z0-9_]*)|:(\d+)(?:-(\d+))?)`"
 )
 
 _MD_CITACAO = re.compile(r"`([\w./-]+\.md)`")
@@ -920,7 +920,9 @@ def check_docs_code_references(root: Path = REPO_ROOT) -> list[Finding]:
 
     for doc in _markdown_docs(root):
         texto = doc.read_text(encoding="utf-8")
-        for caminho, simbolo, linha in _CODE_REF.findall(texto):
+        # Validacao 2026-10-07: intervalo `arquivo.py:10-20` tambem confere
+        # (antes o regex nao casava e o intervalo passava sem verificacao).
+        for caminho, simbolo, linha, linha_fim in _CODE_REF.findall(texto):
             alvo = root / caminho
             if not alvo.is_file():
                 problemas.append(f"{doc.relative_to(root)}: {caminho} nao existe")
@@ -938,9 +940,14 @@ def check_docs_code_references(root: Path = REPO_ROOT) -> list[Finding]:
                     )
             elif linha:
                 total = len(alvo.read_text(encoding="utf-8").splitlines())
-                if int(linha) > total:
+                ultima = int(linha_fim or linha)
+                if ultima < int(linha):
                     problemas.append(
-                        f"{doc.relative_to(root)}: {caminho} tem {total} linhas, doc cita a {linha}"
+                        f"{doc.relative_to(root)}: {caminho}:{linha}-{linha_fim} invertido"
+                    )
+                elif ultima > total:
+                    problemas.append(
+                        f"{doc.relative_to(root)}: {caminho} tem {total} linhas, doc cita a {ultima}"
                     )
 
         for citacao in set(_MD_CITACAO.findall(texto)):
@@ -953,6 +960,140 @@ def check_docs_code_references(root: Path = REPO_ROOT) -> list[Finding]:
 
     if problemas:
         return _fail(check, "; ".join(sorted(problemas)[:8]))
+    return _ok(check)
+
+
+# ---------------------------------------------------------------------------
+# docs_env_vars (validacao 2026-10-07, Bloco 5 / DOC-01)
+# ---------------------------------------------------------------------------
+
+# Prefixos que, em backticks, sao nome de variavel de ambiente DESTE projeto.
+# Fora deles o gate nao opina (nomes ABAP, variaveis de shell, provider nao
+# suportado), pelo mesmo motivo do docstring de check_docs_code_references.
+_ENV_PREFIXOS = (
+    "A2A_",
+    "ADMIN_",
+    "AMQP_",
+    "API_",
+    "APIM_",
+    "ARIBA_",
+    "CAP_",
+    "CONFIDENTIAL_",
+    "CONTAINER_",
+    "DATABASE_",
+    "DIAGNOSIS_",
+    "EMAIL_",
+    "EMBEDDING_",
+    "EVENT_",
+    "EVENTS_",
+    "GRAFANA_",
+    "GRAPH_",
+    "LANGFUSE_",
+    "LLM_",
+    "MCP_",
+    "METRICS_",
+    "NEO4J_",
+    "OAUTH2_",
+    "ODATA_",
+    "OLLAMA_",
+    "PO_",
+    "POSTGRES_",
+    "PROMETHEUS_",
+    "QDRANT_",
+    "REDIS_",
+    "REFERENCE_",
+    "RERANK",
+    "RFC_",
+    "SALESFORCE_",
+    "SAP_",
+    "SENSITIVITY_",
+    "SERVICENOW_",
+    "SFSF_",
+    "SMS_",
+    "SOVEREIGNTY_",
+    "SUCCESSFACTORS_",
+    "USE_",
+    "WEB_SEARCH_",
+    "WORKDAY_",
+)
+# Identificadores com esses prefixos que NAO sao variaveis de ambiente.
+_NAO_SAO_VARIAVEIS = frozenset({"RFC_SYSTEM_INFO", "RFC_COMM_FAILURE", "RFC_PING"})
+
+_ENV_ATRIBUICAO_BLOCO = re.compile(r"^\s*(?:export\s+)?([A-Z][A-Z0-9]*_[A-Z0-9_]+)=", re.MULTILINE)
+_ENV_ATRIBUICAO_INLINE = re.compile(r"`(?:export\s+)?([A-Z][A-Z0-9]*_[A-Z0-9_]+)=")
+_ENV_BACKTICK = re.compile(r"`([A-Z][A-Z0-9]*_[A-Z0-9_]+)`")
+_ENV_FONTES = (
+    "app",
+    "scripts",
+    "alembic",
+    "deploy",
+    ".github",
+    "frontend/src",
+    "tests",
+)
+_ENV_ARQUIVOS = ("docker-compose.yml", ".env.example", "Dockerfile")
+
+
+def known_env_vars(root: Path = REPO_ROOT) -> set[str]:
+    """Variaveis que o projeto de fato le ou injeta.
+
+    Campos do `Settings` (pydantic le o nome do campo em maiusculas), mais
+    o que aparece em os.environ/getenv, `${VAR}` e chaves `VAR:`/`VAR=` de
+    compose, manifests, workflows, scripts e `.env.example`. Le o fonte em
+    vez de importar `app.config`, para o gate continuar leve.
+    """
+    nomes: set[str] = set()
+    config = (root / "app" / "config.py").read_text(encoding="utf-8")
+    nomes |= {m.upper() for m in re.findall(r"^    ([a-z][a-z0-9_]*)\s*:", config, re.MULTILINE)}
+    padroes = (
+        r"(?:environ(?:\.get)?\(?\[?|getenv\()\s*[\"']([A-Z][A-Z0-9_]+)",
+        r"\$\{?([A-Z][A-Z0-9_]+)",
+        r"^\s*#?\s*-?\s*(?:name:\s*)?([A-Z][A-Z0-9_]+)\s*[:=]",
+    )
+    arquivos = [root / a for a in _ENV_ARQUIVOS]
+    for pasta in _ENV_FONTES:
+        if (root / pasta).is_dir():
+            arquivos += [
+                f
+                for f in (root / pasta).rglob("*")
+                if f.is_file() and f.suffix in {".py", ".yaml", ".yml", ".ts", ".tsx", ".sh"}
+            ]
+    for arquivo in arquivos:
+        if not arquivo.is_file():
+            continue
+        texto = arquivo.read_text(encoding="utf-8", errors="ignore")
+        for padrao in padroes:
+            nomes |= set(re.findall(padrao, texto, flags=re.MULTILINE))
+    return nomes
+
+
+def check_docs_env_vars(root: Path = REPO_ROOT) -> list[Finding]:
+    """Variavel de ambiente citada na documentacao tem de existir no projeto.
+
+    O caso real (auditoria 2026-10-05): docs/CONNECTORS.md mandava configurar
+    `OAUTH2_CLIENT_ID`, `ODATA_BASE_URL`, `RFC_USER`, `SERVICENOW_INSTANCE`...
+    Nenhuma existia. Quem seguisse o guia ficava em modo mock SILENCIOSO -
+    o conector nao acha a credencial e cai no cenario de demonstracao, sem
+    erro. Confere duas formas: atribuicao (`VAR=` em bloco de codigo ou em
+    backticks) e nome em backticks com prefixo deste projeto.
+    """
+    check = "docs_env_vars"
+    conhecidas = known_env_vars(root)
+    problemas: set[str] = set()
+    for doc in _markdown_docs(root):
+        texto = doc.read_text(encoding="utf-8")
+        citadas: set[str] = set(_ENV_ATRIBUICAO_INLINE.findall(texto))
+        for bloco in re.findall(r"^```[^\n]*\n(.*?)^```", texto, flags=re.MULTILINE | re.DOTALL):
+            citadas |= set(_ENV_ATRIBUICAO_BLOCO.findall(bloco))
+        citadas |= {n for n in _ENV_BACKTICK.findall(texto) if n.startswith(_ENV_PREFIXOS)}
+        for nome in citadas - conhecidas - _NAO_SAO_VARIAVEIS:
+            problemas.add(f"{doc.relative_to(root)}: {nome}")
+    if problemas:
+        return _fail(
+            check,
+            f"{len(problemas)} variavel(is) citada(s) que o projeto nao le: "
+            + "; ".join(sorted(problemas)[:10]),
+        )
     return _ok(check)
 
 
@@ -1388,6 +1529,7 @@ GATES = {
     "prompt_digest_measured": check_prompt_digest,
     "docs_markup_integrity": check_docs_markup_integrity,
     "docs_code_references": check_docs_code_references,
+    "docs_env_vars": check_docs_env_vars,
     "connector_reachable": check_connector_reachable,
 }
 

@@ -6,7 +6,7 @@ Create Date: 2026-10-07
 
 A tabela e o historico das observacoes de contrato (invariante 16). O codigo
 so faz INSERT, mas nada impedia um UPDATE/DELETE manual ou de outro servico
-de reescrever o historico - e o docs/UC_09 afirmava que havia trigger. Agora
+de reescrever o historico - e o antigo docs/UC_09 (removido) afirmava que havia trigger. Agora
 ha: UPDATE e DELETE por linha levantam erro. TRUNCATE continua permitido
 (operacao administrativa explicita, usada pelos testes e2e).
 """

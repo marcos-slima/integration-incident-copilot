@@ -332,6 +332,11 @@ class Settings(BaseSettings):
     # True em producao atras de TLS (Kyma, DA-24): marca o cookie como
     # Secure. Local em HTTP puro deixa False, senao o browser descarta.
     session_cookie_secure: bool = False
+
+    # Validacao 2026-10-07 (DEP-01): /docs, /redoc e /openapi.json publicam o
+    # mapa completo da API (rotas admin, headers de chave). Default True
+    # preserva o "clone e rode"; o ConfigMap Kyma liga False em producao.
+    expose_api_docs: bool = True
     apim_oauth_token_url: str = ""
     apim_client_id: str = ""
     apim_client_secret: str = ""
@@ -429,6 +434,11 @@ class Settings(BaseSettings):
     # AMQP 1.0 — Solace Cloud / SAP Advanced Event Mesh (DA-32)
     # Consumidor assíncrono de eventos de incidente via fila AMQP.
     # AMQP_ENABLED=false desabilita sem remover a dependência aiormq.
+    # SEC-03: falhas de chave (API/admin/event mesh) por IP e por minuto antes
+    # do 429. Ver app/auth_guard.py.
+    auth_failures_per_minute: int = 10
+    # SEC-03: tentativas erradas do codigo de telefone antes de invalida-lo.
+    phone_code_max_attempts: int = 5
     amqp_enabled: bool = False
     amqp_host: str = ""
     amqp_port: int = 5671

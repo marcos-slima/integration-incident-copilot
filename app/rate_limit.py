@@ -47,13 +47,22 @@ def request_client_identity(request: Request) -> str:
     `request_client_identity_for_auth_endpoints()` que ignora headers de
     autenticação e usa IP + endpoint como bucket.
     """
+    # SEC-03: o header so define o bucket quando a chave e VALIDA. Antes,
+    # qualquer valor enviado virava um bucket novo - trocar o header a cada
+    # requisicao zerava o limite. A chave crua tambem nao vira mais chave do
+    # storage: o bucket usa um prefixo do hash.
+    import hashlib
+    import secrets as _secrets
+
+    from app.config import settings
+
     a2a_key = request.headers.get("X-A2A-Api-Key")
-    if a2a_key:
-        return f"a2a:{a2a_key}"
+    if a2a_key and settings.a2a_api_key and _secrets.compare_digest(a2a_key, settings.a2a_api_key):
+        return "a2a:" + hashlib.sha256(a2a_key.encode()).hexdigest()[:16]
 
     api_key = request.headers.get("X-API-Key")
-    if api_key:
-        return f"apikey:{api_key}"
+    if api_key and settings.api_key and _secrets.compare_digest(api_key, settings.api_key):
+        return "apikey:" + hashlib.sha256(api_key.encode()).hexdigest()[:16]
 
     if request.client:
         return request.client.host

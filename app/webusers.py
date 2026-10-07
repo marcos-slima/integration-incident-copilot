@@ -244,6 +244,7 @@ async def confirm_email(session: AsyncSession, *, username: str, token: str) -> 
     code = generate_phone_code()
     user.phone_code_hash = hash_phone_code(code, settings.session_secret)
     user.phone_code_expires_at = _now() + timedelta(seconds=PHONE_CODE_TTL_SECONDS)
+    user.phone_code_attempts = 0
     result = deliver_sms(user.phone, f"Codigo de ativacao: {code}")
     await session.commit()
     return ActivationTokens(
@@ -257,13 +258,24 @@ async def confirm_email(session: AsyncSession, *, username: str, token: str) -> 
 async def confirm_phone(session: AsyncSession, *, username: str, code: str) -> WebUser:
     """Etapa 2: codigo valido -> active. Hash apagado (unico-uso)."""
     user = await session.scalar(select(WebUser).where(WebUser.username == username))
-    if (
-        user is None
-        or user.status != STATUS_PENDING_PHONE
-        or not verify_phone_code(
-            code, user.phone_code_hash, user.phone_code_expires_at, settings.session_secret
-        )
+    if user is None or user.status != STATUS_PENDING_PHONE or user.phone_code_hash is None:
+        raise LookupError("codigo invalido ou usuario inexistente")
+    if not verify_phone_code(
+        code, user.phone_code_hash, user.phone_code_expires_at, settings.session_secret
     ):
+        # SEC-03: o codigo vigente aceita no maximo phone_code_max_attempts
+        # erros; depois e invalidado e so o admin reemite. Mesma resposta
+        # generica (nao revela que o limite foi atingido).
+        user.phone_code_attempts = (user.phone_code_attempts or 0) + 1
+        if user.phone_code_attempts >= settings.phone_code_max_attempts:
+            user.phone_code_hash = None
+            user.phone_code_expires_at = None
+            logger.warning(
+                "codigo de telefone invalidado apos %d tentativas (usuario=%s)",
+                user.phone_code_attempts,
+                username,
+            )
+        await session.commit()
         raise LookupError("codigo invalido ou usuario inexistente")
     user.status = STATUS_ACTIVE
     user.phone_verified_at = _now()
@@ -281,6 +293,11 @@ async def verify_login_db(session: AsyncSession | None, *, username: str, passwo
         return False
     user = await session.scalar(select(WebUser).where(WebUser.username == username))
     if user is None or user.status != STATUS_ACTIVE:
+        # mesmo custo do caminho com usuario (SEC-03): o tempo nao pode
+        # dizer se o usuario existe ou esta inativo
+        from app.auth import burn_password_check
+
+        burn_password_check(password)
         return False
     return _verify_hash(user.password_hash, username, password)
 

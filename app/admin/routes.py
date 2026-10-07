@@ -832,6 +832,7 @@ async def reissue_phone_code(user_id: str, session: SessionReq) -> dict[str, Any
     code = generate_phone_code()
     user.phone_code_hash = hash_phone_code(code, settings.session_secret)
     user.phone_code_expires_at = datetime.now(UTC) + timedelta(seconds=PHONE_CODE_TTL_SECONDS)
+    user.phone_code_attempts = 0
     result = deliver_sms(user.phone, f"Codigo de ativacao: {code}")
     await session.commit()
     return {
@@ -870,6 +871,10 @@ async def patch_user(
         if payload.status == "disabled":
             user.phone_code_hash = None
             user.phone_code_expires_at = None
+            # SEC-03: desativar derruba as sessoes ja emitidas
+            from app import auth_guard
+
+            auth_guard.revoke_user_sessions(user.username)
     if payload.email is not None:
         user.email = payload.email
     if payload.phone is not None:
@@ -882,5 +887,9 @@ async def patch_user(
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(user_id: str, session: SessionReq) -> None:
     user = await _get_user_or_404(session, user_id)
+    username = user.username
     await session.delete(user)
     await session.commit()
+    from app import auth_guard
+
+    auth_guard.revoke_user_sessions(username)

@@ -63,16 +63,36 @@ from app.llm.origins import resolve_provider_origin
 
 logger = logging.getLogger(__name__)
 
-# Excecoes que sinalizam "o provider esta inalcancavel agora" (rede,
-# timeout) - NAO erros de aplicacao (prompt invalido, resposta
-# malformada, credencial errada) que devem continuar subindo
-# normalmente em vez de mascarados por uma tentativa de fallback.
-# `ConnectionError` (builtin) e o que o pacote `ollama` levanta ao
-# nao conseguir conectar (ver ollama._client._request_raw, que
-# converte `httpx.ConnectError` nisso); providers OpenAI-compativeis
-# (langchain-openai, sobre httpx) levantam `httpx.ConnectError`/
-# `httpx.TimeoutException` diretamente.
-TRANSPORT_FAILURE_EXCEPTIONS = (ConnectionError, httpx.ConnectError, httpx.TimeoutException)
+# Excecoes que sinalizam "o provider esta inalcancavel agora" - ver o
+# docstring de _transport_failure_exceptions().
+
+
+def _transport_failure_exceptions() -> tuple[type[BaseException], ...]:
+    """Excecoes de "provider inalcancavel agora" (aciona fallback + breaker).
+
+    * `ConnectionError`: o pacote `ollama` converte falha de conexao nisso.
+    * `httpx.TransportError`: base de ConnectError, TimeoutException,
+      ReadError, RemoteProtocolError... (antes so ConnectError/Timeout - uma
+      conexao derrubada no meio da resposta subia como erro de aplicacao).
+    * SDK OpenAI (usado por langchain-openai p/ OpenAI e Azure): o SDK
+      ENVOLVE o erro do httpx em `openai.APIConnectionError` (e
+      `APITimeoutError`, subclasse dela), entao a tupla anterior nunca casava
+      com OpenAI/Azure: queda de rede nao acionava fallback nem breaker (R01).
+      `InternalServerError` (5xx do provider) entra pelo mesmo motivo; 4xx
+      (credencial, prompt invalido) continuam subindo como erro.
+    O SDK OpenAI e extra opcional - sem ele so as duas primeiras valem.
+    """
+    excecoes: list[type[BaseException]] = [ConnectionError, httpx.TransportError]
+    try:
+        import openai
+
+        excecoes += [openai.APIConnectionError, openai.InternalServerError]
+    except ImportError:
+        pass
+    return tuple(excecoes)
+
+
+TRANSPORT_FAILURE_EXCEPTIONS = _transport_failure_exceptions()
 
 
 def resolve_registry_config(cfg: Settings, model_name: str | None = None) -> Settings:

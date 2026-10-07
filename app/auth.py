@@ -142,9 +142,20 @@ def verify_password(users: dict[str, WebUser], username: str, password: str) -> 
     nao revela quais logins existem."""
     user = users.get(username)
     if user is None:
+        # SEC-03 (R16): sem isto, usuario inexistente respondia em ~0 ms e o
+        # existente em ~170 ms - o tempo revelava quais logins existem.
+        burn_password_check(password)
         return False
     digest = hashlib.pbkdf2_hmac("sha256", password.encode(), user.salt, user.iterations)
     return secrets.compare_digest(digest.hex(), user.hash_hex)
+
+
+_DUMMY_SALT = secrets.token_bytes(16)
+
+
+def burn_password_check(password: str) -> None:
+    """Mesmo custo de um PBKDF2 real, contra um sal descartavel."""
+    hashlib.pbkdf2_hmac("sha256", password.encode(), _DUMMY_SALT, PBKDF2_ITERATIONS)
 
 
 # ---------------------------------------------------------------------------
@@ -167,32 +178,50 @@ def ensure_session_secret_configured() -> None:
 
 
 def sign_session(username: str, ttl_seconds: int, secret: str) -> str:
-    """`usuario:expiry_hex:assinatura_hex`. A assinatura cobre usuario E
-    expiry — mexer em qualquer um invalida o cookie."""
-    expiry = int(time.time() + ttl_seconds)
-    payload = f"{username}:{expiry:x}"
+    """`usuario:emitido_hex:expira_hex:sid:assinatura`. A assinatura cobre
+    todos os campos. `sid` permite revogar ESTA sessao no logout e
+    `emitido` permite revogar todas as sessoes de um usuario desativado
+    (app/auth_guard.py, SEC-03)."""
+    agora = int(time.time())
+    sid = secrets.token_urlsafe(12)
+    payload = f"{username}:{agora:x}:{agora + int(ttl_seconds):x}:{sid}"
     sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
     return f"{payload}:{sig}"
 
 
-def verify_session(token: str | None, secret: str) -> str | None:
-    """Valida forma, assinatura (compare_digest) e expiry. Retorna o
-    username, ou None para qualquer coisa errada — o chamador decide 401."""
+def _parse_session(token: str | None, secret: str) -> tuple[str, int, int, str] | None:
+    """(usuario, emitido, expira, sid) se forma e assinatura conferem."""
     if not token or not secret:
         return None
-    nome, sep1, resto = token.partition(":")
-    expiry_hex, sep2, sig = resto.partition(":")
-    if not sep1 or not sep2:
+    partes = token.rsplit(":", 4)
+    if len(partes) != 5:
         return None
-    payload = f"{nome}:{expiry_hex}"
+    nome, emitido_hex, expira_hex, sid, sig = partes
+    payload = f"{nome}:{emitido_hex}:{expira_hex}:{sid}"
     expected = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
-    if not secrets.compare_digest(sig, expected):
+    if not nome or not sid or not secrets.compare_digest(sig, expected):
         return None
     try:
-        expiry = int(expiry_hex, 16)
+        return nome, int(emitido_hex, 16), int(expira_hex, 16), sid
     except ValueError:
         return None
-    if time.time() > expiry:
+
+
+def verify_session(token: str | None, secret: str) -> str | None:
+    """Valida forma, assinatura (compare_digest), expiracao e revogacao.
+    Retorna o username, ou None para qualquer coisa errada."""
+    from app import auth_guard
+
+    sessao = _parse_session(token, secret)
+    if sessao is None:
+        return None
+    nome, emitido, expira, sid = sessao
+    if time.time() > expira:
+        return None
+    if auth_guard.is_session_revoked(sid):
+        return None
+    revogado_em = auth_guard.user_revoked_at(nome)
+    if revogado_em is not None and emitido <= revogado_em:
         return None
     return nome
 
@@ -261,6 +290,11 @@ async def login(
     if not senha_ok:
         senha_ok = await verify_login_db(db, username=body.username, password=body.password)
     if not senha_ok:
+        logger.warning(
+            "login de UI recusado (usuario=%r, ip=%s)",
+            body.username[:64],
+            request.client.host if request.client else "?",
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="usuario ou senha invalidos",
@@ -268,7 +302,11 @@ async def login(
     ttl = settings.session_ttl_hours * 3600
     token = sign_session(body.username, ttl, settings.session_secret)
     response.set_cookie(value=token, **session_cookie_kwargs())
-    logger.info("login de UI aceito (usuario=%s, ip=%s)", body.username, request.client.host)
+    logger.info(
+        "login de UI aceito (usuario=%s, ip=%s)",
+        body.username,
+        request.client.host if request.client else "?",
+    )
     # MESMO shape de GET /auth/session: authenticated/username/ttl_hours.
     # O App da UI guarda esta resposta direto como estado da sessao e
     # decide renderizar pelo campo `authenticated` — uma resposta sem
@@ -282,8 +320,17 @@ async def login(
 
 
 @router.post("/logout")
-def logout(response: Response) -> dict[str, bool]:
-    """Limpa o cookie. Idempotente: sair sem sessao tambem e' 200."""
+def logout(request: Request, response: Response) -> dict[str, bool]:
+    """Revoga a sessao no servidor e limpa o cookie. Idempotente.
+
+    Antes so apagava o cookie: uma copia do cookie continuava valida ate
+    expirar (SEC-03 / R22)."""
+    from app import auth_guard
+
+    sessao = _parse_session(request.cookies.get(SESSION_COOKIE), settings.session_secret)
+    if sessao is not None:
+        _nome, _emitido, expira, sid = sessao
+        auth_guard.revoke_session(sid, max(1, expira - int(time.time())))
     response.delete_cookie(SESSION_COOKIE, path="/")
     return {"ok": True}
 

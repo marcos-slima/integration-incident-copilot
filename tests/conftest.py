@@ -39,6 +39,7 @@ os.environ["DATABASE_URL"] = ""
 
 import pytest
 
+from app import auth_guard
 from app.connectors.base import connector_circuit_breaker
 from app.events import idempotency
 from app.rate_limit import limiter
@@ -111,3 +112,14 @@ def _isolate_event_idempotency(monkeypatch):
     idempotency._local_seen.clear()
     yield
     idempotency._local_seen.clear()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_auth_guard(monkeypatch):
+    """SEC-03: contadores de falha e revogacoes de sessao (app/auth_guard.py)
+    sao por processo - sem reset, as chaves invalidas de um teste levariam o
+    seguinte a 429. Forca o fallback em memoria (nunca o Redis do .env)."""
+    monkeypatch.setattr(auth_guard, "_redis", lambda: None)
+    auth_guard.reset_for_tests()
+    yield
+    auth_guard.reset_for_tests()

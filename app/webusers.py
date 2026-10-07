@@ -67,18 +67,34 @@ class DeliveryResult:
 
 
 def deliver_email(to: str, body: str) -> DeliveryResult:
-    """Envia o token por e-mail — QUANDO SMTP estiver configurado.
+    """Envia o token por e-mail quando EMAIL_PROVIDER estiver configurado.
 
-    Hoje: out-of-band. Nao ha SMTP no ambiente (decisao da homologacao);
-    o WARNING abaixo e' o rastro auditavel, e o token volta SÓ para o
-    admin (X-API-Admin-Key), nunca para uma rota publica. Quando houver
-    credencial, este adaptador envia de verdade e o modo out-of-band
-    desliga sozinho (o retorno e' o unico contrato).
+    Validacao 2026-10-07 (M-12): `app/notifications/` (Mailpit e Resend)
+    existia mas nunca era chamado - este adaptador so logava "out-of-band".
+    Agora usa o sender do provedor configurado; sem provedor, ou se o envio
+    falhar, continua out-of-band: o token volta SO para o admin
+    (X-API-Admin-Key), nunca para uma rota publica. `delivered=True` so
+    quando o provedor confirmou o envio - e e isso que faz o token sair da
+    resposta da API admin.
     """
+    from app.notifications.providers import get_email_sender
+
+    sender = get_email_sender()
+    if sender is not None:
+        result = sender.send(to, "Ativacao de acesso - Integration Incident Copilot", body)
+        if result.success:
+            logger.info("DA-55: token de e-mail enviado para %s via %s", to, result.provider)
+            return DeliveryResult(delivered=True, channel="email")
+        logger.warning(
+            "DA-55: envio via %s falhou (%s) - token segue out-of-band pela API admin",
+            result.provider,
+            result.error_message,
+        )
+        return DeliveryResult(delivered=False, channel="email")
     logger.warning(
-        "DA-55 out-of-band: token de e-mail para %s NAO foi enviado — SMTP nao "
-        "configurado. O token segue na resposta da API de admin (canal "
-        "X-API-Admin-Key). Configure o adaptador deliver_email para envio real.",
+        "DA-55 out-of-band: token de e-mail para %s NAO foi enviado — EMAIL_PROVIDER "
+        "nao configurado. O token segue na resposta da API de admin (canal "
+        "X-API-Admin-Key).",
         to,
     )
     return DeliveryResult(delivered=False, channel="email")

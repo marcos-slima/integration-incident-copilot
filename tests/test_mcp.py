@@ -28,26 +28,28 @@ client = TestClient(app)
 def test_list_connectors_returns_all_registered_interface_types():
     catalog = list_connectors()
     interface_types = {row["interface_type"] for row in catalog}
-    assert interface_types == {
-        "odata",
-        "rfc",
-        "servicenow",
-        "salesforce",
-        "workday",
-        "ariba",
-        "cap",
-        "apim",
-    }
+    # M-27: o catalogo vem do registro (antes faltavam successfactors e po).
+    from app.connectors import _REGISTRY
+
+    assert interface_types == set(_REGISTRY)
+    assert {"successfactors", "po"} <= interface_types
     for row in catalog:
         assert isinstance(row["real_data_configured"], bool)
         assert row["config_hint"]
         assert row["vendor"]
 
 
-def test_list_connectors_rfc_is_always_mock_no_env_flag():
+def test_list_connectors_rfc_segue_sap_ashost(monkeypatch):
+    """M-27: o catalogo dizia "RFC sempre mock" mesmo com SAP_ASHOST."""
     catalog = {row["interface_type"]: row for row in list_connectors()}
     assert catalog["rfc"]["real_data_configured"] is False
-    assert "use_real=True" in catalog["rfc"]["config_hint"]
+    monkeypatch.setattr(mcp_server_module.settings, "sap_ashost", "sap.example.com")
+    monkeypatch.setattr("app.connectors.HAS_PYRFC", True)
+    catalog = {row["interface_type"]: row for row in list_connectors()}
+    assert catalog["rfc"]["real_data_configured"] is True
+    monkeypatch.setattr("app.connectors.HAS_PYRFC", False)
+    catalog = {row["interface_type"]: row for row in list_connectors()}
+    assert catalog["rfc"]["status"] == "misconfigured"
 
 
 def test_list_connectors_reflects_configured_real_data(monkeypatch):
@@ -60,8 +62,10 @@ def test_list_connectors_reflects_configured_real_data(monkeypatch):
 
 
 def test_diagnose_incident_tool_calls_run_diagnosis_and_returns_dict(monkeypatch):
-    def _stub_run_diagnosis(request):
+    def _stub_run_diagnosis(request, timeout_seconds=None):
         assert request.description == "iFlow falhando com erro 401"
+        # M-27: o teto da ToolPolicy chega ao grafo.
+        assert timeout_seconds == 180.0
         return DiagnosisResponse(
             probable_root_cause="Causa raiz de teste (stub)",
             model_confidence=0.75,

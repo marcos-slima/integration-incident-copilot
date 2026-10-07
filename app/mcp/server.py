@@ -53,15 +53,10 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from app.agent.graph import run_diagnosis
 from app.config import settings
 from app.connectors import (
-    APIManagementConnector,
-    AribaConnector,
-    CAPConnector,
-    ODataConnector,
-    RFCConnector,
-    SalesforceConnector,
-    ServiceNowConnector,
-    WorkdayConnector,
+    _REGISTRY,
+    connector_status,
 )
+from app.exceptions import DiagnosisOverloadedError
 from app.mcp.policy import enforce
 from app.models import IncidentRequest
 
@@ -92,15 +87,16 @@ def diagnose_incident(
     (sinal objetivo de fundamentacao - ver DA-15) e proximos passos.
 
     interface_type, se informado, deve ser um de: odata, rfc, servicenow,
-    salesforce, workday, ariba, cap, apim. identifier e o nome do iFlow,
-    RFC destination, numero de IDoc/incidente/case/evento/PO, conforme o
-    interface_type.
+    salesforce, workday, ariba, successfactors, po, cap, apim. identifier e
+    o nome do iFlow, RFC destination, numero de IDoc/incidente/case/evento/
+    PO/funcionario, conforme o interface_type. A lista completa, com o modo
+    (real/mock) de cada um, vem de `list_connectors`.
     """
     # DA-27: Capability Registry + Agent Execution Policy - fail-closed,
     # ver app/mcp/policy.py. Hoje sempre permite (tool read-only, scope
     # padrao ja cobre), mas garante que NENHUMA tool roda sem passar
     # por aqui primeiro, inclusive futuras tools de escrita.
-    enforce("diagnose_incident")
+    policy = enforce("diagnose_incident")
     request = IncidentRequest(
         description=description,
         logs=logs,
@@ -108,26 +104,33 @@ def diagnose_incident(
         interface_type=interface_type,
         identifier=identifier,
     )
-    response = run_diagnosis(request)
-    return response.model_dump()
+    # M-27: timeout_seconds/max_retries da ToolPolicy existiam e nunca eram
+    # aplicados. Timeout vira o teto do grafo (nunca acima de
+    # DIAGNOSIS_TIMEOUT_SECONDS); retry so em sobrecarga (503 do semaforo),
+    # que e o unico caso em que repetir e seguro - repetir um timeout
+    # dobraria a carga do pipeline que ja nao deu conta.
+    attempts = policy.max_retries + 1
+    for attempt in range(attempts):
+        try:
+            response = run_diagnosis(request, timeout_seconds=policy.timeout_seconds)
+            return response.model_dump()
+        except DiagnosisOverloadedError:
+            if attempt == attempts - 1:
+                raise
+    raise AssertionError("inalcancavel")  # pragma: no cover
 
 
-# Mapeamento interface_type -> (classe do conector, atributo de settings
-# que, se preenchido, ativa a chamada REAL em vez de mock - ver docstring
-# de app/connectors/base.py). RFC nao segue esse padrao (gate e o
-# parametro `use_real=True` no construtor, nao presenca de settings -
-# continua mock-only ate pyrfc + SAP NetWeaver RFC SDK estarem
-# disponiveis, ver app/connectors/rfc_connector.py), por isso tratado a
-# parte abaixo.
-_CONNECTOR_CATALOG: dict[str, tuple[type, str | None, str]] = {
-    "odata": (ODataConnector, "odata_service_url", "SAP"),
-    "rfc": (RFCConnector, None, "SAP"),
-    "servicenow": (ServiceNowConnector, "servicenow_instance_url", "não-SAP"),
-    "salesforce": (SalesforceConnector, "salesforce_instance_url", "não-SAP"),
-    "workday": (WorkdayConnector, "workday_tenant", "não-SAP"),
-    "ariba": (AribaConnector, "ariba_base_url", "SAP Ariba"),
-    "cap": (CAPConnector, "cap_service_url", "SAP"),
-    "apim": (APIManagementConnector, "apim_analytics_url", "SAP"),
+_VENDOR = {
+    "odata": "SAP",
+    "rfc": "SAP",
+    "cap": "SAP",
+    "apim": "SAP",
+    "po": "SAP",
+    "successfactors": "SAP SuccessFactors",
+    "ariba": "SAP Ariba",
+    "servicenow": "não-SAP",
+    "salesforce": "não-SAP",
+    "workday": "não-SAP",
 }
 
 
@@ -138,31 +141,25 @@ def list_connectors() -> list[dict]:
     demo/mock - sem fazer nenhuma chamada de rede (so inspeciona config).
     Util para um agente cliente decidir quais identificadores/cenarios
     testar antes de chamar `diagnose_incident`.
+
+    Validacao 2026-10-07 (M-27): o catalogo era uma lista mantida a mao com
+    8 conectores (faltavam successfactors e po) e dizia "RFC sempre mock"
+    mesmo com SAP_ASHOST configurado. Agora vem do registro de conectores
+    (`app.connectors._REGISTRY`) e de `connector_status()` - a mesma fonte
+    de GET /health.
     """
     enforce("list_connectors")
     catalog = []
-    for interface_type, (connector_cls, settings_attr, vendor) in _CONNECTOR_CATALOG.items():
-        if interface_type == "rfc":
-            real_data_configured = False
-            config_hint = (
-                "Sempre mock nesta API - modo real exige "
-                "RFCConnector(use_real=True) + pyrfc + SAP NetWeaver RFC SDK "
-                "instalados no processo (nao ha flag de .env)."
-            )
-        else:
-            real_data_configured = bool(getattr(settings, settings_attr))
-            config_hint = (
-                "Configurado para dados reais."
-                if real_data_configured
-                else f"Modo demo/mock - configure '{settings_attr}' no .env para dados reais."
-            )
+    for interface_type, state in connector_status().items():
+        connector_cls = _REGISTRY[interface_type]
         catalog.append(
             {
                 "interface_type": interface_type,
                 "connector_class": connector_cls.__name__,
-                "vendor": vendor,
-                "real_data_configured": real_data_configured,
-                "config_hint": config_hint,
+                "vendor": _VENDOR.get(interface_type, "não-SAP"),
+                "real_data_configured": state["status"] == "real",
+                "status": state["status"],
+                "config_hint": state["note"],
             }
         )
     return catalog

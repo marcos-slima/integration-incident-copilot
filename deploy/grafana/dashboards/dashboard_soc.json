@@ -73,11 +73,11 @@
       "gridPos": {"h": 4, "w": 4, "x": 8, "y": 0},
       "id": 3,
       "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "auto", "textMode": "auto", "colorMode": "background"},
-      "title": "Incidentes CRITICAL",
+      "title": "Incidentes confidenciais",
       "type": "stat",
       "targets": [{
         "datasource": {"type": "grafana-postgresql-datasource", "uid": "postgres_iic"},
-        "rawSql": "SELECT COUNT(*) as value FROM incidents WHERE $__timeFilter(created_at) AND sensitivity_level = 'critical'",
+        "rawSql": "SELECT COUNT(*) as value FROM incidents WHERE $__timeFilter(created_at) AND sensitivity_level IN ('confidential', 'secret')",
         "format": "table"
       }]
     },

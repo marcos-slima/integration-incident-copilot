@@ -127,9 +127,12 @@ async def test_usage_summary_percentual(repo, repo_session):
         monthly_limit_tokens=10_000,
     )
     assert model is not None
+    # M-11: o registro grava a origem canonica; o metering (record_usage)
+    # tambem - o uso tem de estar sob a MESMA chave para casar.
+    assert model.provider_origin == "https://api.groq.com"
     repo_session.add(
         LlmUsage(
-            provider_origin="api.groq.com",
+            provider_origin="https://api.groq.com",
             model_id="qwen/qwen3.8-27b",
             tokens_in=2_500,
             tokens_out=2_500,
@@ -153,7 +156,7 @@ async def test_usage_summary_percentual(repo, repo_session):
 @pytest.mark.asyncio
 async def test_reset_usage_period(repo, repo_session):
     await repo.create_model(provider_origin="api.groq.com", model_id="m1")
-    repo_session.add(LlmUsage(provider_origin="api.groq.com", model_id="m1", tokens_in=100))
+    repo_session.add(LlmUsage(provider_origin="https://api.groq.com", model_id="m1", tokens_in=100))
     await repo_session.flush()
 
     new_period = await repo.reset_usage_period("api.groq.com", "m1")

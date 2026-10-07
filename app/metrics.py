@@ -10,8 +10,12 @@ pelas três audiências da stack de observabilidade:
 Uso (já wired em app/main.py via setup_metrics):
     from app.metrics import setup_metrics, DIAGNOSIS_COUNTER, ...
 
-/metrics só é exposto quando PROMETHEUS_ENABLED=true no .env (opt-in,
-assim como DATABASE_URL e REDIS_URL).
+/metrics só é exposto quando PROMETHEUS_ENABLED=true **e** METRICS_TOKEN
+está preenchido (Authorization: Bearer). Validação 2026-10-07 (M-14):
+`setup_metrics` nunca era chamado (o /metrics dava 404), seis das onze
+métricas nunca eram incrementadas e `iic_diagnosis_total` usava o FLOAT
+`evidence_strength` como label (uma série nova por valor). Agora o label é a
+faixa (`observe_diagnosis`) e todas as métricas têm ponto de incremento.
 
 Design decisions:
 - prometheus_fastapi_instrumentator instrumenta automaticamente todos os
@@ -53,7 +57,8 @@ if _PROMETHEUS_AVAILABLE:
     DIAGNOSIS_TOTAL = Counter(
         "iic_diagnosis_total",
         "Total de diagnósticos processados",
-        labelnames=["agent_domain", "llm_provider", "evidence_strength"],
+        # M-14: faixa discreta (none/low/medium/high), nunca o float.
+        labelnames=["agent_domain", "llm_provider", "evidence_level"],
     )
 
     DIAGNOSIS_LATENCY = Histogram(
@@ -176,9 +181,80 @@ def setup_metrics(app: FastAPI) -> None:
         )
         return
 
+    if not settings.metrics_token:
+        logger.warning(
+            "PROMETHEUS_ENABLED=true sem METRICS_TOKEN: /metrics NAO exposto "
+            "(metricas operacionais nao ficam publicas). Defina METRICS_TOKEN e "
+            "configure o scrape com 'authorization: credentials: <token>'."
+        )
+        return
+
+    import secrets
+
+    from fastapi import Depends, Header, HTTPException
+
+    # Anotacao so com tipos embutidos: o modulo usa `from __future__ import
+    # annotations`, e um `Request` importado aqui dentro nao seria resolvido
+    # pelo FastAPI (viraria parametro de query).
+    def _require_metrics_token(authorization: str = Header(default="")) -> None:
+        header = authorization or ""
+        token = header[7:] if header.lower().startswith("bearer ") else ""
+        if not secrets.compare_digest(token, settings.metrics_token):
+            raise HTTPException(status_code=401, detail="token de metricas invalido/ausente")
+
     Instrumentator(
         should_group_status_codes=False,
         excluded_handlers=["/health", "/ready", "/metrics"],
-    ).instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
+    ).instrument(app).expose(
+        app,
+        endpoint="/metrics",
+        include_in_schema=False,
+        dependencies=[Depends(_require_metrics_token)],
+    )
 
-    logger.info("Prometheus /metrics endpoint habilitado.")
+    logger.info("Prometheus /metrics endpoint habilitado (com token).")
+
+
+def evidence_level(strength: float | None) -> str:
+    """M-14: faixa de evidence_strength para label de metrica (4 valores)."""
+    if strength is None:
+        return "none"
+    if strength >= 0.7:
+        return "high"
+    if strength >= 0.4:
+        return "medium"
+    return "low"
+
+
+def observe_diagnosis(
+    *,
+    agent_domain: str | None,
+    llm_provider: str | None,
+    evidence_strength: float | None,
+    latency_seconds: float,
+    sensitivity_level: str | None,
+    pii_detected: bool,
+) -> None:
+    """M-14: metricas de negocio de um diagnostico concluido.
+
+    Nunca levanta: metrica e observacao, nao pode derrubar o diagnostico."""
+    try:
+        domain = agent_domain or "unknown"
+        provider = llm_provider or "none"
+        DIAGNOSIS_TOTAL.labels(
+            agent_domain=domain,
+            llm_provider=provider,
+            evidence_level=evidence_level(evidence_strength),
+        ).inc()
+        DIAGNOSIS_LATENCY.labels(agent_domain=domain, llm_provider=provider).observe(
+            latency_seconds
+        )
+        level = sensitivity_level or "unknown"
+        # A descricao sempre passa por redact_pii_text antes de persistir.
+        REDACTION_APPLIED_TOTAL.labels(sensitivity_level=level).inc()
+        if pii_detected:
+            PII_DETECTED_TOTAL.labels(sensitivity_level=level).inc()
+        if level in {"confidential", "secret"}:
+            SENSITIVE_INCIDENT_TOTAL.labels(sensitivity_level=level).inc()
+    except Exception:
+        logger.debug("metricas do diagnostico nao registradas", exc_info=True)

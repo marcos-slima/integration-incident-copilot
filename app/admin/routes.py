@@ -16,7 +16,7 @@ import logging
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +27,7 @@ from app.admin.repository import AdminRepository
 from app.admin.security import verify_admin_key
 from app.config import settings
 from app.db import get_db_session
+from app.llm.origins import canonical_origin
 from app.services.incident_repository import IncidentRepository
 
 logger = logging.getLogger(__name__)
@@ -41,8 +42,31 @@ SessionDep = Annotated[AsyncSession | None, Depends(get_db_session)]
 # ---------------------------------------------------------------------------
 
 
+def _origin_or_422(raw: str) -> str:
+    """M-11: origem sempre na forma canonica (app/llm/origins.py)."""
+    origin = canonical_origin(raw)
+    if not origin:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"'{raw}' nao e uma origem: use a URL ou o host do provider "
+                "(ex.: api.groq.com, https://<recurso>.openai.azure.com, http://127.0.0.1:11434)"
+            ),
+        )
+    return origin
+
+
 class ModelCreate(BaseModel):
     provider_origin: str = Field(min_length=1, max_length=128)
+
+    @field_validator("provider_origin")
+    @classmethod
+    def _canonical(cls, value: str) -> str:
+        origin = canonical_origin(value)
+        if not origin:
+            raise ValueError("nao e uma origem (use URL ou host, ex.: api.groq.com)")
+        return origin
+
     model_id: str = Field(min_length=1, max_length=128)
     base_url: str | None = None
     price_in_per_1m: float | None = Field(default=None, ge=0)
@@ -291,7 +315,7 @@ async def list_credentials(session: SessionReq) -> list[dict[str, Any]]:
     return out
 
 
-@router.put("/credentials/{provider_origin}")
+@router.put("/credentials/{provider_origin:path}")
 async def set_credential(
     provider_origin: str,
     payload: CredentialIn,
@@ -307,6 +331,7 @@ async def set_credential(
                 "a credencial (DA-47). Configure a master key no .env."
             ),
         )
+    provider_origin = _origin_or_422(provider_origin)
     repo = AdminRepository(session)
     cred = await repo.set_credential(provider_origin, payload.key)
     return {
@@ -316,11 +341,12 @@ async def set_credential(
     }
 
 
-@router.delete("/credentials/{provider_origin}")
+@router.delete("/credentials/{provider_origin:path}")
 async def delete_credential(
     provider_origin: str,
     session: SessionReq,
 ) -> dict[str, Any]:
+    provider_origin = _origin_or_422(provider_origin)
     repo = AdminRepository(session)
     deleted = await repo.delete_credential(provider_origin)
     if not deleted:
@@ -339,12 +365,13 @@ async def usage_summary(session: SessionReq) -> list[dict[str, Any]]:
     return await repo.usage_summary()
 
 
-@router.post("/usage/{provider_origin}/{model_id}/reset")
+@router.post("/usage/{provider_origin:path}/{model_id}/reset")
 async def reset_usage(
     provider_origin: str,
     model_id: str,
     session: SessionReq,
 ) -> dict[str, Any]:
+    provider_origin = _origin_or_422(provider_origin)
     repo = AdminRepository(session)
     new_period = await repo.reset_usage_period(provider_origin, model_id)
     if new_period is None:

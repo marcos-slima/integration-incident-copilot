@@ -37,6 +37,7 @@ from app.admin.models import (
 )
 from app.config import settings
 from app.db import get_sync_session_factory
+from app.llm.origins import canonical_origin
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +90,7 @@ class AdminRepository:
         notes: str | None = None,
     ) -> LlmModel:
         row = LlmModel(
-            provider_origin=provider_origin.strip(),
+            provider_origin=canonical_origin(provider_origin) or provider_origin.strip(),
             model_id=model_id.strip(),
             base_url=(base_url or "").strip() or None,
             price_in_per_1m=price_in_per_1m,
@@ -144,7 +145,7 @@ class AdminRepository:
         `plaintext_key` existe apenas aqui, em memoria, na request — o
         banco guarda o token Fernet e a mascara. Nunca retornamos o
         plaintext para o chamador."""
-        origin = provider_origin.strip()
+        origin = canonical_origin(provider_origin) or provider_origin.strip()
         encrypted = crypto.encrypt_secret(plaintext_key)
         masked = crypto.mask_secret(plaintext_key)
         existing = await self.get_credential(origin)
@@ -169,7 +170,10 @@ class AdminRepository:
 
     async def get_credential(self, provider_origin: str) -> LlmCredential | None:
         result = await self._session.execute(
-            select(LlmCredential).where(LlmCredential.provider_origin == provider_origin.strip())
+            select(LlmCredential).where(
+                LlmCredential.provider_origin
+                == (canonical_origin(provider_origin) or provider_origin.strip())
+            )
         )
         return result.scalar_one_or_none()
 
@@ -194,7 +198,7 @@ class AdminRepository:
     async def get_open_usage(self, provider_origin: str, model_id: str) -> LlmUsage | None:
         result = await self._session.execute(
             select(LlmUsage).where(
-                LlmUsage.provider_origin == provider_origin,
+                LlmUsage.provider_origin == (canonical_origin(provider_origin) or provider_origin),
                 LlmUsage.model_id == model_id,
                 LlmUsage.period_end.is_(None),
             )
@@ -208,7 +212,7 @@ class AdminRepository:
             return None
         open_row.period_end = _now()
         await self._session.flush()
-        new_row = LlmUsage(provider_origin=provider_origin, model_id=model_id)
+        new_row = LlmUsage(provider_origin=open_row.provider_origin, model_id=model_id)
         self._session.add(new_row)
         await self._session.flush()
         return new_row
@@ -439,11 +443,44 @@ def record_usage(
     primeira chamada da tupla."""
     if not settings.database_url or not settings.metering_enabled:
         return False
+    origin = canonical_origin(origin) or origin
+    deltas = {
+        "tokens_in": int(tokens_in or 0),
+        "tokens_out": int(tokens_out or 0),
+        "requests": int(requests or 0),
+        "failures": int(failures or 0),
+        "cost_usd": float(cost_usd or 0.0),
+    }
     try:
-        from sqlalchemy import select
+        from app.admin.models import LlmUsage
 
         with _get_sync_session_factory()() as session:
-            from app.admin.models import LlmUsage
+            if session.get_bind().dialect.name == "postgresql":
+                # Validacao 2026-10-07 (M-11): ler-somar-gravar perdia
+                # incrementos com dois diagnosticos simultaneos (e a primeira
+                # chamada concorrente estourava o indice unico uq_llm_usage_open).
+                # Um INSERT ... ON CONFLICT soma no proprio banco, atomico.
+                from sqlalchemy import text
+                from sqlalchemy.dialects.postgresql import insert
+
+                table = LlmUsage.__table__
+                stmt = insert(table).values(
+                    id=uuid.uuid4(), provider_origin=origin, model_id=model_id, **deltas
+                )
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["provider_origin", "model_id"],
+                    index_where=text("period_end IS NULL"),
+                    set_={
+                        **{k: table.c[k] + stmt.excluded[k] for k in deltas},
+                        "updated_at": _now(),
+                    },
+                )
+                session.execute(stmt)
+                session.commit()
+                return True
+
+            # Outros bancos (SQLite nos testes): caminho antigo, nao atomico.
+            from sqlalchemy import select
 
             existing = session.execute(
                 select(LlmUsage).where(
@@ -453,23 +490,10 @@ def record_usage(
                 )
             ).scalar_one_or_none()
             if existing is None:
-                session.add(
-                    LlmUsage(
-                        provider_origin=origin,
-                        model_id=model_id,
-                        tokens_in=int(tokens_in or 0),
-                        tokens_out=int(tokens_out or 0),
-                        requests=int(requests or 0),
-                        failures=int(failures or 0),
-                        cost_usd=float(cost_usd or 0.0),
-                    )
-                )
+                session.add(LlmUsage(provider_origin=origin, model_id=model_id, **deltas))
             else:
-                existing.tokens_in += int(tokens_in or 0)
-                existing.tokens_out += int(tokens_out or 0)
-                existing.requests += int(requests or 0)
-                existing.failures += int(failures or 0)
-                existing.cost_usd += float(cost_usd or 0.0)
+                for key, value in deltas.items():
+                    setattr(existing, key, getattr(existing, key) + value)
                 existing.updated_at = _now()
             session.commit()
         return True
@@ -480,3 +504,26 @@ def record_usage(
             model_id,
         )
         return False
+
+
+def registry_prices(origin: str, model_id: str) -> tuple[float | None, float | None] | None:
+    """M-11: (preco_in, preco_out) por 1M do modelo registrado, ou None.
+
+    Best-effort como record_usage: sem banco ou com erro, None (o metering
+    cai na tabela interna)."""
+    if not settings.database_url or not origin:
+        return None
+    try:
+        from sqlalchemy import select
+
+        with _get_sync_session_factory()() as session:
+            row = session.execute(
+                select(LlmModel.price_in_per_1m, LlmModel.price_out_per_1m).where(
+                    LlmModel.provider_origin == (canonical_origin(origin) or origin),
+                    LlmModel.model_id == model_id,
+                )
+            ).first()
+            return (row[0], row[1]) if row else None
+    except Exception:
+        logger.exception("[metering] Falha ao ler preco do registro (%s/%s)", origin, model_id)
+        return None

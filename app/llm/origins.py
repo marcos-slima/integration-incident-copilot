@@ -58,6 +58,34 @@ def normalize_origin(raw: str) -> str:
     return f"{scheme}://{host}"
 
 
+def canonical_origin(raw: str) -> str:
+    """Validacao 2026-10-07 (M-11): forma UNICA de gravar/consultar origem no
+    registro (llm_models, llm_credentials, llm_usage).
+
+    Antes havia tres formatos para a mesma chave: o metering gravava o
+    ROTULO ('ollama'), o runtime consultava a origin normalizada
+    ('http://127.0.0.1:11434') e a UI sugeria host sem esquema
+    ('api.groq.com'). Nada casava: a tela de uso nunca encontrava o modelo
+    e o registro nunca era usado em runtime.
+
+    Aceita URL completa ou so o host; sem esquema assume https (http para
+    loopback). Devolve '' quando nao e uma origem (ex.: 'local_lab').
+    """
+    value = (raw or "").strip()
+    if not value:
+        return ""
+    if "://" not in value:
+        hostport = value.split("/")[0]
+        host = hostport.split(":")[0].lower()
+        # Sem esquema, so aceita o que parece host: com ponto, com porta ou
+        # loopback. 'local_lab'/'ollama' sozinhos sao rotulos, nao origens.
+        if "." not in host and ":" not in hostport and host != "localhost":
+            return ""
+        scheme = "http" if host in {"localhost", "127.0.0.1", "::1"} else "https"
+        value = f"{scheme}://{value}"
+    return normalize_origin(value)
+
+
 def resolve_provider_origin(provider: str, cfg=None) -> str:
     """DA-43: devolve a ORIGIN REAL do destino de um provider logico.
 

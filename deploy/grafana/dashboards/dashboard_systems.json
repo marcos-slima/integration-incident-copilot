@@ -736,7 +736,7 @@
       "type": "grafana-postgresql-datasource",
       "uid": "postgres_iic"
      },
-     "rawSql": "SELECT COALESCE(s.status, 'sem correspondência') AS status_sistema, COUNT(i.id) AS incidentes\n                FROM incidents i\n                LEFT JOIN integration_systems s ON s.connector_type = i.interface_type\n                WHERE i.created_at >= NOW() - INTERVAL '24 hours'\n                GROUP BY 1 ORDER BY 2 DESC",
+     "rawSql": "WITH resolved AS (SELECT i.*, COALESCE(se.system_key, su.k) AS resolved_key FROM incidents i\n                LEFT JOIN integration_systems se ON se.system_key = i.connector_source_system\n                LEFT JOIN (SELECT connector_type, MIN(system_key) AS k FROM integration_systems\n                           GROUP BY connector_type HAVING COUNT(*) = 1) su\n                  ON se.system_key IS NULL AND su.connector_type = i.interface_type)\n                SELECT COALESCE(s.status, 'sem correspondência') AS status_sistema, COUNT(r.id) AS incidentes\n                FROM resolved r LEFT JOIN integration_systems s ON s.system_key = r.resolved_key\n                WHERE r.created_at >= NOW() - INTERVAL '24 hours'\n                GROUP BY 1 ORDER BY 2 DESC",
      "format": "table"
     }
    ]
@@ -797,7 +797,7 @@
       "type": "grafana-postgresql-datasource",
       "uid": "postgres_iic"
      },
-     "rawSql": "SELECT s.system_key, s.name, s.vendor, s.connector_type, s.environment, s.status,\n                    COUNT(i.id) FILTER (WHERE i.created_at >= NOW() - INTERVAL '7 days') AS incidentes_7d,\n                    MAX(i.created_at) AS ultimo_incidente\n             FROM integration_systems s\n             LEFT JOIN incidents i\n               ON (i.connector_source_system = s.system_key OR i.interface_type = s.connector_type)\n              AND i.created_at >= NOW() - INTERVAL '7 days'\n             GROUP BY 1, 2, 3, 4, 5, 6\n             ORDER BY 7 DESC, 1",
+     "rawSql": "WITH resolved AS (SELECT i.*, COALESCE(se.system_key, su.k) AS resolved_key FROM incidents i\n                LEFT JOIN integration_systems se ON se.system_key = i.connector_source_system\n                LEFT JOIN (SELECT connector_type, MIN(system_key) AS k FROM integration_systems\n                           GROUP BY connector_type HAVING COUNT(*) = 1) su\n                  ON se.system_key IS NULL AND su.connector_type = i.interface_type)\n                SELECT s.system_key, s.name, s.vendor, s.connector_type, s.environment, s.status,\n                    COUNT(r.id) AS incidentes_7d, MAX(r.created_at) AS ultimo_incidente\n             FROM integration_systems s\n             LEFT JOIN resolved r\n               ON r.resolved_key = s.system_key\n              AND r.created_at >= NOW() - INTERVAL '7 days'\n             GROUP BY 1, 2, 3, 4, 5, 6\n             ORDER BY 7 DESC, 1",
      "format": "table"
     }
    ],

@@ -34,6 +34,7 @@ from app.exceptions import ConfigurationError, DiagnosisOverloadedError, Diagnos
 from app.llm.gateway import describe_effective_policy
 from app.mcp.server import build_mcp_asgi_app
 from app.mcp.server import mcp as mcp_server
+from app.metrics import setup_metrics
 from app.models import (
     DiagnosisResponse,
     IncidentEventEnvelope,
@@ -356,6 +357,12 @@ class CspMiddleware:
 
 
 app.add_middleware(CspMiddleware)
+
+# Validacao 2026-10-07 (M-14): setup_metrics existia mas nunca era chamado -
+# /metrics dava 404 mesmo com PROMETHEUS_ENABLED=true. Precisa ser no nivel de
+# modulo: o Instrumentator adiciona middleware, o que nao e permitido depois
+# que o app comeca a servir.
+setup_metrics(app)
 
 
 @app.exception_handler(RequestValidationError)
@@ -796,6 +803,13 @@ def verify_incident_endpoint(
         verified_by=body.verified_by,
         verified_root_cause=body.root_cause,
     )
+    # M-14: iic_diagnosis_verified_total (antes nunca incrementada).
+    from app.metrics import DIAGNOSIS_VERIFIED_TOTAL
+
+    DIAGNOSIS_VERIFIED_TOTAL.labels(
+        agent_domain="unknown",
+        verdict={True: "correct", False: "incorrect"}.get(body.correct, "unspecified"),
+    ).inc()
 
     graph_updated = False
     if settings.graph_rag_enabled:

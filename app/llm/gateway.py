@@ -436,6 +436,9 @@ def invoke_via_gateway(
             continue
 
         provider_cfg = cfg.model_copy(update={"llm_provider": provider})
+        # M-11: a chave do registro (e do metering) e a origem ANTES de o
+        # registro trocar o base_url - e por ela que llm_models e procurado.
+        registry_origin = resolve_provider_origin(provider, provider_cfg)
         # GOV-01 (validacao 2026-10-06): no modo gerenciado o registro troca
         # base_url/credencial (texto livre do admin). A politica e reavaliada
         # sobre o destino FINAL, nao so sobre a origin do .env.
@@ -464,6 +467,8 @@ def invoke_via_gateway(
             provider,
             model_name=model_name or getattr(llm, "model_name", None) or cfg.llm_model,
             enabled=bool(cfg.metering_enabled and cfg.database_url),
+            # M-11: grava sob a origem real (a mesma chave do registro).
+            origin=registry_origin,
         )
 
         started_at = time.monotonic()

@@ -295,6 +295,19 @@ def run_diagnosis(
         trace_id=trace_id,
         escalation=escalation,
     )
+    # M-14: metricas de negocio (antes nunca incrementadas).
+    from app.llm.gateway import classify_sensitivity
+    from app.metrics import observe_diagnosis
+    from app.redaction import redact_pii_text
+
+    observe_diagnosis(
+        agent_domain=response.agent_domain,
+        llm_provider=response.llm_provider_used,
+        evidence_strength=response.evidence_strength,
+        latency_seconds=latency_ms / 1000,
+        sensitivity_level=classify_sensitivity(final_state),
+        pii_detected=redact_pii_text(request.description) != (request.description or ""),
+    )
     # B-01: persistencia analitica no PostgreSQL (best-effort, no-op sem
     # DATABASE_URL) - ver app/services/incident_recorder.py.
     record_incident(

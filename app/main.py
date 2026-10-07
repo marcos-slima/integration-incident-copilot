@@ -14,6 +14,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
+from app import auth_guard
 from app.a2a.agent_card import get_agent_card
 from app.a2a.server import router as a2a_router
 from app.admin.routes import router as admin_router  # DA-46/47/48
@@ -27,7 +28,7 @@ from app.connectors import connector_status
 from app.events import idempotency
 from app.events.amqp_consumer import amqp_consumer  # DA-32
 from app.events.consumer import handle_incident_event_async
-from app.exceptions import ConfigurationError, DiagnosisTimeoutError
+from app.exceptions import ConfigurationError, DiagnosisOverloadedError, DiagnosisTimeoutError
 from app.llm.gateway import describe_effective_policy
 from app.mcp.server import build_mcp_asgi_app
 from app.mcp.server import mcp as mcp_server
@@ -53,17 +54,20 @@ api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 event_mesh_api_key_header = APIKeyHeader(name="X-Event-Mesh-Api-Key", auto_error=False)
 
 
-def verify_api_key(api_key: str | None = Security(api_key_header)) -> None:
+def verify_api_key(api_key: str | None = Security(api_key_header), request: Request = None) -> None:
     """Valida API Key. DA-18: apos _ensure_api_keys_configured() rodar
     no startup, settings.api_key NUNCA fica vazio - nao ha mais "modo
     aberto" silencioso. Comparacao com secrets.compare_digest (nao
     "==") para nao vazar o tamanho/prefixo da chave via timing attack."""
-    configured_key = settings.api_key
-    if not secrets.compare_digest(api_key or "", configured_key):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="X-API-Key invalida ou ausente",
-        )
+    # SEC-03: falhas contadas por IP (app/auth_guard.py) - antes a chave
+    # invalida nunca era limitada.
+    auth_guard.check_key(
+        api_key,
+        settings.api_key,
+        scope="api",
+        request=request,
+        detail="X-API-Key invalida ou ausente",
+    )
 
 
 def verify_session_or_api_key(
@@ -85,27 +89,33 @@ def verify_session_or_api_key(
     # confiar no startup: _ensure_api_keys_configured garante que o app
     # real nunca sobe com settings.api_key vazio — o guard e do lifespan,
     # nao da dependency (13 testes de test_api.py documentam isso).
-    if secrets.compare_digest(api_key or "", configured_key):
+    if api_key and secrets.compare_digest(api_key, configured_key):
         return
     if verify_session_cookie(request) is not None:
         return
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
+    auth_guard.check_key(
+        api_key,
+        configured_key,
+        scope="api",
+        request=request,
         detail="X-API-Key invalida/ausente e sem sessao valida (faca login em /auth/login)",
     )
 
 
-def verify_event_mesh_api_key(api_key: str | None = Security(event_mesh_api_key_header)) -> None:
+def verify_event_mesh_api_key(
+    api_key: str | None = Security(event_mesh_api_key_header), request: Request = None
+) -> None:
     """DA-23: chave DEDICADA para o webhook de eventos - nao reaproveita
     verify_api_key/API_KEY, para que um webhook secret vazado (exposto
     na configuracao do sistema de monitoracao externo que publica os
     eventos) nao comprometa o endpoint /diagnose humano nem o A2A."""
-    configured_key = settings.event_mesh_api_key
-    if not secrets.compare_digest(api_key or "", configured_key):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="X-Event-Mesh-Api-Key invalida ou ausente",
-        )
+    auth_guard.check_key(
+        api_key,
+        settings.event_mesh_api_key,
+        scope="event_mesh",
+        request=request,
+        detail="X-Event-Mesh-Api-Key invalida ou ausente",
+    )
 
 
 class MissingRequiredAuthError(RuntimeError):
@@ -280,6 +290,10 @@ app = FastAPI(
     description="Assistente de IA para diagnostico de incidentes de integracao SAP",
     version="1.2.0",
     lifespan=lifespan,
+    # DEP-01: docs desligaveis em producao (EXPOSE_API_DOCS=false).
+    docs_url="/docs" if settings.expose_api_docs else None,
+    redoc_url="/redoc" if settings.expose_api_docs else None,
+    openapi_url="/openapi.json" if settings.expose_api_docs else None,
 )
 
 app.state.limiter = limiter
@@ -340,6 +354,17 @@ class CspMiddleware:
 
 
 app.add_middleware(CspMiddleware)
+
+
+@app.exception_handler(DiagnosisOverloadedError)
+def _diagnosis_overloaded_handler(request: Request, exc: DiagnosisOverloadedError):
+    """Capacidade esgotada nao e timeout: 503 + Retry-After (o cliente pode
+    reenviar), em vez do 504 que o handler de DiagnosisTimeoutError daria."""
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": str(exc)},
+        headers={"Retry-After": "10"},
+    )
 
 
 @app.exception_handler(DiagnosisTimeoutError)

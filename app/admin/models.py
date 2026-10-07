@@ -256,7 +256,9 @@ class IntegrationSystem(Base):
     __tablename__ = "integration_systems"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    system_key: Mapped[str] = mapped_column(String(64), nullable=False, index=True, unique=True)
+    # Unicidade como na migration 004 (UniqueConstraint nomeada, sem indice
+    # extra) - divergencia aqui fazia o autogenerate propor DROP/ADD.
+    system_key: Mapped[str] = mapped_column(String(64), nullable=False)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     vendor: Mapped[str] = mapped_column(String(64), nullable=False)
     connector_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
@@ -271,7 +273,10 @@ class IntegrationSystem(Base):
         DateTime(timezone=True), nullable=False, default=_now, onupdate=_now
     )
 
-    __table_args__ = (Index("ix_integration_systems_vendor_key", "vendor", "system_key"),)
+    __table_args__ = (
+        UniqueConstraint("system_key", name="uq_integration_systems_key"),
+        Index("ix_integration_systems_vendor_key", "vendor", "system_key"),
+    )
 
     def __repr__(self) -> str:
         return (
@@ -330,6 +335,10 @@ class WebUser(Base):
     phone_code_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
     phone_code_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+    # SEC-03 (migration 010): erros com o codigo vigente; zera a cada emissao.
+    phone_code_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
     )
     created_by: Mapped[str] = mapped_column(String(64), nullable=False, default="bootstrap")
     created_at: Mapped[datetime] = mapped_column(

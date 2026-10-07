@@ -23,3 +23,11 @@ class DiagnosisTimeoutError(TimeoutError):
     (app/llm/factory.py::get_chat_model, cfg.llm_request_timeout_seconds) -
     essa protege contra a SOMA de varias etapas lentas, nao so uma
     travada."""
+
+
+class DiagnosisOverloadedError(DiagnosisTimeoutError):
+    """Todas as vagas do pipeline estao ocupadas (inclusive por diagnosticos
+    que ja estouraram o watchdog e seguem rodando em background). Vira 503
+    com Retry-After em app/main.py - nao e timeout do pedido atual, e falta
+    de capacidade. Subclasse de DiagnosisTimeoutError para que codigo que ja
+    trata o timeout (A2A, consumidores) continue tratando este caso."""

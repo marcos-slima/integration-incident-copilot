@@ -97,13 +97,36 @@ jobs:
       # sobreviveram a varios pushes; o gate so foi visto quando o comando foi
       # rodado na mao. Agora roda de verdade e reporta "No known
       # vulnerabilities found".
+      #
+      # Validacao 2026-10-06: o `continue-on-error: true` tinha voltado e o
+      # job ficava verde com CVE. Removido de novo: CVE BLOQUEIA. Um CVE sem
+      # correcao disponivel entra como `--ignore-vuln <ID>` explicito, com a
+      # justificativa num comentario ao lado - nunca como step tolerante.
+      # `--all-extras`: os extras (openai, reports, prometheus...) tambem
+      # vao para a imagem e precisam ser auditados.
       - name: pip-audit — CVEs nas dependências
-        continue-on-error: true
         run: |
           req="$(mktemp -t requirements-ci-XXXXXX.txt)"
-          uv export --no-dev --no-emit-project --format requirements-txt > "$req"
-          uv run pip-audit --requirement "$req"
+          uv export --no-dev --all-extras --no-emit-project --format requirements-txt > "$req"
+          # Validacao 2026-10-07 (DEP-01): torch vem do index pytorch-cpu
+          # como 2.14.1+cpu, versao que nao existe no PyPI - o pip-audit
+          # tentava instalar e falhava. --disable-pip audita as versoes
+          # travadas sem instalar; o sufixo "+cpu" (variante de build do
+          # MESMO release upstream) e removido so para a consulta de CVE,
+          # senao o torch sairia como "nao auditado".
+          sed -i 's/+cpu//' "$req"
+          uv run pip-audit --disable-pip --requirement "$req"
           rm -f "$req"
+
+      # Pre-commit so protege quem tem o hook instalado; os dois vazamentos
+      # reais deste repo passaram por maquinas/ferramentas sem ele. O CI roda
+      # a mesma politica (.gitleaks.toml, com as regras do projeto) sobre a
+      # arvore atual.
+      - name: gitleaks — segredos na arvore
+        run: |
+          curl -sSL -o /tmp/gl.tgz https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz
+          tar -xzf /tmp/gl.tgz -C /tmp gitleaks
+          /tmp/gitleaks detect --no-git --source . --config .gitleaks.toml --redact --exit-code 1
 
       - name: bandit — SAST Python
         run: uv run bandit -r app/ -ll -f json -o bandit-report.json || uv run bandit -r app/ -ll

@@ -789,7 +789,22 @@ def _apply_confidence_guardrails(diagnosis: dict, state: CopilotState) -> dict:
     )
     model_confidence = max(0.0, min(1.0, raw_model_confidence))
 
-    evidence_strength = _compute_evidence_strength(state)
+    # Diagnostico do Rule Engine (DA-33): "rule_engine:<categoria>" nao e
+    # documento RAG, e sim a regra deterministica que casou. So rules.py
+    # define rule_engine_category (a saida do LLM nao tem esse campo), entao
+    # o LLM nao consegue se passar pelo rule engine.
+    claimed_source = diagnosis.get("matched_source")
+    is_rule_engine = bool(diagnosis.get("rule_engine_category")) and claimed_source == (
+        f"rule_engine:{diagnosis.get('rule_engine_category')}"
+    )
+
+    # Validacao 2026-10-07 (M-03): a forca de evidencia da regra (0.95 com
+    # dado real de conector, 0.70 so com texto - rules.py) era SOBRESCRITA
+    # aqui pelo calculo de RAG/conector, que da 0.0 quando o rule engine
+    # resolve sem RAG - e o teto derrubava a confianca da regra para ~0.
+    # Um unico calculo: o maior entre o sinal do pipeline e o da regra.
+    rule_evidence = float(diagnosis.get("evidence_strength") or 0.0) if is_rule_engine else 0.0
+    evidence_strength = max(_compute_evidence_strength(state), rule_evidence)
     diagnosis["evidence_strength"] = round(evidence_strength, 3)
 
     evidence_ceiling = min(1.0, evidence_strength + EVIDENCE_CONFIDENCE_MARGIN)
@@ -805,7 +820,7 @@ def _apply_confidence_guardrails(diagnosis: dict, state: CopilotState) -> dict:
                 f"{diagnosis.get('probable_root_cause', '')}"
             )
 
-    if not state.get("retrieved_context") and not data:
+    if not state.get("retrieved_context") and not data and not is_rule_engine:
         capped = min(model_confidence, 0.3)
         if capped < model_confidence:
             model_confidence = capped
@@ -817,22 +832,13 @@ def _apply_confidence_guardrails(diagnosis: dict, state: CopilotState) -> dict:
 
     # Valida matched_source contra as fontes realmente recuperadas
     # Impede que o LLM invente ou alucine um nome de documento.
-    # Excecao: diagnostico do Rule Engine (DA-33) - "rule_engine:<categoria>"
-    # nao e documento RAG, e sim a regra deterministica que casou. So
-    # rules.py define rule_engine_category (a saida do LLM nao tem esse
-    # campo), entao o LLM nao consegue se passar pelo rule engine.
+    # Validacao 2026-10-07 (M-04): a checagem so rodava quando HAVIA
+    # documentos recuperados. Com conector real e RAG vazio, um nome de
+    # arquivo inventado pelo LLM passava intacto com confianca alta. Sem
+    # documento recuperado, nenhuma fonte citada e valida.
     retrieved = state.get("retrieved_context") or []
     valid_sources = {h["source"] for h in retrieved if h.get("source")}
-    claimed_source = diagnosis.get("matched_source")
-    is_rule_engine = bool(diagnosis.get("rule_engine_category")) and claimed_source == (
-        f"rule_engine:{diagnosis.get('rule_engine_category')}"
-    )
-    if (
-        claimed_source
-        and valid_sources
-        and claimed_source not in valid_sources
-        and not is_rule_engine
-    ):
+    if claimed_source and claimed_source not in valid_sources and not is_rule_engine:
         diagnosis["matched_source"] = None
         model_confidence = min(model_confidence, 0.3)
         diagnosis["probable_root_cause"] = (

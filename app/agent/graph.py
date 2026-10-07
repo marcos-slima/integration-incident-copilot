@@ -12,6 +12,7 @@ deterministicamente qual sub-agente especialista trata o diagnostico
 Ver docs/ARCHITECTURE.md para detalhamento por camada.
 """
 
+import logging
 import os
 import threading
 import time
@@ -21,6 +22,7 @@ from uuid import uuid4
 
 from langfuse import get_client
 
+from app.agent.escalation import compute_escalation_signal
 from app.agent.nodes import (
     _assemble_evidence,
     connector_node,
@@ -38,6 +40,8 @@ from app.agent.supervisor import supervisor_node
 from app.config import settings
 from app.exceptions import DiagnosisOverloadedError, DiagnosisTimeoutError
 from app.models import DiagnosisResponse, IncidentRequest
+
+_logger = logging.getLogger(__name__)
 from app.services.incident_recorder import record_incident
 
 if settings.langfuse_configured:
@@ -247,6 +251,11 @@ def run_diagnosis(
     # nesse caminho. So chamamos quando ha chave configurada.
     trace_id = get_client().get_current_trace_id() if settings.langfuse_configured else None
 
+    # M-26: sinal DA-44 calculado sobre o estado final (deterministico, sem
+    # LLM). Vai para a resposta e para o log de auditoria.
+    escalation = compute_escalation_signal(final_state).as_log_fields()
+    _logger.info("[escalation] incident_id=%s %s", incident_id, escalation)
+
     response = DiagnosisResponse(
         probable_root_cause=diagnosis.get("probable_root_cause", "N/A"),
         model_confidence=float(diagnosis.get("model_confidence", diagnosis.get("confidence", 0.0))),
@@ -284,6 +293,7 @@ def run_diagnosis(
         if settings.graph_rag_enabled and request.interface_type and request.identifier
         else None,
         trace_id=trace_id,
+        escalation=escalation,
     )
     # B-01: persistencia analitica no PostgreSQL (best-effort, no-op sem
     # DATABASE_URL) - ver app/services/incident_recorder.py.

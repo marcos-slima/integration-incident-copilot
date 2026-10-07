@@ -32,9 +32,11 @@ class TestMatchKnownError:
         assert "rule_engine:auth_oauth_expired" in result["matched_source"]
 
     def test_401_unauthorized(self):
+        """Validacao 2026-10-07 (M-02): 401 generico nao e "token expirado"."""
         result = match_known_error("HTTP 401 Unauthorized response from OData endpoint")
         assert result is not None
-        assert result["rule_engine_category"] == "auth_oauth_expired"
+        assert result["rule_engine_category"] == "auth_unauthorized"
+        assert result["confidence"] < 0.90
 
     def test_403_forbidden(self):
         result = match_known_error("403 Forbidden — authorization failed for user RFC_BG")

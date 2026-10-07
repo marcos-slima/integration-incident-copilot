@@ -62,7 +62,14 @@ def test_structured_response_used_directly_when_present(monkeypatch):
     monkeypatch.setattr(nodes_module, "create_react_agent", _fake_create_react_agent)
     monkeypatch.setattr(nodes_module, "invoke_via_gateway", _fake_gateway_calling_builder())
 
-    result = sap_diagnosis_node({"description": "IDoc travado", "retrieved_context": []})
+    # Validacao 2026-10-07 (M-04): o documento citado precisa estar entre os
+    # recuperados; com score 0 o teto de evidencia continua sendo 0.25.
+    result = sap_diagnosis_node(
+        {
+            "description": "IDoc travado",
+            "retrieved_context": [{"source": "idoc_status_51.md", "score": 0.0, "text": "t"}],
+        }
+    )
 
     assert result["diagnosis"]["probable_root_cause"] == "Pool de dialogo esgotado"
     # os guardrails deterministicos (_apply_confidence_guardrails) rodam
@@ -163,7 +170,12 @@ def test_missing_structured_response_key_falls_back_to_regex(monkeypatch):
     )
     monkeypatch.setattr(nodes_module, "invoke_via_gateway", _fake_gateway_calling_builder())
 
-    result = sap_diagnosis_node({"description": "IDoc travado", "retrieved_context": []})
+    result = sap_diagnosis_node(
+        {
+            "description": "IDoc travado",
+            "retrieved_context": [{"source": "doc.md", "score": 0.0, "text": "t"}],
+        }
+    )
 
     assert result["diagnosis"]["probable_root_cause"] == "causa antiga"
     assert result["diagnosis"]["matched_source"] == "doc.md"

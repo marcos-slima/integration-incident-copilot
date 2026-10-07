@@ -70,7 +70,10 @@ _SAP_KEYWORDS = (
     "pi/po",
     "xi/pi",
     "nwds",
-    "fica",
+    # Validacao 2026-10-07 (M-01): "fica" saiu - e verbo comum em portugues
+    # ("a tela fica lenta") e, por substring, casava ate "verifica". O
+    # modulo SAP e escrito FI-CA.
+    "fi-ca",
     "successfactors",
     "sfsf",
     "ariba",
@@ -82,10 +85,23 @@ _SAP_KEYWORDS = (
     "sap pi",
 )
 
-# Padrao com word boundary para "sap" — evita falsos positivos em
-# palavras portuguesas que contem "sap" como substrings
-# (sapato, sapiens, desapareceu, etc.).
+# Validacao 2026-10-07 (M-01): TODOS os termos casam como palavra inteira,
+# nao so "sap". Por substring, "rfc" casava "RFC 6749" (OAuth, IETF) e
+# termos curtos casavam dentro de palavras comuns ("verifica" -> "fica").
+# "Palavra" aqui = nao vizinho de letra/digito, para que "s/4hana",
+# "pi/po" e "sap po" continuem casando.
 _SAP_WORD_RE = re.compile(r"\bsap\b")
+_SAP_KEYWORD_RE = re.compile(
+    r"(?<![a-z0-9])(?:" + "|".join(re.escape(k) for k in _SAP_KEYWORDS) + r")(?![a-z0-9])"
+)
+# RFC seguido de numero e especificacao da IETF (RFC 6749, RFC 7231), nao
+# Remote Function Call do SAP.
+_IETF_RFC_RE = re.compile(r"\brfc[\s-]?\d{3,5}\b")
+
+
+def _has_sap_signal(description: str) -> bool:
+    text = _IETF_RFC_RE.sub(" ", description)
+    return bool(_SAP_WORD_RE.search(text) or _SAP_KEYWORD_RE.search(text))
 
 
 def classify_domain(state: CopilotState) -> AgentDomain:
@@ -102,9 +118,7 @@ def classify_domain(state: CopilotState) -> AgentDomain:
         return "saas"
 
     description = (state.get("description") or "").lower()
-    # §3.5: "sap" verificado com word boundary; demais keywords por
-    # substring (sao especificos o suficiente para nao ter ambiguidade).
-    if _SAP_WORD_RE.search(description) or any(keyword in description for keyword in _SAP_KEYWORDS):
+    if _has_sap_signal(description):
         return "sap"
 
     return "generic"

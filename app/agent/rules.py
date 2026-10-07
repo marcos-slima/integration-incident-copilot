@@ -8,7 +8,7 @@ completo diretamente, sem consumir tokens.
 Extensível: adicione entradas em KNOWN_ERROR_RULES. Cada regra tem:
 - patterns: lista de regex (re.IGNORECASE aplicado)
 - probable_root_cause: causa raiz determinística
-- confidence: fixo em 0.90 — alta certeza por pattern matching
+- confidence: 0.90 por padrao; menor quando o padrao e ambiguo (ex.: 401)
 - next_steps: ações concretas para o operador
 - category: agrupamento para logs/métricas
 """
@@ -36,15 +36,48 @@ class ErrorRule:
     _compiled: list[re.Pattern] = field(default_factory=list, init=False, repr=False)
 
     def __post_init__(self) -> None:
-        self._compiled = [re.compile(p, re.IGNORECASE) for p in self.patterns]
+        self._compiled = [re.compile(_bounded(p), re.IGNORECASE) for p in self.patterns]
 
     def matches(self, text: str) -> bool:
-        return any(p.search(text) for p in self._compiled)
+        for pattern in self._compiled:
+            for match in pattern.finditer(text):
+                if not _negated(text, match.start()):
+                    return True
+        return False
+
+
+# Validacao 2026-10-07 (M-02): `.*` entre dois termos casava a frase inteira -
+# "ja.*existe" encontrava "Ja verificamos a JANELA ... o pedido EXISTE". Cada
+# `.*` dos padroes vira uma janela curta que nao atravessa fim de frase.
+_GAP = r"[^.;!?\n]{0,60}"
+
+
+def _bounded(pattern: str) -> str:
+    return pattern.replace(".*", _GAP)
+
+
+# Validacao 2026-10-07 (M-02): negacao imediatamente antes do termo ("nao e
+# problema de token expirado", "not a token expired issue") descarta aquele
+# casamento. So a forma direta - "sem conexao: connection timeout" continua
+# casando, porque "sem" ali descreve o sintoma, nao nega o erro.
+_NEGATION_BEFORE = re.compile(
+    r"\b(?:n[aã]o|nao|not|never|nunca|isn'?t|wasn'?t)\s+"
+    r"(?:(?:[eé]|eh|foi|era|seria|is|was|be)\s+)?"
+    r"(?:(?:um|uma|o|a|the|an?)\s+)?"
+    r"(?:(?:problema|erro|caso|falha|issue|problem|error|case)\s+(?:de|do|da|of|with)\s+)?$",
+    re.IGNORECASE,
+)
+
+
+def _negated(text: str, start: int) -> bool:
+    return bool(_NEGATION_BEFORE.search(text[max(0, start - 60) : start]))
 
 
 # Regras ordenadas por especificidade — mais específicas primeiro.
-# Cada regra representa uma classe de erro SAP/integração determinístico
-# (60–70% dos incidentes reais, conforme revisão arquitetural externa).
+# Cada regra representa uma classe de erro SAP/integração determinístico.
+# (A fração de incidentes reais coberta pelas regras nunca foi medida.)
+# Padrões: cada ".*" vira uma janela curta dentro da mesma frase (_bounded)
+# e um casamento precedido de negação direta é descartado (_negated).
 KNOWN_ERROR_RULES: list[ErrorRule] = [
     # ------------------------------------------------------------------
     # OAuth / Autenticação
@@ -53,7 +86,6 @@ KNOWN_ERROR_RULES: list[ErrorRule] = [
         patterns=[
             r"oauth.*token.*expir",
             r"token.*expir",
-            r"401.*unauthorized",
             r"access.?token.*invalid",
             r"JWT.*expir",
         ],
@@ -69,13 +101,35 @@ KNOWN_ERROR_RULES: list[ErrorRule] = [
             "Se o erro for recorrente, revisar a lógica de refresh automático.",
         ],
     ),
+    # Validacao 2026-10-07 (M-02): 401 sozinho NAO e "token expirado" -
+    # credencial errada, client sem escopo, usuario bloqueado e relogio fora
+    # de sincronia tambem dao 401. Regra propria, com causa honesta.
+    ErrorRule(
+        patterns=[
+            r"\b401\b.*unauthori[sz]ed",
+            r"unauthori[sz]ed.*\b401\b",
+        ],
+        category="auth_unauthorized",
+        probable_root_cause=(
+            "Requisicao recusada com 401: o destino nao aceitou a credencial. "
+            "Causas possiveis: token expirado, client_id/secret ou usuario incorretos, "
+            "escopo/role ausente, usuario tecnico bloqueado."
+        ),
+        next_steps=[
+            "Ler o corpo/cabecalho WWW-Authenticate da resposta: indica se o token expirou ou e invalido.",
+            "Testar a credencial isoladamente (obter token no IdP com o mesmo client_id/secret).",
+            "Conferir escopos/roles do client e se o usuario tecnico esta ativo.",
+            "Se o token estiver expirado, revisar a renovacao automatica (refresh_token/TTL).",
+        ],
+        confidence=0.75,
+    ),
     ErrorRule(
         patterns=[
             r"403.*forbidden",
             r"authorization.*failed",
             r"authorization.*error",
             r"insuficient.*authoriz",
-            r"no.*authoriz.*object",
+            r"\bno\b.*authoriz.*object",
             r"SY-SUBRC.*4.*authoriz",
         ],
         category="auth_forbidden",
@@ -269,6 +323,7 @@ KNOWN_ERROR_RULES: list[ErrorRule] = [
             r"certificate.*expired",
             r"SSL.*expired",
             r"certificado.*expirado",
+            r"certificado\s+(?:ssl|tls|x\.?509)\b.*expir",
             r"PKIX.*path.*build.*failed",
             r"unable.*find.*valid.*certification",
             r"SSL.*handshake.*fail",
@@ -317,7 +372,7 @@ KNOWN_ERROR_RULES: list[ErrorRule] = [
             r"too.*many.*request",
             r"rate.*limit.*exceeded",
             r"quota.*exceeded",
-            r"throttl",
+            r"\bthrottl",
         ],
         category="rate_limit_exceeded",
         probable_root_cause=(
@@ -339,7 +394,7 @@ KNOWN_ERROR_RULES: list[ErrorRule] = [
             r"duplicate.*entry",
             r"unique.*constraint",
             r"already.*exist",
-            r"ja.*existe",
+            r"\bj[aá]\s+existe",
             r"document.*already.*posted",
             r"FI.*duplicate.*document",
         ],
@@ -383,7 +438,7 @@ KNOWN_ERROR_RULES: list[ErrorRule] = [
             r"status.*68.*IDoc",
             r"IDOC.*SYNTAX.*ERROR.*SENDER",
             r"port.*not.*found.*partner",
-            r"port.*nao.*encontrado",
+            r"\bporta?\b.*n[aã]o.*encontrad",
             r"PARTNER.*PORT.*NOT.*FOUND",
         ],
         category="sap_idoc_port_partner",

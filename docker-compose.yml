@@ -362,7 +362,11 @@ services:
       - "--period"
       - "${REPORT_PERIOD:-daily}"
     environment:
-      DATABASE_URL: "${DATABASE_URL:-}"
+      # Validacao 2026-10-07 (M-18): era o DATABASE_URL do .env, que no modo
+      # nativo aponta para 127.0.0.1 - dentro do container isso e o proprio
+      # container, e o relatorio nunca alcancava o banco. Mesma regra do
+      # x-common-env: host `postgres` da rede do compose.
+      DATABASE_URL: ${CONTAINER_DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-iic}:${POSTGRES_PASSWORD:-REQUIRED_SET_IN_ENV}@postgres:5432/${POSTGRES_DB:-iic}}
       REPORT_PERIOD: "${REPORT_PERIOD:-daily}"
       REPORT_OUTPUT: "/app/reports"
     volumes:

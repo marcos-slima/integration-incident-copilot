@@ -76,7 +76,8 @@ def _get_qdrant_client() -> QdrantClient:
 # (job rag-quality no GitHub Actions nao tem Ollama disponivel). Em producao
 # EMBEDDING_BACKEND nao e definido (default='ollama') e o comportamento e
 # identico ao anterior.
-_EMBEDDING_BACKEND = os.environ.get("EMBEDDING_BACKEND", "ollama").lower()
+# Vem do Settings (le .env E variavel de ambiente); antes so os.environ.
+_EMBEDDING_BACKEND = settings.embedding_backend
 
 
 FASTEMBED_MODEL = "BAAI/bge-small-en-v1.5"

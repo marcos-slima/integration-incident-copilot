@@ -64,6 +64,13 @@ log "1/6 Verificando pré-requisitos..."
 command -v docker >/dev/null || die "docker não encontrado."
 command -v ollama >/dev/null || warn "ollama não encontrado — inferência pode falhar se LLM_PROVIDER=ollama"
 [[ -f "$PROJECT_DIR/.env" ]] || die ".env não encontrado. Execute: cp .env.example .env e preencha."
+# O compose interpola TODOS os serviços, inclusive os de perfis que não vão
+# subir: sem estas variáveis qualquer `docker compose` falha (fail-closed,
+# sem senha default). Melhor dizer aqui do que no meio do passo 3.
+for var in POSTGRES_PASSWORD GRAFANA_PASSWORD NEO4J_PASSWORD; do
+  grep -Eq "^${var}=.+" "$PROJECT_DIR/.env" \
+    || die "$var vazia no .env - o docker-compose.yml exige (mesmo sem usar o serviço)."
+done
 ok "Pré-requisitos OK"
 
 # --- 2. Ollama no host (acesso à GPU) ----------------------------------------
@@ -109,11 +116,16 @@ else
   # Migrações via container (DATABASE_URL aponta para host; substituímos por postgres)
   log "Verificando migrações Alembic..."
   if [[ -n "${DATABASE_URL:-}" ]]; then
-    CONTAINER_URL=$(echo "$DATABASE_URL" | sed 's|@localhost|@postgres|g;s|@127\.0\.0\.1|@postgres|g')
+    # Host e PORTA: dentro da rede do compose o Postgres escuta em 5432, mesmo
+    # quando POSTGRES_HOST_PORT publica outra porta no host (antes so o host
+    # era trocado e a migracao tentava postgres:<porta do host>).
+    CONTAINER_URL=$(echo "$DATABASE_URL" | sed -E 's#@(localhost|127\.0\.0\.1)(:[0-9]+)?/#@postgres:5432/#')
     (cd "$PROJECT_DIR" && \
       docker compose --profile observability run --rm \
         -e DATABASE_URL="$CONTAINER_URL" \
-        --entrypoint /app/.venv/bin/alembic api upgrade head) && ok "Migrações aplicadas"
+        --entrypoint /app/.venv/bin/alembic api upgrade head) \
+      || die "Migrações falharam - a API subiria contra um schema desatualizado."
+    ok "Migrações aplicadas"
   else
     warn "DATABASE_URL não definida no .env — migrações puladas"
   fi

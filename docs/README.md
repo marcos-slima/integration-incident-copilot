@@ -44,22 +44,11 @@ deste documento.
 
 ---
 
-## Auditoria e use cases
-
-Use cases reais mapeados ponta a ponta (HTTP → response), com foco em
-rastreabilidade, encadeamento de módulos e identificação de lacunas.
+## Casos de uso
 
 | Documento | Assunto |
 |---|---|
-| [`AUDITORIA_PONTA_A_PONTA.md`](AUDITORIA_PONTA_A_PONTA.md) | Use cases primários (_UC-1_ a _UC-9_): mapa completo de processamento, breakpoints estrategicos (DA-23), mapping de módulos |
-| [`UC_01_SAP_IDOC_STUCK.md`](UC_01_SAP_IDOC_STUCK.md) | Use Case 1: Incidente SAP OData (IDoc stuck) — fluxo completo BP-1 a BP-8 |
-| [`UC_02_SERVICENOW.md`](UC_02_SERVICENOW.md) | Use Case 2: ServiceNow (multi-fornecedor SaaS) — supervisor roteamento, checklist DA-57 |
-| [`UC_03_GENERIC_WEB_SEARCH.md`](UC_03_GENERIC_WEB_SEARCH.md) | Use Case 3: Generic + web search fallback — DA-57 (fail-closed, sem fallback fixo) |
-| [`UC_05_WEAK_EVIDENCE_FALLBACK.md`](UC_05_WEAK_EVIDENCE_FALLBACK.md) | Use Case 5: Evidence fraca → reference library fallback (DA-15/17) — capping de confiança |
-| [`UC_06_CLOUD_FALLBACK.md`](UC_06_CLOUD_FALLBACK.md) | Use Case 6: Cloud fallback (Ollama offline) — hybrid inference (DA-20/26/43/48) |
-| [`UC_07_CLOUDEVENTS_WEBHOOK.md`](UC_07_CLOUDEVENTS_WEBHOOK.md) | Use Case 7: CloudEvents webhook (DA-23/32/40) — event mesh, AMQP 1.0, idempotência |
-| [`UC_08_GRAPHRAG_ENABLED.md`](UC_08_GRAPHRAG_ENABLED.md) | Use Case 8: GraphRAG enabled (Neo4j) — cypher queries, upsert graph (DA-21/28) |
-| [`UC_09_CONTRACT_DRIFT_BREAKING.md`](UC_09_CONTRACT_DRIFT_BREAKING.md) | Use Case 9: Contract drift breaking (DA-52) — EDMX parse, fingerprint, baseline, observed |
+| [`CASOS_DE_USO.md`](CASOS_DE_USO.md) | Os nove cenários de uso, funcional e técnico no mesmo documento; cada número vem de `tests/test_casos_de_uso.py` |
 
 ## Processo e contexto
 

@@ -47,14 +47,14 @@ testável.
 **2. Conector** — se um sistema de origem e identificador forem informados,
 o agente busca dados estruturados do incidente naquele sistema (código de
 erro, status, mensagem). Sem credencial configurada, o conector opera em
-modo demo/mock e a evidência é marcada `simulated`. São 9 conectores:
-OData, RFC, ServiceNow, Salesforce, Workday, Ariba, SuccessFactors, CAP e
-API Management.
+modo demo/mock e a evidência é marcada `simulated`. São 10 conectores:
+OData, RFC, ServiceNow, Salesforce, Workday, Ariba, SuccessFactors, CAP,
+API Management e SAP PO/PI (variáveis em `docs/CONNECTORS.md`).
 
-**3. Rule engine (21 regras, sem LLM)** — antes de chamar o modelo, um
+**3. Rule engine (22 regras, sem LLM)** — antes de chamar o modelo, um
 catálogo determinístico de erros conhecidos SAP/integração é consultado.
 Se o incidente casa com uma regra (ex: IDoc status 51, `RFC_COMM_FAILURE`,
-HTTP 401 OAuth2), a resposta volta **sem consumir um único token** — rápida
+token OAuth2 expirado), a resposta volta **sem consumir um único token** — rápida
 e com `prompt_digest`/`prompt_version` em `null` na resposta, porque não
 houve prompt nenhum (DA-53).
 
@@ -140,7 +140,7 @@ A UI em `http://localhost:8000` tem três telas:
 sessão, nada do app renderiza. Depois dela:
 
 **Diagnóstico** — formulário limpo (só o incidente: descrição, sistema de
-origem com os 9 conectores, identificador opcional) — credencial nenhuma
+origem com os 10 conectores, identificador opcional) — credencial nenhuma
 na mão do usuário; o cookie de sessão HttpOnly flui sozinho.
 
 **Histórico** — diagnósticos da sessão atual, com confiança e causa raiz.
@@ -189,7 +189,10 @@ Campos que merecem atenção:
   sem LLM. Não é erro: é o caminho rápido e determinístico.
 - **`incident_id`** — guarde-o para o loop de verificação (abaixo).
 - Request aceita ainda: `logs`, `payload`, `sensitivity_level`
-  (`public`/`internal`/`confidential`/`secret` — governa rota do LLM, DA-43),
+  (`public`/`internal`/`confidential`/`secret`). Ele **só eleva** a
+  classificação feita pelo gateway, nunca rebaixa: `public` vindo do cliente
+  não libera provider cloud para dado que o gateway trata como
+  `confidential` (GOV-01, DA-43),
   `connector_source_system` (`system_key` do catálogo admin, melhora a
   correlação do incidente, DA-50).
 
@@ -210,7 +213,7 @@ uv run python -m app.agent.graph \
   "IDoc travado com status 51"
 ```
 
-`--interface` aceita os mesmos 9 conectores da API; `--model` sobrescreve o
+`--interface` aceita os mesmos 10 conectores da API; `--model` sobrescreve o
 LLM; `--debug` imprime o prompt enviado. Não exige API key (chama o grafo
 direto).
 
@@ -232,8 +235,9 @@ descobrir como chamar este — está em
 
 ### Eventos — diagnóstico orientado a evento
 
-- **Webhook:** `POST /events/incident` recebe CloudEvents (`EVENTS_API_KEY`)
-  e dispara `run_diagnosis()` sem ninguém chamar curl (DA-23).
+- **Webhook:** `POST /events/incident` recebe CloudEvents 1.0 (`specversion`,
+  `id` e `source` obrigatórios), autenticado por `X-Event-Mesh-Api-Key`
+  (`EVENT_MESH_API_KEY`), e dispara `run_diagnosis()` sem ninguém chamar curl (DA-23).
 - **AMQP 1.0:** consumidor assíncrono via Solace Cloud (`app/events/
   amqp_consumer.py`), para quem já tem event mesh corporativo.
 

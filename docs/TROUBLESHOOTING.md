@@ -1,282 +1,194 @@
 # Troubleshooting
 
-Guia de diagnóstico para problemas comuns ao rodar o Integration Incident Copilot.
-Para instalação e configuração inicial veja [GETTING_STARTED.md](GETTING_STARTED.md).
+Guia de diagnóstico dos problemas mais comuns ao rodar o Integration
+Incident Copilot. Instalação e configuração inicial estão em
+[GETTING_STARTED.md](GETTING_STARTED.md).
 
----
+> **Revisado na validação de 2026-10-07 (Bloco 5).** A versão anterior
+> mandava trocar a readiness `/ready` por `/health`, o que desliga a
+> readiness real. Também citava variáveis e atributos que não existem. Toda
+> variável citada aqui é conferida pelo gate `docs_env_vars`.
 
 ## Conteúdo
 
-1. [Startup falha — KeyError / AttributeError em settings](#1-startup-falha--keyerror--attributeerror-em-settings)
-2. [AMQP consumer não inicia (AMQP_ENABLED=true)](#2-amqp-consumer-nao-inicia-amqp_enabledtrue)
-3. [Kyma: pods em CrashLoopBackOff / Readiness probe failing](#3-kyma-pods-em-crashloopbackoff--readiness-probe-failing)
-4. [Redis não conecta / circuit breaker sempre aberto](#4-redis-nao-conecta--circuit-breaker-sempre-aberto)
-5. [RAG retorna contexto vazio ou irrelevante](#5-rag-retorna-contexto-vazio-ou-irrelevante)
-6. [LLM retorna erro 401/403 (autenticação)](#6-llm-retorna-erro-401403-autenticacao)
-7. [Busca web: resultados com dados sensíveis ou erros 429](#7-busca-web-resultados-com-dados-sensiveis-ou-erros-429)
-8. [Frontend: tela em branco ou "Unauthorized"](#8-frontend-tela-em-branco-ou-unauthorized)
-9. [CI falha em pytest-cov / bandit / pip-audit](#9-ci-falha-em-pytest-cov--bandit--pip-audit)
-10. [Docker build falha — python-qpid-proton no Linux](#10-docker-build-falha--python-qpid-proton-no-linux)
-11. [GraphRAG: Neo4j inacessível](#11-graphrag-neo4j-inacessivel)
+1. [A API não sobe](#1-a-api-nao-sobe)
+2. [Consumidor AMQP não conecta](#2-consumidor-amqp-nao-conecta)
+3. [Kyma: CrashLoopBackOff ou readiness falhando](#3-kyma-crashloopbackoff-ou-readiness-falhando)
+4. [Redis e circuit breaker](#4-redis-e-circuit-breaker)
+5. [RAG sem contexto ou `/diagnose` com 500 por Qdrant](#5-rag-sem-contexto-ou-diagnose-com-500-por-qdrant)
+6. [LLM: autenticação ou `PolicyViolationError`](#6-llm-autenticacao-ou-policyviolationerror)
+7. [Busca web não acontece](#7-busca-web-nao-acontece)
+8. [Frontend: 401 ou tela de login em loop](#8-frontend-401-ou-tela-de-login-em-loop)
+9. [Build da imagem e `python-qpid-proton`](#9-build-da-imagem-e-python-qpid-proton)
+10. [GraphRAG: Neo4j inacessível](#10-graphrag-neo4j-inacessivel)
+11. [Ambiente em containers (`scripts/start-docker.sh`)](#11-ambiente-em-containers-scriptsstart-dockersh)
 
 ---
 
-## 1. Startup falha — KeyError / AttributeError em settings
-
-**Sintoma:** `app.config.Settings` levanta erro ao carregar; FastAPI não sobe.
-
-**Causas e correções:**
-
-| Causa | Correção |
-|---|---|
-| `.env` ausente ou incompleto | Copie `.env.example` para `.env` e preencha as variáveis obrigatórias (`OPENAI_API_KEY` ou equivalente, `QDRANT_URL`). |
-| Variável tipada incorretamente | `GRAPH_RAG_ENABLED` e `WEB_SEARCH_ENABLED` esperam `true`/`false` (sem aspas). Inteiros devem ser inteiros (`OLLAMA_GATEWAY_TIMEOUT=60`, sem aspas). A conexao com o Qdrant e' por `QDRANT_URL` (URL completa, ex.: `http://localhost:6333`) — nao existe `QDRANT_PORT`. |
-| `.env` com BOM ou CRLF | Converta para UTF-8 sem BOM e quebra de linha LF: `sed -i 's/\r//' .env`. |
+## 1. A API não sobe
 
 ```bash
-# Verificação rápida das configurações carregadas
-uv run python -c "from app.config import settings; print(settings.model_dump())"
+# Configuração efetiva (sem segredos: confira só os nomes e os modos)
+uv run python -c "from app.config import settings; print(settings.llm_provider, settings.qdrant_url, settings.require_auth)"
 ```
 
----
-
-## 2. AMQP consumer não inicia (AMQP_ENABLED=true)
-
-**Sintoma:** FastAPI levanta `TypeError: A coroutine was expected` durante o lifespan.
-
-**Causa:** O consumer AMQP usa `asyncio.create_task()` — que espera uma *coroutine* —
-com um `Future` retornado por `run_in_executor()`. Certifique-se de que a versão no git
-inclui o fix B2 (commit `7166f55` ou posterior).
-
-**Verificação:**
-```bash
-git log --oneline | head -5
-# Deve conter: "fix(amqp): wrap run_in_executor Future in coroutine..."
-```
-
-**Outras causas:**
-
-| Causa | Correção |
+| Mensagem no boot | Causa e correção |
 |---|---|
-| `AMQP_HOST` / `AMQP_PORT` incorretos | O broker pode ser Solace Cloud, mas as variaveis de configuracao usam o prefixo `AMQP_` (ver `app/config.py`: `amqp_host`, `amqp_port`). `SOLACE_HOST`/`SOLACE_PORT` nao existem e sao silenciosamente ignoradas pelo Pydantic Settings. | Verifique credenciais no `.env`; nunca comite o `.env`. |
-| `python-qpid-proton` não instalado | Ver item [10](#10-docker-build-falha--python-qpid-proton-no-linux). |
-| Firewall bloqueando porta AMQP (5671/5672) | Libere a porta ou use o modo mock (`AMQP_ENABLED=false`). |
+| `ValidationError` do pydantic | Valor fora do domínio. Exemplos: `LLM_PROVIDER` aceita `ollama`, `openai` e `azure_openai`; `DATA_SOVEREIGNTY_MODE` aceita `strict` e `cloud_with_dlp`; `EMBEDDING_BACKEND` aceita `ollama` e `fastembed`. Booleanos são `true`/`false`. |
+| Recusa subir por chave ausente | Com `REQUIRE_AUTH=true`, `API_KEY`, `A2A_API_KEY` e `EVENT_MESH_API_KEY` precisam estar definidas. Sem `REQUIRE_AUTH`, a chave vazia é gerada no boot e só aparece no log. |
+| `ConfigurationError` sobre a chave de evidência | Com `DATABASE_URL` preenchida, `LLM_CREDENTIALS_MASTER_KEY` é obrigatória (DA-60). |
+| Variável "ignorada" | O pydantic **ignora** nomes que não são campos do `Settings`. Confira o nome exato em `app/config.py` ou no `.env.example`. A conexão com o Qdrant é por `QDRANT_URL` (URL completa), e não existe variável de porta separada. |
+| `.env` com BOM ou CRLF | `sed -i 's/\r//' .env` |
 
----
+## 2. Consumidor AMQP não conecta
 
-## 3. Kyma: pods em CrashLoopBackOff / Readiness probe failing
+O consumidor (DA-32/40) só sobe com `AMQP_ENABLED=true`. As variáveis usam o
+prefixo `AMQP_`: `AMQP_HOST`, `AMQP_PORT` (default 5671, TLS),
+`AMQP_USERNAME`, `AMQP_PASSWORD` e `AMQP_QUEUE`.
 
-**Sintoma:** `kubectl get pods` mostra `CrashLoopBackOff` ou `0/1 Running` com
-readiness failing.
+| Sintoma | Causa e correção |
+|---|---|
+| Nenhuma mensagem consumida | Confira `AMQP_QUEUE` e as permissões do usuário no broker (Solace/Event Mesh). |
+| Mensagem vai para a DMQ | Depois de `AMQP_MAX_REDELIVERIES` entregas com falha, o consumidor rejeita a mensagem. Envelope inválido (sem `specversion`, `id` ou `source`, CloudEvents 1.0) é rejeitado na hora. |
+| Diagnósticos lentos travam o consumo | Com `REDIS_URL`, o consumidor só enfileira no RQ e o worker diagnostica. Sem Redis, usa um pool de threads no processo da API. |
+| Erro de SSL | O `python-qpid-proton` precisa ter sido compilado com SSL. O build da imagem verifica isso (seção 9). |
 
-**Diagnóstico:**
+Não verificado neste projeto contra um broker real; os testes simulam o
+reactor do Proton.
+
+## 3. Kyma: CrashLoopBackOff ou readiness falhando
+
 ```bash
 kubectl logs -l app=integration-incident-copilot --previous
-kubectl describe pod <pod-name>
+kubectl describe pod <pod>
 ```
 
-**Causas comuns:**
+**As duas probes têm papéis diferentes. Não as troque.**
+
+| Probe | Caminho | O que responde |
+|---|---|---|
+| `livenessProbe` | `/health` | o processo está vivo |
+| `readinessProbe` | `/ready` | as dependências respondem; devolve 503 quando degradado, e o pod sai do balanceamento |
 
 | Causa | Correção |
 |---|---|
-| Readiness probe aponta para `/ready` | `/health` e o endpoint correto (tambem retorna 503 quando degradado). Aponte a probe para `/health` no `deployment.yaml`. |
-| `REDIS_URL` ausente no ConfigMap | Adicione `REDIS_URL: "redis://redis:6379/0"` ao `configmap.yaml`; sem Redis, o task-store é por-processo e a idempotência distribuída não opera em múltiplas réplicas. |
-| Secret com API keys não montado | Crie o Secret referenciado em `secret.example.yaml` e aplique antes do Deployment. |
-| Imagem não encontrada (ImagePullBackOff) | Verifique se o registry e a tag no `deployment.yaml` batem com o que foi publicado pelo CI. |
+| `/ready` em 503 | Sem credencial, a resposta é só o status. Com `X-API-Key`, o detalhe mostra qual serviço está `degraded` (Qdrant, Ollama, Redis, Neo4j). |
+| Secret não aplicado | Crie o Secret a partir de `deploy/kyma/secret.example.yaml` antes do Deployment. |
+| `ImagePullBackOff` | O registry e a tag em `deploy/kyma/deployment.yaml` precisam bater com a imagem publicada. |
 
-**Verificar health check manualmente:**
-```bash
-kubectl port-forward svc/integration-incident-copilot 8080:80
-curl http://localhost:8080/health
-```
+## 4. Redis e circuit breaker
 
----
+Sem `REDIS_URL`:
 
-## 4. Redis não conecta / circuit breaker sempre aberto
+- o circuit breaker, a idempotência de eventos e o task store A2A ficam **em
+  memória, por processo**;
+- com mais de uma réplica, cada pod tem o próprio estado.
 
-**Sintoma:** Logs com `ConnectionError: Redis ...`; ou circuit breaker abre após
-a primeira falha e nunca fecha.
+O boot avisa isso no log.
 
-**Causas:**
-
-| Causa | Correção |
+| Sintoma | Causa e correção |
 |---|---|
-| `REDIS_URL` não configurado | Adicione ao `.env` ou ao ConfigMap Kyma. Sem Redis, o circuit breaker usa estado em memória (por-processo) — não compartilhado entre réplicas. |
-| Redis não iniciado | `docker compose up -d redis` (para desenvolvimento local). |
-| Senha incorreta | Se `REDIS_PASSWORD` estiver definido, certifique-se de que bate com o que o Redis espera. |
-| TLS/mTLS em Redis externo | Configure `REDIS_URL` com esquema `rediss://` e forneça os certificados. |
+| Circuito de um conector abre e não fecha | Ele abre só por indisponibilidade (5xx, 429, rede) e fecha depois do cooldown e de um sucesso. 401/403 **não** abrem o circuito: credencial errada aparece como erro do conector, não como circuito aberto. |
+| `ConnectionError` do Redis | Confira com `redis-cli -u "$REDIS_URL" ping`. A aplicação tenta reconectar a cada 30 s e, enquanto isso, usa o estado em memória. |
 
-**Verificação rápida:**
+## 5. RAG sem contexto ou `/diagnose` com 500 por Qdrant
+
 ```bash
-redis-cli -u "$REDIS_URL" ping
-# Esperado: PONG
-```
-
----
-
-## 5. RAG retorna contexto vazio ou irrelevante
-
-**Sintoma:** Diagnóstico genérico sem referência a documentos; `matched_document: null`.
-
-**Diagnóstico:**
-```bash
-# Verificar se Qdrant está acessível e com dados
 uv run python -c "
 from qdrant_client import QdrantClient
 from app.config import settings
+from app.rag.retriever import COLLECTIONS
 c = QdrantClient(url=settings.qdrant_url)
-info = c.get_collection(settings.qdrant_collection_name)
-print('vectors:', info.vectors_count)
+for nome in COLLECTIONS.values():
+    try: print(nome, c.get_collection(nome).points_count)
+    except Exception as e: print(nome, 'ausente:', type(e).__name__)
 "
 ```
 
-**Causas:**
+| Causa | Correção |
+|---|---|
+| Collection vazia | `uv run python -m app.rag.ingest --target incidents`. Use `--target reference` para o acervo de referência e `--target all` para os dois. |
+| **Qdrant fora do ar** | Hoje o `/diagnose` responde **500**, inclusive quando o rule engine resolveria sem RAG (achado da validação de 2026-10-07, ainda aberto). Suba o Qdrant antes da API; o `/ready` acusa `qdrant: degraded`. |
+| Embedding diferente do usado na ingestão | O retriever confere a identidade do embedding (DA-45). Reingira com o mesmo `EMBEDDING_BACKEND`/`EMBEDDING_MODEL`. Desde a validação de 2026-10-07, `EMBEDDING_BACKEND` no `.env` passa a valer: antes só valia como variável exportada no shell. |
+| Fallback da referência não acontece | Confira `REFERENCE_LIBRARY_FALLBACK_ENABLED`. O deploy Kyma vem com `false` (M-24). |
+
+## 6. LLM: autenticação ou `PolicyViolationError`
+
+| Sintoma | Causa e correção |
+|---|---|
+| 401/403 do provider | Atualize `OPENAI_API_KEY` ou `AZURE_OPENAI_API_KEY`. O endpoint Azure (`AZURE_OPENAI_ENDPOINT`) vai sem barra no fim. |
+| `PolicyViolationError: nenhum provider permitido` (DA-43) | Dado `confidential` (o default sem conector real) só vai para origem local ou para uma liberada. Liberar cloud exige **as duas coisas**: `DATA_SOVEREIGNTY_MODE=cloud_with_dlp` e a origem em `CONFIDENTIAL_ALLOWED_ORIGINS`. A política efetiva aparece em `GET /llm/policy`. |
+| Ollama não responde | O host vem de `OLLAMA_HOST` (default `http://127.0.0.1:11434`). Dentro do container, use o `host.docker.internal` que o compose injeta. |
+| Timeout | `DIAGNOSIS_TIMEOUT_SECONDS` (default 180) limita o diagnóstico inteiro; modelos grandes no Ollama podem precisar de mais. |
+
+## 7. Busca web não acontece
+
+A busca web é *fail-closed* (DA-57). Ela só acontece quando **todas** estas
+condições valem:
+
+1. `WEB_SEARCH_ENABLED=true`;
+2. `WEB_SEARCH_POLICY` diferente de `disabled`;
+3. com `public_only`, o incidente é classificado como `public`;
+4. existe uma linha **habilitada** em `web_search_sources` para o
+   `interface_type` (tela `/admin/web-search`). Sem `DATABASE_URL`, não há
+   linha e, portanto, não há busca.
+
+A consulta passa por `app/agent/nodes.py::_sanitize_web_search_query`, que
+redige URLs, números de IDoc, GUIDs e tokens e trunca o texto. O DuckDuckGo
+limita por IP; falha da busca é logada e vira ausência de resultado, não erro do diagnóstico.
+
+## 8. Frontend: 401 ou tela de login em loop
+
+A UI usa **login de sessão** (DA-54): `POST /auth/login` emite um cookie
+HttpOnly, que o navegador reenvia sozinho. A UI não usa `X-API-Key`; a chave
+é para integrações de máquina.
 
 | Causa | Correção |
 |---|---|
-| Coleção vazia (nenhum documento ingerido) | Execute `uv run python -m app.rag.ingest` (opções em `python -m app.rag.ingest --help`). |
-| `QDRANT_URL` incorreto | Verifique `.env`; padrão local: `http://localhost:6333`. |
-| Modelo de embedding diferente do usado na ingestão | O modelo é fixado na coleção; reingerir com o modelo correto ou recriar a coleção. |
-| Colecao ingerida diferente da que o runtime espera | Nao ha variavel de ambiente para o nome da colecao: os nomes sao constantes em `app/rag/retriever.py::COLLECTIONS` (`sap_incident_docs`, `sap_reference_library`), escolhidas pelo `--target` da ingestão (`incidents`/`reference`/`all`). O sintoma e' ter ingerido so `--target incidents` e o runtime cair no fallback de `reference`. Reingira com `--target all`. |
+| Login sempre 401 | Os usuários vêm de `WEB_UI_USERS` no `.env` (bootstrap, formato `usuario:pbkdf2_sha256$…`) ou da tabela `web_users` com ativação concluída (DA-55). Sem nenhuma das duas fontes, o login fica **fechado** (fail-closed). |
+| Cookie não volta | No dev, use o proxy do Vite (`npm run dev`), para manter a mesma origem. |
+| 429 no login | `/auth/login` e as rotas de ativação aceitam 5 tentativas por minuto por cliente. |
 
----
+## 9. Build da imagem e `python-qpid-proton`
 
-## 6. LLM retorna erro 401/403 (autenticação)
+O `Dockerfile` compila o `python-qpid-proton` no estágio de build (gcc,
+cmake, `libssl-dev`, `libsasl2-dev`) e **reprova o build** se o módulo sair
+sem SSL. O estágio final leva só as bibliotecas de runtime.
 
-**Sintoma:** Diagnóstico falha com `AuthenticationError` ou `403 Forbidden`.
-
-**Causas:**
-
-| Causa | Correção |
+| Sintoma | Causa e correção |
 |---|---|
-| Chave de API ausente ou expirada | Atualize `OPENAI_API_KEY` / `AZURE_OPENAI_API_KEY` no `.env`. Nao existe `ANTHROPIC_API_KEY`: `anthropic` nao e' um `LLM_PROVIDER` valido neste projeto (ver a linha seguinte). |
-| Endpoint Azure incorreto | `AZURE_OPENAI_ENDPOINT` deve terminar sem barra: `https://<resource>.openai.azure.com`. |
-| `LLM_PROVIDER` não configurado | Valores válidos: `ollama` (default), `openai`, `azure_openai`. `azure` e `anthropic` não existem neste projeto. |
-| `PolicyViolationError: nenhum provider permitido` (DA-43) | Dado `confidential` não tem destino cloud autorizado. Confira a policy efetiva em `GET /llm/policy`. Para liberar cloud, são necessários **os dois**: `DATA_SOVEREIGNTY_MODE=cloud_with_dlp` **e** a origem em `CONFIDENTIAL_ALLOWED_ORIGINS`. Sem o segundo, a configuração é fail-closed. |
-| Modo de sovereignty inválido | Valores válidos: `strict` (default, só providers locais) e `cloud_with_dlp`. Qualquer outro valor **falha no boot** — não é interpretado como permissivo. |
-| `local_only` / `OLLAMA_BASE_URL` | Valores que aparecem em documentação antiga e **não existem**. Use `DATA_SOVEREIGNTY_MODE=strict` e `OLLAMA_HOST` (ex.: `http://127.0.0.1:11434`). |
+| `proton com SSL` não aparece / assert falha | Falta `pkg-config` ou `libssl-dev` no builder. Não remova esses pacotes. |
+| Build lento | O torch é a variante CPU (índice do PyTorch fixado no `pyproject.toml`). Use cache do BuildKit. |
 
----
+## 10. GraphRAG: Neo4j inacessível
 
-## 7. Busca web: resultados com dados sensíveis ou erros 429
-
-**Sintoma:** A consulta enviada ao DuckDuckGo contém IDs de documentos SAP, GUIDs ou
-tokens; ou a busca retorna `RateLimitError`.
-
-**Sanitização (fix A3):** A partir do commit que inclui A3, as consultas passam por
-`_sanitize_web_search_query()` que redige URLs, números IDoc SAP (18 dígitos), GUIDs,
-tokens Bearer/Basic e trunca a 200 caracteres. Confirme que o commit está presente:
-```bash
-git log --oneline | grep -i "web.search\|egress\|A3"
-```
-
-**Limitar/desabilitar busca web:**
-```bash
-# No .env
-WEB_SEARCH_ENABLED=false
-```
-
-**Rate limit 429:** DuckDuckGo não exige chave de API, mas limita por IP. Em produção,
-considere um proxy rotativo ou cache de resultados.
-
----
-
-## 8. Frontend: tela em branco ou "Unauthorized"
-
-**Sintoma:** A UI carrega mas retorna `401 Unauthorized` ao chamar `/diagnose`.
-
-**Causa:** A partir do fix A4, a chave de API **não** é mais embutida em variáveis de
-ambiente Vite. Ela deve ser fornecida em runtime via `sessionStorage`.
-
-**Solução:** Na interface, preencha o campo **API Key** (canto superior direito) com a
-chave configurada em `API_KEY` no `.env` do backend. A chave é armazenada apenas na
-sessão do navegador e nunca enviada ao servidor em parâmetros de URL.
-
-**Se `REQUIRE_AUTH=false`:** O backend aceita requisições sem chave; o campo de API Key
-no frontend pode ser deixado em branco.
-
----
-
-## 9. CI falha em pytest-cov / bandit / pip-audit
-
-**Sintoma:** Jobs de CI falham com `No module named pytest_cov` ou `command not found: bandit`.
-
-**Causa:** Essas ferramentas precisam estar no grupo `dev` do `pyproject.toml` e no
-`uv.lock`. A partir do fix B4 elas estão declaradas. Certifique-se de que o `uv.lock`
-está atualizado:
+O GraphRAG é opcional e vem desligado (`GRAPH_RAG_ENABLED=false`). Sem ele,
+o grafo é o linear e o RAG vetorial continua funcionando.
 
 ```bash
-uv lock
-git add uv.lock pyproject.toml
-git commit -m "chore: update lockfile"
-```
-
-**O CI usa `uv run` para isolar o ambiente:**
-```bash
-uv run pytest --cov=app tests/
-uv run bandit -r app/ -c pyproject.toml
-uv run pip-audit
-```
-
----
-
-## 10. Docker build falha — python-qpid-proton no Linux
-
-**Sintoma:** `docker build` falha com `gcc: command not found` ou erro de compilação
-do `python-qpid-proton`.
-
-**Causa:** O pacote `python-qpid-proton==0.40.0` não possui wheel para Linux/amd64 no
-PyPI; o build a partir do código-fonte exige toolchain de compilação (gcc, cmake,
-bibliotecas de desenvolvimento do Proton).
-
-**Solução — adicionar build deps ao Dockerfile:**
-```dockerfile
-# Adicionar antes do `uv sync` na stage de build
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc g++ cmake make \
-    libqpid-proton-cpp12-dev \
-    && rm -rf /var/lib/apt/lists/*
-```
-
-**Alternativa:** Se AMQP não for necessário, mantenha `AMQP_ENABLED=false` e remova
-`python-qpid-proton` das dependências opcionais.
-
----
-
-## 11. GraphRAG: Neo4j inacessível
-
-**Sintoma:** Logs com `ServiceUnavailable: Failed to establish connection to Neo4j`;
-ou diagnóstico sem contexto de histórico relacional.
-
-**GraphRAG é opcional** e desligado por padrão (`GRAPH_RAG_ENABLED=false`). O sistema
-funciona normalmente sem ele — o RAG vetorial (Qdrant) continua operando.
-
-**Para ativar:**
-```bash
-# 1. Subir Neo4j via compose
 docker compose --profile graphrag up -d neo4j
-
-# 2. Configurar no .env
-GRAPH_RAG_ENABLED=true
-NEO4J_URI=bolt://localhost:7687
-NEO4J_PASSWORD=<sua-senha>
-
-# 3. Criar constraints/índices (uma vez)
-uv run python -m app.rag.graph_store --init
+# .env: GRAPH_RAG_ENABLED=true, NEO4J_URI=bolt://127.0.0.1:7687, NEO4J_PASSWORD=<senha>
+uv run python -m app.rag.graph_store --init     # constraints, uma vez
 ```
 
-**Verificar conectividade:**
-```bash
-uv run python -c "
-from app.rag.graph_store import _get_driver
-_get_driver().verify_connectivity()
-print('Neo4j OK')
-"
-```
+O `NEO4J_AUTH` do container só vale na **primeira** inicialização do volume.
+Trocar a senha no `.env` depois exige recriar o volume.
 
----
+## 11. Ambiente em containers (`scripts/start-docker.sh`)
+
+Validado de ponta a ponta em 2026-10-07: imagem construída, com Qdrant,
+Postgres, Grafana e API.
+
+| Sintoma | Causa e correção |
+|---|---|
+| Para no passo 1 pedindo senhas | O compose exige `POSTGRES_PASSWORD`, `GRAFANA_PASSWORD` e `NEO4J_PASSWORD` mesmo sem o perfil correspondente. |
+| "Migrações falharam" | O script para de propósito: subir a API com o schema velho seria pior. Leia o erro acima da mensagem. |
+| `PermissionError: '.env'` no container | O container lê o `.env` como uid 1000. Com `chmod 600` e outro dono, ele não consegue ler; use `chmod 644` ou ajuste o dono. |
+| Ingestão tenta o Ollama sem ele instalado | Defina `EMBEDDING_BACKEND=fastembed` no `.env`. |
+| Container tenta `127.0.0.1` para o banco | No modo container, o compose injeta `postgres:5432`. Para um banco externo, use `CONTAINER_DATABASE_URL`, não `DATABASE_URL`. |
 
 ## Não resolveu?
 
-1. Verifique os logs com `docker compose logs -f app` (local) ou `kubectl logs -f <pod>` (Kyma).
-2. Abra uma issue em [github.com/marcos-lima/integration-incident-copilot](https://github.com/marcos-lima/integration-incident-copilot/issues) com o stack trace completo e a saída de `GET /health`.
+Colete os logs (`docker compose logs api` ou `kubectl logs <pod>`) e a saída
+de `GET /ready` com `X-API-Key`. Num erro 500, procure no log o `error_id`
+que veio na resposta: ele marca a linha com o stack trace.

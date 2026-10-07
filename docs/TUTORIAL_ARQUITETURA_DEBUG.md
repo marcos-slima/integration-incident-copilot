@@ -12,7 +12,7 @@ o processo de desenvolvimento, documento interno fora do repositório).
 
 > **Nota de atualização:** este tutorial foi escrito quando o projeto
 > tinha só 2 conectores (OData/RFC, ambos mock) e 4 nodes no grafo. Hoje
-> sao 9 conectores (a maioria real quando configurado) e o grafo tem
+> sao 10 conectores (4 validados contra sistema real; ver a matriz em `docs/ARCHITECTURE.md`) e o grafo tem
 > 9 nodes — `supervisor`, `connector`, `retrieve`, `sap_diagnose`,
 > `saas_diagnose`, `generic_diagnose`, `report` e, com GraphRAG, os
 > condicionais `graph_enrich`/`graph_write`. O fluxo de diagnostico e
@@ -57,7 +57,7 @@ Cliente HTTP (curl / HTTPie / Bruno)
       │ StateGraph (LangGraph) — 9 nodes, entry point: supervisor    │
       │                                                              │
       │   supervisor ──► connector ──► retrieve                      │
-      │   classifica      9 conectores,    RAG híbrido: Qdrant       │
+      │   classifica     10 conectores,    RAG híbrido: Qdrant       │
       │   o domínio,      reais quando     (denso+BM25) + reranker   │
       │   SEM LLM         configurados     mmarco-mMiniLMv2          │
       │         │                                                    │
@@ -76,7 +76,7 @@ Cliente HTTP (curl / HTTPie / Bruno)
       │                 ▼                                            │
       │         report ──► END                                       │
       │                 ▲                                            │
-      │                 └── graph_write, só se USE_GRAPH_RAG=true    │
+      │                 └── graph_write, só se GRAPH_RAG_ENABLED    │
       │                     (roda ANTES do report)                   │
       └──────────────────────────────────────────────────────────────┘
 ```
@@ -115,7 +115,7 @@ Pydantic e a resposta HTTP sai como `DiagnosisResponse` + `report_markdown`.
 | Contratos de dados | `app/models.py` | `IncidentRequest` (entrada), `DiagnosisResponse` (saída) |
 | Configuração central | `app/config.py` | Única fonte de verdade — URLs, modelo, credenciais, lida do `.env` |
 | Orquestração (o "workflow") | `app/agent/graph.py` | Define os 9 nodes e as arestas entre eles |
-| Busca de dados no sistema SAP + multi-vendor | `app/connectors/` | `base.py` (contrato comum), 9 conectores (OData, RFC, ServiceNow, Salesforce, Workday, Ariba, SuccessFactors, CAP, APIManagement) - maioria real quando configurado |
+| Busca de dados no sistema SAP + multi-vendor | `app/connectors/` | `base.py` (contrato comum), 10 conectores (OData, RFC, ServiceNow, Salesforce, Workday, Ariba, SuccessFactors, CAP, APIManagement, PO/PI) - modo real quando configurado; validação por conector em `docs/ARCHITECTURE.md` |
 | Busca de conhecimento (RAG) | `app/rag/ingest.py`, `app/rag/retriever.py` | Indexação e consulta no Qdrant |
 | Testes | `tests/` | Regressão automatizada de tudo acima |
 

@@ -5,6 +5,30 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 
 ---
 
+## [Não lançado] — validação 2026-10-06/07 (branch `fix/validacao-2026-10-06`)
+
+Correções da auditoria de 2026-10-05, em blocos, cada um verificado em clone
+limpo. O detalhe item a item está nos relatórios de cada bloco e nas
+mensagens de commit.
+
+### Documentação (Bloco 5)
+- **Removidos** `docs/UC_01..09`, os dois documentos de auditoria e o
+  `TESTING_E2E_USER_FLOW`: descreviam código inexistente e marcavam como
+  corrigidos achados abertos.
+- **Novo** `docs/CASOS_DE_USO.md`: nove cenários, funcional e técnico, com
+  números medidos por `tests/test_casos_de_uso.py`.
+- **Reescritos** `docs/CONNECTORS.md` (variáveis reais de cada conector) e
+  `docs/TROUBLESHOOTING.md` (readiness em `/ready`, não `/health`).
+- **Novo gate** `docs_env_vars`; `docs_code_references` passa a conferir
+  intervalos `arquivo.py:10-20`.
+- `REFERENCE_LIBRARY_FALLBACK_ENABLED` (M-24), `false` no deploy Kyma.
+
+> As entradas abaixo são históricas: descrevem o projeto na data delas
+> (ex.: a busca web hoje é configurada em `web_search_sources`, DA-57, e não
+> tem fallback genérico).
+
+---
+
 ## [1.2.0] — 2026-09-15
 
 ### Adicionado

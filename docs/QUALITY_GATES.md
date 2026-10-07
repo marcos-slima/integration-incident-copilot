@@ -24,6 +24,7 @@ verificadas à mão, uma vez, e nunca mais.
 | `prompt_digest_measured` | o prompt em produção (`app/agent/prompts.py`) tem o mesmo digest do prompt **medido** no `data/eval/prompt_baseline.json` | instantâneo | todo push/PR |
 | `docs_markup_integrity` | fences de código balanceados e links relativos `.md` resolvendo, em `docs/`, `README.md` e `CLAUDE.md` | instantâneo | todo push/PR |
 | `docs_code_references` | referências `app/x.py::símbolo` e `app/x.py:N` citadas na documentação existem no código e na linha, e toda citação de arquivo .md em backticks existe em lugar real (raiz, `docs/`, `data/sample_docs/` ou ao lado do doc) | instantâneo | todo push/PR |
+| `docs_env_vars` | toda variável de ambiente citada na documentação (`VAR=` em bloco de código ou em backticks, e nome em backticks com prefixo deste projeto) é lida pelo projeto: campo do `Settings`, compose, manifests, workflows ou `.env.example`. Motivo: o `CONNECTORS.md` antigo mandava configurar variáveis inexistentes e o conector ficava em modo demo sem aviso | instantâneo | todo push/PR |
 | `connector_reachable` | todo conector registrado em `app/connectors/__init__.py` é aceito pelo Literal de `interface_type`, pelas choices do `--interface` do CLI, pelo dropdown da UI web (`SYSTEMS` em `frontend/src/components/DiagnoseView.tsx`), é documentado em `app/models.py`/`app/admin/models.py`, e é coberto por `_SAP_INTERFACE_TYPES` ou `_SAAS_INTERFACE_TYPES` (exceto `apim`, cross-vendor por decisão) | instantâneo | todo push/PR |
 | `connector_validation_matrix` | todo conector registrado em `app/connectors/__init__.py` tem linha na matriz de validação de `docs/ARCHITECTURE.md` — a única fonte de verdade sobre o que foi testado contra instância real — e nenhuma linha órfã sobrou para conector removido. Apodreceu em silêncio uma vez: `successfactors` ficou meses sem linha, com todos os gates verdes | instantâneo | todo push/PR |
 | `connector_coverage` | o mapa de cobertura (DA-58) ainda corresponde ao código: todo conector registrado tem linha em `data/connector_coverage.yaml` (9ª superfície da invariante 23), nenhuma declaração aponta para produto ou conector inexistente, e `docs/COVERAGE_MAP.md` — que é **gerado**, não editado — está em dia com os dados. Reprova por **incoerência**, nunca por lacuna: exigir cobertura completa seria exigir 76 conectores novos para o CI ficar verde | instantâneo | todo push/PR |
@@ -185,7 +186,11 @@ recusado com exit 1 — nunca interpretado como "zero regressões".
 5. **Teste verde não prova que o código roda.** O preflight de RAM era um
    heredoc de 92 linhas dentro de `scripts/promptfoo_remote.sh`, sem
    cobertura: a aritmética que decide se a suite carrega 48 G só podia ser
-   conferida com a RAM à mão. E o inverso também vale: **o job que roda não
+   conferida com a RAM à mão. O cálculo foi movido para
+   `app/evaluation/ram_preflight.py` (núcleo puro, 15 testes), e
+   `preflight_delegates` vigia que o script continua delegando — sem ele, a
+   matemática poderia voltar para dentro do shell com a suite ainda verde,
+   testando um módulo que ninguém chama. E o inverso também vale: **o job que roda não
    prova que a coisa medida está medida.** O `rag-quality` rodava com
    `EMBEDDING_BACKEND=fastembed` (DA-38) porque o GitHub Actions não tem
    Ollama, mas a *ingestão* ignorava essa variável e indexava com
@@ -211,16 +216,15 @@ recusado com exit 1 — nunca interpretado como "zero regressões".
    rodou — o gate **erra** em vez de tratar a ausência como 0.0, que seria
    um falso verde pela regra 2. Verificado por perturbação: com a sigmoid
    forçada a 0.99 o gate reprova, e com o `rerank()` neutralizado ele levanta
-   `RuntimeError`. Nota: o corpus tem **2** casos out-of-scope; a taxa é
-   0%, 50% ou 100%, então a métrica é fraca por construção e o gate serve
-   mais como rede de regressão do que como medida de qualidade. Ampliar o
-   corpus é trabalho em aberto, não algo que um limiar ajustado conserte.
-   verificada carregando 48 G. Movido para
-   `app/evaluation/ram_preflight.py` (núcleo puro, 15 testes) e
-   `preflight_delegates` passou a vigiar que o script continua delegando —
-   sem ele, a matemática poderia voltar para dentro do shell com a suite
-   ainda verde, testando um módulo que ninguém chama.
-6. **Gate que só checa um sentido passa pelo buraco.** `candidate_das_fresh`
+   `RuntimeError`.
+   **Atualização (validação 2026-10-07):** até o RAG-01, a *pipeline* não
+   seguia esta lição: a admissão era `max(cosseno, sigmoid)`, e um caso fora
+   de escopo com cosseno 0.753 e sigmoid 0.0067 era admitido enquanto o
+   gate reportava rejeição. Hoje `app/rag/retriever.py::_evidence_admission_score`
+   usa só o sigmoid quando há reranker, e gate e pipeline medem o mesmo
+   número. O dataset passou de 2 para **10** casos out-of-scope (M-19); 9 de
+   10 são rejeitados.
+7. **Gate que só checa um sentido passa pelo buraco.** `candidate_das_fresh`
    pergunta "esta DA marcada como candidata já foi entregue?". Nunca fez a
    pergunta inversa — "a DA entregue tem a prosa localizável?" — e por isso
    15 seções de decisão do `README.md` sobreviveram sem rótulo `(DA-N)`,
@@ -228,7 +232,7 @@ recusado com exit 1 — nunca interpretado como "zero regressões".
    própria em lugar nenhum. A prosa existia; a amarração não. Um gate
    unidirecional não é metade da verificação, é uma verificação que dá
    sensação de cobertura.
-7. **Contar errado é pior que não contar.** Auditando a documentação da
+8. **Contar errado é pior que não contar.** Auditando a documentação da
    DA-52, o texto dizia "cinco estados" e o invariante 15 do `CLAUDE.md`
    repetia o número, enquanto o enum `ObservationStatus` tinha quatro e a
    seção de limitações do próprio README afirmava que os dois estados extras

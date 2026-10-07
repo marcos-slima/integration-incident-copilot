@@ -158,7 +158,7 @@ final.
 | 29 | [28](#decisoes-de-arquitetura) | Benchmark rerankers → mmarco-mMiniLMv2 vence (+7pp Hit@1) |
 | 30 | [29](#decisoes-de-arquitetura) | PII redaction ampliado + smart log truncation + backoff exponencia |
 | 32 | ARCHITECTURE | Consumidor AMQP 1.0 assíncrono para Solace Cloud / SAP Event Mesh (protocolo corrigido pela DA-40) |
-| 33 | ARCHITECTURE | Rule Engine determinístico (pré-filtro LLM, 21 regras SAP) |
+| 33 | ARCHITECTURE | Rule Engine determinístico (pré-filtro LLM; 22 regras em `KNOWN_ERROR_RULES`) |
 | 34 | ARCHITECTURE | Conector SuccessFactors EC (OAuth2 Client Credentials + OData v2 PerPerson) |
 | 35 | ARCHITECTURE | `/health` como readiness probe real (GET nos serviços) + expansão do catálogo Rule Engine |
 | 38 | [43](#decisoes-de-arquitetura) | `EMBEDDING_BACKEND=fastembed` para o job de avaliação RAG no CI, que não tem Ollama |
@@ -180,30 +180,23 @@ final.
 | 54 | [39](#decisoes-de-arquitetura) | Login de sessão para a UI web (`/auth/login` + cookie HttpOnly; X-API-Key segue para máquinas) |
 | 55 | [40](#decisoes-de-arquitetura) | Manutenção de usuários pelo admin com ativação em duas etapas: token por e-mail → código por telefone (out-of-band até haver SMTP/SMS) |
 | 56 | [41](#decisoes-de-arquitetura) | Conector SAP PO/PI on-premise: Basic Auth nativo contra o Message Monitor, com OAuth2 opcional para quando há API Management na frente |
-| 57 | [43](#decisoes-de-arquitetura) | Fontes de busca web como configuração (`web_search_sources`): `WEB_SEARCH_POLICY=approved` deixa de ser no-op |
-| 58 | [44](#decisoes-de-arquitetura) | Mapa de cobertura produto SAP × mecanismo, calculado de dados versionados: 3 níveis (`dedicated` / `generic` / `absent`) em vez de um booleano |
-| 59 | [45](#decisoes-de-arquitetura) | Conectores multi-vendor: fluxo completo, padrão comum, checklist de 8 superfícies ao adicionar conector, documento consolidado `/docs/CONNECTORS.md` |
-| 60 | [46](#decisoes-de-arquitetura) | Criptografia em repouso de `evidence_json` com Fernet (`LLM_CREDENTIALS_MASTER_KEY`) + migration idempotente `009_encrypt_evidence_json.py` |
+| 57 | [48](#decisoes-de-arquitetura) | Fontes de busca web como configuração (`web_search_sources`): `WEB_SEARCH_POLICY=approved` deixa de ser no-op |
+| 58 | [49](#decisoes-de-arquitetura) | Mapa de cobertura produto SAP × mecanismo, calculado de dados versionados: 3 níveis (`dedicated` / `generic` / `absent`) em vez de um booleano |
+| 59 | [50](#decisoes-de-arquitetura) | Conectores multi-vendor: fluxo completo, padrão comum, checklist de 8 superfícies ao adicionar conector, documento consolidado `/docs/CONNECTORS.md` |
+| 60 | [51](#decisoes-de-arquitetura) | Criptografia em repouso de `evidence_json` com Fernet (`LLM_CREDENTIALS_MASTER_KEY`) + migration idempotente `009_encrypt_evidence_json.py` |
 
-## Auditoria de Processamento Ponta a Ponto
+## Casos de uso
 
-Mapeamento completo dos 9 use cases reais (HTTP → response), com foco em rastreabilidade, encadeamento de módulos e identificação de lacunas/deficiências.
+Os nove cenários (IDoc 51 pelo rule engine, ServiceNow, texto livre sem
+contexto, catálogo de regras, fallback da `reference_library`, fallback de
+LLM, CloudEvents, GraphRAG e drift de contrato) estão em
+[`docs/CASOS_DE_USO.md`](docs/CASOS_DE_USO.md): documento funcional e técnico
+consolidado, com o caminho real no código e o resultado **medido** por
+`tests/test_casos_de_uso.py`.
 
-| Use Case | Título | Documento | DAs Cobertas |
-|---|---|---|---|
-| UC-1 | IDoc Stuck SAP (Fluxo Completo) | [UC_01](docs/UC_01_SAP_IDOC_STUCK.md) | DA-1/2/3/5/12/15/18/20/21/22/23/24/25/26/27/28/29/30/32/33/34/35/38/39/40/41/42/43/44/45/46/47/48/49/50/51/52/53/54/55/56/57/58/59 |
-| UC-2 | ServiceNow (Multi-Vendor SaaS) | [UC_02](docs/UC_02_SERVICENOW.md) | DA-1/2/3/20/22/23/25/26/30/39/43/44/45/48/50/51/57/58/59 |
-| UC-3 | Generic + Web Search Fallback | [UC_03](docs/UC_03_GENERIC_WEB_SEARCH.md) | DA-1/2/3/25/26/30/39/43/50/51/57 |
-| UC-4 | Rule Engine (Sem LLM) | [UC_04](docs/UC_04_RULE_ENGINE.md) | DA-1/2/3/15/22/33/53 |
-| UC-5 | Evidence Fraca → Fallback | [UC_05](docs/UC_05_WEAK_EVIDENCE_FALLBACK.md) | DA-1/2/3/15/17/25/51 |
-| UC-6 | Cloud Fallback (Ollama Offline) | [UC_06](docs/UC_06_CLOUD_FALLBACK.md) | DA-1/2/3/20/26/30/40/41/43/48 |
-| UC-7 | CloudEvents Webhook | [UC_07](docs/UC_07_CLOUDEVENTS_WEBHOOK.md) | DA-20/22/23/26/32/40/43 |
-| UC-8 | GraphRAG Enabled (Neo4j) | [UC_08](docs/UC_08_GRAPHRAG_ENABLED.md) | DA-20/21/22/28/30/32/40/43 |
-| UC-9 | Contract Drift Breaking | [UC_09](docs/UC_09_CONTRACT_DRIFT_BREAKING.md) | DA-25/30/42/51/52 |
-
-**Status:** 9 use cases documentados, 1 lacuna identificada (DA-17: reference library fallback), 17/17 quality gates passaram.
-
-Para detalhes completos: [`docs/AUDITORIA_PONTA_A_PONTA.md`](docs/AUDITORIA_PONTA_A_PONTA.md) + [`docs/AUDITORIA_RESUMO_EXECUTIVO.md`](docs/AUDITORIA_RESUMO_EXECUTIVO.md).
+> Validação 2026-10-07 (DOC-01): os antigos `docs/UC_01..09` e os dois
+> documentos de auditoria (ponta a ponta e resumo executivo) foram removidos. Mostravam código que não
+> existe e marcavam como corrigidos achados que o código contradizia.
 
 ### 1. Alucinação por mistura de contexto (DA-1)
 
@@ -1243,8 +1236,8 @@ precisa decidir *quando* escalar, e o sinal disponível — `evidence_strength`
    real de conector, qualquer limiar acima de 0.75 **nunca dispara** —
    e conector real é o caminho de produção.
 2. **Não sabe de que tier veio a evidência.** `sap_incident_docs`
-   (40 pts curados) e `sap_reference_library` (28.962 chunks de
-   manuais genéricos) passam pelo mesmo reranker e pela mesma escala,
+   (40 pts curados) e `sap_reference_library` (acervo de
+   manuais genéricos, tamanho em `data/index_manifest.json`) passam pelo mesmo reranker e pela mesma escala,
    mas não têm o mesmo peso probatório. Um limiar único não está bem
    definido.
 3. **Satura e não discrimina.** Mede "quanto contexto existe", não "o
@@ -1282,19 +1275,21 @@ por ele.
 
 **Limitações (deliberadamente registradas):**
 - `FLOOR_TIER_MIN_EVIDENCE = 0.62` e `CURATED_TIER_MIN_EVIDENCE = 0.45`
-  **não foram calibrados** contra o corpus de 28.962 chunks. São pontos
+  **não foram calibrados** contra o acervo de referência. São pontos
   de partida escolhidos pela escala de sigmoid (DA-42), a serem
   substituídos por medição no re-baseline. Hipótese, não constante
   validada.
-- O caminho em que `evidence_strength` fica cego **não é reproduzível
-  neste lab**: nenhum conector produz `is_mock=False` —
-  `rfc_connector.py` se declara simulador e devolve `is_mock=True`
-  mesmo para identifier reconhecido. A cegueira do piso de 0.75 foi
-  verificada por **leitura de código**, não por execução.
-- `REFERENCE_FALLBACK_THRESHOLD = 0.85` (`retriever.py`) é justificado
-  num comentário que citava "766k+ chunks" — corpus que nunca existiu
-  aqui; o real tem 28.962, 26× menor. O limiar precisa de
-  re-calibração. (Corrigido o comentário; o valor fica pendente.)
+- O caminho em que `evidence_strength` fica cego exige dado real de
+  conector (`is_mock=False`). Na época desta DA nenhum conector o
+  produzia, e a cegueira do piso de 0.75 foi verificada por **leitura de
+  código**. Hoje RFC (logon), ServiceNow, Salesforce e CAP têm modo real
+  validado (matriz em `docs/ARCHITECTURE.md`).
+- `REFERENCE_FALLBACK_THRESHOLD` (`retriever.py`; 0.85 na época, 0.665 hoje) era justificado
+  num comentário que citava "766k+ chunks", número incompatível com os
+  outros registros do acervo (28.962, 100.805). Nenhum deles tinha o
+  índice medido anotado; desde a validação de 2026-10-07 o ingest grava
+  `data/index_manifest.json`, e o gate `index_manifest` avisa enquanto ele
+  não existir. O limiar precisa de re-calibração contra esse índice.
 - O tier 3 **não faz parte desta DA**: esta decide se há caso para
   escalar, não quem escala.
 
@@ -1722,21 +1717,23 @@ Duas armadilhas específicas de um detector de drift:
 O fluxo é `probe → normalizar → hashear → diff → baseline → sinal`:
 
 - **Probe** (`fetch_contract()` na interface `SAPConnector`, interface
-  segregada: os outros 8 conectores herdam `None` em vez de devolver um
+  segregada: os outros 9 conectores herdam `None` em vez de devolver um
   contrato vazio). O `ODataConnector` lê `$metadata` **reusando o OAuth
-  existente**. Falha de leitura nunca vira `None` genérico sem motivo: o
-  motivo vai para `unverified.reason`.
-- **Normalizar antes de hashear** (`app/contracts/model.py`): Properties,
-  Entities e Annotations viram `tuple` ordenada; namespace, versão e
-  `max_length` de anotação volátil ficam de fora do fingerprint. Como o
+  existente**. Falha de transporte no conector vira `None` e o resultado é
+  `unverified` com motivo genérico ("contrato indisponivel"); só uma exceção
+  que escapa do conector leva o motivo detalhado em `unverified.reason`.
+- **Normalizar antes de hashear** (`app/contracts/model.py`): entidades e
+  propriedades são serializadas em ordem canônica; namespace, versão e
+  anotações ficam fora do modelo, e `max_length` faz parte do fingerprint. Como o
   XML volta a ser canônico, o fingerprint é comparável entre dias.
 - **Severidade** (`app/contracts/diff.py`), fechada e testada: campo ou
   entidade removida, tipo trocado, `nullability` estreitada, `MaxLength`
   reduzido, chave alterada, `abstract` → breaking. Campo novo, tipo
-  alargado, `MaxLength` maior → additive. Reordenação, whitespace,
-  doc, namespace → cosmetic. Rename provável (mesmo tipo, mesmo índice,
-  um dos lados `Nullable` só) é **cosmetic**, não breaking: errar para
-  breaking transforma o detector em alarme falso.
+  alargado, `MaxLength` maior → additive. Reordenação, namespace e versão
+  são descartados na normalização (resultado `clean`); `cosmetic` existe no
+  vocabulário, mas não é emitido hoje. Rename provável (assinatura idêntica)
+  é **breaking com `hint`** (invariante 17): para o consumidor, o efeito é o
+  de um campo removido, e o hint evita dois alarmes.
 - **Baseline** (`app/contracts/baseline.py`, migration `005`): append-only
   em `system_contracts`, sem FK para `integration_systems` — é histórico
   de observação, não registro de cadastro, e a FK só criaria ordem de
@@ -1767,8 +1764,10 @@ caminho inteiro roda, não nas unidades:
    *mapper* do ORM bate com o schema. Divergência de coluna, índice ou
    nome só aparece quando o SELECT real roda.
 
-**Validação.** 89 testes novos: 21 do parser/fingerprint, 35 da matriz de
-severidade, 23 de orquestração e **10 end-to-end** atravessando conector →
+**Validação** (números da entrega; em 2026-10-07 são 98: 21 do parser, 38
+da matriz, 30 de orquestração e 9 end-to-end). 89 testes novos: 21 do
+parser/fingerprint, 35 da matriz de severidade, 23 de orquestração e **10
+end-to-end** atravessando conector →
 HTTP → parser → **PostgreSQL real** → diff → CloudEvent, no job
 `migrations_and_dashboards` do CI (Postgres efêmero, `alembic upgrade
 head` já aplicado). O e2e inclui os casos que só quebram em produção:
@@ -1777,7 +1776,7 @@ vindo depois de queda de leitura, dois sistemas sem compartilhar baseline,
 e o CLI devolvendo exit ≠ 0 para breaking. Suíte: **903 testes**.
 
 **Limitações (deliberadamente registradas):**
-- Só **OData** tem introspecção. RFC e os 6 SaaS herdam
+- Só **OData** tem introspecção. RFC, os 5 SaaS, CAP, APIM e PO herdam
   `fetch_contract() → None` e ficam em `unverified` até ganharem probe
   próprio; a interface já está pronta, o parseador é que não.
 - `unverified` **sai com código 0** no CLI (`scripts/check_contract_drift.py`).
@@ -1785,10 +1784,10 @@ e o CLI devolvendo exit ≠ 0 para breaking. Suíte: **903 testes**.
   tem opinião, e saída de erro transformaria "não deu para checar" em
   "deu errado" — a confusão que o preflight de RAM resolveu no sentido
   oposto. Quem precisa dos três estados lê `--json`.
-- **Baseline persistido antes da emissão do evento**: se o SAP quebrar
-  entre os dois passos, o incidente se perde sem retry. O recorte atual é
-  12 mudanças por evento; o corte do histórico é append-only e o
-  fingerprint do baseline só avança quando houve publicação real.
+- **Entrega antes do baseline** (corrigido em 2026-10-07): o incidente é
+  emitido primeiro e o baseline só é gravado se a entrega deu certo. Breaking
+  com entrega falha re-detecta e reemite na próxima observação, com id de
+  evento estável. O recorte atual é 12 mudanças por evento.
 - Detecção é **reativa por polling**, não por webhook: quem agenda é
   operação externa. Não há scheduler no repo.
 - `unavailable`/`not_introspectable` não são estados separados: hoje
@@ -1987,15 +1986,14 @@ entrava, mesmo que o e-mail cadastrado não fosse da pessoa.
 Logins seguintes seguem usuário+senha (DA-54, decisão do dono: ativação é
 uma vez, não 2FA diário).
 
-**Provedores de notificação unificados com MessagePit** (DA-55, evolução):
-para ambientes de desenvolvimento e local, o projeto agora usa **MessagePit**
-como provedor único — ele substitui Mailpit (SMTP para e-mail) e adiciona
-compatibilidade Twilio para SMS via HTTP (`:8200`). O contrato de entrega é
-absolutamente o mesmo: `deliver_email(token, email, subject)` e
-`deliver_sms(phone, code)` (`app/webusers.py`) —provedores específicos nunca
-aparecem no domínio (padrão Factory Method + Strategy em
-`app/notifications/providers.py`). Sem provedor configurado, o fallback
-out-of-band (token/código na resposta admin) continua valendo.
+**Provedores de notificação** (DA-55, evolução; revisado em 2026-10-07,
+M-12): o e-mail de ativação é **enviado de fato** pelo provedor de
+`EMAIL_PROVIDER` — `mailpit` (SMTP, desenvolvimento) ou `resend` (API). Só
+com envio confirmado o token deixa de voltar na resposta admin. **SMS ainda
+não tem provedor**: o código de telefone segue out-of-band, na resposta da
+API admin. O contrato de entrega é `deliver_email(to, body)` e
+`deliver_sms(to, body)` (`app/webusers.py`); provedores específicos ficam em
+`app/notifications/providers.py` (Factory Method + Strategy).
 
 **Entrega out-of-band, com adaptador real depois** (decisão do dono): sem
 SMTP/provider configurados, o token/código **não** é publicado em
@@ -2010,7 +2008,7 @@ com token de sessão; código de telefone guardado só como hash, único-uso
 (hash apagado na validação); usuário inexistente == token/código errado
 (mesma resposta, sem enumerar quem existe); rate limit 5/min nas rotas
 públicas; `_user_out` nunca expõe hash; admin pode desativar/reativar
-(hash e código zerados no desativar).
+(ao desativar: código de telefone e expiração zerados e sessões revogadas).
 
 **O bootstrap nunca desliga:** o login verifica `web_users` (status=active)
 **e** o `WEB_UI_USERS` do `.env` (DA-54) — o operador nunca fica trancado
@@ -2101,7 +2099,7 @@ UI ofereciam, e a correlação DA-50, que resolve incidente→sistema por
 O gate `connector_reachable` **afirmava** cobrir o catálogo admin na própria
 prosa e nunca lia o arquivo. Agora ele lê, e há teste para a superfície.
 
-**Validação.** 14 testes: mock, filtro de status, identifier desconhecido,
+**Validação.** 14 testes na entrega (17 em 2026-10-07): mock, filtro de status, identifier desconhecido,
 `use_real` sem URL (falha alto), `oauth2` sem token URL (falha alto),
 caminho Basic Auth via `MockTransport`, detalhe por `messageId`, modo
 OAuth2 (Client Credentials + Bearer), tolerância do parser, resposta
@@ -2130,7 +2128,7 @@ variáveis.
 **Limitações (registradas de propósito).**
 - Os pontos de corte (`FLOOR_TIER_MIN_EVIDENCE = 0.62`,
   `CURATED_TIER_MIN_EVIDENCE = 0.45`) **não foram calibrados** contra o
-  corpus de 28.962 chunks. São pontos de partida escolhidos pela forma da
+  acervo de referência. São pontos de partida escolhidos pela forma da
   curva, a serem substituídos por medição no re-baseline. Hipótese, não
   constante validada.
 - A escala é monotônica, que é o que se pede a uma sigmoid; ela não promete
@@ -2279,7 +2277,7 @@ apresentá-la como vitória do benchmark, e aqui ela foi empate técnico.
 - A decisão de roadmap é um argumento de produto, não uma medição. Está
   registrada como o que é.
 
-### 43. Fontes de busca web como configuração, e `approved` que não era no-op (DA-57)
+### 48. Fontes de busca web como configuração, e `approved` que não era no-op (DA-57)
 
 **O problema.** A busca web do grafo (`web_search_node` + tool ReAct) era
 alimentada por **dois mapas literais** em `app/agent/nodes.py`:
@@ -2373,7 +2371,7 @@ aceita `interface_type` no corpo do PATCH e ignora — a mesma allowlist que
   filtro é conteúdo do seed, e o seed é uma afirmação sobre o Help Portal
   que só o uso real confirma.
 
-### 44. Mapa de cobertura: `dedicated`, `generic` e `absent` (DA-58)
+### 49. Mapa de cobertura: `dedicated`, `generic` e `absent` (DA-58)
 
 **O problema.** O repositório tem 10 conectores e uma matriz de validação
 em `docs/ARCHITECTURE.md` que diz o que foi testado contra sistema real.
@@ -2477,7 +2475,7 @@ inexistente, ou quando `docs/COVERAGE_MAP.md` está desatualizado — este
   conector fala com a plataforma Salesforce. Declarar ambos seria afirmar
   escopo que ninguém verificou; fica como questão aberta, não como omissão.
 
-### 45. Conectores multi-vendor: fluxo completo, padrão comum e documentação (DA-59)
+### 50. Conectores multi-vendor: fluxo completo, padrão comum e documentação (DA-59)
 
 **O problema.** O repositório tem 10 conectores implementados, mas a
 documentação existente não respondia a três perguntas-chave para quem quer
@@ -2491,7 +2489,7 @@ usar ou contribuir:
    ser inferido do código.
 2. *Como adicionar um novo conector?* — O registry e os `Literal`s nos
    modelos eram mencionados, mas não havia checklist de todas as superfícies
-   que precisam ser atualizadas (**8** no total: registry, Literals `IncidentRequest.interface_type`
+   que precisam ser atualizadas (**9** no total: registry, Literals `IncidentRequest.interface_type`
    e `IncidentEventData.interface_type`, supervisor, CLI, UI admin,
    `CONNECTOR_TYPES` do catálogo admin, seed de `web_search_sources` DA-57,
    `data/connector_coverage.yaml` DA-58).
@@ -2501,75 +2499,62 @@ usar ou contribuir:
    (mock via `httpx.MockTransport`, teste de erro 401/timeout simulado,
    invocação real com credenciais `.env`).
 
-**A solução.** Documentação consolidada em `/docs/CONNECTORS.md` (348 linhas),
-com seções:
+**A solução.** Documentação consolidada em `docs/CONNECTORS.md`, reescrita na
+validação de 2026-10-07 (Bloco 5). A primeira versão citava variáveis de
+ambiente que o código nunca leu e deixava quem a seguisse em modo demo sem
+aviso. O documento tem cinco seções:
 
 | Seção | Conteúdo |
 |---|---|
-| Visão Geral | Resumo de 10 conectores, modo mock/real, circuit breaker |
-| Fluxo de Uso no Pipeline | DiagramaMermaid com 5 passos (supervisor → connector → retrieve → diagnosis → report) |
-| Conectores Suportados | 10 tabelas com: sistamas, API, identificador, credenciais `.env`, modo mock, validação |
-| Configuração de Credenciais | `.env` padrão com exemplos para todos os conectores, verificação pelo health check |
-| Adicionando Um Novo Conector | Checklist de 8 superfícies + exemplo de código |
-| Testes de Conector | Modo mock (padrão), modo real, teste unitário com mock |
-| Erros Comuns | Tabela de erros e soluções |
-| Limitações | Nenhum conector possui polling/webhook/retry automático |
+| 1. Pipeline | como o conector entra no grafo, modo real × demo, evidência, circuit breaker, `GET /health` |
+| 2. Conectores e variáveis | uma linha por conector: variável que liga o modo real, demais variáveis, cenários demo, validação contra sistema real |
+| 3. Como testar | comandos de teste e o CLI com cenário demo |
+| 4. Como adicionar | as 9 superfícies e o gate que confere cada uma |
+| 5. Limitações | só leitura por chamada, sem retry no conector, credenciais só por ambiente |
 
-**O que foi documentado (10 conectores):**
-
-| Conector | Sistemas | Identificadores | Modo real | Validado |
-|---|---|---|---|---|
-| `odata` | CPI, Integration Suite | Nome iFlow, MPL ID | ✅ OAuth2 | ✅ Mock |
-| `rfc` | ECC, S/4HANA | RFC destination, IDoc | ✅ pyrfc | ✅ Mock |
-| `servicenow` | ServiceNow ITSM | `INCxxxxx` | ✅ REST | ✅ Mock |
-| `salesforce` | Salesforce | Case Number (`00847`) | ✅ SOQL | ✅ Mock |
-| `workday` | Workday HCM | Event ID | ✅ REST WWS | ✅ Mock |
-| `ariba` | SAP Ariba | PO Number | ✅ Open API | ✅ Mock |
-| `successfactors` | SuccessFactors EC | Person ID External | ✅ OData v2 | ✅ Mock |
-| `po` | SAP PO/PI | Message ID (`FAILED`, `HOLDING`, `ALL`) | ✅ Message Monitor | ⚠️ Mock (API não pública) |
-| `cap` | SAP CAP | Entity ID via `$filter` | ✅ OData v4 | ✅ Mock |
-| `apim` | API Management / Integration Suite (analytics) | Proxy name | ✅ OAuth2 | ⚠️ Especulativo |
+A tabela de conectores, com a coluna de validação, mora **só** em
+`docs/CONNECTORS.md` (seção 2), e a matriz-fonte em `docs/ARCHITECTURE.md`.
+Ela não é repetida aqui para não envelhecer em dois lugares.
 
 **Superfícies atualizadas ao adicionar um conector (DA-58/DA-59):**
 
-1. `app/connectors/__init__.py` — registry + mapping `.env` settings
+1. `app/connectors/__init__.py` — `_REGISTRY` e `_REAL_MODE_SETTING`
 2. `app/models.py` — `Literal` em `IncidentRequest.interface_type`
 3. `app/models.py` — `Literal` em `IncidentEventData.interface_type`
 4. `app/agent/supervisor.py` — classificação por domínio (`sap/saas/generic`)
-5. `app/cli/diagnose.py` — opção de seleção para `interface_type`
-6. `app/admin/templates/systems.html` — dropdown `<select name="connector_type">`
-7. `app/admin/models.py` — seed `WebSearchSource` DA-57
-8. `data/connector_coverage.yaml` — `dedicated/generic/absent` + mecanismos DA-58
+5. `app/agent/graph.py` — `choices` de `--interface` no CLI
+6. `app/admin/models.py` — `CONNECTOR_TYPES` do catálogo admin
+7. `alembic/versions/008_*.py` — seed de `web_search_sources` (DA-57)
+8. `app/admin/templates/systems.html` — `<select name="connector_type">`
+9. `data/connector_coverage.yaml` — `dedicated/generic/absent` + mecanismos (DA-58)
 
-**Validação (sem novos testes):**
-
-- Todo conector segue o padrão `fetch(identifier) → ConnectorResult`
-- `connector_node` usa `get_connector(interface_type).fetch(identifier)` (DA-22)
-- Modo mock ativo quando `.env` não tem as credenciais; senão, modo real
-- Health check (`GET /health`) reporta estado de cada conector (`real`/`mock`/`misconfigured`)
+O gate `connector_reachable` (DA-51) confere as superfícies 1 a 8, e o
+`connector_coverage` (DA-58) confere a 9ª.
 
 **Limitações (deliberadamente registradas):**
 
-- **Nenhum conector implementa polling** — somente fetch por identificador
-- **Sem webhook subscriptions** — o copilot não recebe eventos em tempo real
-- **Retry manual** — o caller decide quando retryar em caso de falha
-- **Credenciais por conector** — cada conector tem seu próprio conjunto `.env`
+- **Conector não faz polling nem assina eventos**: só `fetch(identifier)`. O
+  disparo automático entra pelo webhook CloudEvents ou pelo consumidor AMQP.
+- **Sem retry no conector**: a repetição fica com quem chama (RQ, broker).
+- **Credenciais só por ambiente** (`.env` ou Secret Kyma).
 
 **Bugs encontrados no caminho:**
 
-- **DA-57**: `interface_type` em `app/models.py` estava incompleto (`po` e `successfactors` faltavam), o que causava falha silenciosa no dropdown da UI. O gate `connector_reachable` detecta agora as **8** superfícies.
-- **DA-58**: `connector_coverage.yaml` tinha lacunas (`po`, `successfactors` ausentes). O gate `connector_coverage` detecta agora as linhas faltantes.
-- **DA-59**: antes desta documentação, cada conector tinha seu próprio docstring com detalhes de API; agora há um guia consolidado com o fluxo completo e checklist de adição.
+- **DA-57**: os mapas de busca web em `app/agent/nodes.py` não tinham `po`
+  nem `successfactors` (perdiam site e `tech_term`); o seed de
+  `web_search_sources` substituiu os mapas.
+- **DA-58**: `connector_coverage.yaml` não tinha `po` nem `successfactors`. O
+  gate `connector_coverage` detecta linha faltante.
 
-**Por que esta DA não tem testes novos.** A validação já existia nos testes de
-cada conector (`tests/test_ota*.py`, `tests/test_rfc*.py`, etc). Esta DA
-adiciona **documentação**, não código. O gate `connector_reachable` (DA-51)
-e `connector_coverage` (DA-51) já cobrem as superfícies 7 e 8; o resto é
-convenção de código (padrão `ConnectorResult`) e testes unitários individuais.
+**Por que esta DA não tem testes próprios.** É documentação. Os testes de
+cada conector estão em `tests/test_connectors.py`,
+`tests/test_cap_connector.py` e `tests/test_apimanagement_connector.py`, e os
+gates `connector_reachable`, `connector_coverage` e `docs_env_vars` mantêm o
+documento coerente com o código.
 
 ---
 
-### 46. Criptografia em repouso de `evidence_json` com Fernet (DA-60)
+### 51. Criptografia em repouso de `evidence_json` com Fernet (DA-60)
 
 **O problema.** O campo `evidence_json` (JSONB) da tabela `incidents` armazena
 estruturas sensíveis (códigos de erro, traces, paths, payloads): dados que

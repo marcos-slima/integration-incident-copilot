@@ -26,7 +26,7 @@ import sys
 from typing import Any
 
 from app.contracts.diff import ObservationStatus
-from app.contracts.observe import check_connector, describe_report, emit_incident
+from app.contracts.observe import check_connector, describe_report
 
 EXIT_CLEAN = 0
 EXIT_BREAKING = 1
@@ -81,14 +81,16 @@ def main(argv: list[str] | None = None) -> int:
         )
         return EXIT_USAGE
 
+    # A emissao acontece DENTRO de check_connector/observe, que so grava o
+    # baseline se o incidente foi entregue (DATA-01). Chamar emit_incident
+    # aqui de novo emitiria duas vezes.
     report = check_connector(
         connector,
         system_key=args.system_key,
         connector_type=args.connector_type,
+        emit=not args.no_emit,
     )
-    emitted = False
-    if report.is_breaking and not args.no_emit:
-        emitted = emit_incident(report, connector_type=args.connector_type)
+    emitted = bool(report.incident_emitted)
 
     if args.json:
         payload: dict[str, Any] = dict(report.as_dict())

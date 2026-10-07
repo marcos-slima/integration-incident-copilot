@@ -187,12 +187,11 @@ def odata_config(monkeypatch: pytest.MonkeyPatch, sap_stub):
 
 def run(system_key: str, *, emit: bool = False):
     from app.connectors import get_connector
-    from app.contracts.observe import check_connector, emit_incident
+    from app.contracts.observe import check_connector
 
-    report = check_connector(get_connector("odata"), system_key=system_key, connector_type="odata")
-    if emit and report.is_breaking:
-        emit_incident(report, connector_type="odata")
-    return report
+    return check_connector(
+        get_connector("odata"), system_key=system_key, connector_type="odata", emit=emit
+    )
 
 
 class TestCicloCompleto:

@@ -20,7 +20,7 @@ Portfólio da trilha SAP Architect → AI Architect (Marcos Lima).
 | API | FastAPI + Pydantic |
 | Orquestração | LangGraph (`app/agent/graph.py`) |
 | LLM | Ollama local (default) → OpenAI / Azure como fallback (DA-20/26) |
-| Modelo canônico | `qwen3-coder-next:latest` (MoE 80B/3B ativo, 262K ctx; 10/10 no promptfoo na Fase 12 — substituiu `qwen2.5-coder:32b`, ver DA-4/8 + Fase 12) |
+| Modelo canônico | `qwen3-coder-next:latest` (MoE 80B/3B ativo, 262K ctx; 10/10 no promptfoo da Fase 12 — substituiu `qwen2.5-coder:32b`, ver DA-4/8 + Fase 12). **Ressalva (validação 2026-10-07, M-21):** 4 dos 11 casos atuais são resolvidos pelo rule engine e não medem o LLM (`metadata.path` no YAML), e o modelo reprovou o caso "queue manager" do compare — o placar precisa ser re-medido |
 | RAG | LangChain + Qdrant (hybrid dense+sparse BM25, fusão RRF) |
 | Reranker | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` (benchmark DA-29; não usar ms-marco-L6) |
 | GraphRAG | Neo4j (`app/rag/graph_store.py`), opt-in via `USE_GRAPH_RAG=true` |
@@ -96,8 +96,9 @@ docker compose --profile graphrag up -d neo4j      # opt-in
 > publica em `${QDRANT_HOST_PORT:-6333}`. Se outro stack (ou um Qdrant
 > standalone) já usar a `6333`, defina `QDRANT_HOST_PORT=6335` — é o que
 > o `.env` local faz, e é por isso que `scripts/debug_matched_source.py`
-> existia com `6335` fixado. O acervo grande (~767k pontos em
-> `sap_reference_library`) fica no Qdrant do outro stack, não neste repo.
+> existia com `6335` fixado. O acervo grande (`sap_reference_library`) fica no Qdrant do outro stack, não neste repo;
+> o tamanho real fica em `data/index_manifest.json` (gerado pelo ingest, validação 2026-10-07, M-23) —
+> os números antigos (~767k, 28.962, 100.805) eram incompatíveis entre si.
 >
 > armadilha correlata: `data/.ingest_state_reference.json` é **um arquivo por
 > target, sem URL dentro** (chave = `hash:filename`, `app/rag/ingest.py:167`).

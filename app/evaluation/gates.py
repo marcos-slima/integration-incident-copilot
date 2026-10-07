@@ -151,6 +151,28 @@ def check_corpus_coverage(root: Path = REPO_ROOT) -> list[Finding]:
     )
     if missing:
         return _fail(check, f"expected_sources sem documento no corpus: {missing}")
+
+    # Validacao 2026-10-07 (M-19): `expected_keywords` existia no dataset e
+    # nada o lia - 8 dos 18 casos com fonte citavam termos ausentes do
+    # proprio documento esperado ('top', 'LIFNR', 'webhook'...). A keyword
+    # documenta POR QUE aquele documento responde a query; se ela nao esta no
+    # documento, o caso descreve outro documento.
+    def _fold(text: str) -> str:
+        import unicodedata
+
+        return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
+
+    absent: list[str] = []
+    for index, case in enumerate(cases):
+        sources = case.get("expected_sources") or []
+        if not sources:
+            continue
+        texts = [_fold((root / CORPUS_DIR / s).read_text(encoding="utf-8")) for s in sources]
+        for keyword in case.get("expected_keywords") or []:
+            if not any(_fold(keyword) in text for text in texts):
+                absent.append(f"#{index} '{keyword}'")
+    if absent:
+        return _fail(check, f"expected_keywords ausentes do documento esperado: {absent}")
     return _ok(check)
 
 
@@ -230,6 +252,23 @@ def check_reranker_invariant(
                     f"abaixo do piso {thresholds.min_benchmark_margin:+.3f}",
                 )[0]
             )
+    # Validacao 2026-10-07 (M-20): a margem e de UMA consulta; o benchmark
+    # agora grava McNemar exato e IC 95% (scripts/benchmark_rerankers.py).
+    # Sem significancia, o gate avisa - a escolha continua defensavel por
+    # outros motivos (multilingue, latencia), mas nao por "acerta mais".
+    stats = winner.get("vs_baseline") or {}
+    p_value = stats.get("mcnemar_exact_p")
+    if p_value is not None and p_value >= 0.05:
+        findings.append(
+            _warn(
+                check,
+                f"vantagem do vencedor sobre o baseline NAO e significativa "
+                f"(n={stats.get('n')}, {stats.get('only_candidate')} x "
+                f"{stats.get('only_baseline')} consultas discordantes, McNemar p={p_value}, "
+                f"IC95% da diferenca [{stats.get('bootstrap_ci95_low'):+.3f}, "
+                f"{stats.get('bootstrap_ci95_high'):+.3f}])",
+            )[0]
+        )
     return findings or _ok(check)
 
 
@@ -355,6 +394,35 @@ def check_llm_baseline(root: Path = REPO_ROOT) -> list[Finding]:
 
 
 KYMA_CONFIGMAP = Path("deploy/kyma/configmap.yaml")
+INDEX_MANIFEST = Path("data/index_manifest.json")
+
+
+def check_index_manifest(root: Path = REPO_ROOT) -> list[Finding]:
+    """Validacao 2026-10-07 (M-23): limiar calibrado tem que apontar um indice.
+
+    O limiar do fallback da reference_library (retriever) e os do sinal de
+    escalonamento foram "calibrados contra o corpus" sem registro de qual
+    indice estava no ar - e o projeto citava quatro tamanhos diferentes para
+    ele. WARN (nao FAIL): o indice de referencia vive no Qdrant de quem
+    ingere, nunca no CI."""
+    check = "index_manifest"
+    path = root / INDEX_MANIFEST
+    if not path.exists():
+        return _warn(
+            check,
+            f"{INDEX_MANIFEST} ausente: os limiares do fallback (0.665) e do escalonamento "
+            "nao estao amarrados a nenhum indice registrado (rode o ingest e versione o arquivo)",
+        )
+    try:
+        data = _load_json(path, check)
+    except (ValueError, TypeError) as exc:
+        return _fail(check, str(exc))
+    reference = (data.get("collections") or {}).get("sap_reference_library")
+    if not reference:
+        return _warn(
+            check, f"{INDEX_MANIFEST} sem sap_reference_library (limiar do fallback sem indice)"
+        )
+    return _ok(check)
 
 
 def check_deployed_model_evaluated(root: Path = REPO_ROOT) -> list[Finding]:
@@ -1311,6 +1379,7 @@ GATES = {
     "promptfoo_configs": check_promptfoo_configs,
     "llm_baseline": check_llm_baseline,
     "deployed_model_evaluated": check_deployed_model_evaluated,
+    "index_manifest": check_index_manifest,
     "candidate_das_fresh": check_candidate_das,
     "implemented_das_documented": check_documented_das,
     "da_registered": check_da_registered,

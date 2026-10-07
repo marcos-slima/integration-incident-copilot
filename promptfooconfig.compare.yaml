@@ -152,32 +152,43 @@ providers:
 #   - id: "exec:scripts/promptfoo_enterprise.sh"
 #     label: "enterprise: ${ENTERPRISE_MODEL} (LiteLLM)"
 #
+# Validacao 2026-10-07 (M-21): ver o comentario de `metadata.path` em
+# promptfooconfig.yaml - casos "rule_engine" nao chamam o LLM e nao
+# discriminam modelos. Registro honesto: na 1a execucao deste compare o
+# provider LOCAL (modelo de producao) reprovou o caso "queue manager"
+# (citou "WebSphere Queue Manager" copiado da RAG); o "10/10" do README e da
+# Fase 12 e do promptfooconfig.yaml de entao, nao deste compare.
 tests:
   - description: "401 sem conector"
+    metadata: { path: "llm" }
     vars: { description: "iFlow falhando com erro 401", interface_type: "none", identifier: "none" }
     assert:
       - type: javascript
         value: "JSON.parse(output).matched_source === 'cpi_http_401.md'"
 
   - description: "IDoc 51 com conector RFC"
+    metadata: { path: "rule_engine" }
     vars: { description: "IDoc travado", interface_type: "rfc", identifier: "RFC-IDOC-51-DEMO" }
     assert:
       - type: javascript
         value: "['idoc_status_51.md','rule_engine:sap_idoc_status_51'].includes(JSON.parse(output).matched_source) && JSON.parse(output).confidence >= 0.6"
 
   - description: "RFC connection refused com conector"
+    metadata: { path: "rule_engine" }
     vars: { description: "SM59 não conecta", interface_type: "rfc", identifier: "RFC-CONN-REFUSED-DEMO" }
     assert:
       - type: javascript
         value: "['rfc_connection_refused.md','rule_engine:network_connection_refused'].includes(JSON.parse(output).matched_source) && JSON.parse(output).confidence >= 0.6"
 
   - description: "OData timeout sem conector"
+    metadata: { path: "llm" }
     vars: { description: "iFlow travando ao consumir OData sem retorno", interface_type: "none", identifier: "none" }
     assert:
       - type: javascript
         value: "JSON.parse(output).matched_source === 'odata_timeout_cpi.md'"
 
   - description: "Identificador desconhecido - guardrail de seguranca"
+    metadata: { path: "llm" }
     vars: { description: "algo estranho aconteceu", interface_type: "odata", identifier: "XPTO-999-NAO-EXISTE" }
     # DA: este caso exige ABSTENCAO, nao "confianca baixa".
     #
@@ -231,6 +242,7 @@ tests:
           && o.matched_source !== 'salesforce_case_sap_sync_failure.md';
 
   - description: "OData timeout com CPI-TIMEOUT-DEMO"
+    metadata: { path: "llm" }
     vars: { description: "Chamada OData do CPI para o S/4HANA excede o tempo limite", interface_type: "odata", identifier: "CPI-TIMEOUT-DEMO" }
     assert:
       - type: javascript
@@ -277,6 +289,7 @@ tests:
   # removido violava: nenhum valor de `contains`/`not-contains` pode
   # aparecer nas vars de entrada do mesmo caso.
   - description: "queue manager - nao inventar produto especifico"
+    metadata: { path: "llm" }
     vars: { description: "Mensagem não sai do queue manager, trocar por broker SAP", interface_type: "apim", identifier: "APIM-BROKER-001" }
     assert:
       - type: not-contains

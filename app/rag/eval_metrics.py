@@ -63,3 +63,46 @@ def ndcg_at_k(ranked_sources: list[str], expected_sources: set[str], k: int) -> 
     ideal_relevances = [1] * min(k, len(expected_sources))
     idcg = _dcg(ideal_relevances)
     return dcg / idcg if idcg > 0 else 0.0
+
+
+def paired_hit_comparison(
+    candidate_hits: list[int], baseline_hits: list[int], *, rounds: int = 10_000, seed: int = 42
+) -> dict[str, float | int]:
+    """Validacao 2026-10-07 (M-20): diferenca de Hit@1 com incerteza.
+
+    O reranker foi escolhido por uma margem de UMA consulta (12/13 vs 11/13)
+    apresentada como "+7pp". Com n tao pequeno a diferenca precisa vir com:
+      - os pares discordantes (b: so o candidato acerta; c: so o baseline);
+      - p-valor exato de McNemar (binomial bicaudal sobre b+c);
+      - IC 95% por bootstrap pareado (reamostra consultas, nao modelos).
+    Puro (sem numpy) e deterministico (seed), para o JSON ser reproduzivel.
+    """
+    import random
+    from math import comb
+
+    if len(candidate_hits) != len(baseline_hits) or not candidate_hits:
+        raise ValueError("listas de acertos pareadas e nao vazias")
+    n = len(candidate_hits)
+    b = sum(1 for x, y in zip(candidate_hits, baseline_hits, strict=True) if x and not y)
+    c = sum(1 for x, y in zip(candidate_hits, baseline_hits, strict=True) if y and not x)
+    discordant = b + c
+    if discordant == 0:
+        p_value = 1.0
+    else:
+        tail = sum(comb(discordant, k) for k in range(min(b, c) + 1)) / 2**discordant
+        p_value = min(1.0, 2 * tail)
+    rng = random.Random(seed)
+    diffs = []
+    for _ in range(rounds):
+        idx = [rng.randrange(n) for _ in range(n)]
+        diffs.append(sum(candidate_hits[i] - baseline_hits[i] for i in idx) / n)
+    diffs.sort()
+    return {
+        "n": n,
+        "delta_hit_at_1": (sum(candidate_hits) - sum(baseline_hits)) / n,
+        "only_candidate": b,
+        "only_baseline": c,
+        "mcnemar_exact_p": round(p_value, 4),
+        "bootstrap_ci95_low": diffs[int(0.025 * rounds)],
+        "bootstrap_ci95_high": diffs[int(0.975 * rounds) - 1],
+    }

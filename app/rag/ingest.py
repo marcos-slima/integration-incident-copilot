@@ -651,6 +651,21 @@ def run_ingest(
         )
     else:
         print(f"[{target}] Concluido. Total processado ate agora: {len(processed)} arquivo(s).")
+    # M-23: registra o indice que ficou no ar (contagem, identidade, data) em
+    # data/index_manifest.json - e ele que um limiar calibrado deve citar.
+    try:
+        from app.rag.index_manifest import update_manifest
+
+        entry = update_manifest(
+            client,
+            cfg["collection"],
+            target=target,
+            source_dir=str(source_dir) if source_dir else None,
+            files_processed=len(processed),
+        )
+        print(f"[{target}] Manifesto do indice: {entry['points']} ponto(s) em {cfg['collection']}")
+    except Exception as exc:  # noqa: BLE001 - manifesto e registro, nao pode falhar o ingest
+        print(f"[{target}] [aviso] manifesto do indice nao atualizado: {exc}")
     return error_count
 
 

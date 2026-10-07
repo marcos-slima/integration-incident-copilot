@@ -72,7 +72,13 @@ from pathlib import Path
 # sem precisar de sys.path.insert - diferente de scripts/eval_rag.py
 # (script mais antigo, mantido como esta por nao ser escopo desta
 # mudanca).
-from app.rag.eval_metrics import hit_at_1, mrr_at_k, ndcg_at_k, recall_at_k
+from app.rag.eval_metrics import (
+    hit_at_1,
+    mrr_at_k,
+    ndcg_at_k,
+    paired_hit_comparison,
+    recall_at_k,
+)
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 SAMPLE_DOCS_DIR = BASE_DIR / "data" / "sample_docs"
@@ -124,6 +130,30 @@ class ModelResult:
     rss_delta_mb: float = 0.0
     param_count: int | None = None
     per_query: list[dict] = field(default_factory=list)
+    # M-20: diferenca de Hit@1 contra o baseline com McNemar exato e IC 95%.
+    vs_baseline: dict | None = None
+
+
+BASELINE_KEY = "ms-marco-L6"
+
+
+def annotate_vs_baseline(results: list[dict]) -> list[dict]:
+    """Preenche `vs_baseline` em cada resultado (dicts, como no JSON).
+
+    Validacao 2026-10-07 (M-20): a escolha do reranker foi apresentada como
+    "+7pp Hit@1" sobre uma margem de uma consulta. Com o dataset atual a
+    margem continua de uma consulta, e o JSON agora carrega o p-valor e o
+    intervalo - quem le o numero ve a incerteza junto."""
+    base = next((r for r in results if r.get("key") == BASELINE_KEY and r.get("ok")), None)
+    if base is None:
+        return results
+    base_hits = [q["hit_at_1"] for q in base["per_query"]]
+    for r in results:
+        if r.get("ok") and r.get("key") != BASELINE_KEY:
+            r["vs_baseline"] = paired_hit_comparison(
+                [q["hit_at_1"] for q in r["per_query"]], base_hits
+            )
+    return results
 
 
 def _load_corpus() -> list[dict]:
@@ -325,7 +355,10 @@ def main() -> None:
 
     RESULTS_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
     RESULTS_JSON_PATH.write_text(
-        json.dumps([r.__dict__ for r in results], indent=2, ensure_ascii=False), encoding="utf-8"
+        json.dumps(
+            annotate_vs_baseline([r.__dict__ for r in results]), indent=2, ensure_ascii=False
+        ),
+        encoding="utf-8",
     )
     print(f"\nResultados completos salvos em {RESULTS_JSON_PATH.relative_to(BASE_DIR)}")
 

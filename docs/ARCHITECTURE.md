@@ -1188,4 +1188,4 @@ Cada nova regra segue o padrão `ErrorRule`:
 O docstring de `_get_reranker()` em `app/rag/retriever.py` ainda
 mencionava o modelo antigo `ms-marco-MiniLM-L-6-v2`. Corrigido para
 refletir o modelo atual `mmarco-mMiniLMv2-L12-H384-v1` com as métricas
-reais da DA-29 (+7pp Hit@1, +4pp MRR@5, 3.5x mais rápido que L-12 FP32).
+reais da DA-29. **Correção (validação 2026-10-07, M-20):** "3.5x mais rápido" é em relação ao `bge-reranker-base`; o mmarco é ~1,3–1,5x mais LENTO que o baseline L-6, e a vantagem de Hit@1 é de uma consulta, sem significância (ver `docs/RERANKER_BENCHMARK.md`).

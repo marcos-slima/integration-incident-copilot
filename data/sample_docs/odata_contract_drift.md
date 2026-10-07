@@ -22,9 +22,12 @@ estrutura diferente da que o consumidor esperava.
 ## Diagnostico
 1. Ler o $metadata ($metadata ou .xml) do servico e comparar com a
    versao que o consumidor espera
-2. Classificar a mudanca: breaking (removido/tipo alterado) exige
-   adaptedor; additive/cosmetic (campo novo, renomeacao) costuma
-   ser inofensiva
+2. Classificar a mudanca: breaking (propriedade removida ou
+   RENOMEADA, tipo alterado, MaxLength novo ou menor, propriedade que
+   passou a ser obrigatoria) exige adaptar o consumidor - para quem le
+   o servico, renomear tem o mesmo efeito de remover. Additive
+   (propriedade nova opcional) e cosmetic (anotacao, namespace,
+   versao) costumam ser inofensivas
 3. Verificar a proveniencia (versao do servico, data de republicacao)
    para separar mudanca real de ruido de namespace/versao
 4. Se o erro for 404 em propriedade, o path do recurso mudou; se for
@@ -33,7 +36,8 @@ estrutura diferente da que o consumidor esperava.
 ## Resolucao tipica
 Para mudanca breaking, adaptar o consumidor (ou o mapper do
 middleware) e subir em conjunto, em vez de corrigir caso a caso. Para
-mudanca aditiva/cosmetic, nenhuma acao em geral e necessaria alem de
-republicar o consumidor. Quando a mudanca for esperada e
-planejada, agendar a atualizacao do consumidor junto do patch do SAP
+mudanca aditiva/cosmetic, em geral nenhuma acao e necessaria - mas
+confirme antes que o consumidor ignora propriedades desconhecidas
+(alguns proxies gerados validam o schema estritamente). Quando a
+mudanca for esperada e planejada, agendar a atualizacao do consumidor junto do patch do SAP
 para evitar janela de incompatibilidade.

@@ -31,12 +31,28 @@ sistema SAP real disponivel, mas prova que o binding funciona).
 O bloqueio anterior era pessoal (sem S-user/contrato SAP) - confirmado
 que nao e um bloqueio tecnico do produto. Cliente real com licenca SAP
 ativa usa esse conector sem restricao adicional.
+
+O QUE "VALIDADO" SIGNIFICA AQUI (validacao 2026-10-07, M-10): o binding
+pyrfc + SDK carrega e o logon funciona (RFC_SYSTEM_INFO no ABAP Trial). A
+funcao que este conector chama, `BAPI_IDOC_STATUS`, NUNCA foi executada
+contra um sistema real (indisponivel no Trial) - nome, parametros e formato
+da tabela STATUS sao a hipotese documentada, nao um contrato verificado. Se
+o modulo nao existir no sistema do cliente, o resultado agora e um erro
+legivel (FU_NOT_FOUND), nao um 500.
+
+Tambem em M-10: breaker de conector (falha de comunicacao conta; logon e
+erro ABAP nao, porque sao respostas de um sistema de pe), excecoes do pyrfc
+traduzidas em ConnectorResult e timeout por chamada (RFC_TIMEOUT_SECONDS).
+Continua uma conexao por chamada (sem pool): o volume de diagnosticos e
+baixo e o pool do SDK exigiria gerenciar estado entre requisicoes.
 """
 
 from app.config import settings
 from app.connectors.base import (
     ConnectorResult,
     SAPConnector,
+    circuit_breaker_guard,
+    connector_circuit_breaker,
     validate_identifier_charset,
 )
 from app.exceptions import ConfigurationError
@@ -142,19 +158,29 @@ class RFCConnector(SAPConnector):
         separado de `fetch()` para o caminho mock continuar 100%
         testavel sem essa dependencia.
         """
+        if (blocked := circuit_breaker_guard("RFC")) is not None:
+            return blocked
         if (invalid := validate_identifier_charset(identifier, "RFC")) is not None:
             return invalid
-        conn = pyrfc.Connection(
-            ashost=settings.sap_ashost,
-            sysnr=settings.sap_sysnr,
-            client=settings.sap_client,
-            user=settings.sap_user,
-            passwd=settings.sap_password,
-        )
         try:
-            result = conn.call("BAPI_IDOC_STATUS", IDOCNUMBER=identifier)
-        finally:
-            conn.close()
+            conn = pyrfc.Connection(
+                ashost=settings.sap_ashost,
+                sysnr=settings.sap_sysnr,
+                client=settings.sap_client,
+                user=settings.sap_user,
+                passwd=settings.sap_password,
+            )
+            try:
+                result = conn.call(
+                    "BAPI_IDOC_STATUS",
+                    options={"timeout": settings.rfc_timeout_seconds},
+                    IDOCNUMBER=identifier,
+                )
+            finally:
+                conn.close()
+        except Exception as exc:  # noqa: BLE001 - toda excecao do pyrfc vira resultado
+            return _rfc_error_result(exc)
+        connector_circuit_breaker.record_success("RFC")
 
         status_records = result.get("STATUS", [])
         latest = status_records[-1] if status_records else {}
@@ -167,3 +193,39 @@ class RFCConnector(SAPConnector):
             raw=str(result),
             is_mock=False,
         )
+
+
+def _rfc_error_result(exc: Exception) -> ConnectorResult:
+    """M-10: traduz excecoes do pyrfc em ConnectorResult.
+
+    Antes nenhuma era tratada: logon recusado, destino fora do ar ou modulo
+    inexistente viravam 500 no /diagnose. Classes do pyrfc (CommunicationError,
+    LogonError, ABAPApplicationError, ABAPRuntimeError, ExternalRuntimeError)
+    sao reconhecidas pelo nome - o modulo nao existe quando o SDK nao esta
+    instalado, e o teste injeta classes falsas com os mesmos nomes."""
+    kind = type(exc).__name__
+    key = getattr(exc, "key", "") or ""
+    message = getattr(exc, "message", "") or str(exc)
+    if kind == "CommunicationError":
+        # Indisponibilidade de rede/gateway: e o que o breaker existe para cortar.
+        connector_circuit_breaker.record_failure(
+            "RFC",
+            settings.connector_circuit_failure_threshold,
+            settings.connector_circuit_cooldown_seconds,
+        )
+        code = "RFC_COMMUNICATION_FAILURE"
+    elif kind == "LogonError":
+        code = "RFC_LOGON_FAILURE"
+    elif kind in {"ABAPApplicationError", "ABAPRuntimeError"}:
+        code = key or "RFC_ABAP_ERROR"
+    else:
+        code = key or "RFC_ERROR"
+    return ConnectorResult(
+        source_system="RFC",
+        status="error",
+        error_code=code,
+        message=f"Chamada RFC falhou ({kind}): {message}"[:500],
+        raw="",
+        is_mock=False,
+        is_fallback=True,
+    )

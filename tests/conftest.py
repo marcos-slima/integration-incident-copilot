@@ -123,3 +123,15 @@ def _isolate_auth_guard(monkeypatch):
     auth_guard.reset_for_tests()
     yield
     auth_guard.reset_for_tests()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_oauth_token_cache():
+    """M-06: o cache de token OAuth2 e por processo - sem limpar, o token de
+    um teste (MockTransport) seria reaproveitado no seguinte e testes de
+    falha do token endpoint nunca chegariam a chamar o endpoint."""
+    from app.connectors.base import oauth_token_cache
+
+    oauth_token_cache.clear()
+    yield
+    oauth_token_cache.clear()

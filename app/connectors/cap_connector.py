@@ -39,8 +39,13 @@ from app.config import settings
 from app.connectors.base import (
     ConnectorResult,
     ExternalSystemConnector,
+    TokenResponseError,
     circuit_breaker_guard,
     connector_circuit_breaker,
+    json_or_error,
+    oauth_token_cache,
+    record_response_outcome,
+    token_error_result,
     validate_identifier_charset,
 )
 
@@ -93,13 +98,16 @@ class CAPConnector(ExternalSystemConnector):
         return self._fetch_real(identifier)
 
     def _get_access_token(self, client: httpx.Client) -> str:
-        response = client.post(
-            settings.cap_xsuaa_token_url,
-            auth=httpx.BasicAuth(settings.cap_client_id, settings.cap_client_secret),
-            data={"grant_type": "client_credentials"},
+        # Validacao 2026-10-07 (M-06): token reutilizado ate expirar, em vez
+        # de um POST ao IdP por diagnostico.
+        return oauth_token_cache.get(
+            (settings.cap_xsuaa_token_url, settings.cap_client_id),
+            lambda: client.post(
+                settings.cap_xsuaa_token_url,
+                auth=httpx.BasicAuth(settings.cap_client_id, settings.cap_client_secret),
+                data={"grant_type": "client_credentials"},
+            ),
         )
-        response.raise_for_status()
-        return response.json()["access_token"]
 
     def _fetch_real(self, identifier: str) -> ConnectorResult:
         if (blocked := circuit_breaker_guard("SAP CAP")) is not None:
@@ -118,21 +126,10 @@ class CAPConnector(ExternalSystemConnector):
                 f"{settings.cap_service_url.rstrip('/')}?$filter={filter_expr}",
                 headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
             )
-        except httpx.HTTPStatusError as exc:
-            connector_circuit_breaker.record_failure(
-                "SAP CAP",
-                settings.connector_circuit_failure_threshold,
-                settings.connector_circuit_cooldown_seconds,
-            )
-            return ConnectorResult(
-                source_system="SAP CAP",
-                status="error",
-                error_code=str(exc.response.status_code),
-                message=f"Falha ao obter token XSUAA: HTTP {exc.response.status_code}",
-                raw=exc.response.text[:2000],
-                is_mock=False,
-                is_fallback=True,
-            )
+        except (httpx.HTTPStatusError, TokenResponseError) as exc:
+            # M-06: 401/403 do token endpoint e credencial, nao indisponibilidade:
+            # nao abre o circuito (so 5xx/429 contam).
+            return token_error_result("SAP CAP", exc, "do servico")
         except httpx.RequestError as exc:
             connector_circuit_breaker.record_failure(
                 "SAP CAP",
@@ -152,7 +149,7 @@ class CAPConnector(ExternalSystemConnector):
             if self._injected_client is None:
                 client.close()
 
-        connector_circuit_breaker.record_success("SAP CAP")
+        record_response_outcome("SAP CAP", response.status_code)
 
         if response.status_code != 200:
             return ConnectorResult(
@@ -165,7 +162,10 @@ class CAPConnector(ExternalSystemConnector):
                 is_fallback=True,
             )
 
-        records = response.json().get("value", [])  # OData v4 usa "value", nao "records"
+        payload, invalid = json_or_error(response, "SAP CAP")
+        if invalid is not None:
+            return invalid
+        records = payload.get("value", [])  # OData v4 usa "value", nao "records"
         if not records:
             return ConnectorResult(
                 source_system="SAP CAP",

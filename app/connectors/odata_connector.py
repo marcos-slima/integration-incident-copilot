@@ -25,8 +25,13 @@ from app.config import settings
 from app.connectors.base import (
     ConnectorResult,
     SAPConnector,
+    TokenResponseError,
     circuit_breaker_guard,
     connector_circuit_breaker,
+    json_or_error,
+    oauth_token_cache,
+    record_response_outcome,
+    token_error_result,
     validate_identifier_charset,
 )
 from app.contracts.model import Contract
@@ -90,13 +95,16 @@ class ODataConnector(SAPConnector):
         return _MOCK_SCENARIOS.get(identifier, _DEFAULT)
 
     def _get_access_token(self, client: httpx.Client) -> str:
-        response = client.post(
-            settings.odata_oauth_token_url,
-            data={"grant_type": "client_credentials"},
-            auth=(settings.odata_client_id, settings.odata_client_secret),
+        # Validacao 2026-10-07 (M-06): token reutilizado ate expirar, em vez
+        # de um POST ao IdP por diagnostico.
+        return oauth_token_cache.get(
+            (settings.odata_oauth_token_url, settings.odata_client_id),
+            lambda: client.post(
+                settings.odata_oauth_token_url,
+                data={"grant_type": "client_credentials"},
+                auth=(settings.odata_client_id, settings.odata_client_secret),
+            ),
         )
-        response.raise_for_status()
-        return response.json()["access_token"]
 
     def fetch_contract(self) -> Contract | None:  # DA-52
         """Le o `$metadata` do serviço e devolve o contrato normalizado.
@@ -148,21 +156,10 @@ class ODataConnector(SAPConnector):
                 params={"$filter": f"MessageId eq '{identifier}'", "$format": "json"},
                 headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
             )
-        except httpx.HTTPStatusError as exc:
-            connector_circuit_breaker.record_failure(
-                "OData",
-                settings.connector_circuit_failure_threshold,
-                settings.connector_circuit_cooldown_seconds,
-            )
-            return ConnectorResult(
-                source_system="OData",
-                status="error",
-                error_code=str(exc.response.status_code),
-                message=f"Falha ao obter token OAuth2 do CPI: HTTP {exc.response.status_code}",
-                raw=exc.response.text[:2000],
-                is_mock=False,
-                is_fallback=True,
-            )
+        except (httpx.HTTPStatusError, TokenResponseError) as exc:
+            # M-06: 401/403 do token endpoint e credencial, nao indisponibilidade:
+            # nao abre o circuito (so 5xx/429 contam).
+            return token_error_result("OData", exc, "do CPI")
         except httpx.RequestError as exc:
             connector_circuit_breaker.record_failure(
                 "OData",
@@ -182,7 +179,7 @@ class ODataConnector(SAPConnector):
             if self._injected_client is None:
                 client.close()
 
-        connector_circuit_breaker.record_success("OData")
+        record_response_outcome("OData", response.status_code)
 
         if response.status_code != 200:
             return ConnectorResult(
@@ -195,7 +192,10 @@ class ODataConnector(SAPConnector):
                 is_fallback=True,
             )
 
-        results = response.json().get("d", {}).get("results", [])
+        payload, invalid = json_or_error(response, "OData")
+        if invalid is not None:
+            return invalid
+        results = payload.get("d", {}).get("results", [])
         if not results:
             return ConnectorResult(
                 source_system="OData",

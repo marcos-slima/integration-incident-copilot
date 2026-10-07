@@ -22,8 +22,13 @@ from app.config import settings
 from app.connectors.base import (
     ConnectorResult,
     ExternalSystemConnector,
+    TokenResponseError,
     circuit_breaker_guard,
     connector_circuit_breaker,
+    json_or_error,
+    oauth_token_cache,
+    record_response_outcome,
+    token_error_result,
     validate_identifier_charset,
 )
 
@@ -74,16 +79,22 @@ class SalesforceConnector(ExternalSystemConnector):
         return self._fetch_real(identifier)
 
     def _get_access_token(self, client: httpx.Client) -> str:
-        response = client.post(
-            f"{settings.salesforce_instance_url.rstrip('/')}/services/oauth2/token",
-            data={
-                "grant_type": "client_credentials",
-                "client_id": settings.salesforce_client_id,
-                "client_secret": settings.salesforce_client_secret,
-            },
+        # Validacao 2026-10-07 (M-06): token reutilizado ate expirar, em vez
+        # de um POST ao IdP por diagnostico.
+        return oauth_token_cache.get(
+            (
+                f"{settings.salesforce_instance_url.rstrip('/')}/services/oauth2/token",
+                settings.salesforce_client_id,
+            ),
+            lambda: client.post(
+                f"{settings.salesforce_instance_url.rstrip('/')}/services/oauth2/token",
+                data={
+                    "grant_type": "client_credentials",
+                    "client_id": settings.salesforce_client_id,
+                    "client_secret": settings.salesforce_client_secret,
+                },
+            ),
         )
-        response.raise_for_status()
-        return response.json()["access_token"]
 
     def _fetch_real(self, identifier: str) -> ConnectorResult:
         if (blocked := circuit_breaker_guard("Salesforce")) is not None:
@@ -113,21 +124,10 @@ class SalesforceConnector(ExternalSystemConnector):
                 params={"q": soql},
                 headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
             )
-        except httpx.HTTPStatusError as exc:
-            connector_circuit_breaker.record_failure(
-                "Salesforce",
-                settings.connector_circuit_failure_threshold,
-                settings.connector_circuit_cooldown_seconds,
-            )
-            return ConnectorResult(
-                source_system="Salesforce",
-                status="error",
-                error_code=str(exc.response.status_code),
-                message=f"Falha ao obter token OAuth2 do Salesforce: HTTP {exc.response.status_code}",
-                raw=exc.response.text[:2000],
-                is_mock=False,
-                is_fallback=True,
-            )
+        except (httpx.HTTPStatusError, TokenResponseError) as exc:
+            # M-06: 401/403 do token endpoint e credencial, nao indisponibilidade:
+            # nao abre o circuito (so 5xx/429 contam).
+            return token_error_result("Salesforce", exc, "do Salesforce")
         except httpx.RequestError as exc:
             connector_circuit_breaker.record_failure(
                 "Salesforce",
@@ -147,7 +147,7 @@ class SalesforceConnector(ExternalSystemConnector):
             if self._injected_client is None:
                 client.close()
 
-        connector_circuit_breaker.record_success("Salesforce")
+        record_response_outcome("Salesforce", response.status_code)
 
         if response.status_code != 200:
             return ConnectorResult(
@@ -160,7 +160,10 @@ class SalesforceConnector(ExternalSystemConnector):
                 is_fallback=True,
             )
 
-        records = response.json().get("records", [])
+        payload, invalid = json_or_error(response, "Salesforce")
+        if invalid is not None:
+            return invalid
+        records = payload.get("records", [])
         if not records:
             return ConnectorResult(
                 source_system="Salesforce",

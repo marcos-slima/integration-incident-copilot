@@ -56,3 +56,14 @@ def test_m18_start_docker_sem_ai_stack_e_sem_uv_no_container():
 @pytest.mark.skipif(shutil.which("bash") is None, reason="sem bash")
 def test_m18_start_docker_sintaxe():
     subprocess.run(["bash", "-n", str(RAIZ / "scripts" / "start-docker.sh")], check=True)
+
+
+def test_embedding_backend_vem_do_env_file(tmp_path, monkeypatch):
+    """EMBEDDING_BACKEND no .env era ignorado (lido so de os.environ no import
+    do retriever); container e `uv run` caiam no Ollama sem aviso."""
+    from app.config import Settings
+
+    monkeypatch.delenv("EMBEDDING_BACKEND", raising=False)
+    env = tmp_path / ".env"
+    env.write_text("EMBEDDING_BACKEND=fastembed\n", encoding="utf-8")
+    assert Settings(_env_file=env).embedding_backend == "fastembed"

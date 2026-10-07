@@ -199,6 +199,11 @@ class Settings(BaseSettings):
     sap_client: str = "100"
     sap_user: str = ""
     sap_password: str = ""
+    # Validacao 2026-10-07 (M-10): a chamada RFC nao tinha timeout - um
+    # gateway SAP preso segurava a thread do diagnostico ate o
+    # diagnosis_timeout do grafo. Segundos, por chamada (opcao `timeout`
+    # do pyrfc >= 2.7).
+    rfc_timeout_seconds: int = 20
 
     # OData/CPI real (app/connectors/odata_connector.py) - OAuth2
     # client_credentials contra o token endpoint do CPI/Integration
@@ -222,6 +227,11 @@ class Settings(BaseSettings):
     # SuccessFactors<->Workday (replicacao de dados de funcionario).
     workday_tenant: str = ""
     workday_rest_base_url: str = ""  # ex: https://wd2-impl-services1.workday.com
+    # Validacao 2026-10-07 (M-09): token endpoint explicito. Vazio = derivado
+    # do HOST de WORKDAY_REST_BASE_URL (https://<host>/ccx/oauth2/<tenant>/token).
+    # Antes era montado como https://<tenant>.workday.com/..., host que nao
+    # existe nos tenants Workday (o servico fica em wdN-*-services*.workday.com).
+    workday_token_url: str = ""
     workday_client_id: str = ""
     workday_client_secret: str = ""
 

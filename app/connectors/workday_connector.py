@@ -15,14 +15,21 @@ Uso:
     result = WorkdayConnector().fetch("WD-SYNC-FAIL-DEMO")
 """
 
+from urllib.parse import urlsplit
+
 import httpx
 
 from app.config import settings
 from app.connectors.base import (
     ConnectorResult,
     ExternalSystemConnector,
+    TokenResponseError,
     circuit_breaker_guard,
     connector_circuit_breaker,
+    json_or_error,
+    oauth_token_cache,
+    record_response_outcome,
+    token_error_result,
     validate_identifier_charset,
 )
 
@@ -56,6 +63,37 @@ _DEFAULT = ConnectorResult(
 )
 
 
+def _token_url() -> str:
+    """M-09: token endpoint explicito ou derivado do host da REST API."""
+    if settings.workday_token_url:
+        return settings.workday_token_url
+    host = urlsplit(settings.workday_rest_base_url).netloc
+    return f"https://{host}/ccx/oauth2/{settings.workday_tenant}/token"
+
+
+def _config_error() -> ConnectorResult | None:
+    """Validacao 2026-10-07 (M-09): com WORKDAY_TENANT preenchido e
+    WORKDAY_REST_BASE_URL vazio, o GET virava URL relativa
+    ("/integrationEvents/<id>") e o httpx falhava com erro opaco. Agora a
+    configuracao incompleta vira um resultado legivel, sem tentar a rede."""
+    base = urlsplit(settings.workday_rest_base_url or "")
+    if base.scheme != "https" or not base.netloc:
+        return ConnectorResult(
+            source_system="Workday",
+            status="error",
+            error_code="CONFIGURATION_ERROR",
+            message=(
+                "Workday em modo real (WORKDAY_TENANT preenchido) exige "
+                "WORKDAY_REST_BASE_URL absoluta com https (ex.: "
+                "https://wd2-impl-services1.workday.com/ccx/api/v1/<tenant>)."
+            ),
+            raw="",
+            is_mock=False,
+            is_fallback=True,
+        )
+    return None
+
+
 class WorkdayConnector(ExternalSystemConnector):
     """`fetch(identifier)` busca por ID de evento de integracao.
 
@@ -74,16 +112,20 @@ class WorkdayConnector(ExternalSystemConnector):
         return self._fetch_real(identifier)
 
     def _get_access_token(self, client: httpx.Client) -> str:
-        response = client.post(
-            f"https://{settings.workday_tenant}.workday.com/ccx/oauth2/"
-            f"{settings.workday_tenant}/token",
-            data={"grant_type": "client_credentials"},
-            auth=(settings.workday_client_id, settings.workday_client_secret),
+        # Validacao 2026-10-07 (M-06): token reutilizado ate expirar, em vez
+        # de um POST ao IdP por diagnostico.
+        return oauth_token_cache.get(
+            (_token_url(), settings.workday_client_id),
+            lambda: client.post(
+                _token_url(),
+                data={"grant_type": "client_credentials"},
+                auth=(settings.workday_client_id, settings.workday_client_secret),
+            ),
         )
-        response.raise_for_status()
-        return response.json()["access_token"]
 
     def _fetch_real(self, identifier: str) -> ConnectorResult:
+        if (misconfigured := _config_error()) is not None:
+            return misconfigured
         if (blocked := circuit_breaker_guard("Workday")) is not None:
             return blocked
         if (invalid := validate_identifier_charset(identifier, "Workday")) is not None:
@@ -95,21 +137,10 @@ class WorkdayConnector(ExternalSystemConnector):
                 f"{settings.workday_rest_base_url.rstrip('/')}/integrationEvents/{identifier}",
                 headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
             )
-        except httpx.HTTPStatusError as exc:
-            connector_circuit_breaker.record_failure(
-                "Workday",
-                settings.connector_circuit_failure_threshold,
-                settings.connector_circuit_cooldown_seconds,
-            )
-            return ConnectorResult(
-                source_system="Workday",
-                status="error",
-                error_code=str(exc.response.status_code),
-                message=f"Falha ao obter token OAuth2 do Workday: HTTP {exc.response.status_code}",
-                raw=exc.response.text[:2000],
-                is_mock=False,
-                is_fallback=True,
-            )
+        except (httpx.HTTPStatusError, TokenResponseError) as exc:
+            # M-06: 401/403 do token endpoint e credencial, nao indisponibilidade:
+            # nao abre o circuito (so 5xx/429 contam).
+            return token_error_result("Workday", exc, "do Workday")
         except httpx.RequestError as exc:
             connector_circuit_breaker.record_failure(
                 "Workday",
@@ -129,7 +160,7 @@ class WorkdayConnector(ExternalSystemConnector):
             if self._injected_client is None:
                 client.close()
 
-        connector_circuit_breaker.record_success("Workday")
+        record_response_outcome("Workday", response.status_code)
 
         if response.status_code == 404:
             return ConnectorResult(
@@ -152,7 +183,10 @@ class WorkdayConnector(ExternalSystemConnector):
                 is_fallback=True,
             )
 
-        record = response.json()
+        payload, invalid = json_or_error(response, "Workday")
+        if invalid is not None:
+            return invalid
+        record = payload
         status = record.get("status", "Unknown")
         return ConnectorResult(
             source_system="Workday",

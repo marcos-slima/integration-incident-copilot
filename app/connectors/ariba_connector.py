@@ -22,8 +22,13 @@ from app.config import settings
 from app.connectors.base import (
     ConnectorResult,
     ExternalSystemConnector,
+    TokenResponseError,
     circuit_breaker_guard,
     connector_circuit_breaker,
+    json_or_error,
+    oauth_token_cache,
+    record_response_outcome,
+    token_error_result,
     validate_identifier_charset,
 )
 
@@ -76,13 +81,16 @@ class AribaConnector(ExternalSystemConnector):
         return self._fetch_real(identifier)
 
     def _get_access_token(self, client: httpx.Client) -> str:
-        response = client.post(
-            settings.ariba_oauth_token_url,
-            data={"grant_type": "client_credentials"},
-            auth=(settings.ariba_client_id, settings.ariba_client_secret),
+        # Validacao 2026-10-07 (M-06): token reutilizado ate expirar, em vez
+        # de um POST ao IdP por diagnostico.
+        return oauth_token_cache.get(
+            (settings.ariba_oauth_token_url, settings.ariba_client_id),
+            lambda: client.post(
+                settings.ariba_oauth_token_url,
+                data={"grant_type": "client_credentials"},
+                auth=(settings.ariba_client_id, settings.ariba_client_secret),
+            ),
         )
-        response.raise_for_status()
-        return response.json()["access_token"]
 
     def _fetch_real(self, identifier: str) -> ConnectorResult:
         if (blocked := circuit_breaker_guard("Ariba")) is not None:
@@ -96,21 +104,10 @@ class AribaConnector(ExternalSystemConnector):
                 f"{settings.ariba_base_url.rstrip('/')}/purchase-orders/{identifier}",
                 headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
             )
-        except httpx.HTTPStatusError as exc:
-            connector_circuit_breaker.record_failure(
-                "Ariba",
-                settings.connector_circuit_failure_threshold,
-                settings.connector_circuit_cooldown_seconds,
-            )
-            return ConnectorResult(
-                source_system="Ariba",
-                status="error",
-                error_code=str(exc.response.status_code),
-                message=f"Falha ao obter token OAuth2 da Ariba: HTTP {exc.response.status_code}",
-                raw=exc.response.text[:2000],
-                is_mock=False,
-                is_fallback=True,
-            )
+        except (httpx.HTTPStatusError, TokenResponseError) as exc:
+            # M-06: 401/403 do token endpoint e credencial, nao indisponibilidade:
+            # nao abre o circuito (so 5xx/429 contam).
+            return token_error_result("Ariba", exc, "da Ariba")
         except httpx.RequestError as exc:
             connector_circuit_breaker.record_failure(
                 "Ariba",
@@ -130,7 +127,7 @@ class AribaConnector(ExternalSystemConnector):
             if self._injected_client is None:
                 client.close()
 
-        connector_circuit_breaker.record_success("Ariba")
+        record_response_outcome("Ariba", response.status_code)
 
         if response.status_code == 404:
             return ConnectorResult(
@@ -153,7 +150,10 @@ class AribaConnector(ExternalSystemConnector):
                 is_fallback=True,
             )
 
-        record = response.json()
+        payload, invalid = json_or_error(response, "Ariba")
+        if invalid is not None:
+            return invalid
+        record = payload
         network_status = record.get("networkStatus", "Unknown")
         return ConnectorResult(
             source_system="Ariba",

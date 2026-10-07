@@ -29,6 +29,8 @@ from app.connectors.base import (
     ExternalSystemConnector,
     circuit_breaker_guard,
     connector_circuit_breaker,
+    json_or_error,
+    record_response_outcome,
     validate_identifier_charset,
 )
 
@@ -115,7 +117,7 @@ class ServiceNowConnector(ExternalSystemConnector):
             if self._injected_client is None:
                 client.close()
 
-        connector_circuit_breaker.record_success("ServiceNow")
+        record_response_outcome("ServiceNow", response.status_code)
 
         if response.status_code != 200:
             return ConnectorResult(
@@ -128,7 +130,10 @@ class ServiceNowConnector(ExternalSystemConnector):
                 is_fallback=True,
             )
 
-        records = response.json().get("result", [])
+        payload, invalid = json_or_error(response, "ServiceNow")
+        if invalid is not None:
+            return invalid
+        records = payload.get("result", [])
         if not records:
             return ConnectorResult(
                 source_system="ServiceNow",

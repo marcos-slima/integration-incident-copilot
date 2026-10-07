@@ -538,9 +538,8 @@ def test_successfactors_connector_real_mode_active_employee(monkeypatch):
     assert result.source_system == "SuccessFactors"
 
 
-def test_successfactors_connector_real_mode_replication_failed(monkeypatch):
+def _sf_settings(monkeypatch):
     from app.config import Settings
-    from app.connectors.successfactors_connector import SuccessFactorsConnector
 
     monkeypatch.setattr(
         "app.connectors.successfactors_connector.settings",
@@ -552,16 +551,25 @@ def test_successfactors_connector_real_mode_replication_failed(monkeypatch):
         ),
     )
 
+
+def test_successfactors_connector_real_mode_terminated(monkeypatch):
+    """M-07: leitura pela CHAVE PerPerson('<id>') e status pelo endDate do
+    EmpEmployment (replicationStatus/employmentStatus nao existem na API)."""
+    from app.connectors.successfactors_connector import SuccessFactorsConnector
+
+    _sf_settings(monkeypatch)
+    urls = []
+
     def handler(request: httpx.Request) -> httpx.Response:
         if "oauth" in str(request.url) or "token" in str(request.url):
             return httpx.Response(200, json={"access_token": "fake-token"})
+        urls.append(request.url)
         return httpx.Response(
             200,
             json={
                 "d": {
                     "personIdExternal": "EMP-999",
-                    "replicationStatus": "FAILED",
-                    "employmentNav": {"results": [{"employmentStatus": "active"}]},
+                    "employmentNav": {"results": [{"endDate": "/Date(1767225600000)/"}]},
                 }
             },
         )
@@ -569,9 +577,34 @@ def test_successfactors_connector_real_mode_replication_failed(monkeypatch):
     client = httpx.Client(transport=httpx.MockTransport(handler))
     result = SuccessFactorsConnector(client=client).fetch("EMP-999")
 
+    assert urls[0].path == "/odata/v2/PerPerson('EMP-999')"
+    assert "personIdExternal" not in urls[0].params
     assert result.status == "error"
-    assert result.error_code == "REPLICATION_FAILED"
+    assert result.error_code == "TERMINATED"
     assert result.is_mock is False
+
+
+def test_m07_successfactors_nao_usa_registro_de_outro_funcionario(monkeypatch):
+    from app.connectors.successfactors_connector import SuccessFactorsConnector
+
+    _sf_settings(monkeypatch)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "token" in str(request.url):
+            return httpx.Response(200, json={"access_token": "t"})
+        return httpx.Response(200, json={"d": {"personIdExternal": "OUTRO", "employmentNav": {}}})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    result = SuccessFactorsConnector(client=client).fetch("EMP-1")
+    assert result.error_code == "WRONG_RECORD"
+
+    def lista(request: httpx.Request) -> httpx.Response:
+        if "token" in str(request.url):
+            return httpx.Response(200, json={"access_token": "t"})
+        return httpx.Response(200, json={"d": {"results": [{"personIdExternal": "OUTRO"}]}})
+
+    client = httpx.Client(transport=httpx.MockTransport(lista))
+    assert SuccessFactorsConnector(client=client).fetch("EMP-1").error_code == "INVALID_RESPONSE"
 
 
 def test_successfactors_connector_real_mode_connection_error(monkeypatch):
@@ -675,8 +708,20 @@ def test_po_connector_oauth2_sem_token_url_falha_alto(monkeypatch):
     (mandaria Basic para um token endpoint e receberia 401 sem explicacao)."""
     monkeypatch.setattr("app.connectors.po_connector.settings.po_auth_mode", "oauth2")
     monkeypatch.setattr("app.connectors.po_connector.settings.po_oauth_token_url", "")
+    monkeypatch.setattr(
+        "app.connectors.po_connector.settings.po_base_url", "https://po.example.com"
+    )
     with pytest.raises(ConfigurationError):
         POConnector()
+
+
+def test_m08_po_oauth2_sem_token_url_em_mock_nao_derruba(monkeypatch):
+    """Validacao 2026-10-07 (M-08): sem PO_BASE_URL o conector e demo e nunca
+    fala OAuth2 - a checagem derrubava TODO incidente `po` com 500."""
+    monkeypatch.setattr("app.connectors.po_connector.settings.po_auth_mode", "oauth2")
+    monkeypatch.setattr("app.connectors.po_connector.settings.po_oauth_token_url", "")
+    monkeypatch.setattr("app.connectors.po_connector.settings.po_base_url", "")
+    assert POConnector().fetch("PO-MSG-DEMO").is_mock is True
 
 
 def test_po_connector_real_mode_basic_auth(monkeypatch):

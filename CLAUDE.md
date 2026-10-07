@@ -222,6 +222,7 @@ data/
 scripts/            # benchmark_rerankers.py, generate_reports.py,
                     # validate_dashboards.py (45 queries Grafana vs Postgres real),
                     # coverage_map.py (DA-58: gera docs/COVERAGE_MAP.md),
+                    # graph_diagram.py (gera o grafo Mermaid de ARCHITECTURE.md e README.md),
                     # quality_gate.py (DA-51)
 docs/               # índice em README.md; ARCHITECTURE.md, GETTING_STARTED.md,
                     # TUTORIAL_ARQUETURA_DEBUG.md, TROUBLESHOOTING.md,

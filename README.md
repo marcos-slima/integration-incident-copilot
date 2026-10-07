@@ -33,40 +33,39 @@ leia a coluna "validado" antes de citar um conector como prova.
 
 ## Arquitetura
 
+Grafo de orquestração real, gerado de `app/agent/graph.py` por
+`scripts/graph_diagram.py` (forma default; a forma com GraphRAG, o C4, as
+fronteiras de confiança e as máquinas de estado estão em
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#mapa-dos-diagramas)).
+
+<!-- grafo-gerado:inicio (scripts/graph_diagram.py --write; nao editar a mao) -->
+
+**Default: GRAPH_RAG_ENABLED=false**
+
 ```mermaid
 flowchart TD
-    A["Frontend / API client"] -->|"POST /diagnose"| C["FastAPI"]
-    B["Agente externo (A2A)"] -->|"JSON-RPC 2.0"| D["app/a2a/<br/>Agent Card + Task Manager"]
-    C --> E["Orquestracao via LangGraph<br/>app/agent/graph.py"]
-    D --> E
-    E --> S["<b>supervisor</b><br/>classify_domain() → sap / saas / generic<br/>deterministico, sem LLM (DA-22)"]
-    S --> F["<b>connector</b><br/>SAP + multi-vendor: OData - RFC - ServiceNow<br/>Salesforce - Workday - Ariba - SuccessFactors<br/>SAP PO - CAP - APIManagement<br/><i>reais quando configurados, mock por default</i>"]
-    F --> G["<b>retrieve</b><br/>RAG hibrido dense+sparse BM25<br/>Qdrant, fusao RRF, score_threshold"]
-    G --> H{"GraphRAG<br/>habilitado?"}
-    H -->|"sim (opt-in)"| I["graph_enrich<br/>Neo4j"]
-    H -->|"nao (default)"| R{"agent_domain?<br/>(DA-22)"}
-    I --> R
-    R -->|"sap"| J1["<b>sap_diagnose</b><br/>especialista SAP<br/>LLM Gateway + guardrails<br/><i>busca web via ReAct (DA-57)</i>"]
-    R -->|"saas"| J2["<b>saas_diagnose</b><br/>especialista multi-fornecedor<br/>LLM Gateway + guardrails<br/><i>busca web via ReAct (DA-57)</i>"]
-    R -->|"generic"| J3["<b>generic_diagnose</b><br/>especialista generico<br/>LLM Gateway + guardrails"]
-    J1 --> K{"GraphRAG<br/>habilitado?"}
-    J2 --> K
-    J3 --> K
-    K -->|"sim (opt-in)"| L["graph_write<br/>Neo4j"]
-    K -->|"nao (default)"| M["<b>report</b>"]
-    L --> M
-    M --> N["Resposta + Relatorio Markdown"]
-
-    style H fill:#f5f5f5,stroke:#999
-    style K fill:#f5f5f5,stroke:#999
-    style R fill:#f5f5f5,stroke:#999
-    style S fill:#fff3cd,stroke:#e0a800
-    style F fill:#e8f0fe,stroke:#4285f4
-    style G fill:#e8f0fe,stroke:#4285f4
-    style J1 fill:#e8f0fe,stroke:#4285f4
-    style J2 fill:#e8f0fe,stroke:#4285f4
-    style J3 fill:#e8f0fe,stroke:#4285f4
+    inicio(["run_diagnosis"])
+    supervisor["supervisor<br/>classify_domain: sap / saas / generic<br/>(deterministico, sem LLM)"]
+    connector["connector<br/>get_connector(interface_type).fetch(identifier)<br/>real ou cenario demo"]
+    retrieve["retrieve<br/>RAG hibrido + reranker<br/>(fallback reference_library)"]
+    sap_diagnose["sap_diagnose<br/>rule engine; senao LLM via gateway<br/>+ guardrails + evidencia"]
+    saas_diagnose["saas_diagnose<br/>rule engine; senao LLM via gateway<br/>+ guardrails + evidencia"]
+    generic_diagnose["generic_diagnose<br/>rule engine; senao LLM via gateway<br/>+ guardrails + evidencia"]
+    report["report<br/>relatorio Markdown"]
+    fim(["DiagnosisResponse<br/>+ escalation (DA-44)<br/>+ record_incident"])
+    inicio --> supervisor
+    connector --> retrieve
+    generic_diagnose --> report
+    report --> fim
+    retrieve -.->|"generic"| generic_diagnose
+    retrieve -.->|"saas (default)"| saas_diagnose
+    retrieve -.->|"sap"| sap_diagnose
+    saas_diagnose --> report
+    sap_diagnose --> report
+    supervisor --> connector
 ```
+
+<!-- grafo-gerado:fim -->
 
 Ver [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) para o detalhamento
 por camada (API / A2A / orquestração / LLM Gateway / RAG+GraphRAG /

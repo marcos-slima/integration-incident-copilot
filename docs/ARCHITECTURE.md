@@ -5,87 +5,452 @@ Para o "porque" de cada decisao (problemas reais encontrados e como
 foram resolvidos), ver a secao "Decisoes de Arquitetura" no
 [README](../README.md); este documento e o "o que" e "onde".
 
-## Fluxo
+## Mapa dos diagramas
+
+Revisado na validacao de 2026-10-07. Todos os diagramas sao Mermaid; os C4
+usam a notacao C4 (Pessoa, Sistema, Conteiner) desenhada como `flowchart`,
+porque o renderizador `C4Context` do Mermaid sobrepoe os rotulos. O que
+pode ser derivado do codigo e **gerado** ou **conferido por teste**
+(`tests/test_diagramas.py`), para nao repetir os `docs/UC_*` removidos, que
+desenhavam um grafo inexistente.
+
+| Diagrama | Pergunta que responde | Onde | Como fica correto |
+|---|---|---|---|
+| C4 nivel 1 - Contexto | quem aciona o agente e para onde o dado sai | [abaixo](#c4-nivel-1---contexto) | revisao manual |
+| C4 nivel 2 - Conteineres | o que e implantado e com qual protocolo/credencial | [abaixo](#c4-nivel-2---conteineres) | revisao manual |
+| Grafo de orquestracao multiagente | quais nos existem e como o dominio roteia | [abaixo](#grafo-de-orquestracao-multiagente-gerado-do-codigo) | **gerado** por `scripts/graph_diagram.py` |
+| Contrato de estado (`CopilotState`) | quem escreve e quem le cada campo | [abaixo](#contrato-de-estado-e-memoria) | campos conferidos por teste |
+| Fronteiras de confianca | onde o dado e redigido, classificado, barrado ou cifrado | [abaixo](#fronteiras-de-confianca-e-dados-sensiveis) | revisao manual |
+| Decisao do AI Gateway | por que um incidente (nao) foi para a nuvem | [abaixo](#decisao-de-rota-do-ai-gateway) | revisao manual |
+| Maquinas de estado e decisao de escalonamento | estados e transicoes validas | [abaixo](#maquinas-de-estado) | estados conferidos por teste |
+| Sequencia do diagnostico e loop ReAct | ordem das chamadas, determinismo x inferencia | [`CASOS_DE_USO.md`](CASOS_DE_USO.md) | participantes conferidos por teste |
+
+## C4 nivel 1 - Contexto
+
+```mermaid
+flowchart TB
+    analista["<b>Analista de sustentacao</b><br/>[Pessoa]<br/>diagnostica pela UI web"]
+    admin["<b>Administrador</b><br/>[Pessoa]<br/>modelos, credenciais, usuarios,<br/>sistemas, fontes de busca"]
+    agentes["<b>Agentes de IA externos</b><br/>[Sistema externo]<br/>clientes MCP e agentes A2A"]
+    eventos["<b>Monitores e Event Mesh</b><br/>[Sistema externo]<br/>CPI, Solution Manager,<br/>SAP Event Mesh / Solace"]
+
+    iic(["<b>Integration Incident Copilot</b><br/>[Sistema]<br/>regras, RAG e LLM com guardrails"])
+
+    origem["<b>Sistemas de origem</b><br/>[Sistema externo]<br/>10 conectores: OData/CPI, RFC, ServiceNow,<br/>Salesforce, Workday, Ariba, SuccessFactors,<br/>CAP, API Management, PO/PI"]
+    llm["<b>Provedores de LLM</b><br/>[Sistema externo]<br/>Ollama local; OpenAI, Azure<br/>OpenAI e compativeis"]
+    web["<b>Busca web</b><br/>[Sistema externo]<br/>DuckDuckGo, so com fonte aprovada"]
+    email["<b>Provedor de e-mail</b><br/>[Sistema externo]<br/>Mailpit (dev) ou Resend"]
+
+    analista -->|"diagnostica<br/>HTTPS + cookie de sessao"| iic
+    admin -->|"administra<br/>HTTPS + X-API-Admin-Key"| iic
+    agentes -->|"pede diagnostico<br/>MCP: X-API-Key / A2A: X-A2A-Api-Key"| iic
+    eventos -->|"publica incidente<br/>CloudEvents 1.0: webhook ou AMQP 1.0"| iic
+    iic -->|"le o incidente<br/>HTTPS/OAuth2, Basic, RFC"| origem
+    iic -->|"inferencia<br/>so destino permitido pela politica"| llm
+    iic -->|"busca tecnica<br/>consulta sanitizada"| web
+    iic -->|"ativacao de usuario<br/>SMTP ou API"| email
+```
+
+**Leitura:** todo dado que sai do sistema sai por tres setas: conectores
+(leitura), LLM e busca web. As duas ultimas passam por politica: AI Gateway
+(DA-26/39/43) e fontes aprovadas (DA-57).
+
+## C4 nivel 2 - Conteineres
+
+```mermaid
+flowchart TB
+    pessoas["<b>Analista / Administrador</b><br/>[Pessoa]"]
+    clientes["<b>Agentes MCP/A2A e emissores de eventos</b><br/>[Sistema externo]"]
+    llm["<b>Provedores de LLM</b><br/>[Sistema externo]<br/>Ollama no host; cloud"]
+
+    subgraph iic["Integration Incident Copilot"]
+        spa["<b>UI web</b><br/>[Conteiner: React + Vite]<br/>servida pela API (static/dist)"]
+        api["<b>API</b><br/>[Conteiner: FastAPI + LangGraph]<br/>/diagnose, /mcp, /a2a, /events/incident,<br/>/admin, /health, /ready, /metrics<br/>consumidor AMQP no lifespan"]
+        worker["<b>Worker</b><br/>[Conteiner: RQ]<br/>fila diagnosis (perfil async)<br/>roda run_diagnosis: mesmos<br/>acessos da API"]
+        reporter["<b>Reporter</b><br/>[Conteiner: generate_reports.py]<br/>Excel e Markdown"]
+        grafana["<b>Grafana</b><br/>[Conteiner]<br/>papel iic_grafana_ro"]
+        qdrant[("<b>Qdrant</b><br/>sap_incident_docs<br/>sap_reference_library")]
+        pg[("<b>PostgreSQL</b><br/>incidents, registro de LLM,<br/>uso, sistemas, usuarios,<br/>system_contracts")]
+        redis[("<b>Redis</b><br/>fila RQ, circuit breaker,<br/>idempotencia, tasks A2A")]
+        neo4j[("<b>Neo4j</b><br/>historico de incidentes<br/>(GRAPH_RAG_ENABLED)")]
+    end
+
+    pessoas -->|"HTTPS"| spa
+    spa -->|"HTTPS + cookie"| api
+    clientes -->|"chave dedicada por superficie"| api
+    api -->|"enfileira"| redis
+    redis -->|"consome"| worker
+    api --> qdrant
+    api --> pg
+    api -->|"Bolt"| neo4j
+    api -->|"via AI Gateway"| llm
+    grafana -->|"SELECT, somente leitura"| pg
+    reporter -->|"le"| pg
+```
+
+**Raio de impacto** (o que para quando cada um cai):
+
+| Fora do ar | Efeito hoje |
+|---|---|
+| Qdrant | `/diagnose` responde 500, mesmo quando o rule engine resolveria (achado aberto da validacao de 2026-10-07; ver `TROUBLESHOOTING.md`) |
+| Ollama (sem fallback cloud permitido) | `ConfigurationError`; o rule engine continua respondendo o que casa antes do LLM |
+| PostgreSQL | o diagnostico continua (gravacao *best-effort*); `/admin` e o registro de LLM param |
+| Redis | volta ao estado em memoria por processo; com mais de uma replica, deduplicacao e circuito deixam de ser compartilhados |
+| Neo4j | o grafo segue sem o historico (degradacao graciosa, DA-21) |
+
+## Grafo de orquestracao multiagente (gerado do codigo)
+
+Topologia real de `app/agent/graph.py::build_graph`, nas duas formas que o
+grafo pode ter (decidido na construcao, nao a cada execucao). Setas
+tracejadas sao arestas **condicionais**: o rotulo e o valor de
+`agent_domain` que `app/agent/graph.py::_route_to_specialist` le. Qualquer
+valor diferente de `sap` e `generic` cai em `saas_diagnose`.
+
+<!-- grafo-gerado:inicio (scripts/graph_diagram.py --write; nao editar a mao) -->
+
+**Default: GRAPH_RAG_ENABLED=false**
 
 ```mermaid
 flowchart TD
-    A["IncidentRequest<br/>FastAPI POST /diagnose<br/>OU A2A message/send"] --> S["<b>supervisor</b><br/>classifica o dominio (DA-22)<br/>deterministico, sem LLM"]
-    S --> B["<b>connector</b><br/>SAP/nao-SAP (app/connectors/)<br/>mock ou real"]
-    B --> C["<b>retrieve</b><br/>Qdrant hibrido dense+sparse BM25<br/>incidents + reference_library<br/>fusao RRF + reranker cross-encoder"]
-    C --> D{"GraphRAG<br/>opt-in?"}
-    D -->|"sim"| E["graph_enrich<br/>historico da interface no Neo4j"]
-    D -->|"nao (default)"| R{"agent_domain?<br/>(DA-22)"}
-    E --> R
-    R -->|"sap"| F1["<b>sap_diagnose</b><br/>especialista SAP<br/>LLM Gateway + guardrails<br/><i>busca web via ReAct tool (DA-57)</i>"]
-    R -->|"saas"| F2["<b>saas_diagnose</b><br/>especialista multi-fornecedor<br/>LLM Gateway + guardrails<br/><i>busca web via ReAct tool (DA-57)</i>"]
-    R -->|"generic"| F3["<b>generic_diagnose</b><br/>especialista generico<br/>LLM Gateway + guardrails"]
-    F1 --> G{"GraphRAG<br/>opt-in?"}
-    F2 --> G
-    F3 --> G
-    G -->|"sim"| H["graph_write<br/>grava no Neo4j"]
-    G -->|"nao (default)"| I["<b>report</b><br/>monta o Markdown final"]
-    H --> I
-    I --> J["END"]
-
-    style D fill:#f5f5f5,stroke:#999
-    style G fill:#f5f5f5,stroke:#999
-    style R fill:#f5f5f5,stroke:#999
-    style S fill:#fff3cd,stroke:#e0a800
-    style B fill:#e8f0fe,stroke:#4285f4
-    style C fill:#e8f0fe,stroke:#4285f4
-    style F1 fill:#e8f0fe,stroke:#4285f4
-    style F2 fill:#e8f0fe,stroke:#4285f4
-    style F3 fill:#e8f0fe,stroke:#4285f4
+    inicio(["run_diagnosis"])
+    supervisor["supervisor<br/>classify_domain: sap / saas / generic<br/>(deterministico, sem LLM)"]
+    connector["connector<br/>get_connector(interface_type).fetch(identifier)<br/>real ou cenario demo"]
+    retrieve["retrieve<br/>RAG hibrido + reranker<br/>(fallback reference_library)"]
+    sap_diagnose["sap_diagnose<br/>rule engine; senao LLM via gateway<br/>+ guardrails + evidencia"]
+    saas_diagnose["saas_diagnose<br/>rule engine; senao LLM via gateway<br/>+ guardrails + evidencia"]
+    generic_diagnose["generic_diagnose<br/>rule engine; senao LLM via gateway<br/>+ guardrails + evidencia"]
+    report["report<br/>relatorio Markdown"]
+    fim(["DiagnosisResponse<br/>+ escalation (DA-44)<br/>+ record_incident"])
+    inicio --> supervisor
+    connector --> retrieve
+    generic_diagnose --> report
+    report --> fim
+    retrieve -.->|"generic"| generic_diagnose
+    retrieve -.->|"saas (default)"| saas_diagnose
+    retrieve -.->|"sap"| sap_diagnose
+    saas_diagnose --> report
+    sap_diagnose --> report
+    supervisor --> connector
 ```
 
-Os nodes `graph_enrich`/`graph_write` (GraphRAG) so entram no grafo
-quando `GRAPH_RAG_ENABLED=true` - com a flag desligada (default), o
-grafo compilado tem a mesma sequencia de nodes de antes da fase
-GraphRAG, byte a byte (ver secao GraphRAG abaixo). O `supervisor` e o
-roteamento condicional para `sap_diagnose`/`saas_diagnose` (DA-22,
-secao Multi-agent abaixo) rodam SEMPRE, com ou sem GraphRAG - e a unica
-mudanca estrutural que se aplica nos dois modos do grafo.
+**Com GraphRAG: GRAPH_RAG_ENABLED=true**
 
-Cada etapa e um node do grafo (definidos em `app/agent/nodes.py`, orquestrados em `app/agent/graph.py`), instrumentado com
-`@observe` (Langfuse). O estado (`CopilotState`) flui entre nodes; o
-grafo e compilado uma vez (`get_graph()`, singleton em processo).
+```mermaid
+flowchart TD
+    inicio(["run_diagnosis"])
+    supervisor["supervisor<br/>classify_domain: sap / saas / generic<br/>(deterministico, sem LLM)"]
+    connector["connector<br/>get_connector(interface_type).fetch(identifier)<br/>real ou cenario demo"]
+    retrieve["retrieve<br/>RAG hibrido + reranker<br/>(fallback reference_library)"]
+    sap_diagnose["sap_diagnose<br/>rule engine; senao LLM via gateway<br/>+ guardrails + evidencia"]
+    saas_diagnose["saas_diagnose<br/>rule engine; senao LLM via gateway<br/>+ guardrails + evidencia"]
+    generic_diagnose["generic_diagnose<br/>rule engine; senao LLM via gateway<br/>+ guardrails + evidencia"]
+    report["report<br/>relatorio Markdown"]
+    graph_enrich["graph_enrich<br/>historico Neo4j<br/>(so verificado vira fato)"]
+    graph_write["graph_write<br/>grava hipotese no Neo4j<br/>(descricao redigida)"]
+    fim(["DiagnosisResponse<br/>+ escalation (DA-44)<br/>+ record_incident"])
+    inicio --> supervisor
+    connector --> retrieve
+    generic_diagnose --> graph_write
+    graph_enrich -.->|"generic"| generic_diagnose
+    graph_enrich -.->|"saas (default)"| saas_diagnose
+    graph_enrich -.->|"sap"| sap_diagnose
+    graph_write --> report
+    report --> fim
+    retrieve --> graph_enrich
+    saas_diagnose --> graph_write
+    sap_diagnose --> graph_write
+    supervisor --> connector
+```
 
-Dois "consumidores" chamam a mesma orquestracao (`run_diagnosis`), sem
-nenhuma logica duplicada entre eles: o endpoint REST `/diagnose`
-(`app/main.py`) e a camada A2A (`app/a2a/`, ver secao propria abaixo).
+<!-- grafo-gerado:fim -->
+
+O que o grafo **nao** mostra, porque acontece dentro de um no:
+
+- **Atalho do rule engine.** Os tres nos de diagnostico chamam
+  `app/agent/rules.py::match_known_error` antes de qualquer LLM. Se uma das
+  22 regras casa, o no devolve sem chamar o gateway, e `prompt_version` sai
+  nulo (invariante 21).
+- **Loop ReAct.** Sem regra, o no roda um agente ReAct
+  (`create_react_agent`, limite `REACT_AGENT_RECURSION_LIMIT`) que pode chamar
+  a busca web. Ver a sequencia em `CASOS_DE_USO.md`.
+- **Watchdog.** `app/agent/graph.py::_invoke_graph_with_timeout` limita a
+  execucao inteira a `DIAGNOSIS_TIMEOUT_SECONDS`.
+
+Cada no e instrumentado com `@observe` (Langfuse). O grafo e compilado uma
+vez por processo (`get_graph()`). Os consumidores (`/diagnose`, A2A, MCP,
+webhook, AMQP, worker) chamam a mesma `run_diagnosis`, sem logica
+duplicada.
 
 ## Camadas
 
 | Camada | Onde | Responsabilidade |
 |---|---|---|
-| API | `app/main.py` | FastAPI, `/health`, `/diagnose`, Agent Card A2A, servidor MCP (`/mcp`); rate limiting 10/min por IP (slowapi); API Key via `X-API-Key` (API_KEY no .env, ou gerada automaticamente no startup se ausente - DA-18) |
-| A2A | `app/a2a/` | Camada de interoperabilidade externa (Agent Card, task manager, JSON-RPC), chama a mesma orquestracao do `/diagnose` |
-| Orquestracao | `app/agent/graph.py` · `app/agent/nodes.py` · `app/agent/state.py` | Grafo LangGraph (orquestrador ~136 linhas), nodes (connector/retrieve/web_search/diagnose/report), tipos (CopilotState, DiagnosisModel) |
-| LLM Gateway | `app/llm/factory.py` | Escolhe o `BaseChatModel` (Ollama/OpenAI/Azure OpenAI) a partir de `Settings` |
-| RAG | `app/rag/` | Ingestao (`ingest.py`) com pymupdf4llm + schema rico; retrieval unificado (`retriever.py`) — hybrid search + reranker cross-encoder; GraphRAG opt-in (`graph_store.py`) via Neo4j |
-| Conectores | `app/connectors/` | Um por sistema externo (OData, RFC, ServiceNow, Salesforce, Workday, SAP Ariba, SAP CAP, SAP API Management); interface comum em `base.py` |
-| Config | `app/config.py` | Unica fonte de verdade (`.env` + defaults), nunca hardcoded espalhado |
-| Modelos | `app/models.py` | Contratos Pydantic da API (`IncidentRequest`/`DiagnosisResponse`) |
+| API | `app/main.py` | FastAPI e rotas; rate limit por identidade (`app/rate_limit.py`: chave A2A, depois `X-API-Key`, depois IP); uma credencial por superficie (DA-18/54) |
+| Protocolos | `app/a2a/`, `app/mcp/`, `app/events/` | A2A (JSON-RPC 2.0), MCP com politica *fail-closed* (DA-27), CloudEvents por webhook e AMQP 1.0 |
+| Orquestracao | `app/agent/graph.py`, `app/agent/nodes.py`, `app/agent/state.py` | grafo LangGraph, nos, estado e modelo de saida |
+| Regras e decisao | `app/agent/rules.py`, `app/agent/supervisor.py`, `app/agent/escalation.py` | rule engine, roteamento por dominio e sinal de escalonamento, todos deterministicos |
+| AI Gateway | `app/llm/gateway.py`, `app/llm/factory.py`, `app/llm/routes.py`, `app/llm/origins.py` | politica por sensibilidade e origem real, circuito, orcamento e *fallback* |
+| RAG | `app/rag/` | ingestao, busca hibrida com reranker, GraphRAG opcional |
+| Conectores | `app/connectors/` | 10 conectores com contrato comum em `base.py` (ver `CONNECTORS.md`) |
+| Servicos | `app/services/` | gravacao de incidentes (`incident_recorder.py`, `incident_repository.py`) e fontes de busca aprovadas (`web_search_sources.py`) |
+| Admin | `app/admin/` | registro de modelos e credenciais cifradas, uso, sistemas, usuarios, correlacao (DA-46 a DA-50) |
+| Contratos | `app/contracts/` | drift de contrato OData (DA-52) |
+| Config e modelos | `app/config.py`, `app/models.py` | `Settings` como fonte unica; contratos Pydantic da API |
 
-Esta nao e uma Clean Architecture "de livro" com pastas
-`domain/application/infrastructure` separadas - e uma separacao
-pragmatica por responsabilidade, que ja evita a mistura de
-preocupacoes que aquele padrao existe para prevenir (a logica de
-prompt/guardrail, por exemplo, sao funcoes puras em `app/agent/nodes.py`,
-testaveis sem subir API nem grafo).
+## Contrato de estado e memoria
 
-**Nota honesta sobre `app/services/`:** a pasta existe (criada cedo,
-"para quando precisar") mas continua vazia - propositalmente. Hoje
-`run_diagnosis()` (em `app/agent/graph.py`) ja cumpre o papel de "camada de
-servico": e a unica funcao que os dois consumidores existentes
-(`/diagnose` e `app/a2a/task_manager.py`) chamam, sem duplicar logica
-entre eles. Criar uma classe/modulo `IncidentDiagnosisService` que so
-delegasse para essa mesma funcao seria indirecao sem beneficio real -
-exatamente o tipo de "camada vazia por vaidade arquitetural" que este
-documento critica no `genai-engineering-template` (`src/application/`
-la tambem vazio, mas la sem nada que cumprisse o papel por baixo). Se
-um dia houver mais de uma logica de orquestracao real para coordenar
-(nao so repassar uma chamada), a pasta ganha conteudo entao - nao antes.
+`app/agent/state.py::CopilotState` e o unico canal entre os nos. Um campo
+escrito por dois nos e a origem tipica de bug em grafo: o M-03 era o
+guardrail sobrescrevendo a evidencia que o rule engine tinha escrito.
+
+```mermaid
+flowchart LR
+    subgraph entrada["Entrada: run_diagnosis"]
+        e1["description, logs, payload<br/>interface_type, identifier<br/>connector_source_system<br/>sensitivity_level, pii_detected<br/>llm_model, incident_id, debug"]
+    end
+    subgraph nos["Campo escrito por cada no"]
+        sup["supervisor"] --> s1["agent_domain"]
+        con["connector"] --> s2["connector_data"]
+        ret["retrieve"] --> s3["retrieved_context"]
+        gen["graph_enrich"] --> s4["graph_history"]
+        dia["sap / saas / generic_diagnose"] --> s5["diagnosis"]
+        rep["report"] --> s6["report_markdown"]
+        gw["graph_write"] --> n4j[("Neo4j: efeito colateral,<br/>nao escreve no estado")]
+    end
+    morto["web_search_results<br/>(nenhum no do grafo escreve)"]
+    entrada --> nos
+```
+
+**Memoria, por camada:**
+
+| Memoria | Onde | Escrita | Volta ao prompt? |
+|---|---|---|---|
+| Efemera (uma execucao) | `CopilotState` | os nos acima | sim, e o proprio contexto |
+| Recuperada | Qdrant | so a ingestao (`app/rag/ingest.py`); somente leitura em *runtime* | sim, sanitizada e redigida |
+| Aprendida | Neo4j | `graph_write` grava a hipotese com a descricao redigida | so incidente **verificado por humano** volta como fato; o resto vem rotulado "NAO verificado" (DA-28) |
+| Registro e auditoria | PostgreSQL `incidents` | `record_incident`, *best-effort*; `evidence_json` cifrado (DA-60) | nao |
+
+## Fronteiras de confianca e dados sensiveis
+
+```mermaid
+flowchart LR
+    subgraph naoconf["Nao confiavel"]
+        u["descricao, logs, payload"]
+        ev["eventos externos"]
+        cx["retorno de conector"]
+        rg["trecho do RAG (PDF de terceiros)"]
+        wb["resultado da busca web"]
+    end
+    subgraph nucleo["Nucleo do Copilot"]
+        san["sanitize_untrusted_input<br/>anti-injection + redact_pii_text"]
+        cls["classify_sensitivity<br/>cliente so ELEVA"]
+        pr["prompt"]
+        gw{"AI Gateway<br/>origem real x sensibilidade"}
+        ev2["_assemble_evidence<br/>trust_level por fonte"]
+        enc["encrypt_evidence<br/>redige e cifra (Fernet)"]
+        q["_sanitize_web_search_query"]
+        pv["PolicyViolationError"]
+    end
+    subgraph saida["Destinos"]
+        loc["LLM local (loopback)"]
+        cloud["LLM cloud"]
+        ddg["DuckDuckGo"]
+        db[("incidents.evidence_json")]
+        lf["Langfuse (mask=redact_pii_deep)"]
+    end
+    u --> san
+    ev --> san
+    cx --> san
+    rg --> san
+    san --> pr
+    pr --> gw
+    cls --> gw
+    gw -->|"public, ou confidencial com origem local"| loc
+    gw -->|"so com cloud_with_dlp e origem na allowlist"| cloud
+    gw -.->|"nenhum destino permitido"| pv
+    pr -->|"tool do ReAct, so com fonte aprovada"| q
+    q --> ddg
+    ddg --> wb
+    wb -.->|"volta ao LLM como observacao<br/>SEM sanitize_untrusted_input"| pr
+    ev2 --> enc --> db
+    pr --> lf
+```
+
+**Pontos de controle e onde estao:**
+
+| Controle | Codigo | Observacao |
+|---|---|---|
+| Neutralizacao de *prompt injection* e redacao de PII na entrada | `app/agent/nodes.py::sanitize_untrusted_input` | aplicado a descricao, logs, payload, dado de conector, trecho do RAG e historico do grafo; **nao** ao retorno da ferramenta de busca web (achado 1 abaixo) |
+| Classificacao de sensibilidade | `app/llm/gateway.py::classify_sensitivity` | conector real ou `pii_detected` tornam o dado confidencial; o default e confidencial (B-04) |
+| Politica de destino | `app/llm/gateway.py::_provider_allows_sensitivity` | decidida pela **origem real**, nao pelo rotulo do provider (DA-43) |
+| Consulta de busca web | `app/agent/nodes.py::_sanitize_web_search_query` | redige URLs, IDocs, GUIDs, tokens e trunca |
+| Capacidades MCP | `app/mcp/policy.py` | ferramenta sem entrada no registro e negada (DA-27) |
+| Cifragem em repouso | `app/admin/crypto.py::encrypt_evidence` | redige antes de cifrar (DA-60) |
+
+> **Achados da validacao de 2026-10-07 (abertos).**
+>
+> 1. O texto que a ferramenta de busca web do agente ReAct devolve
+>    (`app/agent/nodes.py::_make_web_search_tool`) volta ao LLM como
+>    observacao **sem** passar por `sanitize_untrusted_input`. Isso deixa
+>    aberta a injecao indireta por pagina web. A seta tracejada do diagrama
+>    marca o ponto.
+> 2. `app/agent/nodes.py::web_search_node` existe, mas **nao esta no grafo**:
+>    nenhum no escreve `web_search_results`. O trecho do prompt que sanitiza
+>    "resultado de busca web" le um campo que fica sempre vazio. A unica busca
+>    web real e a ferramenta do ReAct do item 1.
+
+## Decisao de rota do AI Gateway
+
+`app/llm/gateway.py::invoke_via_gateway`, na ordem em que o codigo decide:
+
+```mermaid
+flowchart TD
+    A["estado do grafo"] --> B["classify_sensitivity"]
+    B --> P["para cada provider<br/>(LLM_PROVIDER e LLM_FALLBACK_PROVIDER)"]
+    P --> C{"public?"}
+    C -->|"sim"| D["entra na lista de permitidos"]
+    C -->|"nao: confidencial"| E{"origem real do provider<br/>e loopback?"}
+    E -->|"sim"| D
+    E -->|"nao"| F{"DATA_SOVEREIGNTY_MODE<br/>= cloud_with_dlp?"}
+    F -->|"nao"| X["provider negado<br/>(motivo vai ao log de auditoria)"]
+    F -->|"sim"| G{"origem em<br/>CONFIDENTIAL_ALLOWED_ORIGINS?"}
+    G -->|"nao"| X
+    G -->|"sim"| D
+    D --> H{"lista de permitidos<br/>vazia?"}
+    X --> H
+    H -->|"sim"| PV["PolicyViolationError<br/>(motivos de cada provider)"]
+    H -->|"nao"| I["proximo provider permitido"]
+    I --> J{"circuito aberto?"}
+    J -->|"sim"| N["pula para o seguinte"]
+    J -->|"nao"| K{"custo estimado ><br/>LLM_GATEWAY_MAX_COST_USD?"}
+    K -->|"sim"| N
+    K -->|"nao"| L{"destino resolvido pelo<br/>registro ainda permitido?"}
+    L -->|"nao"| N
+    L -->|"sim"| M["invoca o LLM + metering de tokens reais"]
+    M -->|"sucesso"| OK["resultado + provider usado"]
+    M -->|"falha de transporte"| R["abre/conta o circuito, backoff"]
+    R --> N
+    N --> S{"ha outro provider?"}
+    S -->|"sim"| I
+    S -->|"nao"| CE["ConfigurationError / ultimo erro"]
+```
+
+A politica efetiva, por provider, e exposta em `GET /llm/policy`
+(`app/llm/gateway.py::describe_effective_policy`). O nome do modelo nunca
+entra na decisao (invariante 8).
+
+## Maquinas de estado
+
+Os estados abaixo saem de enums e constantes do codigo, e
+`tests/test_diagramas.py` reprova se o diagrama e o codigo divergirem.
+
+### Observacao de contrato (DA-52)
+
+Fonte: `app/contracts/diff.py::ObservationStatus`.
+
+```mermaid
+stateDiagram-v2
+    [*] --> leitura
+    leitura --> unverified: SAP fora do ar ou baseline ilegivel
+    leitura --> first_observation: sem baseline
+    leitura --> clean: fingerprint igual
+    leitura --> drift: fingerprint diferente
+    first_observation --> [*]: grava baseline
+    clean --> [*]
+    drift --> [*]: so breaking abre incidente, baseline gravado depois da entrega
+    unverified --> [*]: nao abre incidente nem toca o baseline
+```
+
+### Escalonamento (DA-44)
+
+E uma tabela de decisao, avaliada na ordem, e nao um ciclo de vida. Fonte:
+`app/agent/escalation.py::compute_escalation_signal` e a classe `Reason`.
+
+```mermaid
+flowchart TD
+    A["resultado do diagnostico"] --> B{"ha conector ou<br/>documento recuperado?"}
+    B -->|"nao"| NC["no_context<br/>tier none, nao escala"]
+    B -->|"sim"| C{"guardrail anulou<br/>matched_source?"}
+    C -->|"sim"| AB["abstained<br/>tier ungrounded, escala"]
+    C -->|"nao"| D{"evidencia da reference_library<br/>abaixo de 0,62?"}
+    D -->|"sim"| FW["floor_tier_weak<br/>tier floor, escala"]
+    D -->|"nao"| E{"evidencia curada<br/>abaixo de 0,45?"}
+    E -->|"sim"| CW["curated_tier_weak<br/>tier curated_weak, escala"]
+    E -->|"nao"| GR["grounded<br/>tier curated ou floor, nao escala"]
+```
+
+Os limiares 0,62 e 0,45 nao foram calibrados contra o acervo (ver o README,
+DA-44). O sinal e informativo: o grafo nao muda de caminho por causa dele.
+
+### Task A2A (DA-14)
+
+Fonte: `app/a2a/task_manager.py` (`A2ATask.state`, `TERMINAL_STATES`).
+
+```mermaid
+stateDiagram-v2
+    [*] --> submitted
+    submitted --> failed: mensagem invalida
+    submitted --> working: requisicao valida
+    working --> completed: diagnostico concluido
+    working --> failed: excecao (so error_id vai ao cliente)
+    completed --> [*]
+    failed --> [*]
+```
+
+Com `configuration.blocking=false`, a resposta volta em `working` e o
+cliente consulta com `tasks/get`.
+
+### Usuario da UI (DA-55)
+
+Fonte: constantes `STATUS_*` de `app/webusers.py` e `PATCH /admin/api/users/{id}`.
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending_email: admin cria o usuario
+    pending_email --> pending_phone: token de e-mail valido (24 h)
+    pending_phone --> active: codigo de telefone valido (10 min, uso unico)
+    pending_email --> disabled: admin desativa
+    pending_phone --> disabled: admin desativa
+    active --> disabled: admin desativa (sessoes revogadas)
+    disabled --> active: admin reativa
+```
+
+### Circuit breaker (conectores e provedores de LLM)
+
+Fonte: `app/circuit_breaker.py` (namespaces `conn` e `llm`). O estado
+meio-aberto e implicito: depois do *cooldown*, a proxima tentativa passa.
+
+```mermaid
+stateDiagram-v2
+    [*] --> fechado
+    fechado --> aberto: N falhas consecutivas
+    aberto --> meio_aberto: cooldown expira
+    meio_aberto --> fechado: sucesso
+    meio_aberto --> aberto: falha
+```
+
+Nos conectores, so indisponibilidade conta como falha (5xx, 429, rede); 401,
+403 e outros 4xx nao abrem o circuito (M-06).
+
+### Evento recebido (idempotencia)
+
+Fonte: `app/events/idempotency.py` (`is_duplicate`, `mark_completed`, `release`).
+A chave e o par `(source, id)` do CloudEvent. Com `REDIS_URL`, o webhook so
+enfileira e a reivindicacao acontece no worker (`app/queue.py`), com o estado
+no Redis; sem Redis, acontece no processo da API, em memoria.
+
+```mermaid
+stateDiagram-v2
+    [*] --> reclamado: is_duplicate devolve False (lease)
+    reclamado --> concluido: mark_completed (24 h)
+    reclamado --> liberado: release (falha, reentrega aceita)
+    liberado --> [*]
+    concluido --> [*]
+    note right of reclamado
+        reentrega durante o lease ou depois de concluido
+        e descartada como duplicata
+    end note
+```
 
 ## LLM Gateway - por que e como
 

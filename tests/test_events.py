@@ -89,13 +89,19 @@ def test_incident_event_webhook_rejects_oversized_description(monkeypatch):
     monkeypatch.setattr(consumer_module, "run_diagnosis", _stub_diagnosis)
 
     huge_payload = {
+        # envelope CloudEvents valido: o 422 tem de vir do tamanho, nao de
+        # atributo faltando (M-16 tornou specversion/id/source obrigatorios)
+        "specversion": "1.0",
         "type": "com.sap.integration.incident.detected.v1",
+        "source": "/sap/cpi",
+        "id": "evt-oversize",
         "data": {"description": "x" * 10_000},
     }
     response = client.post(
         "/events/incident", json=huge_payload, headers={"X-Event-Mesh-Api-Key": "secret-event"}
     )
     assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"][-1] == "description"
 
 
 def test_ensure_api_keys_configured_generates_event_mesh_key(monkeypatch):

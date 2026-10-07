@@ -117,9 +117,9 @@ def _run_diagnosis(envelope: IncidentEventEnvelope) -> bool:
         handle_incident_event(envelope)
     except Exception:
         logger.exception("amqp | diagnostico falhou cloudevents.id=%s", envelope.id)
-        idempotency.release(envelope.id)
+        idempotency.release(idempotency.event_key(envelope))
         return False
-    idempotency.mark_completed(envelope.id)
+    idempotency.mark_completed(idempotency.event_key(envelope))
     return True
 
 
@@ -209,7 +209,7 @@ def _make_handler(stop_flag: list[bool], executor: ThreadPoolExecutor | None):
                 self._enqueue_rq(envelope, delivery)
                 return
 
-            if idempotency.is_duplicate(envelope.id):
+            if idempotency.is_duplicate(idempotency.event_key(envelope)):
                 logger.info("amqp | mensagem duplicada descartada cloudevents.id=%s", envelope.id)
                 self._settle(delivery, Delivery.ACCEPTED)
                 return

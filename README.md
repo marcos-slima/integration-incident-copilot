@@ -813,7 +813,9 @@ ponta a ponta sem depender de um broker real — mesma lógica pragmática
 de DA-19/DA-21. Só `type ==
 "com.sap.integration.incident.detected.v1"` é aceito hoje (`Literal`
 em `IncidentEventEnvelope`); qualquer outro valor vira `422`
-automaticamente. Autenticação usa uma chave **dedicada**
+automaticamente. O envelope segue CloudEvents 1.0 estrito: `specversion`,
+`type`, `source` e `id` são obrigatórios, e a deduplicação usa o par
+`source`+`id` (validação 2026-10-07, M-16). Autenticação usa uma chave **dedicada**
 (`X-Event-Mesh-Api-Key`, gerada automaticamente se não configurada,
 mesmo padrão DA-18) — isolada de `API_KEY`/`A2A_API_KEY`, porque o
 webhook secret normalmente vive num sistema externo fora do controle

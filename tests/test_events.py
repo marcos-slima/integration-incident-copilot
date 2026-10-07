@@ -15,6 +15,7 @@ from app.models import DiagnosisResponse, IncidentEventEnvelope
 client = TestClient(app)
 
 _VALID_PAYLOAD = {
+    "specversion": "1.0",
     "type": "com.sap.integration.incident.detected.v1",
     "source": "cpi-monitor",
     "id": "evt-1",

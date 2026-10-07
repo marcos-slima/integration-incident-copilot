@@ -105,17 +105,34 @@ class IncidentEventData(BaseModel):
 
 
 class IncidentEventEnvelope(BaseModel):
-    """Envelope CloudEvents recebido em `POST /events/incident` - ver
+    """Envelope CloudEvents 1.0 (modo estruturado) recebido em
+    `POST /events/incident` e no consumidor AMQP - ver
     app/events/consumer.py para a conversao para IncidentRequest e o
-    disparo automatico do diagnostico."""
+    disparo automatico do diagnostico.
 
+    Validacao 2026-10-07 (M-16): `id` e `source` eram opcionais e
+    `specversion` nem existia. Pela especificacao CloudEvents 1.0 os quatro
+    (`specversion`, `id`, `source`, `type`) sao OBRIGATORIOS - e o par
+    (`source`, `id`) e a chave de deduplicacao: sem `id`, um reenvio do
+    Event Mesh disparava um segundo diagnostico (e uma segunda chamada de
+    LLM) para o mesmo incidente.
+    """
+
+    specversion: Literal["1.0"]
     type: Literal["com.sap.integration.incident.detected.v1"]
-    source: str | None = Field(
-        default=None,
-        description="Sistema de origem do evento (ex: 'cpi-monitor', 'solman'). Informativo.",
+    source: str = Field(
+        min_length=1,
+        max_length=512,
+        description="Sistema de origem do evento (ex: '/sap/cpi/monitor'). Obrigatorio (CE 1.0).",
     )
-    id: str | None = None
+    id: str = Field(
+        min_length=1,
+        max_length=256,
+        description="Id unico do evento na origem. Obrigatorio (CE 1.0); chave de idempotencia.",
+    )
     time: str | None = None
+    datacontenttype: str | None = None
+    subject: str | None = None
     data: IncidentEventData
 
 

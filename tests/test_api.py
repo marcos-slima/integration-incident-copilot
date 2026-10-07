@@ -11,6 +11,9 @@ from app.rate_limit import limiter
 
 client = TestClient(app)
 
+# M-15: detalhe de /health e /ready so para chamador autenticado.
+_HEALTH_KEY = "h" * 32
+
 
 def _stub_diagnosis(request):
     return DiagnosisResponse(
@@ -47,8 +50,9 @@ def test_index_serves_built_frontend_when_present(monkeypatch, tmp_path):
     assert "ok" in response.text
 
 
-def test_health_endpoint():
-    response = client.get("/health")
+def test_health_endpoint(monkeypatch):
+    monkeypatch.setattr(main_module.settings, "api_key", _HEALTH_KEY)
+    response = client.get("/health", headers={"X-API-Key": _HEALTH_KEY})
     assert response.status_code == 200
     body = response.json()
     # §4.3: /health e liveness puro - sempre "ok"; probe de infra fica em /ready.
@@ -86,10 +90,12 @@ def test_health_endpoint_reflects_connector_config(monkeypatch):
     monkeypatch.setattr(
         "app.connectors.settings.odata_service_url", "https://sap.example.com/odata"
     )
-    assert client.get("/health").json()["connectors"]["odata"]["status"] == "real"
+    monkeypatch.setattr(main_module.settings, "api_key", _HEALTH_KEY)
+    auth = {"X-API-Key": _HEALTH_KEY}
+    assert client.get("/health", headers=auth).json()["connectors"]["odata"]["status"] == "real"
 
     monkeypatch.setattr("app.connectors.settings.odata_service_url", "")
-    assert client.get("/health").json()["connectors"]["odata"]["status"] == "mock"
+    assert client.get("/health", headers=auth).json()["connectors"]["odata"]["status"] == "mock"
 
 
 def test_health_endpoint_is_rate_limited_by_global_default():
@@ -543,9 +549,11 @@ def test_health_services_degraded_when_qdrant_unreachable(monkeypatch):
         return {"qdrant": "degraded", "ollama": "not_configured"}
 
     monkeypatch.setattr(main_module, "_probe_infra_services", _probe_degraded)
-    monkeypatch.setattr(main_module, "settings", Settings(qdrant_url="http://qdrant:6333"))
+    monkeypatch.setattr(
+        main_module, "settings", Settings(qdrant_url="http://qdrant:6333", api_key=_HEALTH_KEY)
+    )
 
-    response = client.get("/ready")
+    response = client.get("/ready", headers={"X-API-Key": _HEALTH_KEY})
     assert response.status_code == 503
     result = response.json()
     assert result["services"]["qdrant"] == "degraded"
@@ -561,9 +569,11 @@ def test_health_services_ok_when_qdrant_responds(monkeypatch):
         return {"qdrant": "ok", "ollama": "ok", "redis": "not_configured"}
 
     monkeypatch.setattr(main_module, "_probe_infra_services", _probe_ok)
-    monkeypatch.setattr(main_module, "settings", Settings(qdrant_url="http://qdrant:6333"))
+    monkeypatch.setattr(
+        main_module, "settings", Settings(qdrant_url="http://qdrant:6333", api_key=_HEALTH_KEY)
+    )
 
-    response = client.get("/ready")
+    response = client.get("/ready", headers={"X-API-Key": _HEALTH_KEY})
     assert response.status_code == 200
     result = response.json()
     assert result["services"]["qdrant"] == "ok"
@@ -629,3 +639,16 @@ def test_ready_degraded_when_primary_ollama_not_configured(monkeypatch):
     monkeypatch.setattr(main_module, "settings", Settings(llm_provider="ollama", ollama_host=""))
 
     assert client.get("/ready").status_code == 503
+
+
+def test_m15_health_e_ready_sem_credencial_nao_expoem_configuracao(monkeypatch):
+    """Validacao 2026-10-07 (M-15): sem credencial, so o status."""
+    import app.main as main_module
+
+    monkeypatch.setattr(main_module, "_probe_infra_services", lambda: {"qdrant": "ok"})
+    monkeypatch.setattr(main_module.settings, "api_key", _HEALTH_KEY)
+    for path in ("/health", "/ready"):
+        body = client.get(path).json()
+        assert set(body) == {"status"}, path
+        body = client.get(path, headers={"X-API-Key": "errada"}).json()
+        assert set(body) == {"status"}, path

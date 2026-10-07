@@ -426,8 +426,11 @@ externo (CPI, Solution Manager, um listener de fila/IDoc) dispare o
 diagnostico automaticamente, publicando um evento em vez de esperar
 alguem chamar a API.
 
-**Formato do evento:** [CloudEvents](https://cloudevents.io/) -
-`type`/`source`/`id`/`time`/`data` - o mesmo formato que o SAP Event
+**Formato do evento:** [CloudEvents](https://cloudevents.io/) 1.0, modo
+estruturado - `specversion`/`type`/`source`/`id` obrigatorios, `time`
+opcional, mais `data` (validacao 2026-10-07: `id` e `source` eram opcionais
+e `specversion` nao existia; a deduplicacao agora usa o par
+`source`+`id`, como a especificacao define) - o mesmo formato que o SAP Event
 Mesh usa em modo **REST/Webhook push subscription** (alem do AMQP 1.0
 nativo). `data` carrega exatamente os mesmos campos de
 `IncidentRequest` (a informacao e a MESMA que um humano digitaria em

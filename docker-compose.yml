@@ -162,9 +162,14 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?REQUIRED_SET_IN_ENV}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3001}
-      # A mesma senha do postgres (provisioning do datasource usa
-      # ${POSTGRES_PASSWORD} em deploy/grafana/provisioning/datasources/).
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?REQUIRED_SET_IN_ENV}
+      # Datasource (deploy/grafana/provisioning/datasources/postgres.yml).
+      # Validacao 2026-10-07 (M-17): sem GRAFANA_DB_USER/PASSWORD no .env o
+      # Grafana usa o DONO do banco (comportamento anterior). Recomendado:
+      # GRAFANA_DB_USER=iic_grafana_ro + GRAFANA_DB_PASSWORD, criado pela
+      # migration 013 (rode `alembic upgrade head` com GRAFANA_DB_PASSWORD).
+      GRAFANA_DB_USER: ${GRAFANA_DB_USER:-iic}
+      GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD:-${POSTGRES_PASSWORD:?REQUIRED_SET_IN_ENV}}
+      GRAFANA_DB_SSLMODE: ${GRAFANA_DB_SSLMODE:-disable}
     volumes:
       - grafana_data:/var/lib/grafana
       - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro

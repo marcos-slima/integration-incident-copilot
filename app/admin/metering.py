@@ -18,10 +18,12 @@ Sem `usage` na resposta (provider que nao reporta) → nada e gravado
 (sem heuristica de estimativa aqui; o teto de budget continua o do
 gateway).
 
-Precos usados na captura espelham a tabela interna do gateway
-($10/1M in&out para openai/azure_openai, 0 para ollama). O preco do
-registro (llm_models.price_*) tera prioridade numa proxima fase — a
-parcela administrativa do custo ja fica no resumo via percentual.
+Precos: o do registro (llm_models.price_*) quando o modelo esta registrado
+para a origem; senao a tabela interna do gateway ($10/1M in&out para
+openai/azure_openai, 0 para ollama). Validacao 2026-10-07 (M-11): antes o
+preco do registro era ignorado sempre, e o uso era gravado sob o ROTULO do
+provider ('ollama'), nao sob a origem - a tela de uso nunca casava com o
+registro.
 """
 
 from __future__ import annotations
@@ -84,9 +86,11 @@ class UsageCaptureCallback(BaseCallbackHandler):
     Anexado ao model via `llm.callbacks = [cb]` em attach_metering().
     Nao toca o fluxo: apenas le LLMResult no on_llm_end e soma."""
 
-    def __init__(self, provider: str, model_name: str) -> None:
+    def __init__(self, provider: str, model_name: str, origin: str = "") -> None:
         self.provider = provider
         self.model_name = model_name
+        # M-11: chave de gravacao = origem canonica (a mesma do registro).
+        self.origin = origin
         self.tokens_in = 0
         self.tokens_out = 0
         self.requests = 0
@@ -104,7 +108,7 @@ class UsageCaptureCallback(BaseCallbackHandler):
 
 
 def attach_metering(
-    llm: Any, provider: str, model_name: str, enabled: bool
+    llm: Any, provider: str, model_name: str, enabled: bool, origin: str = ""
 ) -> UsageCaptureCallback | None:
     """Anexa o callback de captura a um chat model LangChain.
 
@@ -115,7 +119,7 @@ def attach_metering(
         return None
     if not hasattr(llm, "callbacks"):
         return None
-    cb = UsageCaptureCallback(provider=provider, model_name=model_name)
+    cb = UsageCaptureCallback(provider=provider, model_name=model_name, origin=origin)
     try:
         llm.callbacks = [cb]
     except Exception:  # noqa: BLE001 - pragma: no cover; contratos de model mudam entre versoes
@@ -124,9 +128,17 @@ def attach_metering(
     return cb
 
 
-def _cost_usd(provider: str, tokens_in: int, tokens_out: int) -> float:
-    pin = _PRICE_IN_PER_1M.get(provider, 0.0)
-    pout = _PRICE_OUT_PER_1M.get(provider, 0.0)
+def _cost_usd(
+    provider: str,
+    tokens_in: int,
+    tokens_out: int,
+    prices: tuple[float | None, float | None] | None = None,
+) -> float:
+    """Custo em USD. `prices` = (in, out) por 1M do registro; None ou campo
+    vazio cai na tabela interna por provider."""
+    reg_in, reg_out = prices or (None, None)
+    pin = reg_in if reg_in is not None else _PRICE_IN_PER_1M.get(provider, 0.0)
+    pout = reg_out if reg_out is not None else _PRICE_OUT_PER_1M.get(provider, 0.0)
     return (tokens_in * pin + tokens_out * pout) / 1_000_000.0
 
 
@@ -135,12 +147,16 @@ def record_usage_observed(cb: UsageCaptureCallback | None, *, successful: bool) 
 
     if cb is None:
         return
-    from app.admin.repository import record_usage
+    from app.admin.repository import record_usage, registry_prices
+
+    # M-11: sem origem resolvida (provider desconhecido) grava sob o rotulo,
+    # como antes - melhor um registro mal chaveado do que perder o uso.
+    key = cb.origin or cb.provider
 
     if not successful and not cb.has_usage:
         # falha de transporte sem nenhum usage reportado: conta so a falha
         record_usage(
-            cb.provider,
+            key,
             cb.model_name,
             tokens_in=0,
             tokens_out=0,
@@ -151,9 +167,10 @@ def record_usage_observed(cb: UsageCaptureCallback | None, *, successful: bool) 
         return
     if not cb.has_usage:
         return
-    cost = _cost_usd(cb.provider, cb.tokens_in, cb.tokens_out)
+    prices = registry_prices(cb.origin, cb.model_name) if cb.origin else None
+    cost = _cost_usd(cb.provider, cb.tokens_in, cb.tokens_out, prices)
     record_usage(
-        cb.provider,
+        key,
         cb.model_name,
         tokens_in=cb.tokens_in,
         tokens_out=cb.tokens_out,

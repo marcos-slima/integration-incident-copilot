@@ -506,6 +506,12 @@ class Settings(BaseSettings):
     # (prometheus-fastapi-instrumentator) + métricas de negócio iic_*.
     # Requires: pip install prometheus-fastapi-instrumentator
     prometheus_enabled: bool = False
+    # Validacao 2026-10-07 (M-14): token exigido em /metrics
+    # (Authorization: Bearer <token>). As metricas trazem volume, dominios,
+    # providers e estado de circuito - dado operacional que nao deve ficar
+    # publico. Vazio com PROMETHEUS_ENABLED=true = /metrics NAO e exposto
+    # (aviso no log), em vez de abrir sem autenticacao.
+    metrics_token: str = ""
 
     # SMTP (DA-55: ativação de usuários via e-mail)
     email_provider: Literal["mailpit", "resend", ""] = ""

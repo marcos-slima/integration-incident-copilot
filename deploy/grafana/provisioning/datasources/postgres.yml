@@ -14,11 +14,15 @@ datasources:
     uid: postgres_iic
     url: postgres:5432
     database: iic
-    user: iic
+    # Validacao 2026-10-07 (M-17): usuario/senha/sslmode vem do ambiente do
+    # container (docker-compose.yml). Recomendado: GRAFANA_DB_USER=iic_grafana_ro
+    # (papel somente leitura criado pela migration 013) em vez do dono do banco,
+    # e GRAFANA_DB_SSLMODE=require fora da rede local do compose.
+    user: "${GRAFANA_DB_USER}"
     secureJsonData:
-      password: "${POSTGRES_PASSWORD}"
+      password: "${GRAFANA_DB_PASSWORD}"
     jsonData:
-      sslmode: "disable"
+      sslmode: "${GRAFANA_DB_SSLMODE}"
       maxOpenConns: 10
       maxIdleConns: 2
       connMaxLifetime: 14400

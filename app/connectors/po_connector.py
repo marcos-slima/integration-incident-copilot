@@ -48,8 +48,12 @@ from app.config import settings
 from app.connectors.base import (
     ConnectorResult,
     ExternalSystemConnector,
+    TokenResponseError,
     circuit_breaker_guard,
     connector_circuit_breaker,
+    oauth_token_cache,
+    record_response_outcome,
+    token_error_result,
     validate_identifier_charset,
 )
 from app.exceptions import ConfigurationError
@@ -155,7 +159,12 @@ class POConnector(ExternalSystemConnector):
                 "fachada exposta (proxy/Web Dispatcher/APIM), nao para a "
                 "porta ICM do PO/PI."
             )
-        if settings.po_auth_mode == "oauth2" and not settings.po_oauth_token_url:
+        real_mode = use_real or bool(settings.po_base_url)
+        if real_mode and settings.po_auth_mode == "oauth2" and not settings.po_oauth_token_url:
+            # Validacao 2026-10-07 (M-08): a checagem rodava tambem em modo
+            # demo (sem PO_BASE_URL), entao PO_AUTH_MODE=oauth2 sem token URL
+            # derrubava TODO incidente `po` com 500 - inclusive os de mock,
+            # que nunca falam com OAuth2.
             # Fail-closed: sem token URL nao existe OAuth2 possivel, e cair
             # silenciosamente em Basic Auth seria mandar Basic para um token
             # endpoint e receber 401 sem explicacao.
@@ -207,39 +216,22 @@ class POConnector(ExternalSystemConnector):
             url = f"{settings.po_base_url.rstrip('/')}/mdt/api/1.0/facade"
             params: dict[str, str] = {"type": "message"}
             if is_filter:
-                params["status"] = _DEFAULT_FILTER if identifier in ("", "ALL") else identifier
+                # Validacao 2026-10-07 (M-08): "ALL" virava status=FAILED, ou
+                # seja, o filtro "todas" devolvia so as com falha. ALL = sem
+                # filtro de status; vazio = default (FAILED).
+                if identifier != "ALL":
+                    params["status"] = identifier or _DEFAULT_FILTER
             else:
                 params["id"] = identifier
 
             response = client.get(url, params=params, headers=headers)
-        except httpx.HTTPStatusError as exc:
-            # Mesmo par do `ODataConnector`/`AribaConnector`: o `raise_for_status`
-            # do token endpoint estoura `HTTPStatusError`, que NAO e subclasse de
-            # `RequestError`. Sem este `except`, um 401 do APIM subia como
-            # excecao em vez de virar `ConnectorResult` — o grafo veria 500 em
-            # vez de um conector degradado com evidencia. O GET da facade, por
-            # sua vez, tem checagem de status explicita abaixo.
-            connector_circuit_breaker.record_failure(
-                _SOURCE,
-                settings.connector_circuit_failure_threshold,
-                settings.connector_circuit_cooldown_seconds,
-            )
-            return ConnectorResult(
-                source_system=_SOURCE,
-                status="error",
-                error_code=str(exc.response.status_code),
-                message=(
-                    f"Falha ao obter token OAuth2 do APIM diante do PO/PI: "
-                    f"HTTP {exc.response.status_code}"
-                ),
-                raw=exc.response.text[:2000],
-                is_mock=False,
-                is_fallback=True,
-            )
-        except (httpx.RequestError, KeyError, ValueError) as exc:
-            # `RequestError`: rede/socket. `KeyError`/`ValueError`: o token
-            # endpoint respondeu 200 sem `access_token`, ou com corpo que nao e
-            # JSON — um APIM mal configurado faz isso sem erro HTTP.
+        except (httpx.HTTPStatusError, TokenResponseError) as exc:
+            # M-06: 401/403 do token endpoint e credencial, nao indisponibilidade:
+            # nao abre o circuito (so 5xx/429 contam).
+            return token_error_result(_SOURCE, exc, "do APIM diante do PO/PI")
+        except httpx.RequestError as exc:
+            # Rede/socket. Token sem `access_token` (APIM mal configurado
+            # respondendo 200) cai no `except` acima como TokenResponseError.
             connector_circuit_breaker.record_failure(
                 _SOURCE,
                 settings.connector_circuit_failure_threshold,
@@ -258,7 +250,7 @@ class POConnector(ExternalSystemConnector):
             if self._injected_client is None:
                 client.close()
 
-        connector_circuit_breaker.record_success(_SOURCE)
+        record_response_outcome(_SOURCE, response.status_code)
 
         if response.status_code != 200:
             return ConnectorResult(
@@ -320,22 +312,20 @@ def _basic_auth_header(username: str, password: str) -> str:
 def _oauth2_token(client: httpx.Client) -> str:
     """OAuth2 Client Credentials — só quando ha API Management na frente do
     PO/PI (o PO/PI em si nao tem OAuth2). `__init__` ja falha alto se o
-    modo for oauth2 sem token URL."""
-    response = client.post(
-        settings.po_oauth_token_url,
-        data={"grant_type": "client_credentials"},
-        auth=(settings.po_oauth_client_id, settings.po_oauth_client_secret),
+    modo for oauth2 sem token URL.
+
+    Validacao 2026-10-07 (M-06): token em cache ate expirar
+    (`oauth_token_cache`), e corpo sem `access_token` vira
+    `TokenResponseError` (subclasse de ValueError) - mesmo caminho dos
+    outros conectores."""
+    return oauth_token_cache.get(
+        (settings.po_oauth_token_url, settings.po_oauth_client_id),
+        lambda: client.post(
+            settings.po_oauth_token_url,
+            data={"grant_type": "client_credentials"},
+            auth=(settings.po_oauth_client_id, settings.po_oauth_client_secret),
+        ),
     )
-    response.raise_for_status()
-    # Validar a forma aqui, em vez de deixar o `dict[...]` estourar: um APIM
-    # mal configurado responde 200 com corpo que nao e objeto JSON, ou objeto
-    # sem `access_token`, e cada caso levantava uma excecao diferente
-    # (TypeError, KeyError, JSONDecodeError) que subiria pelo grafo. Um
-    # ValueError unico deixa o tradutor em `_fetch_real` com um caminho so.
-    data = response.json()
-    if not isinstance(data, dict) or "access_token" not in data:
-        raise ValueError(f"resposta do token endpoint sem access_token: {str(data)[:200]}")
-    return str(data["access_token"])
 
 
 def _extract_messages(payload: Any) -> list[dict[str, Any]]:

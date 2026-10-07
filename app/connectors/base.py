@@ -207,8 +207,11 @@ class _TokenCache:
             self._items.clear()
 
 
-class TokenResponseError(Exception):
-    """Token endpoint respondeu 2xx sem um `access_token` legivel."""
+class TokenResponseError(ValueError):
+    """Token endpoint respondeu 2xx sem um `access_token` legivel.
+
+    Subclasse de ValueError: quem ja tratava "JSON invalido" como ValueError
+    (ex.: ODataConnector.fetch_contract) continua cobrindo este caso."""
 
 
 oauth_token_cache = _TokenCache()

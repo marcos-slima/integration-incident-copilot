@@ -7,9 +7,22 @@ Mesmo criterio dos demais conectores reais opcionais:
 Client Credentials Grant (SAP BTP, Identity Authentication) + consulta
 OData v2 ao status do funcionario em EC.
 
-Endpoint real: GET /odata/v2/PerPerson(personIdExternal='{id}')
-  com $expand=personalInfoNav,employmentNav,jobInfoNav para obter o
-  estado atual do funcionario (active/inactive, jobCode, costCenter).
+Endpoint real: GET /odata/v2/PerPerson('{id}') (chave = personIdExternal)
+  com $expand=employmentNav/jobInfoNav.
+
+Validacao 2026-10-07 (M-07): antes a chamada era
+`/PerPerson?personIdExternal='x'`. No OData v2 isso e um parametro de query
+desconhecido, NAO um filtro - o servico devolve a colecao inteira e o codigo
+pegava `results[0]`, ou seja, o diagnostico podia usar os dados de OUTRO
+funcionario. Tambem lia `replicationStatus` e `employmentStatus`, campos que
+nao existem em PerPerson/EmpEmployment. Agora:
+  - busca pela chave (um registro ou 404), e confere o personIdExternal
+    devolvido;
+  - o status de emprego vem de EmpEmployment.endDate (preenchido =
+    desligado);
+  - o estado da replicacao EC -> ERP NAO e exposto por PerPerson (fica no
+    Data Replication Monitor); este conector nao o le e diz isso na
+    mensagem, em vez de inventar.
 
 Nao testado contra um tenant SuccessFactors real (sem acesso disponivel)
 - testado com `httpx.MockTransport`, mesma ressalva dos demais conectores
@@ -26,8 +39,13 @@ from app.config import settings
 from app.connectors.base import (
     ConnectorResult,
     ExternalSystemConnector,
+    TokenResponseError,
     circuit_breaker_guard,
     connector_circuit_breaker,
+    json_or_error,
+    oauth_token_cache,
+    record_response_outcome,
+    token_error_result,
     validate_identifier_charset,
 )
 
@@ -117,13 +135,16 @@ class SuccessFactorsConnector(ExternalSystemConnector):
         return self._fetch_real(identifier)
 
     def _get_access_token(self, client: httpx.Client) -> str:
-        response = client.post(
-            settings.sfsf_oauth_token_url,
-            data={"grant_type": "client_credentials"},
-            auth=(settings.sfsf_client_id, settings.sfsf_client_secret),
+        # Validacao 2026-10-07 (M-06): token reutilizado ate expirar, em vez
+        # de um POST ao IdP por diagnostico.
+        return oauth_token_cache.get(
+            (settings.sfsf_oauth_token_url, settings.sfsf_client_id),
+            lambda: client.post(
+                settings.sfsf_oauth_token_url,
+                data={"grant_type": "client_credentials"},
+                auth=(settings.sfsf_client_id, settings.sfsf_client_secret),
+            ),
         )
-        response.raise_for_status()
-        return response.json()["access_token"]
 
     def _fetch_real(self, identifier: str) -> ConnectorResult:
         if (blocked := circuit_breaker_guard("SuccessFactors")) is not None:
@@ -134,36 +155,21 @@ class SuccessFactorsConnector(ExternalSystemConnector):
         client = self._injected_client or httpx.Client(timeout=self.timeout)
         try:
             token = self._get_access_token(client)
+            # M-07: chave do registro, nunca parametro de query (que o OData
+            # v2 ignora). O charset do identificador ja foi validado acima
+            # (sem aspas), entao a interpolacao na chave e segura.
             response = client.get(
-                f"{settings.sfsf_base_url.rstrip('/')}/odata/v2/PerPerson",
-                params={
-                    "personIdExternal": f"'{identifier}'",
-                    "$expand": "personalInfoNav,employmentNav,jobInfoNav",
-                    "$format": "json",
-                },
+                f"{settings.sfsf_base_url.rstrip('/')}/odata/v2/PerPerson('{identifier}')",
+                params={"$expand": "employmentNav/jobInfoNav", "$format": "json"},
                 headers={
                     "Authorization": f"Bearer {token}",
                     "Accept": "application/json",
                 },
             )
-        except httpx.HTTPStatusError as exc:
-            connector_circuit_breaker.record_failure(
-                "SuccessFactors",
-                settings.connector_circuit_failure_threshold,
-                settings.connector_circuit_cooldown_seconds,
-            )
-            return ConnectorResult(
-                source_system="SuccessFactors",
-                status="error",
-                error_code=str(exc.response.status_code),
-                message=(
-                    f"Falha ao obter token OAuth2 do SuccessFactors: "
-                    f"HTTP {exc.response.status_code}"
-                ),
-                raw=exc.response.text[:2000],
-                is_mock=False,
-                is_fallback=True,
-            )
+        except (httpx.HTTPStatusError, TokenResponseError) as exc:
+            # M-06: 401/403 do token endpoint e credencial, nao indisponibilidade:
+            # nao abre o circuito (so 5xx/429 contam).
+            return token_error_result("SuccessFactors", exc, "do SuccessFactors")
         except httpx.RequestError as exc:
             connector_circuit_breaker.record_failure(
                 "SuccessFactors",
@@ -183,7 +189,7 @@ class SuccessFactorsConnector(ExternalSystemConnector):
             if self._injected_client is None:
                 client.close()
 
-        connector_circuit_breaker.record_success("SuccessFactors")
+        record_response_outcome("SuccessFactors", response.status_code)
 
         if response.status_code == 401:
             return ConnectorResult(
@@ -216,42 +222,58 @@ class SuccessFactorsConnector(ExternalSystemConnector):
                 is_fallback=True,
             )
 
-        data = response.json()
-        # OData v2 envolve resultado em d.results (lista) ou d (objeto unico)
-        record = data.get("d", data)
-        if isinstance(record, dict) and "results" in record:
-            results = record["results"]
-            record = results[0] if results else {}
-
-        employment = record.get("employmentNav") or {}
-        if isinstance(employment, dict) and "results" in employment:
-            emp_list = employment["results"]
-            employment = emp_list[0] if emp_list else {}
-
-        emp_status = employment.get("employmentStatus", "unknown")
-        repl_status = record.get("replicationStatus", "")
-
-        if repl_status == "FAILED":
+        payload, invalid = json_or_error(response, "SuccessFactors")
+        if invalid is not None:
+            return invalid
+        record = payload.get("d") if isinstance(payload.get("d"), dict) else None
+        if not record or "results" in record:
+            # Leitura por chave devolve UM objeto. Lista aqui = API/versao
+            # diferente da esperada; nao escolher "o primeiro" (M-07).
             return ConnectorResult(
                 source_system="SuccessFactors",
                 status="error",
-                error_code="REPLICATION_FAILED",
-                message=(
-                    f"Replicacao do funcionario '{identifier}' falhou no MDI "
-                    f"(employmentStatus={emp_status})"
-                ),
-                raw=str(record),
+                error_code="INVALID_RESPONSE",
+                message="SuccessFactors nao devolveu um unico PerPerson para a chave pedida",
+                raw=response.text[:2000],
                 is_mock=False,
+                is_fallback=True,
             )
+        returned_id = record.get("personIdExternal")
+        if returned_id is not None and str(returned_id) != identifier:
+            return ConnectorResult(
+                source_system="SuccessFactors",
+                status="error",
+                error_code="WRONG_RECORD",
+                message=(
+                    f"SuccessFactors devolveu o funcionario '{returned_id}' para a chave "
+                    f"'{identifier}' - resultado descartado"
+                ),
+                raw="",
+                is_mock=False,
+                is_fallback=True,
+            )
+
+        employment = record.get("employmentNav") or {}
+        if isinstance(employment, dict) and "results" in employment:
+            employments = employment["results"] or []
+            # Mais de um vinculo (recontratacao, global assignment): vale o
+            # ultimo sem data de fim, se houver.
+            open_ones = [e for e in employments if isinstance(e, dict) and not e.get("endDate")]
+            employment = (open_ones or employments or [{}])[-1]
+        end_date = employment.get("endDate") if isinstance(employment, dict) else None
+        active = bool(employment) and not end_date
+        emp_status = "active" if active else ("terminated" if end_date else "unknown")
 
         return ConnectorResult(
             source_system="SuccessFactors",
-            status="ok" if emp_status == "active" else "error",
-            error_code=emp_status if emp_status != "active" else "",
+            status="ok" if active else "error",
+            error_code="" if active else emp_status.upper(),
             message=(
-                f"Funcionario '{identifier}' — status: {emp_status}"
-                + (f", replicacao: {repl_status}" if repl_status else "")
+                f"Funcionario '{identifier}' - vinculo: {emp_status}"
+                + (f" (endDate={end_date})" if end_date else "")
+                + ". Estado da replicacao EC->ERP nao e lido por este conector "
+                "(Data Replication Monitor)."
             ),
-            raw=str(record),
+            raw=str(record)[:2000],
             is_mock=False,
         )

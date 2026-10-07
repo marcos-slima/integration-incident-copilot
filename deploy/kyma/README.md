@@ -8,7 +8,7 @@ deste projeto (ver `README.md` na raiz, Decisão de Arquitetura ### 22).
 
 | Arquivo | O que faz |
 |---|---|
-| `namespace.yaml` | Namespace dedicado `sap-integration-copilot` |
+| `namespace.yaml` | Namespace dedicado `integration-incident-copilot` |
 | `configmap.yaml` | Configuração não sensível (provider de LLM, URL do Qdrant, flags) |
 | `secret.example.yaml` | **Template** de segredos (API keys, credenciais de LLM) - nunca aplicar direto, copiar e preencher |
 | `deployment.yaml` | Deployment da API (2 réplicas, probes em `/health`, usuário não-root, requests/limits) |
@@ -21,8 +21,8 @@ deste projeto (ver `README.md` na raiz, Decisão de Arquitetura ### 22).
 
 ```bash
 # 1. Build e push da imagem (registry acessível pelo cluster Kyma)
-docker build -t <REGISTRY>/sap-integration-copilot:<TAG> .
-docker push <REGISTRY>/sap-integration-copilot:<TAG>
+docker build -t <REGISTRY>/integration-incident-copilot:<TAG> .
+docker push <REGISTRY>/integration-incident-copilot:<TAG>
 
 # 2. Ajuste deployment.yaml com a imagem real (troque <REGISTRY>/<TAG>)
 #    e apirule.yaml com o dominio real do cluster (troque <CLUSTER_DOMAIN>)
@@ -37,8 +37,8 @@ rm /tmp/secret.yaml
 kubectl apply -k .
 
 # 5. Acompanhe o rollout
-kubectl -n sap-integration-copilot rollout status deployment/sap-integration-copilot
-kubectl -n sap-integration-copilot get apirule sap-integration-copilot
+kubectl -n integration-incident-copilot rollout status deployment/integration-incident-copilot
+kubectl -n integration-incident-copilot get apirule integration-incident-copilot
 ```
 
 ## Pré-requisitos não cobertos por este bundle

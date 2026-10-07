@@ -35,6 +35,11 @@ dependencies = [
     "ddgs>=9.16.0",
     "pymupdf4llm>=1.28.2",
     "sentence-transformers>=6.0.1",
+    # DEP-01 (validacao 2026-10-07): torch declarado direto so para poder
+    # apontar a fonte (index CPU, ver [tool.uv.sources]). O reranker roda em
+    # CPU; o torch padrao do PyPI trazia ~4,5 GB de CUDA (nvidia-*, triton)
+    # para dentro da imagem e de toda venv.
+    "torch>=2.14.1",
     "slowapi>=0.1.10",
     "mcp>=1.9.0",
     # Opcional em runtime (REDIS_URL vazio = nao usado, ver
@@ -97,6 +102,16 @@ prometheus = [
 # diretamente. Sem isto o pip-audit mantem o processo de seguranca verde
 # sobre uma versao com CVE conhecida.
 constraint-dependencies = ["urllib3>=2.8.0"]
+
+# DEP-01: torch so-CPU no Linux (imagem, CI e a maquina de desenvolvimento).
+# macOS/Windows continuam no PyPI (as rodas de la ja sao so-CPU).
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [tool.ruff]
 line-length = 100

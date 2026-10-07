@@ -22,19 +22,29 @@
 # avancar para o escopo "integracao com servicos BTP" descartado nesta
 # fase (ver conversa de escopo do DA-24) - troca a autenticacao por
 # token/roles do BTP em vez das API keys customizadas atuais.
+#
+# Proximo passo registrado (validacao 2026-10-07): o modulo API Gateway
+# atual usa APIRule v2 (gateway.kyma-project.io/v2), em que "noop" deixou
+# de existir - o equivalente e `noAuth: true` por regra, e o caminho
+# recomendado e `jwt` com o IAS/XSUAA do subaccount (issuer + jwksUri).
+# Migrar exige um cluster para validar o schema; ate la este arquivo segue
+# em v1beta1 e PRECISA ser conferido com `kubectl explain apirule.spec`.
 apiVersion: gateway.kyma-project.io/v1beta1
 kind: APIRule
 metadata:
-  name: sap-integration-copilot
-  namespace: sap-integration-copilot
+  name: integration-incident-copilot
+  namespace: integration-incident-copilot
 spec:
-  host: sap-integration-copilot.<CLUSTER_DOMAIN>
+  host: integration-incident-copilot.<CLUSTER_DOMAIN>
   service:
-    name: sap-integration-copilot
+    name: integration-incident-copilot
     port: 80
   gateway: kyma-system/kyma-gateway
   rules:
     - path: /*
-      methods: ["GET", "POST"]
+      # Validacao 2026-10-07 (DEP-01): PATCH/PUT/DELETE faltavam - o painel
+      # admin (PATCH/DELETE em /admin/*) devolvia 404/405 no gateway, mesmo
+      # funcionando local. OPTIONS nao e necessario (SPA same-origin).
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
       accessStrategies:
         - handler: noop

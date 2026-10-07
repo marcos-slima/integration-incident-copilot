@@ -10,7 +10,7 @@ from pathlib import Path
 import yaml
 
 KYMA_DIR = Path(__file__).resolve().parent.parent / "deploy" / "kyma"
-NAMESPACE = "sap-integration-copilot"
+NAMESPACE = "integration-incident-copilot"
 
 
 def _load(filename: str) -> dict:
@@ -70,8 +70,8 @@ def test_deployment_env_comes_from_configmap_and_secret():
     env_from_names = {
         ref_type: ref["name"] for entry in container["envFrom"] for ref_type, ref in entry.items()
     }
-    assert env_from_names["configMapRef"] == "sap-integration-copilot-config"
-    assert env_from_names["secretRef"] == "sap-integration-copilot-secrets"
+    assert env_from_names["configMapRef"] == "integration-incident-copilot-config"
+    assert env_from_names["secretRef"] == "integration-incident-copilot-secrets"
 
 
 def test_service_targets_the_deployment_container_port():
@@ -87,13 +87,13 @@ def test_hpa_targets_the_same_deployment():
     doc = _load("hpa.yaml")
     ref = doc["spec"]["scaleTargetRef"]
     assert ref["kind"] == "Deployment"
-    assert ref["name"] == "sap-integration-copilot"
+    assert ref["name"] == "integration-incident-copilot"
     assert doc["spec"]["minReplicas"] <= doc["spec"]["maxReplicas"]
 
 
 def test_apirule_targets_the_same_service():
     doc = _load("apirule.yaml")
-    assert doc["spec"]["service"]["name"] == "sap-integration-copilot"
+    assert doc["spec"]["service"]["name"] == "integration-incident-copilot"
 
 
 def test_secret_example_has_no_real_looking_values():
@@ -120,10 +120,10 @@ def test_worker_consumes_diagnosis_queue_with_shared_config():
     um worker no cluster eles nunca seriam processados."""
     doc = _load("worker.yaml")
     container = doc["spec"]["template"]["spec"]["containers"][0]
-    assert container["command"] == [".venv/bin/rq"]
+    assert container["command"] == ["/app/.venv/bin/rq"]
     assert container["args"] == ["worker", "--url", "$(REDIS_URL)", "diagnosis"]
     refs = {next(iter(ref.values()))["name"] for ref in container["envFrom"]}
-    assert refs == {"sap-integration-copilot-config", "sap-integration-copilot-secrets"}
+    assert refs == {"integration-incident-copilot-config", "integration-incident-copilot-secrets"}
     assert doc["spec"]["template"]["spec"]["securityContext"]["runAsNonRoot"] is True
 
 
@@ -135,3 +135,55 @@ def test_configmap_sem_referencia_dollar_parenteses():
     literais = {k: v for k, v in doc["data"].items() if "$(" in str(v)}
     assert literais == {}, f"valores nao seriam expandidos: {sorted(literais)}"
     assert "REDIS_URL" not in doc["data"] and "NEO4J_PASSWORD" not in doc["data"]
+
+
+# ---------------------------------------------------------------------------
+# Validacao 2026-10-07 (DEP-01)
+# ---------------------------------------------------------------------------
+
+
+def _mebibytes(value: str) -> int:
+    if value.endswith("Gi"):
+        return int(float(value[:-2]) * 1024)
+    if value.endswith("Mi"):
+        return int(value[:-2])
+    raise AssertionError(f"unidade inesperada: {value}")
+
+
+def test_api_e_worker_tem_memoria_para_o_reranker():
+    """Medido com o venv da imagem: ~1156 MB residentes com o reranker
+    carregado. API e worker rodam o mesmo grafo; limite < 1536Mi e OOMKill."""
+    for filename in ("deployment.yaml", "worker.yaml"):
+        container = _load(filename)["spec"]["template"]["spec"]["containers"][0]
+        resources = container["resources"]
+        assert _mebibytes(resources["requests"]["memory"]) >= 1536, filename
+        assert _mebibytes(resources["limits"]["memory"]) >= 2048, filename
+
+
+def test_apirule_libera_os_metodos_do_painel_admin():
+    methods = set(_load("apirule.yaml")["spec"]["rules"][0]["methods"])
+    assert {"GET", "POST", "PUT", "PATCH", "DELETE"} <= methods
+
+
+def test_configmap_de_producao():
+    data = _load("configmap.yaml")["data"]
+    # sem Ollama no cluster: embeddings in-process
+    assert data["EMBEDDING_BACKEND"] == "fastembed"
+    assert data["EXPOSE_API_DOCS"] == "false"
+    assert data["SESSION_COOKIE_SECURE"] == "true"
+    trusted = data["FORWARDED_ALLOW_IPS"]
+    assert "*" not in trusted.split(","), "'*' faz o uvicorn confiar no XFF do cliente"
+
+
+def test_dockerfile_sem_toolchain_no_runtime_e_com_migrations():
+    dockerfile = (KYMA_DIR.parent.parent / "Dockerfile").read_text(encoding="utf-8")
+    runtime = dockerfile.split("FROM python:3.12-slim AS app", 1)[1]
+    for pacote in ("gcc", "cmake", "libssl-dev", "libsasl2-dev"):
+        assert pacote not in runtime.split("FROM app AS final", 1)[0], pacote
+    assert "COPY --chown=appuser:appuser alembic/ alembic/" in runtime
+    assert "--extra openai" in dockerfile
+    assert "--proxy-headers" in dockerfile
+    assert "pkg-config" in dockerfile.split("AS builder", 1)[1].split("AS app", 1)[0]
+    assert "SSL.present()" in dockerfile
+    assert "FASTEMBED_BM25_PATH=/app/.cache/bm25" in runtime
+    assert '"--forwarded-allow-ips", "*"' not in dockerfile

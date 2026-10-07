@@ -40,12 +40,13 @@ def _print_report(findings: list[dict[str, str]]) -> None:
         print(f"[{SYMBOLS[finding['severity']]}] {finding['check']:<{width}}  {finding['message']}")
 
 
-def _write_baseline(results_path: Path, destination: Path) -> int:
+def _write_baseline(results_path: Path, destination: Path, model: str | None = None) -> int:
     payload = json.loads(results_path.read_text(encoding="utf-8"))
     cases = normalize_promptfoo_results(payload)
     baseline = {
         "generated_at": None,
-        "model": None,
+        # DEP-01: o gate deployed_model_evaluated compara com o LLM_MODEL do Kyma.
+        "model": model,
         "cases": cases,
         "pass_rate": round(sum(cases.values()) / len(cases), 4) if cases else 0.0,
     }
@@ -114,6 +115,10 @@ def main(argv: list[str] | None = None) -> int:
         help="grava o baseline de LLM a partir de um resultado do promptfoo",
     )
     parser.add_argument(
+        "--baseline-model",
+        help="modelo LLM usado na rodada do promptfoo (gravado no baseline)",
+    )
+    parser.add_argument(
         "--write-prompt-baseline",
         action="store_true",
         help=(
@@ -128,7 +133,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.write_prompt_baseline:
         return _write_prompt_baseline(root)
     if args.write_promptfoo_baseline:
-        return _write_baseline(args.write_promptfoo_baseline, root / PROMPTFOO_BASELINE)
+        return _write_baseline(
+            args.write_promptfoo_baseline, root / PROMPTFOO_BASELINE, args.baseline_model
+        )
 
     if args.compare_promptfoo:
         baseline_path = root / PROMPTFOO_BASELINE

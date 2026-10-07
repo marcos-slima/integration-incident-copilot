@@ -153,7 +153,7 @@ curl -s -X POST http://127.0.0.1:8000/mcp/ \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"cliente-teste","version":"1.0"}}}'
 ```
 
-Deve retornar um evento `message` com `serverInfo.name == "sap-integration-copilot"` e as ferramentas `diagnose_incident`/`list_connectors` disponíveis.
+Deve retornar um evento `message` com `serverInfo.name == "integration-incident-copilot"` e as ferramentas `diagnose_incident`/`list_connectors` disponíveis.
 
 Desde a **DA-23**, também existe um caminho de **ingestão orientada a
 evento**: `POST /events/incident` simula o que um assinante de webhook

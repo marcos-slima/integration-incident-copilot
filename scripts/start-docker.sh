@@ -2,8 +2,15 @@
 # =============================================================================
 # start-docker.sh — Inicia o Integration Incident Copilot em modo CONTAINER
 #
-# O que roda em Docker:  TUDO — api, Qdrant, Neo4j, Langfuse (ai-stack)
+# O que roda em Docker:  api, Qdrant (compose deste repo); Neo4j se
+#                        GRAPH_RAG_ENABLED=true (profile graphrag);
 #                        PostgreSQL IIC, Grafana (profile observability)
+#
+# Validacao 2026-10-07 (M-18): o script dependia de $HOME/ai-stack (um stack
+# pessoal que nao existe em outra maquina), rodava `uv run` dentro do
+# container (a imagem nao tem uv) e o passo de ingestao tinha uma barra
+# invertida seguida de comentario - o bash executava `docker compose run`
+# sem comando e o resto como comandos no HOST.
 # O que roda no HOST:    Ollama (acesso à GPU local para inferência rápida)
 #
 # Uso:
@@ -17,7 +24,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-AI_STACK_DIR="${AI_STACK_DIR:-$HOME/ai-stack}"
 SKIP_INGEST=false
 NO_OBS=false
 BUILD=false
@@ -50,7 +56,7 @@ wait_http() {
 log "Integration Incident Copilot — START (modo container)"
 echo ""
 echo "  HOST    → Ollama (inferência com GPU local)"
-echo "  DOCKER  → API, Qdrant, Neo4j, Langfuse, PostgreSQL IIC, Grafana"
+echo "  DOCKER  → API, Qdrant, (Neo4j), PostgreSQL IIC, Grafana"
 echo ""
 
 # --- 1. Pré-requisitos -------------------------------------------------------
@@ -82,13 +88,15 @@ else
   warn "Ollama não instalado — containers usarão LLM_PROVIDER do .env"
 fi
 
-# --- 3. Infraestrutura Docker (ai-stack) -------------------------------------
-log "3/6 Subindo infraestrutura — ai-stack (Qdrant, Neo4j, Langfuse)..."
-[[ -d "$AI_STACK_DIR" ]] || die "Diretório ai-stack não encontrado: $AI_STACK_DIR"
-(cd "$AI_STACK_DIR" && docker compose up -d)
-wait_http "http://localhost:6333/health" "Qdrant"
-wait_http "http://localhost:7474"        "Neo4j"
-wait_http "http://localhost:3000"        "Langfuse"
+# --- 3. Infraestrutura Docker (compose deste repo) --------------------------
+log "3/6 Subindo infraestrutura — Qdrant (e Neo4j se GRAPH_RAG_ENABLED=true)..."
+set -a; source "$PROJECT_DIR/.env"; set +a
+(cd "$PROJECT_DIR" && docker compose up -d qdrant)
+wait_http "http://localhost:${QDRANT_HOST_PORT:-6333}/healthz" "Qdrant"
+if [[ "${GRAPH_RAG_ENABLED:-false}" == "true" ]]; then
+  (cd "$PROJECT_DIR" && docker compose --profile graphrag up -d neo4j)
+  wait_http "http://localhost:7474" "Neo4j"
+fi
 
 # --- 4. Observabilidade: PostgreSQL IIC + Grafana ----------------------------
 if [[ "$NO_OBS" == "true" ]]; then
@@ -100,13 +108,12 @@ else
 
   # Migrações via container (DATABASE_URL aponta para host; substituímos por postgres)
   log "Verificando migrações Alembic..."
-  set -a; source "$PROJECT_DIR/.env"; set +a
   if [[ -n "${DATABASE_URL:-}" ]]; then
     CONTAINER_URL=$(echo "$DATABASE_URL" | sed 's|@localhost|@postgres|g;s|@127\.0\.0\.1|@postgres|g')
     (cd "$PROJECT_DIR" && \
       docker compose --profile observability run --rm \
         -e DATABASE_URL="$CONTAINER_URL" \
-        api uv run alembic upgrade head) && ok "Migrações aplicadas"
+        --entrypoint /app/.venv/bin/alembic api upgrade head) && ok "Migrações aplicadas"
   else
     warn "DATABASE_URL não definida no .env — migrações puladas"
   fi
@@ -129,11 +136,13 @@ if [[ "$SKIP_INGEST" == "true" ]]; then
   log "6/6 Ingest pulado (--skip-ingest)"
 else
   log "6/6 Indexando base de conhecimento (RAG) no container..."
-  docker compose run --rm api \
-    # A-06 fix: --reset só é passado com flag explícita --reset-rag
-    INGEST_FLAGS="--target incidents"
-    [[ "$RESET_RAG" == "true" ]] && INGEST_FLAGS="$INGEST_FLAGS --reset" && warn "RAG reset solicitado — collection sera recriada"
-    uv run python -m app.rag.ingest $INGEST_FLAGS
+  # A-06: --reset só com a flag explícita --reset-rag.
+  INGEST_FLAGS=(--target incidents)
+  if [[ "$RESET_RAG" == "true" ]]; then
+    INGEST_FLAGS+=(--reset)
+    warn "RAG reset solicitado — collection sera recriada"
+  fi
+  docker compose run --rm --entrypoint /app/.venv/bin/python api -m app.rag.ingest "${INGEST_FLAGS[@]}"
   ok "Ingest concluído"
 fi
 
@@ -144,16 +153,17 @@ echo "  │  DOCKER (Copilot)                                               │"
 echo "  │    Copilot UI / API  → http://localhost:8000                   │"
 echo "  │    API docs (Swagger)→ http://localhost:8000/docs              │"
 echo "  │  DOCKER (Infra)                                                 │"
-echo "  │    Langfuse (traces) → http://localhost:3000                   │"
 if [[ "$NO_OBS" == "false" ]]; then
 echo "  │    Grafana           → http://localhost:3001  admin/<GRAFANA_PW>│"
 echo "  │    PostgreSQL IIC    → localhost:5432                          │"
 fi
 echo "  │    Qdrant dashboard  → http://localhost:6333/dashboard         │"
+if [[ "${GRAPH_RAG_ENABLED:-false}" == "true" ]]; then
 echo "  │    Neo4j browser     → http://localhost:7474  neo4j/<NEO4J_PW> │"
+fi
 echo "  │  HOST                                                           │"
 echo "  │    Ollama            → http://localhost:11434                  │"
 echo "  └─────────────────────────────────────────────────────────────────┘"
 echo ""
 log "Logs: docker compose logs -f api"
-log "Stop: ./scripts/stop-docker.sh"
+log "Stop: docker compose --profile observability --profile graphrag down"

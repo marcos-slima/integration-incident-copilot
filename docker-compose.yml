@@ -103,7 +103,8 @@ services:
       start_period: 30s
     restart: unless-stopped
     ports:
-      - "11434:11434"
+      # Validacao 2026-10-07 (M-18): loopback, como os demais servicos.
+      - "127.0.0.1:11434:11434"
     volumes:
       - ollama_data:/root/.ollama
 
@@ -181,12 +182,13 @@ services:
   # Mailpit — SMTP testing local (zero custo, total offline)
   # Permite visualizar e-mails enviados via http://localhost:8025
   mailpit:
-    image: axllent/mailpit:latest
+    # M-18: versao fixa (era :latest - cada pull trazia outra imagem).
+    image: axllent/mailpit:v1.31
     profiles: ["mailpit"]
     restart: unless-stopped
     ports:
-      - "8025:8025"  # Web UI
-      - "1025:1025"  # SMTP
+      - "127.0.0.1:8025:8025"  # Web UI
+      - "127.0.0.1:1025:1025"  # SMTP
     environment:
       MP_MAX_MESSAGES: "1000"
       MP_DATABASE: "/data/mailpit.db"
@@ -307,6 +309,10 @@ services:
         condition: service_healthy
     volumes:
       - ./data/sample_docs:/app/data/sample_docs:ro
+      # M-18: o worker executa o MESMO pipeline da API, mas nao lia o .env -
+      # politica de soberania, provider e chaves podiam diferir entre o
+      # caminho sincrono (/diagnose) e o assincrono (fila).
+      - ./.env:/app/.env:ro
 
 
   # ---------------------------------------------------------------------------
@@ -317,13 +323,17 @@ services:
   # Fork do Mailpit com SMS Twilio-compatible ingest (porta 8200)
   # Permite visualizar emails e SMS via http://localhost:8025
   messagepit:
-    image: ghcr.io/coreydaley/messagepit:latest
+    # M-18: fixado por digest (o projeto nao publica tags de versao) e com
+    # portas de host proprias - antes usava 8025/1025 como o mailpit, e os
+    # dois perfis juntos nao subiam. SMS continua sem provedor no app
+    # (SMS_PROVIDER so aceita vazio); este servico so serve para inspecao.
+    image: ghcr.io/coreydaley/messagepit@sha256:04bd1a2f82c8b90aec52c6bfa4090ef1088acb025f5193f75112207886ef0a02
     profiles: ["messagepit"]
     restart: unless-stopped
     ports:
-      - "8025:8025"  # Web UI (email + SMS)
-      - "1025:1025"  # SMTP (email)
-      - "8200:8200"  # Twilio-compatible SMS ingest
+      - "127.0.0.1:${MESSAGEPIT_UI_PORT:-8026}:8025"  # Web UI (email + SMS)
+      - "127.0.0.1:${MESSAGEPIT_SMTP_PORT:-1026}:1025"  # SMTP (email)
+      - "127.0.0.1:8200:8200"  # Twilio-compatible SMS ingest
     environment:
       MP_MAX_MESSAGES: "1000"
       MP_DATABASE: "/data/messagepit.db"

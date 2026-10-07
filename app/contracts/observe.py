@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -120,24 +121,40 @@ def observe(
     contract: Contract | None,
     connector_type: str,
     failure_reason: str | None = None,
+    emit: bool = True,
 ) -> DriftReport:
-    """Compara o contrato observado com o baseline, EMITE incidente (breaking)
-    e DEPOIS persiste a observacao.
+    """Compara o contrato observado com o baseline, emite incidente (so
+    breaking) e persiste a observacao.
 
-    Persiste mesmo em `first_observation` e `clean`: e' o que cria o
-    baseline e o que mantem o historico de "quando mudou". Nao persiste em
-    `unverified`, porque nao ha contrato novo -- gravar o vazio apagaria o
-    baseline anterior sem ganho nenhum e o proximo diff compararia contra
-    nada.
+    Persiste em `first_observation`, `clean` e `drift` - e' o que cria o
+    baseline e mantem o historico. Nao persiste em `unverified` (sem contrato
+    novo, ou baseline ilegivel): gravar ali faria o proximo diff comparar
+    contra algo que nao foi comparado.
 
-    **Ordem critical**: emite CloudEvent de incidente ANTES de gravar baseline.
-    Se a entrega falhar, a persistencia ainda ocorre. O contrario perderia o
-    sinal para sempre (baseline gravado mas evento nunca emitido).
+    Entrega do incidente (validacao 2026-10-07, DATA-01): se o drift e
+    breaking e a emissao FALHA, o baseline novo NAO e gravado. A proxima
+    observacao compara de novo contra o baseline antigo, detecta o mesmo
+    drift e tenta emitir outra vez - retry por re-deteccao, sem tabela de
+    outbox. O id do evento (`drift-<sistema>-<fingerprint>`) e' estavel,
+    entao o consumidor deduplica se a primeira entrega tiver chegado.
+    A versao anterior gravava o baseline mesmo com a emissao falhando, e o
+    drift sumia para sempre.
+
+    `emit=False` (CLI `--no-emit`): nao emite e grava o baseline - escolha
+    explicita do operador de so registrar a observacao. A emissao e' feita
+    SO aqui; o CLI nao chama emit_incident por conta propria (antes os dois
+    emitiam, e `--no-emit` nao impedia a emissao interna).
     """
     if contract is None:
         return unverified_report(system_key, failure_reason or "contrato indisponivel")
 
-    report = diff_contracts(_load_baseline(system_key), contract)
+    try:
+        baseline = _load_baseline(system_key)
+    except BaselineReadError as exc:
+        # Erro de banco NAO e' "sem baseline": tratar como first_observation
+        # gravaria o contrato atual como baseline e absorveria o drift.
+        return unverified_report(system_key, f"baseline ilegivel: {exc}")
+    report = diff_contracts(baseline, contract)
     report = DriftReport(
         system_key=system_key,
         status=report.status,
@@ -148,11 +165,17 @@ def observe(
         reason=report.reason,
         kind=report.kind,
     )
-    _emit_incident_and_persist(report, contract, connector_type=connector_type)
-    return report
+    emitido = _emit_incident_and_persist(report, contract, connector_type=connector_type, emit=emit)
+    return replace(report, incident_emitted=emitido)
+
+
+class BaselineReadError(RuntimeError):
+    """O baseline existe (ou pode existir) mas nao foi possivel le-lo."""
 
 
 def _load_baseline(system_key: str) -> Contract | None:
+    """Ultimo contrato observado; None = nunca observado. Erro de leitura
+    levanta BaselineReadError (vira `unverified`, nunca `first_observation`)."""
     if not settings.database_url:
         return None
     try:
@@ -161,12 +184,9 @@ def _load_baseline(system_key: str) -> Contract | None:
             if row is None:
                 return None
             return contract_from_dict(row.contract or {})
-    except Exception:
-        # Sem baseline nao e' "sem drift": vira first_observation quando o
-        # contrato chegar, e o report carrega isso explicitamente. Um erro
-        # de banco nao pode virar um "esta tudo bem" silencioso.
+    except Exception as exc:
         _logger.exception("[contracts] falha ao ler baseline de %s", system_key)
-        return None
+        raise BaselineReadError(type(exc).__name__) from exc
 
 
 def _persist(report: DriftReport, contract: Contract, *, connector_type: str) -> None:
@@ -197,28 +217,26 @@ def _persist(report: DriftReport, contract: Contract, *, connector_type: str) ->
 
 
 def _emit_incident_and_persist(
-    report: DriftReport, contract: Contract, *, connector_type: str
-) -> None:
-    """Se breaking, emite incidente E DEPOIS persiste baseline.
-
-    Garante que o incidente seja enviado ANTES de gravar o baseline no banco.
-    Se a emissao falhar, o baseline ainda e' gravado (a observacao e' valida,
-    mesmo que o incidente NAO foi entregue).
-
-    O contrario (persistir antes) perde o incidente para sempre se o banco
-    gravar mas o event mesh falhar: baseline atualizado mas sinal nunca
-    chegou ao consumidor.
-    """
-    # Emite incidente PRIMEIRO. So breaking vira incidente.
-    # A emissao pode falhar, mas isso NAO deve impedir a persistencia.
-    has_incident = emit_incident(report, connector_type=connector_type)
-    _logger.info(
-        "[contracts] incidente emitido com sucesso: %s",
-        report.system_key,
-    ) if has_incident else None
-    # Depois persiste o baseline (mesmo para first_observation e clean).
-    # Best-effort: falha de persistencia eh logada mas nao interrompe o flow.
+    report: DriftReport, contract: Contract, *, connector_type: str, emit: bool
+) -> bool | None:
+    """Breaking: emite e so persiste se a emissao deu certo (ou se emit=False).
+    Demais estados: persiste direto. Ver docstring de observe()."""
+    if not report.is_breaking:
+        _persist(report, contract, connector_type=connector_type)
+        return None
+    if not emit:
+        _persist(report, contract, connector_type=connector_type)
+        return False
+    emitido = emit_incident(report, connector_type=connector_type)
+    if not emitido:
+        _logger.error(
+            "[contracts] drift breaking em %s NAO foi entregue - baseline mantido para "
+            "re-detectar e reemitir na proxima observacao",
+            report.system_key,
+        )
+        return False
     _persist(report, contract, connector_type=connector_type)
+    return True
 
 
 def emit_incident(report: DriftReport, *, connector_type: str) -> bool:
@@ -273,6 +291,7 @@ def check_connector(
     *,
     system_key: str,
     connector_type: str,
+    emit: bool = True,
 ) -> DriftReport:
     """Faz a observacao completa de um conector: probe -> diff -> persiste.
 
@@ -293,5 +312,8 @@ def check_connector(
             contract=None,
             connector_type=connector_type,
             failure_reason=f"{type(exc).__name__}: {exc}",
+            emit=emit,
         )
-    return observe(system_key=system_key, contract=contract, connector_type=connector_type)
+    return observe(
+        system_key=system_key, contract=contract, connector_type=connector_type, emit=emit
+    )

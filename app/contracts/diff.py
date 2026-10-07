@@ -11,12 +11,15 @@ Regras de classificacao, e o porque de cada uma:
   falso aqui custa um incident silencioso.
 
 `additive` - o consumidor continua funcionando, mas o contrato mudou:
-  propriedade nova, `Nullable` true->false (passou a aceitar null),
+  propriedade nova, `Nullable` false->true (passou a aceitar null),
   `MaxLength` maior, entidade nova. Vale registrar porque payload maior
   muda o orcamento de token/embedding do RAG (DA-25) mesmo sem breaking.
 
-`cosmetic` - anotacao, `Version`, ordem, namespace. Muda a impressao
-  digital e nada mais.
+`cosmetic` - anotacao, `Version`, ordem, namespace. A normalizacao do
+  contrato (model.py) DESCARTA esses campos de proposito (invariante 18:
+  sem isso o SAP republicando o servico geraria drift todo dia), entao o
+  diff atual nunca emite `cosmetic`: a constante fica reservada para quando
+  o modelo passar a guardar anotacoes.
 
 `probable_rename` - propriedade removida + propriedade nova com a MESMA
   assinatura (tipo, nulabilidade, tamanho, chave). SAP renomeia campo em
@@ -133,6 +136,10 @@ class DriftReport:
     fingerprint_after: str | None = None
     reason: str | None = None
     kind: str | None = None
+    # Preenchido por observe(): True = incidente entregue; False = era
+    # breaking e a entrega falhou (ou foi pulada com emit=False); None =
+    # nao havia o que emitir.
+    incident_emitted: bool | None = None
 
     @property
     def is_breaking(self) -> bool:
@@ -261,14 +268,19 @@ def _diff_properties(entity_name: str, before: Property, after: Property) -> lis
                 )
             )
     elif before_max_len == -1 and after_max_len != -1:
+        # Sem MaxLength -> com MaxLength e' RESTRICAO (antes cabia qualquer
+        # tamanho): o consumidor que mandava texto longo passa a ser
+        # rejeitado. Mesma natureza de max_length_reduced (validacao
+        # 2026-10-07, DATA-01).
         changes.append(
             Change(
-                severity=SEVERITY_ADDITIVE,
+                severity=SEVERITY_BREAKING,
                 kind="max_length_added",
                 entity=entity_name,
                 property=before.name,
                 old="null",
                 new=str(after_max_len),
+                hint="campo antes sem limite de tamanho; valores maiores passam a ser rejeitados",
             )
         )
     if before.key and not after.key:
@@ -437,13 +449,8 @@ def diff_contracts(before: Contract | None, after: Contract) -> DriftReport:
                 )
             )
 
-    # Detecta mudancas cosméticas: atualmente o modelo normalizado
-    # ignora anotacoes/namespace/versao (sao volateis por design),
-    # mas a constante SEVERITY_COSMETIC e' mantida para quando
-    # o modelo evoluir e novos campos entrarem (anotacao, etc).
-    cosmetic_changes: list[Change] = []
-
-    all_changes = changes + cosmetic_changes
+    # `cosmetic` nao e emitido: ver docstring do modulo.
+    all_changes = changes
 
     # Determina severidade global: breaking > additive > cosmetic > none
     severity = SEVERITY_NONE

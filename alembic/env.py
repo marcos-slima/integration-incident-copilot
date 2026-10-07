@@ -54,10 +54,17 @@ if _raw_url:
 # metadata para o `alembic revision --autogenerate` enxerga-las.
 # Importar models SEM app/db.py (que tenta engine async):
 from app.admin.models import IntegrationSystem, LlmCredential, LlmModel, LlmUsage  # noqa: F401
+from app.contracts.baseline import SystemContract  # noqa: F401
 from app.db import Base
+from app.services.incident_repository import Incident  # noqa: F401
 
-# Importar modelos para que o metadata os registre (autogenerate)
-# NAO importar Incident aqui (ela importa app.db, que cria engine async)
+# DB-01 (validacao 2026-10-07): TODO modelo com tabela precisa estar no
+# metadata. Antes `incidents` e `system_contracts` ficavam de fora e
+# `alembic revision --autogenerate` geraria DROP TABLE das duas (a
+# segunda e' append-only, historico de drift). A justificativa antiga
+# ("Incident importa app.db, que cria engine async") nao valia: app.db ja
+# e importado logo acima, e criar o engine nao abre conexao.
+# Teste: tests/test_alembic_metadata.py.
 
 target_metadata = Base.metadata
 

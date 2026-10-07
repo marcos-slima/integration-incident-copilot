@@ -352,10 +352,19 @@ class TestCLI:
     falha de entrega mandava o operador procurar a flag errada."""
 
     def _run(self, capsys, monkeypatch, *, no_emit: bool, emitted: bool, report=None):
+        from dataclasses import replace
+
         import scripts.check_contract_drift as cli
 
-        monkeypatch.setattr(cli, "check_connector", lambda *a, **k: report or _breaking_report())
-        monkeypatch.setattr(cli, "emit_incident", lambda *a, **k: emitted)
+        def _check(*a, emit=True, **k):
+            # observe() e' o unico ponto de emissao (DATA-01, 2026-10-07):
+            # o resultado da entrega vem no proprio report.
+            base = report or _breaking_report()
+            if not base.is_breaking:
+                return base
+            return replace(base, incident_emitted=emitted if emit else False)
+
+        monkeypatch.setattr(cli, "check_connector", _check)
         argv = ["--system-key", "cap_prod", "--connector-type", "odata"]
         if no_emit:
             argv.append("--no-emit")

@@ -640,8 +640,8 @@ Não é log bruto: é o histórico **consultável** de cada diagnóstico.
 Padrão Kubernetes — o access log é o mesmo da seção 1, só muda onde ele vive:
 
 ```bash
-kubectl logs -n sap-integration-copilot deployment/api
-kubectl logs -n sap-integration-copilot deployment/worker
+kubectl logs -n integration-incident-copilot deployment/api
+kubectl logs -n integration-incident-copilot deployment/worker
 ```
 
 O namespace e os deployments (`api`, `worker`) estão nos manifestos de

@@ -354,6 +354,58 @@ def check_llm_baseline(root: Path = REPO_ROOT) -> list[Finding]:
     return _ok(check)
 
 
+KYMA_CONFIGMAP = Path("deploy/kyma/configmap.yaml")
+
+
+def check_deployed_model_evaluated(root: Path = REPO_ROOT) -> list[Finding]:
+    """Validacao 2026-10-07 (DEP-01): o modelo do deploy Kyma tem que ser o avaliado.
+
+    O ConfigMap de producao declara LLM_MODEL (hoje um modelo cloud), mas os
+    unicos numeros de qualidade do projeto vem de modelos locais. Sem este
+    gate, trocar o modelo de producao nao deixava rastro nenhum no quality
+    gate. WARN (nao FAIL) porque o baseline de LLM depende de rodar o
+    promptfoo com credenciais - o objetivo e tornar a lacuna visivel.
+    """
+    check = "deployed_model_evaluated"
+    configmap = root / KYMA_CONFIGMAP
+    if not configmap.exists():
+        return _ok(check)
+    try:
+        import yaml
+
+        data = (yaml.safe_load(configmap.read_text(encoding="utf-8")) or {}).get("data") or {}
+    except Exception as exc:  # noqa: BLE001 - YAML invalido vira finding, nao crash do gate
+        return _fail(check, f"{KYMA_CONFIGMAP} ilegivel: {exc}")
+    deployed = str(data.get("LLM_MODEL") or "").strip()
+    if not deployed:
+        return _warn(check, f"{KYMA_CONFIGMAP} sem LLM_MODEL; modelo de producao indefinido")
+
+    baseline_path = root / PROMPTFOO_BASELINE
+    if not baseline_path.exists():
+        return _warn(
+            check,
+            f"modelo de producao '{deployed}' sem baseline de LLM ({PROMPTFOO_BASELINE} "
+            "ausente): a qualidade do diagnostico em producao nao foi medida",
+        )
+    try:
+        baseline = _load_json(baseline_path, check)
+    except (ValueError, TypeError) as exc:
+        return _fail(check, str(exc))
+    measured = baseline.get("model") if isinstance(baseline, dict) else None
+    if not measured:
+        return _warn(
+            check,
+            f"{PROMPTFOO_BASELINE} nao registra o modelo medido; grave com "
+            f"--baseline-model {deployed}",
+        )
+    if str(measured).strip() != deployed:
+        return _warn(
+            check,
+            f"producao usa '{deployed}' mas o baseline mediu '{measured}'",
+        )
+    return _ok(check)
+
+
 def _candidate_das(root: Path) -> list[str]:
     text = (root / CLAUDE_DOC).read_text(encoding="utf-8")
     # Ancorado no INICIO DA LINHA do titulo, nao na primeira ocorrencia da
@@ -1258,6 +1310,7 @@ GATES = {
     "reranker_invariant": check_reranker_invariant,
     "promptfoo_configs": check_promptfoo_configs,
     "llm_baseline": check_llm_baseline,
+    "deployed_model_evaluated": check_deployed_model_evaluated,
     "candidate_das_fresh": check_candidate_das,
     "implemented_das_documented": check_documented_das,
     "da_registered": check_da_registered,

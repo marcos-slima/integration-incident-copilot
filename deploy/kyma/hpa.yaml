@@ -8,13 +8,13 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: sap-integration-copilot
-  namespace: sap-integration-copilot
+  name: integration-incident-copilot
+  namespace: integration-incident-copilot
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: sap-integration-copilot
+    name: integration-incident-copilot
   minReplicas: 2
   maxReplicas: 6
   metrics:

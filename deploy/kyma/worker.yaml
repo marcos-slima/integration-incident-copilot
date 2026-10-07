@@ -10,19 +10,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sap-integration-copilot-worker
-  namespace: sap-integration-copilot
+  name: integration-incident-copilot-worker
+  namespace: integration-incident-copilot
   labels:
-    app.kubernetes.io/name: sap-integration-copilot-worker
+    app.kubernetes.io/name: integration-incident-copilot-worker
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: sap-integration-copilot-worker
+      app.kubernetes.io/name: integration-incident-copilot-worker
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: sap-integration-copilot-worker
+        app.kubernetes.io/name: integration-incident-copilot-worker
     spec:
       securityContext:
         runAsNonRoot: true
@@ -31,22 +31,26 @@ spec:
           type: RuntimeDefault
       containers:
         - name: worker
-          image: "<REGISTRY>/sap-integration-copilot:<TAG>"
-          command: [".venv/bin/rq"]
+          image: "<REGISTRY>/integration-incident-copilot:<TAG>"
+          command: ["/app/.venv/bin/rq"]
           # $(REDIS_URL) e expandido pelo kubelet a partir do envFrom
           args: ["worker", "--url", "$(REDIS_URL)", "diagnosis"]
           envFrom:
             - configMapRef:
-                name: sap-integration-copilot-config
+                name: integration-incident-copilot-config
             - secretRef:
-                name: sap-integration-copilot-secrets
+                name: integration-incident-copilot-secrets
+          # Validacao 2026-10-07 (DEP-01): o worker executa o MESMO grafo
+          # de diagnostico da API (retriever + reranker), entao precisa da
+          # mesma memoria (~1,2 GB residente medido). 512Mi era OOMKill
+          # garantido no primeiro job.
           resources:
             requests:
-              cpu: "100m"
-              memory: "256Mi"
+              cpu: "250m"
+              memory: "1536Mi"
             limits:
-              cpu: "500m"
-              memory: "512Mi"
+              cpu: "1000m"
+              memory: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: false

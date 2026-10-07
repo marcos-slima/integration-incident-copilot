@@ -28,11 +28,110 @@
 
 ## Visão geral do pipeline
 
+O grafo e as maquinas de estado estao em [`ARCHITECTURE.md`](ARCHITECTURE.md)
+(o grafo e gerado do codigo). Aqui fica a **ordem temporal**: quem chama quem,
+e onde o caminho e deterministico ou passa por inferencia.
+
+### Sequencia do diagnostico: tres caminhos
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor C as Cliente (UI, MCP, A2A, evento)
+    participant RD as run_diagnosis
+    participant SUP as supervisor
+    participant CON as connector
+    participant RET as retrieve (Qdrant)
+    participant DIA as sap/saas/generic_diagnose
+    participant RE as rule engine
+    participant GW as AI Gateway
+    participant LLM as LLM
+    participant GR as guardrails
+    participant REP as report
+    participant PG as PostgreSQL
+
+    C->>RD: IncidentRequest
+    RD->>SUP: estado inicial (sensibilidade declarada pelo cliente)
+    SUP-->>RD: agent_domain (sem LLM)
+    RD->>CON: fetch(identifier)
+    CON-->>RD: connector_data (real ou demo)
+    RD->>RET: consulta = descricao + mensagem do conector
+    RET-->>RD: retrieved_context (admissao pelo reranker)
+    RD->>DIA: estado
+    DIA->>RE: descricao + mensagem do conector
+    alt UC-01 - regra casou
+        RE-->>DIA: causa e passos (confianca da regra)
+        DIA->>GR: valida (evidencia da regra preservada)
+    else UC-02 - sem regra, com contexto
+        RE-->>DIA: nenhuma regra
+        DIA->>GW: prompt sanitizado e redigido
+        GW->>LLM: so provider permitido pela politica
+        Note over GW,LLM: loop ReAct: ver o proximo diagrama
+        LLM-->>GW: DiagnosisModel
+        GW-->>DIA: resposta + provider usado
+        DIA->>GR: teto pela evidencia, fonte citada tem de ter sido recuperada
+    else UC-03 - sem regra e sem contexto
+        RE-->>DIA: nenhuma regra
+        DIA->>GW: prompt
+        GW->>LLM: inferencia
+        LLM-->>GW: resposta
+        GW-->>DIA: resposta
+        DIA->>GR: sem documento e sem conector: teto 0,3 e matched_source nulo
+    end
+    GR-->>DIA: diagnosis (model_confidence, evidence_strength)
+    DIA-->>RD: diagnosis
+    RD->>REP: monta o Markdown
+    REP-->>RD: report_markdown
+    RD->>RD: compute_escalation_signal e _assemble_evidence
+    RD->>PG: record_incident (best-effort, evidencia cifrada)
+    RD-->>C: DiagnosisResponse (evidence, escalation)
 ```
-POST /diagnose ──► run_diagnosis ──► grafo LangGraph
-                                      supervisor → connector → retrieve → {sap|saas|generic}_diagnose → report
-                                      (+ graph_enrich / graph_write quando GRAPH_RAG_ENABLED=true)
+
+O rule engine roda **depois** do conector e do RAG: o texto que ele avalia
+inclui a mensagem do conector. Os tres caminhos correspondem aos testes de
+UC-01, UC-02 e UC-03 abaixo.
+
+### Loop ReAct e chamada de ferramenta
+
+Dentro do no de diagnostico, sem regra casada
+(`app/agent/nodes.py::_run_diagnosis_agent`):
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant DIA as no de diagnostico
+    participant AG as agente ReAct (create_react_agent)
+    participant LLM as LLM (via AI Gateway)
+    participant WS as web_search_tool
+    participant DDG as DuckDuckGo
+
+    DIA->>DIA: ferramentas = [web_search_tool] so se _web_search_allowed
+    DIA->>AG: prompt + instrucao JSON (response_format=DiagnosisModel)
+    loop ate a resposta final ou REACT_AGENT_RECURSION_LIMIT (default 8)
+        AG->>LLM: mensagens
+        alt LLM pede ferramenta
+            LLM-->>AG: tool_call(query)
+            AG->>WS: query
+            WS->>WS: _sanitize_web_search_query
+            WS->>DDG: query + site_filter da fonte aprovada
+            DDG-->>WS: ate 5 resultados
+            WS-->>AG: texto (sem sanitize_untrusted_input: achado aberto)
+        else LLM responde
+            LLM-->>AG: resposta final
+        end
+    end
+    AG-->>DIA: structured_response (DiagnosisModel)
+    opt structured output falhou
+        DIA->>AG: repete sem response_format
+        AG-->>DIA: texto livre
+        DIA->>DIA: extrai JSON por regex, senao _fallback_diagnosis
+    end
+    DIA->>DIA: matched_source nulo? recupera do texto cru
+    DIA->>DIA: _apply_confidence_guardrails
 ```
+
+Sem fonte aprovada para o `interface_type`, a lista de ferramentas fica vazia
+e o loop termina na primeira resposta do LLM.
 
 | Etapa | Onde | O que faz |
 |---|---|---|

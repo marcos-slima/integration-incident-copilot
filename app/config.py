@@ -184,6 +184,14 @@ class Settings(BaseSettings):
     # pydantic le o .env para o Settings, mas nao o exporta para o ambiente);
     # o container e o `uv run` local caiam no Ollama sem aviso.
     embedding_backend: Literal["ollama", "fastembed"] = "ollama"
+    # Validacao 2026-10-07 (M-24): a `sap_reference_library` e montada a
+    # partir de livros/manuais de TERCEIROS (acervo pessoal, sem licenca de
+    # redistribuicao). Como fallback do RAG (DA-17), trechos dela entram no
+    # prompt, no relatorio e na resposta da API - numa demo publica isso e
+    # redistribuir conteudo protegido. False desliga a consulta a collection;
+    # o deploy Kyma (demo/portfolio) usa false. Ligue so com conteudo proprio
+    # ou licenciado.
+    reference_library_fallback_enabled: bool = True
 
     # OpenAI / compativel com OpenAI (inclui endpoints locais tipo
     # vLLM/LM Studio que implementam a mesma API) - so relevante se

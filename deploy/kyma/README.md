@@ -79,6 +79,15 @@ contra infraestrutura externa (DA-19). Em particular:
   (Destination service, XSUAA) - escopo explicitamente descartado
   nesta fase em favor de só empacotar o deploy.
 
+## Conteúdo de terceiros na demo pública (M-24)
+
+O `configmap.yaml` traz `REFERENCE_LIBRARY_FALLBACK_ENABLED: "false"`. A
+collection `sap_reference_library` é montada a partir de livros e manuais de
+terceiros, sem licença de redistribuição. Como fallback do RAG (DA-17), os
+trechos dela entrariam no prompt, no relatório e na resposta da API, o que
+numa demo pública equivale a redistribuí-los. Ligue o fallback só com
+conteúdo próprio ou licenciado.
+
 ## Recursos Kubernetes/Kyma
 
 O **Dockerfile** gerou uma imagem de ~512MB (sem CUDA, CPU-only), mas o consumo de memória em runtime é maior:

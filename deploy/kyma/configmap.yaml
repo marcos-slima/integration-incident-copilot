@@ -91,6 +91,9 @@ data:
   # DEP-01: sem /docs, /redoc e /openapi.json em producao (mapa da API,
   # inclusive rotas admin). Ligue so para depurar.
   EXPOSE_API_DOCS: "false"
+  # M-24: a reference_library e acervo de terceiros sem licenca de
+  # redistribuicao; numa demo publica ela nao pode alimentar respostas.
+  REFERENCE_LIBRARY_FALLBACK_ENABLED: "false"
   # DEP-01: proxies confiaveis para o X-Forwarded-For (uvicorn
   # --proxy-headers, ver Dockerfile). Faixas privadas/CGNAT cobrem o
   # sidecar Istio e o ingress gateway do Kyma (Gardener usa 100.64.0.0/10

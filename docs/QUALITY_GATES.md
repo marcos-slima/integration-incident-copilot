@@ -17,8 +17,8 @@ verificadas à mão, uma vez, e nunca mais.
 | `promptfoo_configs` | configs do promptfoo são YAML válido, têm `prompts`/`tests`/`providers`, e os scripts `exec:` referenciados existem | instantâneo | todo push/PR |
 | `llm_baseline` | existe baseline versionado do promptfoo (comparação de regressão de LLM) | instantâneo | todo push/PR |
 | `candidate_das_fresh` | nenhuma DA marcada como "candidata" no `CLAUDE.md` já entregue em `docs/ARCHITECTURE.md` | instantâneo | todo push/PR |
-| `implemented_das_documented` | toda DA registrada no `CLAUDE.md` tem prosa localizável (seção `### N. ... (DA-N)` no `README.md`, ou `docs/ARCHITECTURE.md` como local alternativo declarado) — e, no sentido inverso, nenhuma seção `(DA-N)` órfã | instantâneo | todo push/PR |
-| `das_index_current` | o índice de DAs do `README.md` é único (sem tabela colada duas vezes), lista exatamente o mesmo conjunto do registro do `CLAUDE.md`, cada linha aponta para seção que existe, e o número da coluna Seção é o do heading real (não o da seção vizinha) | instantâneo | todo push/PR |
+| `implemented_das_documented` | toda DA registrada no `CLAUDE.md` tem prosa localizável (seção `### N. ... (DA-N)` em `docs/DECISOES_DE_ARQUITETURA.md`, ou `docs/ARCHITECTURE.md` como local alternativo declarado) — e, no sentido inverso, nenhuma seção `(DA-N)` órfã | instantâneo | todo push/PR |
+| `das_index_current` | o índice de DAs de `docs/DECISOES_DE_ARQUITETURA.md` é único (sem tabela colada duas vezes), lista exatamente o mesmo conjunto do registro do `CLAUDE.md`, cada linha aponta para seção que existe, e o número da coluna Seção é o do heading real (não o da seção vizinha) | instantâneo | todo push/PR |
 | `da_registered` | toda DA citada no código de produto (`app/`, `scripts/`, `alembic/`) tem linha na tabela de DAs do `CLAUDE.md`. Nove DAs estavam fora do livro-razão com a prosa só na docstring: três delas (soberania de dados, AMQP 1.0, circuit breaker Redis) são das mais arquiteturais do projeto e invisíveis para quem navega pelas DAs | instantâneo | todo push/PR |
 | `preflight_delegates` | o preflight de RAM do harness é `app/evaluation/ram_preflight.py`, não python inline no `scripts/promptfoo_remote.sh` | instantâneo | todo push/PR |
 | `prompt_digest_measured` | o prompt em produção (`app/agent/prompts.py`) tem o mesmo digest do prompt **medido** no `data/eval/prompt_baseline.json` | instantâneo | todo push/PR |
@@ -30,6 +30,77 @@ verificadas à mão, uma vez, e nunca mais.
 | `connector_coverage` | o mapa de cobertura (DA-58) ainda corresponde ao código: todo conector registrado tem linha em `data/connector_coverage.yaml` (9ª superfície da invariante 23), nenhuma declaração aponta para produto ou conector inexistente, e `docs/COVERAGE_MAP.md` — que é **gerado**, não editado — está em dia com os dados. Reprova por **incoerência**, nunca por lacuna: exigir cobertura completa seria exigir 76 conectores novos para o CI ficar verde | instantâneo | todo push/PR |
 | `migrations_and_dashboards` (job) | `alembic upgrade head` em banco limpo + as 45 queries dos 4 dashboards | ~1 min | todo push/PR |
 | `llm_eval` (job) | promptfoo contra o baseline; falha em regressão de caso | depende do provider | agendado 03:17 UTC + manual |
+
+## Pipeline de avaliacao
+
+Como uma mudanca de modelo, prompt, reranker ou corpus e medida antes de
+chegar a producao. Os nomes dos jobs sao os de `.github/workflows/tests.yml`
+e `.github/workflows/quality.yml`, e `tests/test_diagramas.py` reprova se o
+diagrama e os workflows divergirem.
+
+```mermaid
+flowchart LR
+    subgraph artefatos["Artefatos versionados"]
+        docs["data/sample_docs/"]
+        ds["data/eval/rag_eval_dataset.json"]
+        rb["data/eval/reranker_benchmark_results.json"]
+        pb["data/eval/prompt_baseline.json"]
+        fb["data/eval/promptfoo_baseline.json<br/>(ainda nao gravado)"]
+        cfg["promptfooconfig*.yaml"]
+        mf["data/index_manifest.json<br/>(gerado pelo ingest)"]
+    end
+
+    subgraph pr["A cada push e PR"]
+        det["<b>deterministic</b><br/>scripts/quality_gate.py<br/>20 gates"]
+        mig["<b>migrations_and_dashboards</b><br/>alembic upgrade + check<br/>45 queries dos dashboards<br/>e2e da DA-52 no Postgres"]
+        tst["<b>test</b><br/>ruff + pytest, cobertura >= 80%"]
+        rq["<b>rag-quality</b><br/>ingest com fastembed no Qdrant<br/>pytest -m rag_quality"]
+        sec["<b>security</b>"]
+        cs["<b>compose-smoke</b>"]
+        n4["<b>neo4j-smoke</b>"]
+        fe["<b>frontend</b>"]
+        db["<b>docker-build</b>"]
+    end
+
+    subgraph agenda["Agendado (03:17 UTC) ou manual"]
+        llm["<b>llm_eval</b><br/>promptfoo eval<br/>--compare-promptfoo"]
+    end
+
+    subgraph manual["Manual, na maquina com Ollama"]
+        bm["scripts/benchmark_rerankers.py"]
+        pf["promptfoo + --write-promptfoo-baseline"]
+        pd["--write-prompt-baseline"]
+        ing["python -m app.rag.ingest"]
+    end
+
+    docs --> rq
+    ds --> rq
+    ds --> det
+    docs --> det
+    rb --> det
+    pb --> det
+    cfg --> det
+    fb --> det
+    mf --> det
+    cfg --> llm
+    fb --> llm
+    bm --> rb
+    pf --> fb
+    pd --> pb
+    ing --> mf
+```
+
+**Leitura:**
+
+- **O que e deterministico roda em todo push:** forma do dataset, corpus,
+  invariante do reranker, digest do prompt, configs do promptfoo,
+  documentacao, alcance dos conectores. Sem LLM e sem infraestrutura.
+- **O que mede o LLM roda agendado** (`llm_eval`) e compara com o baseline
+  gravado; sem baseline, o gate `llm_baseline` avisa em vez de passar.
+- **O que so roda na sua maquina** (Ollama de 80B, reranker com mais
+  consultas, ingestao do acervo) gera os artefatos que os gates conferem
+  depois. Mudar o prompt sem regravar `prompt_baseline.json` reprova o
+  `prompt_digest_measured` (invariante 20).
 
 ## Rodando localmente
 

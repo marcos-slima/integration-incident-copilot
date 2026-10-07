@@ -240,8 +240,8 @@ def test_run_diagnosis_populates_trace_id_from_langfuse_current_trace(monkeypatc
         # guard em graph.py::run_diagnosis nem chama get_client()
         Settings(
             graph_rag_enabled=False,
-            langfuse_public_key="pk-lf-fake-for-test",
-            langfuse_secret_key="sk-lf-fake-for-test",
+            langfuse_public_key="pk-test-fake-for-test",
+            langfuse_secret_key="sk-test-fake-for-test",
         ),
     )
     monkeypatch.setattr(graph_module, "get_client", lambda: _FakeLangfuseClient("trace-xyz"))
@@ -264,8 +264,8 @@ def test_run_diagnosis_trace_id_is_none_when_langfuse_has_no_active_trace(monkey
         # setadas - senao o guard curto-circuita antes do get_client()
         Settings(
             graph_rag_enabled=False,
-            langfuse_public_key="pk-lf-fake-for-test",
-            langfuse_secret_key="sk-lf-fake-for-test",
+            langfuse_public_key="pk-test-fake-for-test",
+            langfuse_secret_key="sk-test-fake-for-test",
         ),
     )
     monkeypatch.setattr(graph_module, "get_client", lambda: _FakeLangfuseClient(None))

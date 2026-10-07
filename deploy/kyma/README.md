@@ -2,7 +2,7 @@
 
 Manifests reais para rodar o SAP Integration Copilot num cluster Kyma
 (SAP BTP). Fecha o último item do roadmap arquitetural consolidado
-deste projeto (ver `README.md` na raiz, Decisão de Arquitetura ### 22).
+deste projeto (ver `docs/DECISOES_DE_ARQUITETURA.md`, seção 22).
 
 ## O que tem aqui
 
@@ -46,8 +46,13 @@ kubectl -n integration-incident-copilot get apirule integration-incident-copilot
 - **Qdrant**: `configmap.yaml` aponta para `http://qdrant:6333` dentro
   do mesmo namespace, mas este bundle NÃO implanta o Qdrant em si -
   use o [Helm chart oficial da Qdrant](https://github.com/qdrant/qdrant-helm)
-  ou um serviço gerenciado. Sem isso, o Pod sobe (probes de `/health`
-  passam), mas `/diagnose` falha ao tentar consultar o RAG.
+  ou um serviço gerenciado. Sem isso, a liveness (`/health`) passa, mas a
+  readiness (`/ready`) fica em 503 e o Pod não recebe tráfego.
+- **Redis**: `REDIS_URL` vem do Secret e aponta para `redis:6379`, que este
+  bundle também não implanta.
+
+O diagrama de implantação, com a rota real do LLM nesta configuração, está
+em [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md#implantacao).
 - **GraphRAG (Neo4j)**: continua opt-in (`GRAPH_RAG_ENABLED=false` no
   ConfigMap, mesma decisão de arquitetura #9 do README) - ligar em
   Kyma exigiria implantar um Neo4j separadamente, fora deste bundle.

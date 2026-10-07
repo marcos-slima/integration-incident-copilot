@@ -388,13 +388,14 @@ class TestEstadosDocumentados:
     }
 
     def _secao_da52(self) -> str:
-        readme = pathlib.Path("README.md").read_text(encoding="utf-8")
+        # Prosa das DAs: docs/DECISOES_DE_ARQUITETURA.md (era o README ate 2026-10-07).
+        readme = pathlib.Path("docs/DECISOES_DE_ARQUITETURA.md").read_text(encoding="utf-8")
         # Ancorado no ROTULO (DA-52), nao no numero da secao. A secao foi
         # renumerada de 36 para 37 quando a DA-30 ganhou o lugar dela no
         # indice, e o teste que dependia do numero reprovou — o proprio
         # defeito que `das_index_current` existe para tornar visivel.
         m = re.search(r"^### \d+\..*\(DA-52\)\s*$", readme, re.MULTILINE)
-        assert m, "a secao da DA-52 nao foi encontrada no README.md"
+        assert m, "a secao da DA-52 nao foi encontrada em docs/DECISOES_DE_ARQUITETURA.md"
         fim = readme.find("\n### ", m.end())
         return readme[m.start() : fim if fim != -1 else len(readme)]
 

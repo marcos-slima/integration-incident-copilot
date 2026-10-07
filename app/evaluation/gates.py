@@ -32,6 +32,9 @@ PROMPT_BASELINE = Path("data/eval/prompt_baseline.json")
 CORPUS_DIR = Path("data/sample_docs")
 RERANKER_SOURCE = Path("app/rag/retriever.py")
 ARCHITECTURE_DOC = Path("docs/ARCHITECTURE.md")
+# Prosa e indice das DAs. Ate 2026-10-07 moravam no README.md; o README
+# passou a ser a pagina de apresentacao do repositorio.
+DECISIONS_DOC = Path("docs/DECISOES_DE_ARQUITETURA.md")
 CLAUDE_DOC = Path("CLAUDE.md")
 
 
@@ -555,8 +558,7 @@ def _documented_das(root: Path) -> tuple[dict[int, int], set[int]]:
     `(DA-46/47/48)` / `(DA-15/16/17)`, que o proprio projeto ja usa para
     DAs entregues na mesma mudanca.
     """
-    readme = (root / "README.md").read_text(encoding="utf-8")
-    area = readme[readme.index("## Decisões de Arquitetura") :]
+    area = (root / DECISIONS_DOC).read_text(encoding="utf-8")
     in_readme: dict[int, int] = {}
     for num, titulo in re.findall(r"^### (\d+)\.\s*(.+?)\s*$", area, re.MULTILINE):
         for grupo in re.findall(r"\(DA-([\d/]+)\)\s*$", titulo):
@@ -605,14 +607,14 @@ def check_documented_das(root: Path = REPO_ROOT) -> list[Finding]:
         return _fail(
             check,
             f"DA registrada sem prosa: {_das(sem_prosa)} "
-            "(sem secao no README nem em docs/ARCHITECTURE.md)",
+            f"(sem secao em {DECISIONS_DOC} nem em {ARCHITECTURE_DOC})",
         )
 
     orfas = sorted(set(in_readme) - registradas)
     if orfas:
         return _fail(
             check,
-            f"secao (DA-N) no README fora do registro do CLAUDE.md: {_das(orfas)}",
+            f"secao (DA-N) em {DECISIONS_DOC} fora do registro do CLAUDE.md: {_das(orfas)}",
         )
     return _ok(check)
 
@@ -710,18 +712,18 @@ def check_index_current(root: Path = REPO_ROOT) -> list[Finding]:
     errado passava.
     """
     check = "das_index_current"
-    readme = (root / "README.md").read_text(encoding="utf-8")
+    readme = (root / DECISIONS_DOC).read_text(encoding="utf-8")
     tabelas = re.findall(
         r"^\| DA \| Seção \| O que é \|\n\|---\|---\|---\|\n(.*?)(?:\n\n|\Z)",
         readme,
         re.MULTILINE | re.DOTALL,
     )
     if not tabelas:
-        return _fail(check, "tabela de indice de DAs nao encontrada no README.md")
+        return _fail(check, f"tabela de indice de DAs nao encontrada em {DECISIONS_DOC}")
     if len(tabelas) > 1:
         return _fail(
             check,
-            f"indice de DAs duplicado: {len(tabelas)} tabelas no README.md"
+            f"indice de DAs duplicado: {len(tabelas)} tabelas em {DECISIONS_DOC}"
             " — mantenha apenas a mais recente",
         )
     corpo = tabelas[0]
@@ -762,7 +764,7 @@ def check_index_current(root: Path = REPO_ROOT) -> list[Finding]:
             real = in_readme.get(da)
             if real is None:
                 desencontradas.append(
-                    f"DA-{da} aponta para secao {numero.group(1)} mas nao tem prosa no README.md"
+                    f"DA-{da} aponta para secao {numero.group(1)} mas nao tem prosa em {DECISIONS_DOC}"
                 )
             elif real != int(numero.group(1)):
                 desencontradas.append(

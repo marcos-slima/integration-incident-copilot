@@ -2,8 +2,8 @@
 
 Visao tecnica do que existe hoje no codigo - nao um plano aspiracional.
 Para o "porque" de cada decisao (problemas reais encontrados e como
-foram resolvidos), ver a secao "Decisoes de Arquitetura" no
-[README](../README.md); este documento e o "o que" e "onde".
+foram resolvidos), ver [`DECISOES_DE_ARQUITETURA.md`](DECISOES_DE_ARQUITETURA.md);
+este documento e o "o que" e "onde".
 
 ## Mapa dos diagramas
 
@@ -23,7 +23,10 @@ desenhavam um grafo inexistente.
 | Fronteiras de confianca | onde o dado e redigido, classificado, barrado ou cifrado | [abaixo](#fronteiras-de-confianca-e-dados-sensiveis) | revisao manual |
 | Decisao do AI Gateway | por que um incidente (nao) foi para a nuvem | [abaixo](#decisao-de-rota-do-ai-gateway) | revisao manual |
 | Maquinas de estado e decisao de escalonamento | estados e transicoes validas | [abaixo](#maquinas-de-estado) | estados conferidos por teste |
+| Linhagem de evidencia e confianca | de onde vem cada numero da resposta | [abaixo](#linhagem-de-evidencia-e-confianca) | trust levels e tetos conferidos por teste |
+| Implantacao (compose e Kyma) | o que sobe, onde, e para onde o LLM vai de fato | [abaixo](#implantacao) | recursos e chaves conferidos por teste |
 | Sequencia do diagnostico e loop ReAct | ordem das chamadas, determinismo x inferencia | [`CASOS_DE_USO.md`](CASOS_DE_USO.md) | participantes conferidos por teste |
+| Pipeline de avaliacao e gates | como uma mudanca de modelo, prompt ou reranker e medida | [`QUALITY_GATES.md`](QUALITY_GATES.md#pipeline-de-avaliacao) | jobs e numero de gates conferidos por teste |
 
 ## C4 nivel 1 - Contexto
 
@@ -379,8 +382,8 @@ flowchart TD
     E -->|"nao"| GR["grounded<br/>tier curated ou floor, nao escala"]
 ```
 
-Os limiares 0,62 e 0,45 nao foram calibrados contra o acervo (ver o README,
-DA-44). O sinal e informativo: o grafo nao muda de caminho por causa dele.
+Os limiares 0,62 e 0,45 nao foram calibrados contra o acervo (ver
+`DECISOES_DE_ARQUITETURA.md`, DA-44). O sinal e informativo: o grafo nao muda de caminho por causa dele.
 
 ### Task A2A (DA-14)
 
@@ -452,9 +455,138 @@ stateDiagram-v2
     end note
 ```
 
+## Linhagem de evidencia e confianca
+
+Como cada fonte vira `trust_level` (`app/agent/nodes.py::_assemble_evidence`)
+e como as tres metricas da resposta sao calculadas
+(`app/agent/nodes.py::_compute_evidence_strength` e
+`app/agent/nodes.py::_apply_confidence_guardrails`). Nenhuma delas usa a
+autoavaliacao do LLM como evidencia (invariante 4).
+
+```mermaid
+flowchart LR
+    subgraph fontes["Fonte observada"]
+        re["regra do rule engine"]
+        cr["conector real"]
+        cm["conector demo ou fallback"]
+        rag["trecho do RAG"]
+        gh["historico GraphRAG"]
+        ws["web_search_results"]
+        ds["descricao do usuario"]
+    end
+    subgraph trust["trust_level"]
+        so["system_observed"]
+        si["simulated"]
+        rd["retrieved_document"]
+        wu["web_untrusted"]
+        ur["user_reported"]
+    end
+    re --> so
+    cr --> so
+    cm --> si
+    rag --> rd
+    gh --> rd
+    ws -.->|"campo hoje sempre vazio"| wu
+    ds --> ur
+
+    subgraph calc["Metricas da resposta"]
+        es["evidence_strength =<br/>max(sinal do pipeline, evidencia da regra)"]
+        mc["model_confidence =<br/>min(confianca do LLM, evidence_strength + 0,25)<br/>e os tetos dos guardrails"]
+        dc["diagnosis_confidence =<br/>evidence_strength x model_confidence"]
+    end
+    rag -->|"rerank_score_calibrated (DA-42)"| es
+    cr -->|"piso 0,75"| es
+    re -->|"0,95 com conector real; 0,70 so texto"| es
+    es --> mc
+    llm["confianca declarada pelo LLM"] --> mc
+    es --> dc
+    mc --> dc
+```
+
+**Tetos aplicados a `model_confidence`, na ordem do codigo:**
+
+| Condicao | Teto | Efeito adicional |
+|---|---|---|
+| sempre | `evidence_strength + 0,25` (`EVIDENCE_CONFIDENCE_MARGIN`) | — |
+| conector devolveu dado de fallback (identificador nao reconhecido) | 0,4 | prefixo `[confianca limitada - identificador nao reconhecido…]` |
+| sem documento, sem conector e sem regra | 0,3 | `matched_source` anulado |
+| `matched_source` citado pelo LLM nao esta entre os documentos recuperados | 0,3 | `matched_source` anulado; o escalonamento marca `abstained` |
+
+`diagnosis_confidence` e uma heuristica para ordenar diagnosticos, nao uma
+probabilidade calibrada. O `web_untrusted` so apareceria a partir de
+`web_search_results`, campo que nenhum no do grafo preenche hoje (ver os
+achados em "Fronteiras de confianca"); o resultado da busca feita pela
+ferramenta do ReAct nao vira evidencia.
+
+## Implantacao
+
+### Local (`docker-compose.yml`)
+
+| Perfil | Servicos |
+|---|---|
+| (nenhum) | `api`, `qdrant` |
+| `observability` | `postgres`, `grafana`, `reporter` |
+| `async` | `redis`, `worker` |
+| `graphrag` | `neo4j` |
+| `container-ollama` | `ollama` (o default e o Ollama nativo no host, via `host.docker.internal`) |
+| `mailpit` | `mailpit` (SMTP de desenvolvimento) |
+| `messagepit` | `messagepit` |
+
+Todas as portas sao publicadas so em 127.0.0.1. O passo a passo validado
+de ponta a ponta esta em `scripts/start-docker.sh`.
+
+### SAP BTP Kyma (`deploy/kyma/`)
+
+```mermaid
+flowchart TB
+    net(["Internet"]) --> ar["<b>APIRule</b><br/>handler noop: a autenticacao<br/>e da aplicacao (chaves e sessao)"]
+    ar --> svc["<b>Service</b> :80"]
+    subgraph ns["namespace integration-incident-copilot (kustomization)"]
+        svc
+        subgraph api["<b>Deployment api</b>: 2 a 6 pods (HPA)"]
+            pod["container da API<br/>readinessProbe /ready<br/>livenessProbe /health"]
+        end
+        wk["<b>Deployment worker</b><br/>1 replica, RQ"]
+        cm["<b>ConfigMap</b><br/>LLM_PROVIDER=openai, LLM_MODEL=gpt-4o-mini<br/>LLM_FALLBACK_PROVIDER=azure_openai<br/>DATA_SOVEREIGNTY_MODE=cloud_with_dlp<br/>EMBEDDING_BACKEND=fastembed<br/>GRAPH_RAG_ENABLED=false<br/>REFERENCE_LIBRARY_FALLBACK_ENABLED=false"]
+        sec["<b>Secret</b> (de secret.example.yaml)<br/>chaves da API, REDIS_URL,<br/>credenciais OpenAI e Azure OpenAI"]
+    end
+    svc --> pod
+    cm -.-> pod
+    sec -.-> pod
+    cm -.-> wk
+    sec -.-> wk
+    subgraph fora["Fora do bundle: provisionar antes"]
+        qd[("Qdrant<br/>qdrant:6333")]
+        rd[("Redis<br/>redis:6379")]
+    end
+    pod --> qd
+    pod --> rd
+    wk --> rd
+    pod -->|"dado public"| oai["OpenAI api.openai.com"]
+    pod -->|"dado confidencial (o default)"| az["Azure OpenAI<br/>(CONFIDENTIAL_ALLOWED_ORIGINS)"]
+```
+
+**O que o diagrama deixa explicito:**
+
+- **Rota real do LLM.** Com `SENSITIVITY_DEFAULT=confidential` (B-04) e a
+  allowlist apontando so para Azure, `api.openai.com` recebe apenas dado
+  classificado como `public`. Na pratica, quase todo incidente vai para o
+  **Azure OpenAI**, o fallback, e nao para o `gpt-4o-mini` do primario.
+  Simulado na validacao de 2026-10-07 com `_select_allowed_providers` e a
+  configuracao do ConfigMap: `public -> [openai, azure_openai]`,
+  `confidential -> [azure_openai]`. A avaliacao do "modelo de producao" tem de
+  medir o deployment do Azure.
+- **Sem banco.** O Secret nao traz `DATABASE_URL`: no Kyma nao ha gravacao
+  de `incidents`, nem `/admin`, nem registro de LLM.
+- **Qdrant e Redis nao fazem parte do bundle.** Sem Qdrant, a readiness
+  `/ready` fica em 503 e o pod nao recebe trafego.
+- **APIRule sem autenticacao no gateway.** Evoluir para `jwt` com o
+  IAS/XSUAA do subaccount esta em aberto (APIRule v2).
+- Nenhum manifest foi aplicado num cluster real.
+
 ## LLM Gateway - por que e como
 
-Ver `app/llm/factory.py` e a Decisao de Arquitetura #10 no README. Em
+Ver `app/llm/factory.py` e a Decisao de Arquitetura #10 em `DECISOES_DE_ARQUITETURA.md`. Em
 uma frase: `Settings.llm_provider` decide entre Ollama (default,
 local-first, sem custo de API), OpenAI ou Azure OpenAI, sem o resto do
 codigo (`app/agent/nodes.py`, prompt, guardrails) precisar saber qual foi
@@ -476,15 +608,22 @@ provider primario esta genuinamente indisponivel).
 `settings.llm_provider` (Ollama, tipicamente) e, SE
 `settings.llm_fallback_provider` estiver configurado (`.env`, vazio por
 default = comportamento identico a antes desta fase) E a falha for de
-TRANSPORTE (`ConnectionError`/`httpx.ConnectError`/
-`httpx.TimeoutException` - Ollama fora do ar, timeout de rede), refaz a
+TRANSPORTE (`app/llm/factory.py::TRANSPORT_FAILURE_EXCEPTIONS`:
+`ConnectionError`, `httpx.TransportError` - base de `ConnectError`,
+`TimeoutException`, `ReadError` etc. - e, com o SDK `openai` instalado,
+`openai.APIConnectionError` e `openai.InternalServerError`; Ollama fora
+do ar, timeout de rede, 5xx do provider), refaz a
 MESMA chamada com o provider de fallback antes de desistir. Erro de
 APLICACAO (JSON malformado, prompt invalido) NUNCA aciona o fallback -
 subir normalmente evita mascarar um bug real atras de uma segunda
 chamada de LLM (custo/latencia desnecessarios). Os sub-agentes de
-diagnostico (`sap_diagnosis_node`/`saas_diagnosis_node`, ver DA-22
-logo abaixo) usam isso, via `_run_diagnosis_agent()`, para a chamada
-ao agente ReAct; qual provider respondeu de fato fica exposto em
+diagnostico (`sap_diagnosis_node`/`saas_diagnosis_node`/
+`generic_diagnosis_node`, ver DA-22 logo abaixo) chamavam isso
+diretamente na entrega da DA-20 (historico; hoje, desde a DA-26,
+`app/agent/nodes.py::_run_diagnosis_agent` chama
+`app/llm/gateway.py::invoke_via_gateway`, que aplica policy/circuit
+breaker/budget e e o UNICO ponto de entrada do LLM no grafo); qual
+provider respondeu de fato fica exposto em
 `DiagnosisResponse.llm_provider_used` - transparencia, nao so um
 fallback silencioso.
 
@@ -518,12 +657,15 @@ esta fechada.
 "Real" aqui quer dizer: o codigo de producao (fetch de token OAuth2,
 montagem do header, parsing da resposta) e exercitado de verdade nos
 testes via `httpx.MockTransport` simulando a API documentada de cada
-fornecedor - nao existe, para nenhum destes tres ultimos (Salesforce/
-Workday/Ariba) nem para o RFC, uma conta/tenant real disponivel para
-validar contra producao. Essa e a mesma ressalva ja feita sobre
-`RFCConnector._fetch_real` desde a Fase 8, agora estendida a todos os
-conectores no mesmo padrao - nao e uma limitacao nova, e a mesma
-limitacao aplicada com consistencia.
+fornecedor. Validacao contra sistema real e uma afirmacao separada, por
+conector, e a matriz acima e a fonte: **RFC, ServiceNow, Salesforce e
+CAP** foram validados contra instancia real; **OData, Workday, Ariba,
+SuccessFactors e PO/PI** nao foram (so `httpx.MockTransport`/cassettes);
+**API Management** tem schema especulativo. (historico; o texto original
+desta secao dizia que nenhum conector - nem RFC/Salesforce - tinha
+tenant real disponivel, o que deixou de valer quando as validacoes da
+matriz foram feitas.) "Tem conector" nunca deve ser lido como "foi
+validado".
 
 Por que RFC (nao so OData) importa para o posicionamento do produto:
 clientes ainda em ECC on-premise, sem BTP/Integration Suite, tipicamente
@@ -533,8 +675,9 @@ nao consegue adotar SAP AI Core (que exige HANA Cloud). Ver
 
 ## RAG
 
-Duas collections Qdrant (`app/rag/ingest.py`) — ambas participam do
-fluxo de diagnostico a partir da v2.0:
+Duas collections Qdrant (`app/rag/ingest.py`) — `sap_incident_docs` e
+a fonte primaria do diagnostico; `sap_reference_library` entra so como
+fallback (DA-17, ver abaixo):
 
 - `sap_incident_docs` — documentos de troubleshooting (`.md`), hybrid
   search (dense + BM25 esparso, fusao RRF)
@@ -543,15 +686,27 @@ fluxo de diagnostico a partir da v2.0:
   `document_id`, `chunk_index`, `file_hash`, `title`, `category`,
   `ingested_at` (parser: `pymupdf4llm`, preserva estrutura Markdown)
 
-**Retrieval unificado (`_retrieve_unified`):** consulta as duas
-collections em paralelo, funde os resultados por score composto
-(`alpha=0.7 × cosine + 0.3 × rrf_normalizado`) e passa os candidatos
-para o **reranker semantico** (`cross-encoder/ms-marco-MiniLM-L-6-v2`
-via `sentence-transformers`) que reordena por relevancia real ao par
-`(query, chunk)` — muito mais preciso que similaridade de cosseno pura.
+**Retrieval unificado (`app/rag/retriever.py::_retrieve_unified`):**
+(historico; a v2.0 descrevia consulta as duas collections em paralelo -
+hoje e sequencial com fallback):
+
+1. consulta `sap_incident_docs` por hybrid search
+   (`app/rag/retriever.py::_retrieve_hybrid`, que ordena os candidatos
+   por score composto `0.7 × cosine + 0.3 × rrf_normalizado`);
+2. so se nenhum hit de incidents tiver cosseno `>= score_threshold`
+   consulta `sap_reference_library` (busca densa) como fallback - e esse
+   fallback pode ser desligado com `reference_library_fallback_enabled`;
+3. funde/deduplica o pool ordenando por cosseno denso e passa os
+   candidatos ao **reranker semantico**
+   (`cross-encoder/mmarco-mMiniLMv2-L12-H384-v1`, DA-29, via
+   `sentence-transformers`), que reordena por relevancia real ao par
+   `(query, chunk)`;
+4. a admissao final usa `app/rag/retriever.py::_evidence_admission_score`
+   (ver DA-25 abaixo).
 
 **Ingestao:** idempotente por IDs deterministicos
-(`md5(document_id::chunk_index)`) — sem delete-before-upsert. Estado
+(`uuid5(NAMESPACE_URL, f"{document_id}::chunk::{chunk_index}")`, ver
+`app/rag/ingest.py`) — sem delete-before-upsert. Estado
 salvo por hash de conteudo (`hash:filename`) em vez de path, detectando
 mudancas mesmo com renomeacao de arquivo.
 
@@ -570,8 +725,9 @@ HISTORICO relacional de uma interface especifica.
 Continua **desligado por default** (`GRAPH_RAG_ENABLED=false`) - a
 decisao de manter assim nao mudou (ver Decisao de Arquitetura #9): o
 Qdrant ja resolve o caso de uso principal, e o grafo so agrega valor
-depois de meses de historico real acumulado, nao com os 8 documentos de
-demonstracao deste repositorio. A diferenca em relacao a antes desta
+depois de meses de historico real acumulado, nao com os 15 documentos de
+demonstracao deste repositorio (`data/sample_docs/`; eram 8 quando esta
+secao foi escrita). A diferenca em relacao a antes desta
 fase e que agora **existe codigo real, testado (com driver fake, ver
 `tests/test_graph_store.py`), pronto para ligar** quando fizer sentido:
 
@@ -646,16 +802,16 @@ Antes desta fase, um unico node (`diagnose_node`) tratava QUALQUER
 incidente com uma persona fixa de "especialista em integracao SAP" -
 incoerente com o principio de design deste projeto de que SAP e um
 conector entre iguais, nao o eixo arquitetural (ver Decisao de
-Arquitetura #8/#13 no README). Um incidente de webhook do Salesforce
+Arquitetura #8/#13 em `DECISOES_DE_ARQUITETURA.md`). Um incidente de webhook do Salesforce
 recebia a mesma expertise "OData/IDoc/RFC/CPI" que um incidente de RFC.
 
 **Decisao:** um `supervisor_node` (`app/agent/supervisor.py`) roda
 PRIMEIRO no grafo (antes ate do `connector`) e classifica
 deterministicamente o dominio do incidente:
 
-- `interface_type` em `{odata, rfc, cap}` -> `"sap"`
-- `interface_type` em `{servicenow, salesforce, workday, ariba}` ->
-  `"saas"`
+- `interface_type` em `{odata, rfc, cap, po}` -> `"sap"`
+- `interface_type` em `{servicenow, salesforce, workday, ariba,
+  successfactors}` -> `"saas"`
 - sem `interface_type` (fluxo por descricao livre): palavra-chave SAP
   na descricao (`idoc`, `iflow`, `cpi`, `rfc`, `bapi`, `abap`, `btp`,
   etc.) -> `"sap"`; senao -> `"generic"`
@@ -665,17 +821,21 @@ aplicado aos guardrails de confianca (DA-15): decisao estrutural
 barata, deterministica e 100% testavel sem depender de infraestrutura
 de IA. `app/agent/graph.py::_route_to_specialist` le `agent_domain` do
 estado e direciona o grafo (via `add_conditional_edges`) para UM dos
-dois sub-agentes especialistas - nunca os dois no mesmo incidente, sem
-duplicar custo de chamada de LLM:
+tres sub-agentes especialistas - nunca mais de um no mesmo incidente,
+sem duplicar custo de chamada de LLM:
 
 - `sap_diagnosis_node` - persona SAP (OData, IDoc, RFC, CPI/Integration
   Suite, BTP)
 - `saas_diagnosis_node` - persona multi-fornecedor (ServiceNow,
-  Salesforce, Workday, Ariba, APIs REST/OAuth2 em geral); tambem cobre
-  `"generic"` (nenhum dominio identificado), aplicando o mesmo
-  raciocinio generalista de troubleshooting de integracao
+  Salesforce, Workday, Ariba, SuccessFactors, APIs REST/OAuth2 em geral)
+- `generic_diagnosis_node` - persona propria de integracao generica
+  (`app/agent/prompts.py::GENERIC_INTEGRATION_PERSONA`) para
+  `"generic"` (nenhum dominio identificado). (historico; na entrega da
+  DA-22 eram dois sub-agentes e `"generic"` caia no
+  `saas_diagnosis_node`.) `agent_domain` ausente continua caindo em
+  `saas_diagnose` (`app/agent/graph.py::_route_to_specialist`).
 
-Os dois sub-agentes compartilham o mesmo nucleo (`_run_diagnosis_agent`
+Os sub-agentes compartilham o mesmo nucleo (`_run_diagnosis_agent`
 em `app/agent/nodes.py`) - agente ReAct, Hybrid Inference (DA-20),
 parsing de JSON e guardrails de confianca (DA-15) permanecem
 IDENTICOS; a unica diferenca entre eles e a persona/expertise injetada
@@ -686,20 +846,28 @@ no prompt. Qual dominio foi usado fica exposto em
 **Validacao:** `tests/test_supervisor.py` (classificacao pura, sem
 LLM) e `tests/test_nodes_multiagent.py` (cada sub-agente recebe a
 persona certa, o roteamento condicional manda para o node certo -
-incluindo o caso de seguranca `agent_domain` ausente cair no
-especialista generalista em vez de quebrar - e `agent_domain` chega
-ate `DiagnosisResponse`), todos mockando `invoke_with_hybrid_fallback`
-diretamente (sem Ollama real, mesmo padrao de `test_llm_factory.py`).
+incluindo o caso de seguranca `agent_domain` ausente cair em
+`saas_diagnose` em vez de quebrar - e `agent_domain` chega
+ate `DiagnosisResponse`), todos mockando a chamada de LLM
+diretamente (sem Ollama real, mesmo padrao de `test_llm_factory.py`;
+historico: `invoke_with_hybrid_fallback` na DA-22, `invoke_via_gateway`
+desde a DA-26).
 `build_graph()` foi verificado manualmente compilando com sucesso nos
 dois modos (GraphRAG ligado/desligado), confirmando os nodes esperados
 no grafo resultante.
 
 ## Rodando sem depender de infra externa
 
-O `docker-compose.yml` na raiz deste repositorio sobe Ollama + Qdrant +
-a API num unico `docker compose up -d`, sem depender de infra externa
-(incluindo Neo4j opcional para GraphRAG e stack completo do Langfuse
-para observabilidade). Isso importa porque este projeto tambem funciona
+O `docker-compose.yml` na raiz deste repositorio sobe, no
+`docker compose up -d` default, so a API + Qdrant. O Ollama roda no host
+por default (a API o alcanca via `host.docker.internal`); o container
+`ollama` e opcional, no profile `container-ollama`. Neo4j (profile
+`graphrag`), Redis + worker RQ (profile `async`) e a observabilidade
+(Postgres/Grafana, profile `observability`) ficam em profiles opcionais.
+Langfuse e externo (`LANGFUSE_HOST`) - nao ha servico Langfuse no
+compose. (historico; o texto original desta secao dizia que o compose
+subia Ollama + Qdrant + API e o stack completo do Langfuse.) Isso
+importa porque este projeto tambem funciona
 como demonstracao para terceiros (cliente, entrevistador) - que nao
 têm, nem deveriam precisar montar, o ambiente de desenvolvimento so
 para rodar o projeto uma vez. Langfuse, Neo4j e infra opcional:
@@ -826,9 +994,17 @@ outros dois canais de acesso.
 `/diagnose` e pela camada A2A - nenhuma logica de diagnostico
 duplicada, so mais um ponto de entrada.
 
+**Atualizacao (2026-10-07):** o webhook hoje chama
+`app/events/consumer.py::handle_incident_event_async` e responde `202`
+sem esperar o LLM: com `REDIS_URL`, o 202 so sai depois do evento
+gravado na fila RQ (durable); sem `REDIS_URL` (dev), o diagnostico roda
+em `BackgroundTasks` no processo web (nao durable). Falha no enqueue
+devolve `503`, para o publicador reenviar.
+
 **Nao-objetivo explicito desta fase:** processamento assincrono/fila
-real (hoje e sincrono - o webhook so retorna quando o diagnostico
-termina, sujeito ao mesmo rate limit de 10/min de `/diagnose`) e
+real (historico; na entrega da DA-23 era sincrono - o webhook so
+retornava quando o diagnostico terminava; hoje e assincrono, ver
+atualizacao acima) e
 consumo AMQP direto do SAP Event Mesh - **entregue em DA-32** (ver secao
 "Consumidor AMQP 1.0 assíncrono via Solace Cloud" abaixo, commit `67b78e8`).
 
@@ -843,8 +1019,9 @@ depender de Ollama/Qdrant reais.
 
 Fecha o último item do roadmap arquitetural consolidado deste projeto.
 `deploy/kyma/` (manifests + `README.md` próprio com o passo a passo)
-contém um Deployment (2 réplicas, probes em `/health`, usuário
-não-root), Service, HorizontalPodAutoscaler (2-6 réplicas por CPU),
+contém um Deployment (2 réplicas, liveness em `/health` e readiness em
+`/ready` - historico; na entrega as duas probes usavam `/health` -,
+usuário não-root), Service, HorizontalPodAutoscaler (2-6 réplicas por CPU),
 ConfigMap (config não sensível) e um `secret.example.yaml` - TEMPLATE,
 nunca aplicado direto, com todo valor prefixado `CHANGE-ME` (testado em
 `tests/test_kyma_manifests.py::test_secret_example_has_no_real_looking_values`).
@@ -856,7 +1033,7 @@ não duplica autenticação na camada de rede. Evoluir para `jwt`
 (validando tokens XSUAA do BTP) seria a evolução natural de uma
 integração mais profunda com serviços BTP (Destination service,
 XSUAA) - escopo explicitamente descartado nesta fase em favor de só
-empacotar o deploy (ver decisão de escopo no README, ### 22).
+empacotar o deploy (ver decisão de escopo em `DECISOES_DE_ARQUITETURA.md`, ### 22).
 
 **Correções feitas no `Dockerfile` nesta mesma fase** (descobertas ao
 revisar o empacotamento para produção, corrigidas na origem em vez de
@@ -888,9 +1065,12 @@ em `deploy/kyma/README.md`.
 
 **Validação:** `tests/test_kyma_manifests.py` (11 testes) garante que
 todo YAML do bundle é sintaticamente válido e internamente consistente
-- mesmo namespace em todos os recursos namespaced, probes de saúde em
-`/health` (nunca um endpoint autenticado, para não travar o rollout em
-`CrashLoopBackOff` por falta de Secret), Pod rodando não-root, HPA/APIRule
+- mesmo namespace em todos os recursos namespaced, probes de saúde sem
+autenticação (nunca um endpoint autenticado, para não travar o rollout em
+`CrashLoopBackOff` por falta de Secret) - liveness em `/health` (processo
+vivo, sem IO externo) e readiness em `/ready` (503 quando um serviço
+configurado está degradado; historico: na entrega ambas usavam
+`/health`), Pod rodando não-root, HPA/APIRule
 apontando para o Deployment/Service certos, e o `kustomization.yaml`
 referenciando só arquivos que existem (excluindo deliberadamente o
 template de Secret).
@@ -958,6 +1138,11 @@ dense + sparse -> RRF -> candidate pool -> cross encoder -> evidence threshold -
   [0, 1], mesma convencao ja usada em `_compute_evidence_strength`)
   atingir `score_threshold` - o reranker ganhou um caminho proprio
   para "salvar" um documento que o cosseno sozinho descartaria.
+  (historico; hoje, desde a DA-42 e a validacao 2026-10-07,
+  `app/rag/retriever.py::_evidence_admission_score` usa SO o
+  `rerank_score_calibrated` (sigmoid) quando o reranker existe, e o
+  cosseno apenas quando nao ha reranker - o `max(cosseno, sigmoid)`
+  admitia casos fora de escopo que o reranker rejeitava.)
 - O gatilho do fallback para `reference_library` (DA-17) continua
   olhando para o melhor cosseno de `incidents_hits` antes do rerank -
   nao mudou de criterio, so passou a conviver com candidatos fracos
@@ -987,7 +1172,7 @@ dado mock/fallback.) A lista e montada de forma inteiramente
 DETERMINISTICA em `app/agent/nodes.py::_assemble_evidence(state)` - o
 LLM nunca declara/cita suas proprias fontes, mesmo principio ja usado
 em `evidence_strength` (DA-15) e nos demais guardrails deste projeto
-("guardrails em codigo, nao em prompt", DA-3 do README.md).
+("guardrails em codigo, nao em prompt", DA-3 em `DECISOES_DE_ARQUITETURA.md`).
 `_assemble_evidence` e chamada tanto em `report_node` (para a nova
 secao "Evidencias" do `report_markdown`) quanto em
 `graph.py::run_diagnosis` (para popular `DiagnosisResponse.evidence`)
@@ -1043,7 +1228,18 @@ provider externo. Se a policy nao deixa nenhum provider candidato (ex:
 `llm_provider="openai"` sem fallback local configurado, e o incidente
 e confidencial), a chamada falha explicitamente com
 `PolicyViolationError` - nunca silenciosamente tenta cloud mesmo
-assim.
+assim. (historico: texto da v1.)
+
+**Atualizacao (2026-10-07):** hoje
+(`app/llm/gateway.py::classify_sensitivity`, DA-39/DA-43) o default e
+`confidential` (`settings.sensitivity_default`) - texto livre pode
+conter dado que a redacao por regex nao reconhece; dado real de
+conector ou `pii_detected` tambem dao `confidential`. A classificacao
+declarada pelo cliente so ELEVA, nunca rebaixa. A decisao de roteamento
+e pela ORIGIN real do destino, nao pelo rotulo do provider: dado
+`confidential` so vai para cloud com `DATA_SOVEREIGNTY_MODE=cloud_with_dlp`
+E a origin listada em `CONFIDENTIAL_ALLOWED_ORIGINS`; sem isso, so
+providers locais (fail-closed).
 
 **2. Circuit Breaker.** `CircuitBreaker` (in-memory, por provider, por
 processo) substitui o try/except direto da DA-20: depois de
@@ -1052,7 +1248,10 @@ transporte CONSECUTIVAS, o provider fica "aberto" por
 `settings.llm_gateway_circuit_cooldown_seconds` (default 30s) -
 chamadas seguintes pulam esse provider sem tentar, em vez de esperar o
 mesmo timeout de rede de novo contra algo que ja sabemos que esta
-fora. Reseta para fechado no primeiro sucesso.
+fora. Reseta para fechado no primeiro sucesso. (historico; desde a
+DA-41 o estado e compartilhado entre replicas via Redis -
+`app/circuit_breaker.py` - com fallback automatico para memoria quando
+`REDIS_URL` esta vazia ou o Redis esta fora.)
 
 **3. Budget.** `_estimate_cost_usd` estima o custo (heuristica de
 ~4 caracteres/token x tabela de preco aproximada por provider -
@@ -1071,10 +1270,10 @@ latencia e custo estimado.
 duplicado aqui); PII/DLP de verdade (um scanner de dados sensiveis no
 CONTEUDO do prompt - `sanitize_untrusted_input` protege contra prompt
 injection, nao e a mesma coisa que um scanner de PII); tenant
-isolation (projeto ainda single-tenant); circuit breaker compartilhado
-entre replicas (e in-memory por processo - os 2+ pods do deploy Kyma,
-DA-24, nao compartilham esse estado entre si; precisaria de um backend
-tipo Redis para isso em producao multi-instancia).
+isolation (projeto ainda single-tenant). O item "circuit breaker
+compartilhado entre replicas" tambem estava nesta lista (in-memory por
+processo, os 2+ pods do deploy Kyma nao compartilhavam o estado) -
+**resolvido na DA-41** (backend Redis, fallback em memoria).
 
 Validado com `tests/test_llm_gateway.py` (20 testes) - policy de
 roteamento, circuit breaker (abre/fecha/expira cooldown, isolado por
@@ -1238,7 +1437,9 @@ independente do grafo - um score booleano `diagnosis_correct` no trace
 Langfuse original (`DiagnosisResponse.trace_id`, capturado em
 `run_diagnosis()` independente de GraphRAG). GraphRAG desligado deixou
 de ser 404 automatico - vira 400 SO se tambem nao houver trace_id/
-correct informados (nada para registrar em lugar nenhum); GraphRAG
+correct informados E (desde a DA-50) nao houver linha gravavel na tabela
+`incidents` (sem `DATABASE_URL` ou incidente inexistente) - nada para
+registrar em lugar nenhum; GraphRAG
 ligado com incident_id inexistente continua 404. Ver
 `app/models.py::VerifyIncidentRequest` (campos `correct`/`trace_id`
 novos) e `app/main.py::verify_incident_endpoint`.
@@ -1369,10 +1570,11 @@ puro sem ganho de qualidade. A regra deterministica tem confianca 0.90
 inferencia local ou custo de API.
 
 **Implementacao:** `app/agent/rules.py` — `ErrorRule` dataclass
-(pattern regex, action, root_cause, confidence) + catalogo
-`KNOWN_ERROR_RULES` com 22 regras hoje (14 originais, 7 da expansão da
-seção "Rule Engine: 14 → 21 regras" e `sap_mdg_mdi_lock`); a lista
-canônica é o próprio código:
+(`patterns` regex, `probable_root_cause`, `next_steps`, `category`,
+`confidence`) + catalogo `KNOWN_ERROR_RULES` com 22 regras hoje: 15 de
+base e 7 da expansao DA-35 (tabela da secao "Rule Engine: 14 → 21
+regras" abaixo, que ja inclui `sap_mdg_mdi_lock`; os numeros "14 → 21"
+daquele titulo sao historicos). A lista canônica é o próprio código:
 - OAuth expirado / tokens JWT invalidos
 - HTTP 401/403 (permissao/autorizacao)
 - Material lock (M8082) e Pricing condition (VK041)
@@ -1423,8 +1625,10 @@ linhas):
     integracao SF↔S4HANA via CPI)
   - `INACTIVE` — colaborador inativo, retorna payload OData v2 real
   - `AUTH-FAIL` — simula falha de autenticacao OAuth2 (401)
-- Modo **real**: circuit breaker, validacao de charset da resposta
-  (OData v2 pode retornar Latin-1 em alguns tenants legados), fallbacks
+- Modo **real**: circuit breaker, validacao de charset do IDENTIFICADOR
+  antes de montar a URL OData
+  (`app/connectors/base.py::validate_identifier_charset`; historico:
+  esta secao dizia "charset da resposta"), fallbacks
   explícitos para 401/404/CONNECTION_ERROR
 - Settings: `SFSF_BASE_URL`, `SFSF_OAUTH_TOKEN_URL`, `SFSF_CLIENT_ID`,
   `SFSF_CLIENT_SECRET`
@@ -1453,13 +1657,32 @@ webhook — fechando o ciclo de ingestao event-driven end-to-end. Commit
 a ordem de execucao desta sessao — DA-33 e DA-34 foram priorizados antes
 pela dependencia de outros commits (2f8532f / 0dfebe1 / 0e387d7).
 
-**Escolha de biblioteca:** `aiormq 7.0.0` (pure Python, zero deps nativas)
+**Atualizacao (2026-10-07) - design atual (DA-40):** a descricao
+baseada em `aiormq` abaixo e HISTORICA. `aiormq` fala AMQP 0-9-1, nao
+AMQP 1.0; a DA-40 trocou a biblioteca por `python-qpid-proton` (AMQP
+1.0 nativo, com wrapper asyncio). Hoje, em
+`app/events/amqp_consumer.py`:
+
+- o reactor do proton e single-thread e nunca bloqueia: o diagnostico
+  roda fora dele - com `REDIS_URL`, a mensagem vira job RQ (mesmo
+  caminho do webhook `/events/incident`); sem `REDIS_URL`, num
+  `ThreadPoolExecutor` (`max_workers = AMQP_PREFETCH`), e a conclusao
+  volta ao reactor por `EventInjector`;
+- disposition: `Delivery.ACCEPTED` em sucesso (ou enqueue RQ ok);
+  `Delivery.REJECTED` para payload invalido ou ao atingir
+  `AMQP_MAX_REDELIVERIES` (vai para a DMQ do broker); `Delivery.MODIFIED`
+  (delivery-failed) em falha, para o broker reentregar;
+- parada por um timer de 1 s no reactor que checa o stop flag.
+
+O texto abaixo fica como registro da entrega original da DA-32.
+
+**Escolha de biblioteca (historico):** `aiormq 7.0.0` (pure Python, zero deps nativas)
 em vez de `python-proton` (requer `librproton` C) ou `azure-servicebus`
 (vendor-lock). `aiormq` e o mesmo motor que o `aio-pika` usa internamente
 — AMQP 0-9-1 e 1.0 via plugin — e instala sem compilar nada, mantendo o
 Dockerfile simples.
 
-**Implementacao:** `app/events/amqp_consumer.py` (192 linhas):
+**Implementacao (historico, versao aiormq):** `app/events/amqp_consumer.py`:
 - `AmqpConsumerTask` — classe que gerencia o ciclo de vida como
   **asyncio background task**: `start()` cria a task, `stop()` sinaliza
   parada e aguarda (timeout 10s, cancel forcado apos isso)

@@ -6,6 +6,8 @@
 > Objetivo: você conseguir entender, rodar, debugar e reproduzir/
 > estender isso sozinho, sem depender de mais ninguém.
 
+> **Nota de estado (documento histórico).** Este tutorial descreve a Fase 8, no ponto em que foi escrito. Grafo, chamada ao LLM, conectores e stack Docker evoluíram desde então; trechos marcados como *histórico* descrevem a Fase 8, não o estado atual. Para o estado de hoje, ver [ARCHITECTURE.md](ARCHITECTURE.md) e [GETTING_STARTED.md](GETTING_STARTED.md). Comandos de execução (§6) e o guia de extensão foram atualizados para funcionar no repositório atual.
+
 ---
 
 ## 1. Motivo de negócio (arquitetura de solução)
@@ -35,7 +37,7 @@ ECC**.
 IncidentRequest (POST /diagnose)
         │
         ▼
-   app/agent/graph.py  (LangGraph: connector → retrieve → diagnose → report)
+   app/agent/graph.py  (LangGraph, fluxo da Fase 8: connector → retrieve → diagnose → report)
         │                    │              │            │
         │                    │              │            └─ Markdown final
         │                    │              └─ app/llm/factory.py  ◄── NOVO
@@ -46,6 +48,12 @@ IncidentRequest (POST /diagnose)
               ├─ rfc_connector.py       ◄── AMPLIADO (use_real + novo cenário)
               └─ servicenow_connector.py ◄── NOVO (HTTP real)
 ```
+
+*Histórico:* o diagrama acima é o fluxo da Fase 8. Hoje o grafo é
+`supervisor → connector → retrieve → [graph_enrich] → {sap|saas|generic}_diagnose → [graph_write] → report`
+(os nodes entre colchetes só existem com `GRAPH_RAG_ENABLED=true`), e as
+chamadas ao LLM passam pelo LLM Gateway (`app/llm/gateway.py`) — ver
+[ARCHITECTURE.md](ARCHITECTURE.md).
 
 Nada na orquestração (`graph.py`) precisou saber *qual* provedor de
 LLM ou *qual* conector está por trás — os dois são escondidos atrás de
@@ -71,7 +79,9 @@ ou deixar um `AttributeError` genérico vazar.
 
 ### 3.2 `app/llm/factory.py` + `app/llm/__init__.py` (novo pacote)
 
-Função central: `get_chat_model(model_name=None, config=None)`.
+Função central: `get_chat_model(model_name=None, config=None, registry_resolved=False)`
+(o parâmetro `registry_resolved` foi adicionado depois da Fase 8, com o
+registro de modelos da DA-46).
 Recebe `Settings`, olha `config.llm_provider` e devolve a instância
 certa:
 
@@ -100,8 +110,8 @@ código já depende do contrato `BaseChatModel` do LangChain
 mesmo contrato. Reaproveitar isso é menos código e menos lugar para
 bug do que reimplementar o mesmo polimorfismo com outro nome.
 
-**Onde entra no fluxo:** `app/agent/graph.py`, função `diagnose_node`,
-uma linha mudou:
+**Onde entra no fluxo (histórico, Fase 8):** `app/agent/graph.py`,
+função `diagnose_node`, uma linha mudou:
 
 ```python
 # antes:
@@ -109,6 +119,11 @@ llm = ChatOllama(model=model_name, temperature=0.0, seed=42)
 # depois:
 llm = get_chat_model(model_name)
 ```
+
+*Hoje:* `diagnose_node` não existe mais (foi dividido em
+`sap_diagnose`/`saas_diagnose`/`generic_diagnose`), e as chamadas ao LLM
+passam por `app/llm/gateway.py::invoke_via_gateway`, que usa
+`get_chat_model` internamente.
 
 ### 3.3 `app/connectors/servicenow_connector.py` (novo arquivo)
 
@@ -226,10 +241,15 @@ só o que for usar.
 
 ### 4.4 `docker-compose.yml`
 
-Sobe `api` + `ollama` + `qdrant` com um `docker compose up -d` só —
-self-contained, sem depender de infra externa (Neo4j opcional para
-GraphRAG, Langfuse opcional para observabilidade). Langfuse e Neo4j
-continuam opcionais via variáveis de ambiente vazias.
+*Histórico:* na Fase 8, `docker compose up -d` subia `api` + `ollama` +
+`qdrant`. **Hoje** o mesmo comando sobe só `api` + `qdrant`; o Ollama
+roda no host (acessado via `host.docker.internal:11434`) ou, em máquinas
+sem Ollama local, em container via
+`docker compose --profile container-ollama up -d ollama`. Neo4j,
+Postgres/Grafana e demais serviços são opt-in por profile, mas
+`NEO4J_PASSWORD`, `POSTGRES_PASSWORD` e `GRAFANA_PASSWORD` precisam estar
+no `.env` mesmo com esses profiles inativos (a interpolação do compose
+as exige).
 
 ### 4.5 `.vscode/launch.json`
 
@@ -265,8 +285,8 @@ existia para o resto do projeto.
 
 | | Antes | Depois |
 |---|---|---|
-| Testes unitários (rodam sempre) | 5 | 18 |
-| Testes de integração (pulam sem stack local) | 14 | 14 (inalterados) |
+| Testes unitários (rodam sempre) — contagens da Fase 8 | 5 | 18 |
+| Testes de integração (pulam sem stack local) — contagens da Fase 8 | 14 | 14 (inalterados) |
 | `ruff check` | limpo | limpo |
 
 ---
@@ -277,8 +297,8 @@ existia para o resto do projeto.
 # 1. Clonar e instalar
 git clone https://github.com/marcos-slima/integration-incident-copilot.git
 cd integration-incident-copilot
-uv sync --extra dev            # so o caminho local-first
-uv sync --extra dev --extra openai   # se tambem quiser testar o provider OpenAI
+uv sync                        # so o caminho local-first (o grupo dev ja vem por default)
+uv sync --extra openai         # se tambem quiser testar o provider OpenAI
 
 # 2. Rodar os testes que NAO precisam de stack nenhuma no ar
 uv run pytest tests/test_connectors.py tests/test_llm_factory.py -v
@@ -287,12 +307,15 @@ uv run ruff check app/ tests/
 # 3. Ver a configuracao efetiva (nada hardcoded, tudo vem daqui)
 uv run python -m app.config
 
-# 4. Subir a stack completa self-contained e testar ponta a ponta
-docker compose up -d
-docker compose exec ollama ollama pull qwen3-coder-next:latest
-docker compose exec ollama ollama pull nomic-embed-text
+# 4. Subir a stack e testar ponta a ponta
+#    (NEO4J_PASSWORD, POSTGRES_PASSWORD e GRAFANA_PASSWORD definidas no .env)
+docker compose up -d                       # api + qdrant; o Ollama roda no host
+ollama pull qwen3-coder-next:latest        # no host
+ollama pull nomic-embed-text               # no host
+#    Sem Ollama no host: docker compose --profile container-ollama up -d ollama
+#    e depois docker compose exec ollama ollama pull <modelo>
 uv run python -m app.rag.ingest --target incidents   # indexa data/sample_docs/
-uv run pytest tests/ -v                               # agora os 14 de integracao tambem rodam
+uv run pytest tests/ -v                               # os testes de integracao tambem rodam (14 na Fase 8)
 
 # 5. Debugar visualmente no VS Code (breakpoint em qualquer node de graph.py)
 #    Rode uma das configuracoes novas em .vscode/launch.json:
@@ -306,19 +329,30 @@ uv run python -m app.agent.graph "Alerta ServiceNow aberto automaticamente" \
 
 ### Como estender (o padrão a seguir)
 
-**Novo provedor de LLM** (ex: AWS Bedrock): adicionar um `elif
-provider == "bedrock":` em `app/llm/factory.py`, seguindo o mesmo
-formato de validação + `ConfigurationError` + import tardio (lazy) do
-SDK opcional. Nenhum outro arquivo muda.
+**Novo provedor de LLM** (ex: AWS Bedrock):
 
-**Novo conector** (ex: Salesforce, Workday): criar
-`app/connectors/salesforce_connector.py` herdando de
+1. adicionar `"bedrock"` ao `Literal` de `llm_provider` (e de
+   `llm_fallback_provider`, se ele puder ser fallback) em `app/config.py`,
+   junto com os campos de configuração do provedor;
+2. adicionar um branch `if provider == "bedrock":` em `get_chat_model`
+   (`app/llm/factory.py`), seguindo o mesmo formato de validação +
+   `ConfigurationError` + import tardio (lazy) do SDK opcional;
+3. adicionar o mapeamento correspondente em `_apply_registry_resolution`
+   (`app/llm/factory.py`), para que o registro de modelos (DA-46) consiga
+   sobrescrever modelo/endpoint/chave do novo provedor.
+
+**Novo conector** (ex. hipotético: Zendesk — Salesforce e Workday já
+existem): criar `app/connectors/zendesk_connector.py` herdando de
 `ExternalSystemConnector`, seguindo exatamente o padrão do
 `ServiceNowConnector` (modo demo quando não configurado, HTTP real via
-`httpx` quando configurado, `client` injetável para teste). Registrar
-em `app/connectors/__init__.py` (`_REGISTRY`) e no `Literal` de
-`app/models.py`. Nenhuma mudança em `app/agent/graph.py` é necessária
-— é exatamente esse o ponto da interface comum.
+`httpx` quando configurado, `client` injetável para teste). Hoje o
+conector precisa aparecer em **9 superfícies**, listadas em
+[CONNECTORS.md §4](CONNECTORS.md#4-como-adicionar-um-conector) — entre
+elas `_REGISTRY` **e** `_REAL_MODE_SETTING` em
+`app/connectors/__init__.py`, os `Literal` de `app/models.py` e os
+`choices` de `--interface` na CLI de `app/agent/graph.py`. A
+orquestração do grafo em si não muda — é esse o ponto da interface
+comum.
 
 ---
 
@@ -330,5 +364,6 @@ em `app/connectors/__init__.py` (`_REGISTRY`) e no `Literal` de
   validada em produção.
 - `ServiceNowConnector` não foi testado contra uma instância ServiceNow
   real, pelo mesmo motivo — só via `httpx.MockTransport`.
-- Nenhuma UI foi criada — o Copilot continua sendo consumido via
+- Nenhuma UI foi criada nesta fase — o Copilot era consumido via
   `POST /diagnose` (curl/HTTPie/Bruno) ou pela CLI de debug.
+  *(Histórico: hoje existe o frontend em `frontend/`.)*

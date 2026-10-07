@@ -135,7 +135,10 @@ def _as_cell(raw: Any, product: str, mechanism: str) -> MechanismCell:
         note = str(raw.get("note") or "")
     else:
         raise CoverageError(
-            f"{product}/{mechanism}: valor {raw!r} nao e nivel de suporte nem {level, note}"
+            # Validacao 2026-10-07 (M-13): a f-string citava `level`/`note`,
+            # que neste ramo nao existem - o erro de dado virava
+            # UnboundLocalError em vez desta mensagem.
+            f"{product}/{mechanism}: valor {raw!r} nao e nivel de suporte nem {{level, note}}"
         )
     if level not in LEVELS:
         raise CoverageError(f"{product}/{mechanism}: nivel {level!r} fora do enum {sorted(LEVELS)}")

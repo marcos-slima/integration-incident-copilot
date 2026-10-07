@@ -24,7 +24,7 @@ class MailpitEmailSender(EmailSender):
         msg.set_content(body)
 
         try:
-            with smtplib.SMTP(self.host, self.port) as smtp:
+            with smtplib.SMTP(self.host, self.port, timeout=10) as smtp:
                 smtp.send_message(msg)
             return NotificationResult(success=True, provider="mailpit")
         except Exception as exc:  # noqa: BLE001

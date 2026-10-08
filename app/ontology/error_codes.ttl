@@ -1,0 +1,224 @@
+# DA-61: SKOS ontology for SAP integration error codes
+# Version: 1.0.0
+# Purpose: Provide machine-readable taxonomies for error classification
+# Usage: Load via app/agent/ontology_loader.py → populates KNOWN_ERROR_RULES
+
+@prefix ex: <http://example.org/iic/error_codes#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# ============================================================================
+# Top-level categories
+# ============================================================================
+
+ex:NetworkError a skos:Concept ;
+    skos:prefLabel "Network Error"@en ;
+    skos:altLabel "conexão falha", "timeout", "communication failure"@pt ;
+    skos:inPolicy ex:ErrorClassification .
+
+ex:AuthenticationError a skos:Concept ;
+    skos:prefLabel "Authentication Error"@en ;
+    skos:altLabel "auth falha", " acesso negado", "token inválido"@pt ;
+    skos:inPolicy ex:ErrorClassification .
+
+ex:AuthorizationError a skos:Concept ;
+    skos:prefLabel "Authorization Error"@en ;
+    skos:altLabel "permissão negada", "forbidden", "ACL violation"@pt ;
+    skos:inPolicy ex:ErrorClassification .
+
+ex:DataError a skos:Concept ;
+    skos:prefLabel "Data Error"@en ;
+    skos:altLabel "payload incorreto", "campo faltando", "schema mismatch"@pt ;
+    skos:inPolicy ex:ErrorClassification .
+
+ex:RateLimitError a skos:Concept ;
+    skos:prefLabel "Rate Limit Error"@en ;
+    skos:altLabel "too many requests", "quota excedida", "throttled"@pt ;
+    skos:inPolicy ex:ErrorClassification .
+
+ex:ParsingError a skos:Concept ;
+    skos:prefLabel "Parsing Error"@en ;
+    skos:altLabel "JSON inválido", "XML malformado", "EDI fail"@pt ;
+    skos:inPolicy ex:ErrorClassification .
+
+# ============================================================================
+# Specific error codes ( mapped to KNOWN_ERROR_RULES )
+# ============================================================================
+
+# OAuth/Token errors
+ex:OAuthTokenExpired a skos:Concept ;
+    skos:prefLabel "OAuth Token Expired"@en ;
+    skos:altLabel "token expirado", "access token invalid", "JWT expired"@pt ;
+    skos:Broader ex:AuthenticationError ;
+    skos:note "Maps to patterns: oauth.*token.*expir, token.*expir, access.?token.*invalid, JWT.*expir" ;
+    skos:inPolicy ex:KnownErrorRules .
+
+ex:OAuthTokenRefreshFailed a skos:Concept ;
+    skos:prefLabel "OAuth Token Refresh Failed"@en ;
+    skos:altLabel "refresh token fail", "token renewal error"@pt ;
+    skos:Broader ex:AuthenticationError ;
+    skos:note "Patterns: refresh.*token.*fail, token.*renewal.*error" .
+
+# Connection errors
+ex:RFCCommunicationFailure a skos:Concept ;
+    skos:prefLabel "RFC Communication Failure"@en ;
+    skos:altLabel "RFC_COMMUNICATION_FAILURE", "connection timeout", "network unreachable"@pt ;
+    skos:Broader ex:NetworkError ;
+    skos:note "Patterns: rfc.*communication.*fail, connection.*timeout, network.*unreachable" .
+
+ex:ConnectionRefused a skos:Concept ;
+    skos:prefLabel "Connection Refused"@en ;
+    skos:altLabel "connection refused", "connection reset", "ECONNREFUSED"@pt ;
+    skos:Broader ex:NetworkError ;
+    skos:note "Patterns: connection.*refus, connection.*rest, ECONNREFUSED" .
+
+# Authentication/Authorization
+ex:HTTP401Unauthorized a skos:Concept ;
+    skos:prefLabel "HTTP 401 Unauthorized"@en ;
+    skos:altLabel "401", "unauthorized", " authentication fail"@pt ;
+    skos:Broader ex:AuthenticationError ;
+    skos:note "Patterns: 401.*unauthorized, unauthorized.*access, authentication.*fail" ;
+    skos:propertyValue ex:confidence "0.75"^^xsd:float .
+
+ex:HTTP403Forbidden a skos:Concept ;
+    skos:prefLabel "HTTP 403 Forbidden"@en ;
+    skos:altLabel "403", "forbidden", "ACL violation"@pt ;
+    skos:Broader ex:AuthorizationError ;
+    skos:note "Patterns: 403.*forbidden, forbidden.*access, ACL.*violat" ;
+    skos:propertyValue ex:confidence "0.90"^^xsd:float .
+
+# Data errors
+ex:SAPDataElementNotFound a skos:Concept ;
+    skos:prefLabel "SAP Data Element Not Found"@en ;
+    skos:altLabel "DATA_ELEMENT_NOT_FOUND", " campo inexistente", "field not in schema"@pt ;
+    skos:Broader ex:DataError ;
+    skos:note "Patterns: dataelement.*not.*found, data element.*not.*found, field.*not.*in.*schema" .
+
+ex:MDIValidationFailed a skos:Concept ;
+    skos:prefLabel "MDI Validation Failed"@en ;
+    skos:altLabel "MDI_VALIDATION_FAILED", "validation fail", "schema mismatch"@pt ;
+    skos:Broader ex:DataError ;
+    skos:note "Patterns: mdi.*validation.*fail, validation.*fail, schema.*mismatch" .
+
+# Rate limiting
+ex:HTTP429TooManyRequests a skos:Concept ;
+    skos:prefLabel "HTTP 429 Too Many Requests"@en ;
+    skos:altLabel "429", "too many requests", "rate limit", "throttled"@pt ;
+    skos:Broader ex:RateLimitError ;
+    skos:note "Patterns: 429.*too.*many.*request, rate.*limit, throttled" ;
+    skos:propertyValue ex:confidence "0.95"^^xsd:float .
+
+# Parsing errors
+ex:JSONParsingError a skos:Concept ;
+    skos:prefLabel "JSON Parsing Error"@en ;
+    skos:altLabel "JSON parse fail", "invalid JSON", "JSON syntax error"@pt ;
+    skos:Broader ex:ParsingError ;
+    skos:note "Patterns: json.*parse.*fail, invalid JSON, JSON.*syntax.*error" .
+
+ex:XMLParsingError a skos:Concept ;
+    skos:prefLabel "XML Parsing Error"@en ;
+    skos:altLabel "XML parse fail", "malformed XML", "XML syntax error"@pt ;
+    skos:Broader ex:ParsingError ;
+    skos:note "Patterns: xml.*parse.*fail, malformed XML, XML.*syntax.*error" .
+
+# ============================================================================
+# Policy rules ( mapped to next_steps and categories )
+# ============================================================================
+
+ex:Recoverable a skos:Concept ;
+    skos:prefLabel "Recoverable Error"@en ;
+    skos:altLabel "recuperável", "retryable", "transient"@pt ;
+    skos:inPolicy ex:ErrorSeverity .
+
+ex:NonRecoverable a skos:Concept ;
+    skos:prefLabel "Non-Recoverable Error"@en ;
+    skos:altLabel "não recuperável", "permanent", "fatal"@pt ;
+    skos:inPolicy ex:ErrorSeverity .
+
+ex:EscalateTier1 a skos:Concept ;
+    skos:prefLabel "Escalate Tier 1"@en ;
+    skos:altLabel "tier 1", "operation team", "first line"@pt ;
+    skos:inPolicy ex:EscalationPolicy .
+
+ex:EscalateTier2 a skos:Concept ;
+    skos:prefLabel "Escalate Tier 2"@en ;
+    skos:altLabel "tier 2", "development team", "second line"@pt ;
+    skos:inPolicy ex:EscalationPolicy .
+
+ex:EscalateTier3 a skos:Concept ;
+    skos:prefLabel "Escalate Tier 3"@en ;
+    skos:altLabel "tier 3", "vendor support", "third line"@pt ;
+    skos:inPolicy ex:EscalationPolicy .
+
+# ============================================================================
+# Relationships (subproperties, inheritance)
+# ============================================================================
+
+ex:possibleCause a rdf:Property ;
+    rdfs:domain ex:Error ;
+    rdfs:range ex:RootCause ;
+    rdfs:comment "Defines possible root causes for an error." .
+
+ex:escalatesTo a rdf:Property ;
+    rdfs:domain ex:Error ;
+    rdfs:range ex:EscalationTier ;
+    rdfs:comment "Defines escalation level for an error." .
+
+ex:confidence a rdf:Property ;
+    rdfs:domain ex:Error ;
+    rdfs:range xsd:float ;
+    rdfs:comment "Confidence score for error classification (0.0-1.0)." .
+
+ex:nextSteps a rdf:Property ;
+    rdfs:domain ex:Error ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Recommended actions for operators." .
+
+ex:category a rdf:Property ;
+    rdfs:domain ex:Error ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Category key for logging and metrics." .
+
+ex:probableRootCause a rdf:Property ;
+    rdfs:domain ex:Error ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Deterministic root cause explanation." .
+
+# ============================================================================
+# Error classification policy
+# ============================================================================
+
+ex:ErrorClassification a skos:Collection ;
+    skos:member ex:NetworkError ;
+    skos:member ex:AuthenticationError ;
+    skos:member ex:AuthorizationError ;
+    skos:member ex:DataError ;
+    skos:member ex:RateLimitError ;
+    skos:member ex:ParsingError ;
+    skos:prefLabel "Error Classification Hierarchy"@en .
+
+ex:KnownErrorRules a skos:Collection ;
+    skos:member ex:OAuthTokenExpired ;
+    skos:member ex:OAuthTokenRefreshFailed ;
+    skos:member ex:RFCCommunicationFailure ;
+    skos:member ex:ConnectionRefused ;
+    skos:member ex:HTTP401Unauthorized ;
+    skos:member ex:HTTP403Forbidden ;
+    skos:member ex:SAPDataElementNotFound ;
+    skos:member ex:MDIValidationFailed ;
+    skos:member ex:HTTP429TooManyRequests ;
+    skos:member ex:JSONParsingError ;
+    skos:member ex:XMLParsingError ;
+    skos:prefLabel "Known Error Rules Ontology"@en .
+
+ex:ErrorSeverity a skos:Collection ;
+    skos:member ex:Recoverable ;
+    skos:member ex:NonRecoverable ;
+    skos:prefLabel "Error Severity Levels"@en .
+
+ex:EscalationPolicy a skos:Collection ;
+    skos:member ex:EscalateTier1 ;
+    skos:member ex:EscalateTier2 ;
+    skos:member ex:EscalateTier3 ;
+    skos:prefLabel "Escalation Policy Levels"@en .

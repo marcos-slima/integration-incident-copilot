@@ -288,7 +288,7 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
 | DA-57 | Fontes de busca web viram configuração: `web_search_sources` (uma linha por `interface_type`) substitui os dois mapas literais de `app/agent/nodes.py`; `WEB_SEARCH_POLICY=approved` passa a exigir linha habilitada — **fail-closed, sem fallback em código**. O gate `connector_reachable` ganha a **7ª superfície** (seed da migration 008) e a **8ª** (`<select name="connector_type">` de `app/admin/templates/systems.html`, que omitia `successfactors` e `po` e fazia a correlação DA-50 cair no fallback) | `app/admin/models.py` (`WebSearchSource`), `app/admin/repository.py`, `app/admin/routes.py` + `ui.py` (`/admin/api/web-search-sources`, `/admin/web-search`), `app/services/web_search_sources.py`, `app/agent/nodes.py` (`_web_search_allowed`), `app/admin/templates/systems.html`, `alembic/versions/008_*.py`, `app/evaluation/gates.py` |
 | DA-58 | Mapa de cobertura produto SAP × mecanismo, **calculado** de dados versionados (27 linhas × 9 mecanismos) em vez de tabela mantida à mão: 3 níveis (`dedicated` / `generic` / `absent`) porque "cliente OData alcançaria" não é "conector de S/4HANA". Os dois eixos (capacidade do produto = afirmação sem fonte; cobertura do repo = fato verificável) são independentes, e `unknown` ≠ `none`. Gate `connector_coverage` reprova por **incoerência**, nunca por lacuna | `data/sap_products.yaml`, `data/connector_coverage.yaml`, `app/evaluation/coverage.py`, `scripts/coverage_map.py`, `docs/COVERAGE_MAP.md`, `app/evaluation/gates.py` |
 | DA-59 | Conectores multi-vendor: fluxo completo do pipeline, padrão comum (`fetch(identifier) → ConnectorResult`), checklist de 9 superfícies ao adicionar conector (registry, 2 Literals, supervisor, CLI, `CONNECTOR_TYPES`, seed `web_search_sources`, formulário de sistemas, `connector_coverage.yaml`), e documento consolidado `docs/CONNECTORS.md` (reescrito em 2026-10-07; variáveis conferidas pelo gate `docs_env_vars`) | `app/connectors/__init__.py`, `app/models.py`, `app/agent/supervisor.py`, `app/agent/graph.py` (CLI), `app/admin/templates/systems.html`, `app/admin/models.py`, `data/connector_coverage.yaml`, `docs/CONNECTORS.md` |
-| DA-60 | Criptografia em repouso de `evidence_json` com Fernet (`LLM_CREDENTIALS_MASTER_KEY`) + migration idempotente `009_encrypt_evidence_json.py` | `app/admin/crypto.py`, `app/services/incident_recorder.py`, `app/admin/routes.py`, `alembic/versions/009_encrypt_evidence_json.py` |
+| DA-61 | Taxonomia de erros SAP com TTL/RDFLib (SKOS para Rule Engine) | `app/ontology/`, `app/agent/ontology_loader.py` |
 
 **DAs candidatas (sem implementação ainda):**
 - DA-31: SAP AI Agent Hub registration (MCP + A2A) — bloqueada: exige tenant Kyma
@@ -338,6 +338,52 @@ disco comprometido sem criptografia exporiria esse contexto.
 - A detecção de "já cifrado" na migration usa o prefixo `gAAA` dos tokens Fernet.
 - Downgrade em produção devolve a evidência em claro. Use só para rollback imediato.
 
+---
+
+### 47. Taxonomia de erros SAP com TTL/RDFLib (SKOS para Rule Engine) (DA-61)
+
+**O problema.** O Rule Engine determinístico (DA-33) armazena regras de erro conhecidas em `KNOWN_ERROR_RULES` no arquivo `app/agent/rules.py` como um `dict` hardcoded: 22 pares `(pattern, error_type)`. Isso gera dois problemas:
+
+1. **Dificuldade de manutenção**: adicionar/remover regras exige editar o código Python, fazer commit e deploy.
+2. **Ausência de estrutura semântica**: o `dict` não expressa relação entre erros (hierarquia, siblings, causas comuns), o que dificulta extensão e correlação.
+
+A auditoria Q2 2026 (DATA-01) recomendou substituir hardcoded por taxonomia formal. Entretanto, não se pode eliminar o fallback: a regra está em 90% dos incidentes. A solução tem que ser:
+
+- Taxonomia dinâmica (carregada por `rdflib` em runtime),
+- Fallback para o código hardcoded (se ontologia falhar ou não carregar),
+- Zero breaking changes (API `ErrorRule` mantida, apenas fonte muda).
+
+**O caso de uso.** Administradores de integração precisam ajustar regras de diagnóstico sem mudar código: novos erros SAP lançados, correção de false positives, adição de novos erros de parceiros (Salesforce, Workday, etc.). A taxonomia SKOS (Simple Knowledge Organization System) fornece hierarquia (`skos:broader`/`skos:narrower`) e relacionamentos (`skos:related`) entre erros.
+
+**A solução.**
+
+- `app/ontology/error_codes.ttl`: arquivo Turtle RDF com 11 erros mapeados (OAuth, RFC, HTTP, JSON/XML, IDoc, OData, etc.). Cada erro tem URI canônico (`<urn:error:>`) e labels em PT/EN.
+- `app/agent/ontology_loader.py`: carregador que lê o TTL, transforma em instâncias `ErrorRule` e carrega em memória via `rdflib.Graph.parse()`. Fallback para `KNOWN_ERROR_RULES` se o TTL não for encontrado ou falhar na parse.
+- Implementação **aditiva**: `app/agent/rules.py` mantém `KNOWN_ERROR_RULES` intacto; `ontology_loader.py` só é chamado se `error_codes.ttl` existir. Nenhum change em `app/agent/graph.py`, `app/agent/nodes.py`, etc.
+- API compatível: `ErrorRule` (pattern `str`, error_type `Literal["OAuth2", "RFC", ...]`) é a mesma da versão hardcoded.
+
+**Limitações (aceitas):**
+
+- Taxonomia inicial pequena (11 erros) → expandir de acordo com uso real.
+- RDFLib nãoValidação em produção exige `error_codes.ttl` existir e ser válido TTL (senão fallback; não exception).
+- Sem versãoamento: TTL é "latest", não snapshot; para rolling back, restaurar TTL anterior.
+- Fallback não grava log de erro (silencioso), exige monitoramento manual de `error_codes.ttl`.
+
+**Próximos passos (DA-61 Fases 2/3):**
+
+- Fase 2 (Neo4j + OWL): carregar taxonomia em Neo4j GraphRAG, usar consultas SPARQL para correlação de incidentes (ex: "todos incidents com erro OAuth2").
+- Fase 3 (PROV-O): trilhar proveniência (fonte da regra, hora da carga, quem alterou TTL, etc.).
+
+**Dependências.**
+
+- `rdflib>=7.0`: processamento RDF/TTL.
+- `owlrl>=6.0`: inferência OWL (Fase 2).
+- `pyshacl>=0.25`: validação SHACL (Fase 2).
+
+**Validação.**
+
+- Teste unitário: `pytest tests/test_ontology_loader.py` (futuro).
+- Simulação: `uv run python -c "from app.agent.ontology_loader import load_error_rules; rules = load_error_rules(); assert len(rules) == 11"`.
 
 ## Invariantes que NÃO devem ser alterados sem DA formal
 

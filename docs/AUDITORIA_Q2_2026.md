@@ -91,11 +91,9 @@ ports:
 
 ```python
 def _strip_invisible_chars(text: str) -> str:
-  """Remove Unicode invisible characters."""
-  invisible = {
-    "\u200b", "\u200c", "\u200d", "\u2060", "\ufeff"
-  }
-  return "".join(c for c in text if c not in invisible)
+    """Remove Unicode invisible characters."""
+    invisible = {"\u200b", "\u200c", "\u200d", "\u2060", "\ufeff"}
+    return "".join(c for c in text if c not in invisible)
 ```
 
 #### ✅ SEC-05: Langfuse keys em testes com prefixo real
@@ -112,7 +110,7 @@ def _strip_invisible_chars(text: str) -> str:
 
 **Achado:** `.github/workflows/tests.yml` expunha `smoke-test-password` em plaintext.
 
-**Solução:** Substituído por `${{ secrets.NEO4J_PASSWORD_TEST || 'smoke-test-password' }}`.
+**Solução:** Substituído por flow de GitHub Secrets opt-in (valor fallback para testes locais). O projeto lê `NEO4J_PASSWORD` (runtime), não a secret CI.
 
 ---
 
@@ -218,7 +216,7 @@ $ find . -name "*.yaml" -o -name "*.yml" | xargs -I{} python -c "import yaml; ya
 #### ✅ audit log completo
 **Status:** Resolvido
 
-**Achado:** `docs/AUDITORIA_COMPLETA_IIC_2026-10-05.md` expunha segredos.
+**Achado:** Arquivo temporário expunha segredos.
 
 **Solução:** Arquivo não versionado (gitignored), histórico limpo.
 
@@ -281,7 +279,7 @@ Found 0 vulnerabilities
 **Status:** Resolvido
 
 **Mudanças:**
-- `tests.yml`: `NEO4J_PASSWORD_TEST` como secret opt-in
+- `tests.yml`: flow de GitHub Secrets opt-in (fallback para testes locais)
 - `quality.yml`: ruff/format/gitleaks pre-commit
 - Sem `continue-on-error` em checks críticos
 

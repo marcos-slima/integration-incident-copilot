@@ -20,14 +20,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 # Instalação via `uv add rdflib` no DA-61 (Fase 1)
-try:
-    from rdflib import Graph, Literal, URIRef
-    from rdflib.namespace import RDF, SKOS
-except ImportError:
-    raise ImportError(
-        "instale rdflib: uv add rdflib (DA-61 Fase 1)\n"
-        "ou use ONTOLOGY_RULES_ENABLED=false no .env para voltar ao hardcoded"
-    ) from None
+from rdflib import Graph, Literal, URIRef
+from rdflib.namespace import SKOS
+
+# RDF.member doesn't exist; skos:member is the correct predicate
+RDF_MEMBER = SKOS.member
 
 # ---------------------------------------------------------------------------
 # Mapeamento TTL → ErrorRule (camada de adaptação)
@@ -101,9 +98,22 @@ def _extract_next_steps(g: Graph, concept: URIRef) -> list[str]:
 
 
 def _extract_category(g: Graph, concept: URIRef) -> str:
-    """Derive category from concept name (ex: ex:OAuthTokenExpired → oauth_token_expired)."""
+    """Derive category from concept name (ex: ex:OAuthTokenExpired → oauth_token_expired).
+
+    Aplica mapeamento para compatibilidade com KNOWN_ERROR_RULES quando necessário.
+    """
     local = concept.split("#")[-1] if "#" in concept else concept.split("/")[-1]
-    return local.replace(":", "_").lower()
+    base = local.replace(":", "_").lower()
+    # Mapeamento para compatibilidade com rules.py KNOWN_ERROR_RULES
+    category_map = {
+        "oauthtokenexpired": "auth_oauth_expired",
+        "http401unauthorized": "auth_unauthorized",
+        "httptimeout": "http_timeout",
+        "http403forbidden": "auth_forbidden",
+        "connectionrefused": "network_connection_refused",
+        "http429toomanyrequests": "rate_limit_exceeded",
+    }
+    return category_map.get(base, base)
 
 
 def _extract_confidence(g: Graph, concept: URIRef) -> float:
@@ -138,7 +148,7 @@ def load_error_rules(ontology_path: Path | None = None) -> list[ErrorRule]:
         RuntimeError: Se o TTL não for parseável (SHACL não aplicado ainda, DA-61 Fase 1).
     """
     if ontology_path is None:
-        ontology_path = Path(__file__).parent / "error_codes.ttl"
+        ontology_path = Path(__file__).parent.parent / "ontology" / "error_codes.ttl"
 
     _logger = logging.getLogger(__name__)
 
@@ -154,7 +164,7 @@ def load_error_rules(ontology_path: Path | None = None) -> list[ErrorRule]:
     # Coletar todos os conceitos de erro (filtrar por skos:inPolicy=KnownErrorRules)
     known_rules = URIRef("http://example.org/iic/error_codes#KnownErrorRules")
     error_concepts = [
-        member for member in g.objects(known_rules, RDF.member) if isinstance(member, URIRef)
+        member for member in g.objects(known_rules, RDF_MEMBER) if isinstance(member, URIRef)
     ]
 
     rules = []
@@ -182,13 +192,38 @@ def load_error_rules(ontology_path: Path | None = None) -> list[ErrorRule]:
     return rules
 
 
-def load_error_rules_or_fallback() -> list[ErrorRule]:
-    """Tenta carregar SKOS, cai para rules.py hardcoded se falhar."""
+def load_error_rules_combined() -> list[ErrorRule]:
+    """Carrega SKOS (+ hardcoded como complemento) para cobertura completa."""
     try:
-        return load_error_rules()
+        ontology_rules = load_error_rules()
     except (FileNotFoundError, RuntimeError, ImportError):
         _logger = logging.getLogger(__name__)
-        _logger.warning("ontology loader failed, falling back to hardcoded rules")
+        _logger.warning("ontology loader failed, using hardcoded rules only")
         from app.agent.rules import KNOWN_ERROR_RULES
 
         return list(KNOWN_ERROR_RULES)
+
+    _logger = logging.getLogger(__name__)
+
+    # Mesclar hardcoded para cobrir regras não presentes na ontologia
+    try:
+        from app.agent.rules import KNOWN_ERROR_RULES
+
+        # Criar set de categorias já presentes na ontologia
+        ontology_categories = {r.category for r in ontology_rules}
+
+        # Adicionar hardcoded que não estão na ontologia
+        for rule in KNOWN_ERROR_RULES:
+            if rule.category not in ontology_categories:
+                ontology_rules.append(rule)
+
+        _logger.info(
+            "loaded %d rules from ontology, %d from hardcoded (combined: %d)",
+            len(ontology_rules),
+            len(KNOWN_ERROR_RULES) - len(ontology_categories),
+            len(ontology_rules),
+        )
+    except ImportError:
+        pass
+
+    return ontology_rules

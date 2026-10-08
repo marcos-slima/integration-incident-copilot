@@ -22,7 +22,23 @@ from dataclasses import dataclass, field
 _logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Catálogo de regras
+# Carregamento dinâmico via ontologia SKOS (DA-61 Fase 1)
+# ---------------------------------------------------------------------------
+
+
+def _load_rules_from_ontology_or_fallback() -> list[ErrorRule]:
+    """Tenta carregar SKOS (+ hardcoded como complemento) para cobertura completa."""
+    try:
+        from app.agent.ontology_loader import load_error_rules_combined
+
+        return load_error_rules_combined()
+    except (FileNotFoundError, RuntimeError, ImportError, ModuleNotFoundError):
+        _logger.warning("ontology loader failed, falling back to hardcoded rules")
+        return list(KNOWN_ERROR_RULES)
+
+
+# ---------------------------------------------------------------------------
+# Catálogo de regras (fallback quando ontology_loader falha)
 # ---------------------------------------------------------------------------
 
 
@@ -602,7 +618,9 @@ def match_known_error(text: str, has_connector_data: bool = False) -> dict | Non
 
     evidence_strength = 0.95 if has_connector_data else 0.70
 
-    for rule in KNOWN_ERROR_RULES:
+    # Use ontology rules (DA-61) or fall back to hardcoded
+    rules = _load_rules_from_ontology_or_fallback()
+    for rule in rules:
         if rule.matches(text):
             _logger.info(
                 "[rule_engine] Incidente resolvido deterministicamente — "

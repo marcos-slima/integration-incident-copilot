@@ -377,6 +377,12 @@ class Settings(BaseSettings):
     # Python, so essa flag + a infra de fato existir.
     graph_rag_enabled: bool = False
     neo4j_uri: str = "bolt://127.0.0.1:7687"
+
+    # DA-61: caminho para error_codes.ttl (SKOS ontology para erros SAP)
+    # Default aponta para o arquivo no repo; pode ser sobrescrito para
+    # uso em deploy (ex:volume montado). Ontology loader (app/agent/ontology_loader.py)
+    # e enrichment (app/ontology/enrichment.py) usam este caminho.
+    ontology_ttl_path: str = "app/ontology/error_codes.ttl"
     neo4j_user: str = "neo4j"
     neo4j_password: str = ""
 

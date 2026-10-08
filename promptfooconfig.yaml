@@ -113,7 +113,7 @@ tests:
 
   # Resultado manual: 95%, causa especifica (sem $filter/$top, 60 s do adapter OData V2).
   - description: "OData timeout com CPI-TIMEOUT-DEMO - documento e sistema convergem"
-    metadata: { path: "llm" }
+    metadata: { path: "rule_engine" }
     vars: { description: "Chamada OData do CPI para o S/4HANA excede o tempo limite", interface_type: "odata", identifier: "CPI-TIMEOUT-DEMO" }
     assert:
       - type: javascript

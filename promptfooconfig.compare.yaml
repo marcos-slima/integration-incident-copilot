@@ -242,7 +242,7 @@ tests:
           && o.matched_source !== 'salesforce_case_sap_sync_failure.md';
 
   - description: "OData timeout com CPI-TIMEOUT-DEMO"
-    metadata: { path: "llm" }
+    metadata: { path: "rule_engine" }
     vars: { description: "Chamada OData do CPI para o S/4HANA excede o tempo limite", interface_type: "odata", identifier: "CPI-TIMEOUT-DEMO" }
     assert:
       - type: javascript

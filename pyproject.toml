@@ -73,6 +73,7 @@ dependencies = [
     # configurada. Sem isso o "worker" opt-in (docker-compose.yml,
     # profile "async") nao teria o que rodar.
     "rq>=2.12.0",
+    "rdflib>=7.6.0",
 ]
 
 [project.optional-dependencies]

@@ -77,6 +77,7 @@ final.
 | 58 | [49](#49-mapa-de-cobertura-dedicated-generic-e-absent-da-58) | Mapa de cobertura produto SAP × mecanismo, calculado de dados versionados: 3 níveis (`dedicated` / `generic` / `absent`) em vez de um booleano |
 | 59 | [50](#50-conectores-multi-vendor-fluxo-completo-padrão-comum-e-documentação-da-59) | Conectores multi-vendor: fluxo completo, padrão comum, checklist de 8 superfícies ao adicionar conector, documento consolidado `/docs/CONNECTORS.md` |
 | 60 | [51](#51-criptografia-em-repouso-de-evidence_json-com-fernet-da-60) | Criptografia em repouso de `evidence_json` com Fernet (`LLM_CREDENTIALS_MASTER_KEY`) + migration idempotente `009_encrypt_evidence_json.py` |
+| 61 | [52](#52-taxonomia-de-erros-sap-com-ttl-rdflib-da-61) | Taxonomia de erros SAP com TTL/RDFLib (SKOS) para Rule Engine: carregamento dinâmico vs hardcoded, zero breaking changes (DA-61 Fase 1) |
 
 ---
 
@@ -2549,5 +2550,52 @@ existentes exige migration: não se pode apenas adicionar a função de encrypt;
 os dados já gravados (potencialmente milhares de linhas) precisam ser
 processados. Migration garantido idempotência (re-run não quebra dados) e
 downgrade (emergency rollback).
+
+---
+
+### 52. Taxonomia de erros SAP com TTL/RDFLib (SKOS para Rule Engine) (DA-61)
+
+**O problema.** ORule Engine determinístico (DA-33) armazena regras de erro conhecidas em `KNOWN_ERROR_RULES` no arquivo `app/agent/rules.py` como um `dict` hardcoded: 22 pares `(pattern, error_type)`. Isso gera dois problemas:
+
+1. **Dificuldade de manutenção**: adicionar/remover regras exige editar o código Python, fazer commit e deploy.
+2. **Ausência de estrutura semântica**: o `dict` não expressa relação entre erros (hierarquia, siblings, causas comuns), o que dificulta extensão e correlação.
+
+A auditoria Q2 2026 (DATA-01) recomendou substituir hardcoded por taxonomia formal. Entretanto, não se pode eliminar o fallback: a regra está em 90% dos incidentes. A solução tem que ser:
+
+- Taxonomia dinâmica (carregada por `rdflib` em runtime),
+- Fallback para o código hardcoded (se ontologia falhar ou não carregar),
+- Zero breaking changes (API `ErrorRule` mantida, apenas fonte muda).
+
+**O caso de uso.** Administradores de integração precisam ajustar regras de diagnóstico sem mudar código: novos erros SAP lançados, correção de false positives, adição de novos erros de parceiros (Salesforce, Workday, etc.). A taxonomia SKOS (Simple Knowledge Organization System) fornece hierarquia (`skos:broader`/`skos:narrower`) e relacionamentos (`skos:related`) entre erros.
+
+**A solução.**
+
+- `app/ontology/error_codes.ttl`: arquivo Turtle RDF com 11 erros mapeados (OAuth, RFC, HTTP, JSON/XML, IDoc, OData, etc.). Cada erro tem URI canônico (`<urn:error:>`) e labels em PT/EN.
+- `app/agent/ontology_loader.py`: carregador que lê o TTL, transforma em instâncias `ErrorRule` e carrega em memória via `rdflib.Graph.parse()`. Fallback para `KNOWN_ERROR_RULES` se o TTL não for encontrado ou falhar na parse.
+- Implementação **aditiva**: `app/agent/rules.py` mantém `KNOWN_ERROR_RULES` intacto; `ontology_loader.py` só é chamado se `error_codes.ttl` existir. Nenhum change em `app/agent/graph.py`, `app/agent/nodes.py`, etc.
+- API compatível: `ErrorRule` (pattern `str`, error_type `Literal["OAuth2", "RFC", ...]`) é a mesma da versão hardcoded.
+
+**Limitações (aceitas):**
+
+- Taxonomia inicial pequena (11 erros) → expandir de acordo com uso real.
+- RDFLib nãoValidação em produção exige `error_codes.ttl` existir e ser válido TTL (senão fallback; não exception).
+- Sem versãoamento: TTL é "latest", não snapshot; para rolling back, restaurar TTL anterior.
+- Fallback não grava log de erro (silencioso), exige monitoramento manual de `error_codes.ttl`.
+
+**Próximos passos (DA-61 Fases 2/3):**
+
+- Fase 2 (Neo4j + OWL): carregar taxonomia em Neo4j GraphRAG, usar consultas SPARQL para correlação de incidentes (ex: "todos incidents com erro OAuth2").
+- Fase 3 (PROV-O): trilhar proveniência (fonte da regra, hora da carga, quem alterou TTL, etc.).
+
+**Dependências.**
+
+- `rdflib>=7.0`: processamento RDF/TTL.
+- `owlrl>=6.0`: inferência OWL (Fase 2).
+- `pyshacl>=0.25`: validação SHACL (Fase 2).
+
+**Validação.**
+
+- Teste unitário: `pytest tests/test_ontology_loader.py` (futuro).
+- Simulação: `uv run python -c "from app.agent.ontology_loader import load_error_rules; rules = load_error_rules(); assert len(rules) == 11"`.
 
 ---

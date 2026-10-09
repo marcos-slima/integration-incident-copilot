@@ -154,7 +154,8 @@ def handle_incident_event_async(
         job_id = enqueue_incident_event(envelope.model_dump(mode="json"))
         return {"status": "queued", "job_id": job_id}
 
-    if idempotency.is_duplicate(idempotency.event_key(envelope)):
+    key = idempotency.event_key(envelope)
+    if idempotency.is_duplicate(key):
         _logger.warning(
             "[events] Evento duplicado descartado (idempotencia) — cloudevents.id=%s",
             event_id,

@@ -9,11 +9,11 @@ policy/circuit/budget em cima)."""
 import httpx
 import pytest
 
+from app import circuit_breaker as cb_module
 from app.config import Settings
 from app.connectors.base import ConnectorResult
 from app.exceptions import ConfigurationError
 from app.llm.gateway import (
-    CircuitBreaker,
     PolicyViolationError,
     _estimate_cost_usd,
     _select_allowed_providers,
@@ -26,8 +26,10 @@ from app.llm.gateway import (
 @pytest.fixture(autouse=True)
 def _reset_circuit_breaker():
     circuit_breaker.reset()
+    cb_module._redis_available = None
     yield
     circuit_breaker.reset()
+    cb_module._redis_available = None
 
 
 def _real_connector_data(source_system="OData"):
@@ -217,43 +219,38 @@ def test_allowed_providers_deduplicated():
 
 
 def test_circuit_starts_closed():
-    cb = CircuitBreaker()
-    assert cb.is_open("ollama", cooldown_seconds=30.0) is False
+    assert circuit_breaker.is_open("ollama", cooldown_seconds=30.0) is False
 
 
 def test_circuit_opens_after_threshold_failures():
-    cb = CircuitBreaker()
-    cb.record_failure("ollama", failure_threshold=3)
-    cb.record_failure("ollama", failure_threshold=3)
-    assert cb.is_open("ollama", cooldown_seconds=30.0) is False  # so 2 falhas ainda
-    cb.record_failure("ollama", failure_threshold=3)
-    assert cb.is_open("ollama", cooldown_seconds=30.0) is True  # 3a falha abre
+    circuit_breaker.record_failure("ollama", failure_threshold=3)
+    circuit_breaker.record_failure("ollama", failure_threshold=3)
+    assert circuit_breaker.is_open("ollama", cooldown_seconds=30.0) is False  # so 2 falhas ainda
+    circuit_breaker.record_failure("ollama", failure_threshold=3)
+    assert circuit_breaker.is_open("ollama", cooldown_seconds=30.0) is True  # 3a falha abre
 
 
 def test_circuit_closes_after_success():
-    cb = CircuitBreaker()
     for _ in range(3):
-        cb.record_failure("ollama", failure_threshold=3)
-    assert cb.is_open("ollama", cooldown_seconds=30.0) is True
+        circuit_breaker.record_failure("ollama", failure_threshold=3)
+    assert circuit_breaker.is_open("ollama", cooldown_seconds=30.0) is True
 
-    cb.record_success("ollama")
-    assert cb.is_open("ollama", cooldown_seconds=30.0) is False
+    circuit_breaker.record_success("ollama")
+    assert circuit_breaker.is_open("ollama", cooldown_seconds=30.0) is False
 
 
 def test_circuit_reopens_after_cooldown_expires():
-    cb = CircuitBreaker()
     for _ in range(3):
-        cb.record_failure("ollama", failure_threshold=3)
+        circuit_breaker.record_failure("ollama", failure_threshold=3)
     # cooldown=0 -> ja expirou no instante seguinte
-    assert cb.is_open("ollama", cooldown_seconds=0.0) is False
+    assert circuit_breaker.is_open("ollama", cooldown_seconds=0.0) is False
 
 
 def test_circuit_is_per_provider():
-    cb = CircuitBreaker()
     for _ in range(3):
-        cb.record_failure("ollama", failure_threshold=3)
-    assert cb.is_open("ollama", cooldown_seconds=30.0) is True
-    assert cb.is_open("openai", cooldown_seconds=30.0) is False
+        circuit_breaker.record_failure("ollama", failure_threshold=3)
+    assert circuit_breaker.is_open("ollama", cooldown_seconds=30.0) is True
+    assert circuit_breaker.is_open("openai", cooldown_seconds=30.0) is False
 
 
 # ---------------------------------------------------------------------

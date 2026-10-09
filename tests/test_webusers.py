@@ -233,9 +233,15 @@ class TestRotasPublicas:
         limiter.reset()
         return client
 
-    def test_verify_email_certo_avanca(self, db_app: TestClient, db: AsyncSession) -> None:
+    def test_verify_email_certo_avanca(
+        self, db_app: TestClient, db: AsyncSession, user_env: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         import asyncio
 
+        monkeypatch.setattr(
+            "app.webusers.deliver_email",
+            lambda to, body: type("obj", (object,), {"delivered": False})(),
+        )
         _, tokens = asyncio.get_event_loop().run_until_complete(
             create_user(
                 db,
@@ -270,6 +276,10 @@ class TestRotasAdmin:
 
         monkeypatch.setattr(db_module, "AsyncSessionLocal", _Maker(db))
         monkeypatch.setattr(settings, "admin_api_key", "chave-admin-teste")
+        monkeypatch.setattr(
+            "app.webusers.deliver_email",
+            lambda to, body: type("obj", (object,), {"delivered": False})(),
+        )
         limiter.reset()
         return client
 

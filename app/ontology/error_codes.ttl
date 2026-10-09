@@ -54,6 +54,7 @@ ex:OAuthTokenExpired a skos:Concept ;
     skos:broader ex:AuthenticationError ;
     ex:confidence 0.90 ;
     skos:note "Patterns: oauth.*token.*expir, token.*expir, access.?token.*invalid, JWT.*expir" ;
+    skos:note "next_steps: Renovar token OAuth2 via grant flow, Verificar expiração no JWT payload, Reautenticar usuário ou refresh token, Confirmar scopes e client credentials" ;
     skos:inPolicy ex:KnownErrorRules .
 
 ex:OAuthTokenRefreshFailed a skos:Concept ;
@@ -61,7 +62,8 @@ ex:OAuthTokenRefreshFailed a skos:Concept ;
     skos:altLabel "refresh token fail", "token renewal error"@pt ;
     skos:broader ex:AuthenticationError ;
     ex:confidence 0.85 ;
-    skos:note "Patterns: refresh.*token.*fail, token.*renewal.*error" .
+    skos:note "Patterns: refresh.*token.*fail, token.*renewal.*error" ;
+    skos:note "next_steps: Validar token refresh não expirado, Requisitar novo access token via grant type refresh_token, Verificar client_id e client_secret, Reautenticar usuário se refresh falhar" .
 
 # Connection errors
 ex:RFCCommunicationFailure a skos:Concept ;
@@ -69,21 +71,24 @@ ex:RFCCommunicationFailure a skos:Concept ;
     skos:altLabel "RFC_COMMUNICATION_FAILURE", "network unreachable"@pt ;
     skos:broader ex:NetworkError ;
     ex:confidence 0.85 ;
-    skos:note "Patterns: rfc.*communication.*fail, network.*unreachable" .
+    skos:note "Patterns: rfc.*communication.*fail, network.*unreachable" ;
+    skos:note "next_steps: Verificar conectividade de rede SAP (SM51), Validar host e system number no destination SM59, Confirmar usuário e senha no destination, Testar conexão SAProuter ou firewall se aplicável" .
 
 ex:ConnectionRefused a skos:Concept ;
     skos:prefLabel "Connection Refused"@en ;
     skos:altLabel "connection refused", "connection reset", "ECONNREFUSED", "partner not reached"@pt ;
     skos:broader ex:NetworkError ;
     ex:confidence 0.85 ;
-    skos:note "Patterns: connection.*refus, connection.*rest, ECONNREFUSED, conex.*recus, partner.*not.*reached" .
+    skos:note "Patterns: connection.*refus, connection.*rest, ECONNREFUSED, conex.*recus, partner.*not.*reached" ;
+    skos:note "next_steps: Validar service port aberto e escutando, Verificar firewall iptables/firewalld, Confirmar service está ativo no destino, Revisar logs do serviço para erro de bind" .
 
 ex:HTTPTimeout a skos:Concept ;
     skos:prefLabel "HTTP Timeout"@en ;
     skos:altLabel "timeout", "connection timeout", "deadline exceeded"@pt ;
     skos:broader ex:NetworkError ;
     ex:confidence 0.85 ;
-    skos:note "Patterns: timeout, connection.*timeout, deadline.*exceed" .
+    skos:note "Patterns: timeout, connection.*timeout, deadline.*exceed" ;
+    skos:note "next_steps: Aumentar timeout no client ou proxy, Verificar latência da rede SAP, Confirmar backend não está sobrecarregado, Revisar logs para long running queries ou locks" .
 
 # Authentication/Authorization
 ex:HTTP401Unauthorized a skos:Concept ;
@@ -91,14 +96,16 @@ ex:HTTP401Unauthorized a skos:Concept ;
     skos:altLabel "401", "unauthorized", " authentication fail"@pt ;
     skos:broader ex:AuthenticationError ;
     ex:confidence 0.75 ;
-    skos:note "Patterns: 401.*unauthorized, unauthorized.*access, authentication.*fail" .
+    skos:note "Patterns: 401.*unauthorized, unauthorized.*access, authentication.*fail" ;
+    skos:note "next_steps: Validar credenciais (token, API key, Basic Auth), Verificar scope ou permissões do token, Confirmar client credentials estão corretos, Reautenticar usuário se necessário" .
 
 ex:HTTP403Forbidden a skos:Concept ;
     skos:prefLabel "HTTP 403 Forbidden"@en ;
     skos:altLabel "403", "forbidden", "ACL violation"@pt ;
     skos:broader ex:AuthorizationError ;
     ex:confidence 0.85 ;
-    skos:note "Patterns: 403.*forbidden, forbidden.*access, ACL.*violat" .
+    skos:note "Patterns: 403.*forbidden, forbidden.*access, ACL.*violat" ;
+    skos:note "next_steps: Verificar permissões do usuário ou service account, Confirmar role ou grupo tem acesso ao recurso, Revisar políticas de ACL ou RBAC, Escalar para administrador se necessário" .
 
 # Data errors
 ex:SAPDataElementNotFound a skos:Concept ;
@@ -106,14 +113,16 @@ ex:SAPDataElementNotFound a skos:Concept ;
     skos:altLabel "DATA_ELEMENT_NOT_FOUND", " campo inexistente", "field not in schema"@pt ;
     skos:broader ex:DataError ;
     ex:confidence 0.85 ;
-    skos:note "Patterns: dataelement.*not.*found, data element.*not.*found, field.*not.*in.*schema" .
+    skos:note "Patterns: dataelement.*not.*found, data element.*not.*found, field.*not.*in.*schema" ;
+    skos:note "next_steps: Validar nome do campo no dictionary (SE11), Confirmar se o campo existe no dictionary da tabela, Revisar mapping ou ABAP para campo correto, Ajustar schema ou request se o campo foi removido" .
 
 ex:MDIValidationFailed a skos:Concept ;
     skos:prefLabel "MDI Validation Failed"@en ;
     skos:altLabel "MDI_VALIDATION_FAILED", "validation fail", "schema mismatch"@pt ;
     skos:broader ex:DataError ;
     ex:confidence 0.85 ;
-    skos:note "Patterns: mdi.*validation.*fail, validation.*fail, schema.*mismatch" .
+    skos:note "Patterns: mdi.*validation.*fail, validation.*fail, schema.*mismatch" ;
+    skos:note "next_steps: Validar payload contra schema XML/XSD, Confirmar campos obrigatórios não estão ausentes, Revisar regras de validação MDI, Ajustar dado ou schema conforme necessário" .
 
 # Rate limiting
 ex:HTTP429TooManyRequests a skos:Concept ;
@@ -121,7 +130,8 @@ ex:HTTP429TooManyRequests a skos:Concept ;
     skos:altLabel "429", "too many requests", "rate limit", "throttled"@pt ;
     skos:broader ex:RateLimitError ;
     ex:confidence 0.85 ;
-    skos:note "Patterns: 429.*too.*many.*request, rate.*limit, throttled" .
+    skos:note "Patterns: 429.*too.*many.*request, rate.*limit, throttled" ;
+    skos:note "next_steps: Aplicar backoff exponencial antes de retransmitir, Verificar limites de rate no header X-RateLimit-Limit, Aguardar periodo de cooldown definido no header Retry-After, Reduzir frequência de chamadas" .
 
 # Parsing errors
 ex:JSONParsingError a skos:Concept ;
@@ -129,14 +139,16 @@ ex:JSONParsingError a skos:Concept ;
     skos:altLabel "JSON parse fail", "invalid JSON", "JSON syntax error"@pt ;
     skos:broader ex:ParsingError ;
     ex:confidence 0.85 ;
-    skos:note "Patterns: json.*parse.*fail, invalid JSON, JSON.*syntax.*error" .
+    skos:note "Patterns: json.*parse.*fail, invalid JSON, JSON.*syntax.*error" ;
+    skos:note "next_steps: Validar JSON com validador online (ex: jsonlint), Verificar codificação (UTF-8 sem BOM), Confirmar escape de caracteres especiais, Ajustar payload conforme especificação JSON" .
 
 ex:XMLParsingError a skos:Concept ;
     skos:prefLabel "XML Parsing Error"@en ;
     skos:altLabel "XML parse fail", "malformed XML", "XML syntax error"@pt ;
     skos:broader ex:ParsingError ;
     ex:confidence 0.85 ;
-    skos:note "Patterns: xml.*parse.*fail, malformed XML, XML.*syntax.*error" .
+    skos:note "Patterns: xml.*parse.*fail, malformed XML, XML.*syntax.*error" ;
+    skos:note "next_steps: Validar XML contra schema XSD, ConfirmarWell-formedness (tags balanceadas, encoding correto), Verificar codificação (UTF-8, ISO-8859-1), Revisar DTD ou namespace se aplicável" .
 
 # ============================================================================
 # Policy rules ( mapped to next_steps and categories )

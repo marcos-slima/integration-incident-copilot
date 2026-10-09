@@ -463,82 +463,25 @@ def validate_error_ttl() -> tuple[bool, str]:
 
 ## Próximos passos concretos (sem esperar)
 
-### 1. Criar `app/ontology/enrichment.py` (Fase 2, Low effort)
+### 1. Atualizar `deploy/kyma/configmap.yaml` (N-08)
 
-```python
-# app/ontology/enrichment.py
-from app.config import settings
-from rdflib import Graph, URIRef
-from neo4j import Driver
+- Trocar `$(VAR)` → `${VAR}` se não for placeholder intencional
+- Documentar tipo de template usado (Helm, Kustomize, ou custom)
 
+### 2. Criar teste unitário para `ontology_enrich_node` (Fase 2)
 
-def enrich_incident_with_ontology(incident_id: str, neo4j_driver: Driver) -> None:
-    """Link incident to ontology concepts and infer upper categories."""
-    query = """
-    MATCH (i:Incident {id: $incident_id})
-    WITH i, i.diagnosis->>'rule_engine_category' AS category
-    WHERE category IS NOT NULL
-    MATCH (e:ErrorCategory {category: category})
-    CREATE (i)-[:HAS_ERROR]->(e)
-    WITH e
-    CALL apoc.cypher.doIt("
-        MATCH (e)<-[:SKOS_BROADER*]-(upper:ErrorCategory)
-        RETURN collect(upper.category) AS upper_categories
-    ", {e: e}) YIELD value
-    WITH e, value.upper_categories AS upper_categories
-    UNWIND upper_categories AS upper
-    MATCH (upper_node:ErrorCategory {category: upper})
-    CREATE (i)-[:HAS_UPPER_LEVEL_ERROR]->(upper_node)
-    """
-    neo4j_driver.execute(query, {"incident_id": incident_id})
-```
+- Mock TTL carregado/sucesso
+- Mock TTL falha → fallback gracioso (log warning)
+- Validar output do nó
 
-### 2. Criar `app/rag/ontology_aware_retriever.py` (Fase 4, Medium effort)
+### 3. Ativar `ONTOLOGY_ENRICHMENT_ENABLED` e validar execução real
 
-```python
-# app/rag/ontology_aware_retriever.py
-from langchain_core.documents import Document
-from app.rag.retriever import hybrid_retrieve
-from app.ontology.enrichment import get_upper_categories
-
-
-def ontology_aware_retrieve(query: str, top_k: int = 5) -> list[Document]:
-    """Hybrid RAG + ontology inference (SPARQL fallback)."""
-    documents = hybrid_retrieve(query, top_k * 2)  # Retrieve more, then filter
-    upper_categories = get_upper_categories_from_query(query)
-
-    filtered = []
-    for doc in documents:
-        if doc.metadata.get("category") in upper_categories:
-            filtered.append(doc)
-
-    return filtered[:top_k]
-```
-
-### 3. Criar `app/agent/ontology_agent.py` (Fase 5, Medium effort)
-
-```python
-# app/agent/ontology_agent.py
-from langgraph.graph import StateGraph, END
-from app.state import CopilotState
-from app.ontology.enrichment import enrich_incident_with_ontology
-
-
-def ontology_reasoning_node(state: CopilotState) -> CopilotState:
-    """LangGraph node: diagnosis + ontology reasoning."""
-    enriched = enrich_incident_with_ontology(state.incident_id, state.neo4j_driver)
-    state.enrichment = enriched
-    return state
-
-
-builder = StateGraph(CopilotState)
-builder.add_node("ontology_reasoning", ontology_reasoning_node)
-builder.add_edge("diagnose", "ontology_reasoning")
-builder.add_edge("ontology_reasoning", END)
-```
+- `export ONTOLOGY_ENRICHMENT_ENABLED=true`
+- Executar caso de uso real com `uv run python -m app.agent.graph`
+- Validar logs: TTL carregado, enrichment aplicado
 
 ---
 
-**Próximo**: Começar com `app/ontology/enrichment.py` — implementar link incident → error concept com Cypher + SPARQL fallback.
+**Próximo**: Criar teste unitário para `ontology_enrich_node` (conclui Fase 2 crítica).
 
-Quer que eu implemente o código proposto agora?
+Quer que eu implemente o teste agora?

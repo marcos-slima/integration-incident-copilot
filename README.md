@@ -64,6 +64,9 @@ flowchart TD
     saas_diagnose["saas_diagnose<br/>rule engine; else LLM via gateway<br/>+ guardrails + evidence"]
     generic_diagnose["generic_diagnose<br/>rule engine; else LLM via gateway<br/>+ guardrails + evidence"]
     report["report<br/>Markdown report"]
+    ontology_enrich["ontology_enrich<br/>SKOS/rdflib: upper categories + next steps<br/>(independent from GraphRAG)"]
+    hitl_review["hitl_review<br/>pause for human review if confidence < 0.7<br/>(DA-61 Phase 6)"]
+    risk_assessment["risk_assessment<br/>evaluate risk/confidence before report<br/>(HITL feedback + ontology candidates)"]
     fim(["DiagnosisResponse<br/>+ escalation (DA-44)<br/>+ record_incident"])
     inicio --> supervisor
     connector --> retrieve

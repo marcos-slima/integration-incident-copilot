@@ -378,6 +378,12 @@ class Settings(BaseSettings):
     graph_rag_enabled: bool = False
     neo4j_uri: str = "bolt://127.0.0.1:7687"
 
+    # ONTOLOGY_ENRICHMENT_ENABLED (app/agent/nodes.py::ontology_enrich_node)
+    # Desligado por default. Quando ligado, executa uma consulta SKOS/rdflib
+    # em error_codes.ttl para obter upper categories e next steps.
+    # Faz parte da Fase 2/3 do DA-61. Exige ontology_ttl_path válido.
+    ontology_enrichment_enabled: bool = False
+
     # DA-61: caminho para error_codes.ttl (SKOS ontology para erros SAP)
     # Default aponta para o arquivo no repo; pode ser sobrescrito para
     # uso em deploy (ex:volume montado). Ontology loader (app/agent/ontology_loader.py)

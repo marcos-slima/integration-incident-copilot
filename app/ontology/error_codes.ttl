@@ -51,7 +51,7 @@ ex:ParsingError a skos:Concept ;
 ex:OAuthTokenExpired a skos:Concept ;
     skos:prefLabel "OAuth Token Expired"@en ;
     skos:altLabel "token expirado", "access token invalid", "JWT expired"@pt ;
-    skos:Broader ex:AuthenticationError ;
+    skos:broader ex:AuthenticationError ;
     ex:confidence 0.90 ;
     skos:note "Patterns: oauth.*token.*expir, token.*expir, access.?token.*invalid, JWT.*expir" ;
     skos:inPolicy ex:KnownErrorRules .
@@ -59,7 +59,7 @@ ex:OAuthTokenExpired a skos:Concept ;
 ex:OAuthTokenRefreshFailed a skos:Concept ;
     skos:prefLabel "OAuth Token Refresh Failed"@en ;
     skos:altLabel "refresh token fail", "token renewal error"@pt ;
-    skos:Broader ex:AuthenticationError ;
+    skos:broader ex:AuthenticationError ;
     ex:confidence 0.85 ;
     skos:note "Patterns: refresh.*token.*fail, token.*renewal.*error" .
 
@@ -67,21 +67,21 @@ ex:OAuthTokenRefreshFailed a skos:Concept ;
 ex:RFCCommunicationFailure a skos:Concept ;
     skos:prefLabel "RFC Communication Failure"@en ;
     skos:altLabel "RFC_COMMUNICATION_FAILURE", "network unreachable"@pt ;
-    skos:Broader ex:NetworkError ;
+    skos:broader ex:NetworkError ;
     ex:confidence 0.85 ;
     skos:note "Patterns: rfc.*communication.*fail, network.*unreachable" .
 
 ex:ConnectionRefused a skos:Concept ;
     skos:prefLabel "Connection Refused"@en ;
     skos:altLabel "connection refused", "connection reset", "ECONNREFUSED", "partner not reached"@pt ;
-    skos:Broader ex:NetworkError ;
+    skos:broader ex:NetworkError ;
     ex:confidence 0.85 ;
     skos:note "Patterns: connection.*refus, connection.*rest, ECONNREFUSED, conex.*recus, partner.*not.*reached" .
 
 ex:HTTPTimeout a skos:Concept ;
     skos:prefLabel "HTTP Timeout"@en ;
     skos:altLabel "timeout", "connection timeout", "deadline exceeded"@pt ;
-    skos:Broader ex:NetworkError ;
+    skos:broader ex:NetworkError ;
     ex:confidence 0.85 ;
     skos:note "Patterns: timeout, connection.*timeout, deadline.*exceed" .
 
@@ -89,14 +89,14 @@ ex:HTTPTimeout a skos:Concept ;
 ex:HTTP401Unauthorized a skos:Concept ;
     skos:prefLabel "HTTP 401 Unauthorized"@en ;
     skos:altLabel "401", "unauthorized", " authentication fail"@pt ;
-    skos:Broader ex:AuthenticationError ;
+    skos:broader ex:AuthenticationError ;
     ex:confidence 0.75 ;
     skos:note "Patterns: 401.*unauthorized, unauthorized.*access, authentication.*fail" .
 
 ex:HTTP403Forbidden a skos:Concept ;
     skos:prefLabel "HTTP 403 Forbidden"@en ;
     skos:altLabel "403", "forbidden", "ACL violation"@pt ;
-    skos:Broader ex:AuthorizationError ;
+    skos:broader ex:AuthorizationError ;
     ex:confidence 0.85 ;
     skos:note "Patterns: 403.*forbidden, forbidden.*access, ACL.*violat" .
 
@@ -104,14 +104,14 @@ ex:HTTP403Forbidden a skos:Concept ;
 ex:SAPDataElementNotFound a skos:Concept ;
     skos:prefLabel "SAP Data Element Not Found"@en ;
     skos:altLabel "DATA_ELEMENT_NOT_FOUND", " campo inexistente", "field not in schema"@pt ;
-    skos:Broader ex:DataError ;
+    skos:broader ex:DataError ;
     ex:confidence 0.85 ;
     skos:note "Patterns: dataelement.*not.*found, data element.*not.*found, field.*not.*in.*schema" .
 
 ex:MDIValidationFailed a skos:Concept ;
     skos:prefLabel "MDI Validation Failed"@en ;
     skos:altLabel "MDI_VALIDATION_FAILED", "validation fail", "schema mismatch"@pt ;
-    skos:Broader ex:DataError ;
+    skos:broader ex:DataError ;
     ex:confidence 0.85 ;
     skos:note "Patterns: mdi.*validation.*fail, validation.*fail, schema.*mismatch" .
 
@@ -119,7 +119,7 @@ ex:MDIValidationFailed a skos:Concept ;
 ex:HTTP429TooManyRequests a skos:Concept ;
     skos:prefLabel "HTTP 429 Too Many Requests"@en ;
     skos:altLabel "429", "too many requests", "rate limit", "throttled"@pt ;
-    skos:Broader ex:RateLimitError ;
+    skos:broader ex:RateLimitError ;
     ex:confidence 0.85 ;
     skos:note "Patterns: 429.*too.*many.*request, rate.*limit, throttled" .
 
@@ -127,14 +127,14 @@ ex:HTTP429TooManyRequests a skos:Concept ;
 ex:JSONParsingError a skos:Concept ;
     skos:prefLabel "JSON Parsing Error"@en ;
     skos:altLabel "JSON parse fail", "invalid JSON", "JSON syntax error"@pt ;
-    skos:Broader ex:ParsingError ;
+    skos:broader ex:ParsingError ;
     ex:confidence 0.85 ;
     skos:note "Patterns: json.*parse.*fail, invalid JSON, JSON.*syntax.*error" .
 
 ex:XMLParsingError a skos:Concept ;
     skos:prefLabel "XML Parsing Error"@en ;
     skos:altLabel "XML parse fail", "malformed XML", "XML syntax error"@pt ;
-    skos:Broader ex:ParsingError ;
+    skos:broader ex:ParsingError ;
     ex:confidence 0.85 ;
     skos:note "Patterns: xml.*parse.*fail, malformed XML, XML.*syntax.*error" .
 

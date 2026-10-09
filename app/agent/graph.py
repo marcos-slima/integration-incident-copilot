@@ -29,9 +29,12 @@ from app.agent.nodes import (
     generic_diagnosis_node,
     graph_enrich_node,
     graph_write_node,
+    hitl_review_node,
     observe_span,
+    ontology_enrich_node,
     report_node,
     retrieve_node,
+    risk_assessment_node,
     saas_diagnosis_node,
     sap_diagnosis_node,
 )
@@ -87,12 +90,38 @@ def build_graph():
     graph.add_node("saas_diagnose", saas_diagnosis_node)
     graph.add_node("generic_diagnose", generic_diagnosis_node)
     graph.add_node("report", report_node)
+    graph.add_node("ontology_enrich", ontology_enrich_node)
+    graph.add_node("hitl_review", hitl_review_node)
+    graph.add_node("risk_assessment", risk_assessment_node)
 
     graph.set_entry_point("supervisor")
     graph.add_edge("supervisor", "connector")
     graph.add_edge("connector", "retrieve")
 
-    if settings.graph_rag_enabled:
+    graph.add_conditional_edges(
+        "retrieve",
+        _route_to_specialist,
+        {
+            "sap_diagnose": "sap_diagnose",
+            "saas_diagnose": "saas_diagnose",
+            "generic_diagnose": "generic_diagnose",
+        },
+    )
+
+    if settings.ontology_enrichment_enabled:
+        graph.add_edge("retrieve", "ontology_enrich")
+        graph.add_edge("ontology_enrich", "hitl_review")
+        graph.add_edge("hitl_review", "risk_assessment")
+        graph.add_conditional_edges(
+            "risk_assessment",
+            _route_to_specialist,
+            {
+                "sap_diagnose": "sap_diagnose",
+                "saas_diagnose": "saas_diagnose",
+                "generic_diagnose": "generic_diagnose",
+            },
+        )
+    elif settings.graph_rag_enabled:
         graph.add_node("graph_enrich", graph_enrich_node)
         graph.add_node("graph_write", graph_write_node)
         graph.add_edge("retrieve", "graph_enrich")
@@ -110,15 +139,6 @@ def build_graph():
         graph.add_edge("generic_diagnose", "graph_write")
         graph.add_edge("graph_write", "report")
     else:
-        graph.add_conditional_edges(
-            "retrieve",
-            _route_to_specialist,
-            {
-                "sap_diagnose": "sap_diagnose",
-                "saas_diagnose": "saas_diagnose",
-                "generic_diagnose": "generic_diagnose",
-            },
-        )
         graph.add_edge("sap_diagnose", "report")
         graph.add_edge("saas_diagnose", "report")
         graph.add_edge("generic_diagnose", "report")

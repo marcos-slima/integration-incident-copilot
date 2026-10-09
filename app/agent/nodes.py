@@ -111,6 +111,8 @@ else:
 MAX_LOGS_IN_PROMPT = 3_000
 MAX_PAYLOAD_IN_PROMPT = 3_000
 
+_logger = logging.getLogger(__name__)
+
 
 def connector_node(state: CopilotState) -> CopilotState:
     interface_type = state.get("interface_type")
@@ -149,6 +151,54 @@ def retrieve_node(state: CopilotState) -> CopilotState:
 
 
 @observe_span(name="graph_enrich")
+def ontology_enrich_node(state: CopilotState) -> CopilotState:
+    """So entra no grafo quando ONTOLOGY_ENRICHMENT_ENABLED=true - consulta
+    a ontologia SKOS (error_codes.ttl) por upper categories e next steps,
+    sem depender de Neo4j (usa rdflib direto no TTL).
+
+    DA-61: ontology enrichment e graph enrichment sao independentes.
+    GraphRAG (Neo4j) serve para recuperar incidentes anteriores; ontology
+    enrichment servico para inferencia semantica (skos:broader*, next_steps).
+    Ambos podem rodar juntos ou separados."""
+    try:
+        from app.ontology.enrichment import (
+            get_next_steps_from_category,
+            get_upper_categories_from_category,
+        )
+
+        # Extract error category from diagnosis (rule_engine_category)
+        category = state.get("diagnosis", {}).get("rule_engine_category")
+        if not category:
+            return {"ontology_inference": "", "ontology_next_steps": ""}
+
+        # Query TTL via rdflib for upper categories
+        upper_cats = get_upper_categories_from_category(category)
+        next_steps = get_next_steps_from_category(category)
+
+        # Format upper categories as text
+        upper_context = (
+            "\n".join([f"- {cat}" for cat in upper_cats])
+            if upper_cats
+            else "Nenhuma upper category definida"
+        )
+        next_steps_context = (
+            "\n".join([f"- {step}" for step in next_steps])
+            if next_steps
+            else "- Nenhum next step definido"
+        )
+
+        return {
+            "ontology_inference": upper_context,
+            "ontology_next_steps": next_steps_context,
+        }
+    except (FileNotFoundError, ValueError) as exc:
+        _logger.warning(
+            "ontology_enrich_node: falha ao carregar/consultar error_codes.ttl: %s",
+            exc,
+        )
+        return {"ontology_inference": "", "ontology_next_steps": ""}
+
+
 def graph_enrich_node(state: CopilotState) -> CopilotState:
     """So entra no grafo quando GRAPH_RAG_ENABLED=true (ver
     build_graph()) - consulta o Neo4j por incidentes anteriores na
@@ -1329,3 +1379,122 @@ def report_node(state: CopilotState) -> CopilotState:
 {supporting_md}
 """
     return {"report_markdown": report}
+
+
+def hitl_review_node(state: CopilotState) -> CopilotState:
+    """Node to pause and request human review when confidence is low.
+
+    Decision logic:
+    1. Check if ONTOLOGY_ENRICHMENT_ENABLED and confidence < HITL_CONFIDENCE_THRESHOLD
+    2. Build review payload from state
+    3. *In production*, this would trigger an external review workflow (email, UI, API)
+    4. For now, simulate review with default values (can be overridden by tests)
+
+    Args:
+        state: Current CopilotState
+
+    Returns:
+        CopilotState with hitl_request and hitl_response fields
+    """
+    HITL_CONFIDENCE_THRESHOLD = 0.7
+
+    # Skip HITL if disabled or confidence is sufficient
+    if not settings.ontology_enrichment_enabled:
+        _logger.debug("HITL disabled, skipping review")
+        return state
+
+    if state.get("confidence") is None:
+        _logger.debug("No confidence score available, skipping HITL")
+        return state
+
+    if state["confidence"] >= HITL_CONFIDENCE_THRESHOLD:
+        _logger.debug("Confidence %.2f >= threshold, skipping HITL", state["confidence"])
+        return state
+
+    # Build review request
+    hitl_request = {
+        "incident_id": state.get("incident_id", "unknown"),
+        "summary": state.get("summary", "")[:500],
+        "current_confidence": state["confidence"],
+        "ontology_candidates": state.get("ontology_candidates", {}),
+        "diagnostic_hypothesis": state.get("diagnostic_hypothesis", ""),
+    }
+
+    # Simulate human review
+    hitl_response = {
+        "reviewed": True,
+        "confidence_adjustment": -0.2,
+        "corrected_categories": [],
+        "comments": "Low confidence diagnostic, using fallback path",
+        "status": "approved",
+    }
+
+    state["hitl_request"] = hitl_request
+    state["hitl_response"] = hitl_response
+    state["confidence_adjustment"] = hitl_response["confidence_adjustment"]
+
+    return state
+
+
+HITL_CONFIDENCE_THRESHOLD = 0.7
+
+
+def risk_assessment_node(state: CopilotState) -> CopilotState:
+    """Avalia risco do diagnóstico com base em HITL feedback e ontologia.
+
+    DA-61 Fase 6: risk assessment como gate final antes de emitir relatório.
+    Usa:
+    - HITL review (se presente): confiança ajustada, comments, status
+    - Ontology candidates: concordância entre categorias SKOS
+
+    Limites empíricos:
+    - risk_threshold = 0.7: abaixo disso, risk=high (requer humano)
+    - risk_medium_threshold = 0.85: entre 0.7 e 0.85 → risk=medium
+
+    Retorna state atualizado com:
+    - risk_level: "low" | "medium" | "high"
+    - risk_factors: list[str] de justificativas
+    - risk_confidence: confidence ajustado (float)
+    """
+    risk_factors = []
+    risk_confidence = state.get("confidence", 1.0)
+
+    # Ajustar confiança com hitl_correction se disponível
+    hitl_response = state.get("hitl_response")
+    if hitl_response:
+        adjustment = hitl_response.get("confidence_adjustment", 0.0)
+        risk_confidence = max(0.0, min(1.0, risk_confidence + adjustment))
+        state["risk_confidence"] = risk_confidence
+
+        if hitl_response.get("status") == "rejected":
+            risk_factors.append("HITL review rejected diagnostic")
+        if hitl_response.get("corrected_categories"):
+            risk_factors.append("HITL corrected categories")
+
+    # Ontology candidates como indicador adicional
+    ontology_candidates = state.get("ontology_candidates", {})
+    if ontology_candidates:
+        candidate_count = len(ontology_candidates)
+        if candidate_count > 1:
+            risk_factors.append(f"{candidate_count} ontology candidates present")
+        elif candidate_count == 1:
+            risk_factors.append("Single ontology candidate, low ambiguity")
+
+    # Avaliar risco baseado na confiança ajustada
+    if risk_confidence >= HITL_CONFIDENCE_THRESHOLD + 0.15:
+        state["risk_level"] = "low"
+    elif risk_confidence >= HITL_CONFIDENCE_THRESHOLD:
+        state["risk_level"] = "medium"
+    else:
+        state["risk_level"] = "high"
+
+    state["risk_factors"] = risk_factors
+
+    _logger.debug(
+        "risk_assessment_node: risk_level=%s, confidence=%.2f, factors=%s",
+        state["risk_level"],
+        risk_confidence,
+        risk_factors,
+    )
+
+    return state

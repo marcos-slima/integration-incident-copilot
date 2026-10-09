@@ -21,7 +21,7 @@ NEO4J_USER_VAR = "NEO4J_USER"
 NEO4J_PASSWORD_VAR = "NEO4J_PASSWORD"
 
 
-def load_error_rules_to_neo4j(neo4j_uri: str, username: str, password: str) -> int:
+async def load_error_rules_to_neo4j(neo4j_uri: str, username: str, password: str) -> int:
     """Import SKOS error codes from TTL to Neo4j in an idempotent way.
 
     Returns the number of concepts imported.
@@ -46,20 +46,18 @@ def load_error_rules_to_neo4j(neo4j_uri: str, username: str, password: str) -> i
                     await session.execute_write(
                         _upsert_concept,
                         {
-                            "uri": rule.error_type,
-                            "label": rule.pattern,
+                            "uri": rule.category,
+                            "label": rule.patterns[0] if rule.patterns else "",
                             "confidence": rule.confidence,
-                            "root_cause": rule.root_cause,
+                            "root_cause": rule.probable_root_cause,
                             "next_steps": rule.next_steps or [],
-                            "broader": rule.broader or [],
+                            "broader": [],
                         },
                     )
                     count += 1
                 return count
 
-        import asyncio
-
-        return asyncio.run(_import())
+        return await _import()
 
     except neo4j_exceptions.ServiceUnavailable as exc:
         logger.warning("Neo4j service unavailable: %s", exc)
@@ -69,7 +67,7 @@ def load_error_rules_to_neo4j(neo4j_uri: str, username: str, password: str) -> i
         return 0
     finally:
         if driver:
-            asyncio.run(driver.close())
+            await driver.close()
 
 
 async def _upsert_concept(
@@ -95,9 +93,9 @@ async def _upsert_concept(
                  c.next_steps = $next_steps,
                  c.updated_at = timestamp()
 
-    WITH c
-    UNWIND $broader AS broader_uri
-    OPTIONAL MATCH (b:ErrorConcept {uri: $broader_uri})
+    WITH c, CASE WHEN $broader IS NOT NULL AND size($broader) > 0 THEN $broader ELSE [] END AS broader_list
+    UNWIND broader_list AS broader_uri
+    OPTIONAL MATCH (b:ErrorConcept {uri: broader_uri})
     WHERE b IS NOT NULL
     MERGE (c)-[:skos_broader]->(b)
     """
@@ -105,7 +103,7 @@ async def _upsert_concept(
     await tx.run(query, **data)
 
 
-def get_incidents_by_error_uri(
+async def get_incidents_by_error_uri(
     neo4j_uri: str, username: str, password: str, uri: str
 ) -> list[dict[str, Any]]:
     """Retrieve incidents linked to a specific error concept via Neo4j."""
@@ -117,12 +115,10 @@ def get_incidents_by_error_uri(
 
         async def _query():
             async with driver.session() as session:
-                result = await session.read_transaction(_match_incidents_by_error, {"uri": uri})
+                result = await session.execute_read(_match_incidents_by_error, {"uri": uri})
                 return [dict(record) for record in result]
 
-        import asyncio
-
-        return asyncio.run(_query())
+        return await _query()
 
     except neo4j_exceptions.ServiceUnavailable as exc:
         logger.warning("Neo4j service unavailable: %s", exc)
@@ -132,9 +128,7 @@ def get_incidents_by_error_uri(
         return []
     finally:
         if driver:
-            import asyncio
-
-            asyncio.run(driver.close())
+            await driver.close()
 
 
 async def _match_incidents_by_error(
@@ -156,7 +150,7 @@ async def _match_incidents_by_error(
     return await result.fetch()
 
 
-def get_error_hierarchy(
+async def get_error_hierarchy(
     neo4j_uri: str, username: str, password: str, uri: str
 ) -> list[dict[str, Any]]:
     """Retrieve the SKOS hierarchy (broader/narrower) for a given error concept."""
@@ -168,12 +162,10 @@ def get_error_hierarchy(
 
         async def _query():
             async with driver.session() as session:
-                result = await session.read_transaction(_query_hierarchy, {"uri": uri})
+                result = await session.execute_read(_query_hierarchy, {"uri": uri})
                 return [dict(record) for record in result]
 
-        import asyncio
-
-        return asyncio.run(_query())
+        return await _query()
 
     except neo4j_exceptions.ServiceUnavailable as exc:
         logger.warning("Neo4j service unavailable: %s", exc)
@@ -183,9 +175,7 @@ def get_error_hierarchy(
         return []
     finally:
         if driver:
-            import asyncio
-
-            asyncio.run(driver.close())
+            await driver.close()
 
 
 async def _query_hierarchy(

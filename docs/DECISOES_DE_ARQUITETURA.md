@@ -2603,6 +2603,49 @@ A auditoria Q2 2026 (DATA-01) recomendou substituir hardcoded por taxonomia form
 **Validação.**
 
 - Testes unitários: 40/40 `test_da33.py` passando (inclui `test_match_known_error`, `test_all_rules_have_next_steps`, etc.)
+
+---
+
+### 53. Neo4j loader para SKOS taxonomy import (DA-62)
+
+**O problema.** A Fase 2 do DA-61 requer integrar a taxonomia SKOS (TTL) com o GraphRAG Neo4j para correlação de incidentes (ex: "todos incidentes com erro OAuth2"). Entretanto, a carga inicial e updates precisam de idempotência, tratamento de erros e queries Cypher específicas para SKOS.
+
+**O caso de uso.** Administradores querem:
+- Carregar SKOS TTL ao Neo4j uma vez (ou recarregar após atualização),
+- Consultar incidentes pendentes conectados a um erro específico,
+- Recuperar hierarquia SKOS (broader/narrower) para inferência.
+
+**A solução.**
+
+- `app/ontology/neo4j_loader.py`: módulo com:
+  - `load_error_rules_to_neo4j()`: importa TTL via `ontology_loader.py`, upsert idempotente via `MERGE`,
+  - `get_incidents_by_error_uri()`: Cypher query para encontrars incidentes pendentes,
+  - `get_error_hierarchy()`: recupera `skos:broader`/`skos:narrower` relations via Cypher,
+  - Fallback grácil: retorna lista vazia se Neo4j indisponível ou credenciais inválidas.
+
+- **Idempotência**: cada upsert usa `MERGE` + `ON CREATE SET` / `ON MATCH SET`,
+- **Tratamento de erros**: `ServiceUnavailable` e `AuthError` capturados, logging warning/erro, empty list retornado (não exception),
+- **Separation of concerns**: SKOS (TTL) vs. GraphRAG (Neo4j) com camada de adaptação (`neo4j_loader.py`).
+
+**Critérios de sucesso.**
+- `uv run ruff check app/ontology/neo4j_loader.py` → all passed,
+- `uv run pytest tests/ -m "not integration"` → 1406 passed (1 gate fails por ausência de baseline externo),
+- Commit staging + gitleaks clean (não há hardcoded secrets:常数 para variáveis de ambiente).
+
+**Limitações (aceitas):**
+- Neo4j é opt-in (`GRAPH_RAG_ENABLED=false` default),
+- Sem migration: carga inicial só em instalação nova; dados antigos precisam reload manual,
+- Query patterns seguem DA-21: `(DriverError, TransientError)` vs. `Neo4jError`.
+
+**Próximos passos (DA-62 Fase 2b):**
+- Ativar `GRAPH_RAG_ENABLED=true` e validar carga real TTL → Neo4j,
+- Integrar `get_error_hierarchy()` em `app/agent/ontology_agent.py`,
+- Criar endpoint `/admin/ontology/hierarchy` para visualizar SKOS no console.
+
+**Validação.**
+- `app/ontology/neo4j_loader.py` com commit `291239c` em `feature/DA-61-fase2`,
+- Ruff check passando, gitleaks clean,
+- 4 testes `test_nodes_ontology_degradation.py` passando.
 - Testes de integração: 1407/1407 passing (não há testes específicos de ontology_loader ainda)
 - Simulação: `uv run python -c "from app.agent.ontology_loader import load_error_rules_combined; rules = load_error_rules_combined(); assert len(rules) == 28"`
 

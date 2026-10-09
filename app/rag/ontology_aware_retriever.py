@@ -78,6 +78,7 @@ def _apply_ontology_filter(candidates: list[dict], category: str) -> tuple[list[
 
 def retrieve_hybrid_ontology_aware(
     query: str,
+    target: str = "incidents",
     top_k: int = 5,
     score_threshold: float = 0.5,
     ontology_category: str | None = None,
@@ -86,6 +87,7 @@ def retrieve_hybrid_ontology_aware(
 
     Args:
         query: user query
+        target: collection to query (default: "incidents")
         top_k: max documents to return
         score_threshold: minimum similarity score
         ontology_category: error category for ontology enrichment
@@ -93,8 +95,11 @@ def retrieve_hybrid_ontology_aware(
     Returns:
         List of documents, optionally filtered/re-ranked by ontology
     """
+    if target not in COLLECTIONS:
+        raise ValueError(f"Unknown target: {target}. Available: {list(COLLECTIONS.keys())}")
+
     # Step 1: hybrid retrieval (dense + sparse)
-    candidates = _retrieve_hybrid(query, COLLECTIONS["incidents"], top_k * 2)
+    candidates = _retrieve_hybrid(query, COLLECTIONS[target], top_k * 2)
 
     if not candidates:
         return []

@@ -193,6 +193,22 @@ ex:KnownErrorRules a skos:Collection ;
     skos:member ex:HTTP429TooManyRequests ;
     skos:member ex:JSONParsingError ;
     skos:member ex:XMLParsingError ;
+    skos:member ex:sap_material_lock ;
+    skos:member ex:sap_pricing_condition_missing ;
+    skos:member ex:sap_idoc_status_51 ;
+    skos:member ex:sap_idoc_status_26 ;
+    skos:member ex:HTTP503Unavailable ;
+    skos:member ex:cpi_mapping_error ;
+    skos:member ex:ssl_certificate_expired ;
+    skos:member ex:rfc_destination_error ;
+    skos:member ex:duplicate_document ;
+    skos:member ex:sap_idoc_multiple_objects ;
+    skos:member ex:sap_idoc_port_partner ;
+    skos:member ex:sap_badi_exception ;
+    skos:member ex:sap_bapi_failure ;
+    skos:member ex:sap_serial_number_duplicate ;
+    skos:member ex:sap_sd_credit_block ;
+    skos:member ex:SAPMDGMdiLock ;
     skos:prefLabel "Known Error Rules Ontology"@en .
 
 ex:ErrorSeverity a skos:Collection ;
@@ -205,3 +221,151 @@ ex:EscalationPolicy a skos:Collection ;
     skos:member ex:EscalateTier2 ;
     skos:member ex:EscalateTier3 ;
     skos:prefLabel "Escalation Policy Levels"@en .
+
+# ============================================================================
+# Additional error codes (mapped from KNOWN_ERROR_RULES)
+# ============================================================================
+
+ex:sap_material_lock a skos:Concept ;
+    skos:prefLabel "SAP Material Lock"@en ;
+    skos:altLabel "material lock", "M8082", "material bloqueado"@pt ;
+    skos:broader ex:DataError ;
+    ex:confidence 0.90 ;
+    skos:note "Patterns: M8082, material.*lock, material.*bloqueado, ENQUEUE.*material" ;
+    skos:note "next_steps: Aguardar 15 minutos e tentar o reprocessamento, Verificar transação SM12 (SAP Lock Monitor) para identificar o processo bloqueador, Confirmar se há um job batch em execução no mesmo material, Se o lock for antigo (> 1h), verificar com o administrador SAP se pode ser liberado" ;
+    skos:member ex:Recoverable .
+
+ex:sap_pricing_condition_missing a skos:Concept ;
+    skos:prefLabel "SAP Pricing Condition Missing"@en ;
+    skos:altLabel "condition record missing", "VK041", "preço ausente"@pt ;
+    skos:broader ex:DataError ;
+    ex:confidence 0.90 ;
+    skos:note "Patterns: VK041, condition.*record.*missing, condicao.*preco.*ausente, no.*pricing.*condition, MM.*price.*not.*found" ;
+    skos:note "next_steps: Verificar tabela T001W para configuração de.preço, Revisar transação VK04 para criar/mantener condição, Confirmar data de validade da condição, Verificar condições de desconto e promoções vigentes" ;
+    skos:member ex:Recoverable .
+
+ex:sap_idoc_status_51 a skos:Concept ;
+    skos:prefLabel "SAP IDoc Status 51"@en ;
+    skos:altLabel "IDoc status 51", "application error", "WE19 status 51"@pt ;
+    skos:broader ex:DataError ;
+    ex:confidence 0.90 ;
+    skos:note "Patterns: IDoc.*status.*51, status.*51.*IDoc, IDOC.*APPLICATION.*ERROR, WE19.*status.*51" ;
+    skos:note "next_steps: Acessar transação BD87 para reprocessar o IDoc, Verificar logs de erro no WE19 para detalhes do problema, Confirmar se o programa de processamento está ativo, Revisar configuração de partner profile no NAST" ;
+    skos:member ex:NonRecoverable .
+
+ex:sap_idoc_status_26 a skos:Concept ;
+    skos:prefLabel "SAP IDoc Status 26"@en ;
+    skos:altLabel "IDoc status 26", "syntax error", "ALE error"@pt ;
+    skos:broader ex:DataError ;
+    ex:confidence 0.90 ;
+    skos:note "Patterns: IDoc.*status.*26, status.*26.*IDoc, IDOC.*ALE.*ERROR" ;
+    skos:note "next_steps: Verificar estrutura do segmento E1MARAM no IDoc, Confirmar se o schema está atualizado no WE60, Revisar transação BD87 para reprocessamento, Validar partner profile e port configuration" ;
+    skos:member ex:NonRecoverable .
+
+ex:HTTP503Unavailable a skos:Concept ;
+    skos:prefLabel "HTTP 503 Unavailable"@en ;
+    skos:altLabel "503", "service unavailable", "backend unavailable"@pt ;
+    skos:broader ex:NetworkError ;
+    ex:confidence 0.90 ;
+    skos:note "Patterns: HTTP.*503, 503.*Service.*Unavailable, service.*unavailable, backend.*unavailable, system.*unavailable" ;
+    skos:note "next_steps: Aguardar 60 segundos e tentar reprocessamento, Verificar status do backend SAP (SM51, SM66), Confirmar se o serviço OData/RFC está ativo, Revisar logs de sistema para erro de resource exhausted" ;
+    skos:member ex:Recoverable .
+
+ex:cpi_mapping_error a skos:Concept ;
+    skos:prefLabel "CPI Mapping Error"@en ;
+    skos:altLabel "mapping failed", "XSLT error", "groovy error"@pt ;
+    skos:broader ex:ParsingError ;
+    ex:confidence 0.90 ;
+    skos:note "Patterns: MAPPING_FAIL, mapping.*failed, xslt.*error, XSLT_PARS, groovy.*script.*error, script.*exception.*iflow" ;
+    skos:note "next_steps: Acessar CPI Cockpit para visualizar o erro de mapping, Revisar mapping diagram ou script Groovy, Validar input XML com schema XSD, Confirmar se o iFlow está ativado" ;
+    skos:member ex:NonRecoverable .
+
+ex:ssl_certificate_expired a skos:Concept ;
+    skos:prefLabel "SSL Certificate Expired"@en ;
+    skos:altLabel "certificate expired", "SSL expired", "PKIX path failed"@pt ;
+    skos:broader ex:AuthenticationError ;
+    ex:confidence 0.90 ;
+    skos:note "Patterns: certificate.*expired, SSL.*expired, certificado.*expirado, certificado\\s+(?:ssl|tls|x\\.?509)\\b.*expir, PKIX.*path.*build.*failed, unable.*find.*valid.*certification, SSL.*handshake.*fail" ;
+    skos:note "next_steps: Renovar certificado SSL/TLS no keystore SAP (strustSAP2), Importar certificado da CA raiz no trust store, Revisar data de validade do certificado (SMICM), Confirmar se o hostname corresponde ao certificado" ;
+    skos:member ex:Recoverable .
+
+ex:rfc_destination_error a skos:Concept ;
+    skos:prefLabel "RFC Destination Error"@en ;
+    skos:altLabel "RFC destination not found", "RFC logon failed", "ABAP RFC error"@pt ;
+    skos:broader ex:NetworkError ;
+    ex:confidence 0.90 ;
+    skos:note "Patterns: RFC.*destination.*not.*found, destination.*not.*found, RFC.*logon.*failed, RFC.*connection.*failed, ABAP.*RFC.*error" ;
+    skos:note "next_steps: Verificar transação SM59 para configurar destination RFC, Confirmar usuário, senha e language no destination, Revisar host e system number no destination, Testar conexão com botão 'Test Connection'" ;
+    skos:member ex:Recoverable .
+
+ex:duplicate_document a skos:Concept ;
+    skos:prefLabel "Duplicate Document"@en ;
+    skos:altLabel "duplicate entry", "unique constraint", "document already posted"@pt ;
+    skos:broader ex:DataError ;
+    ex:confidence 0.90 ;
+    skos:note "Patterns: duplicate.*entry, unique.*constraint, already.*exist, \\bj[aá]\\s+existe, document.*already.*posted, FI.*duplicate.*document" ;
+    skos:note "next_steps: Verificar número do documento e data de posting, Revisar transação FB03 para documentos já existentes, Confirmar se o documento foi duplicado por reprocessamento, Ajustar documento original ou cancelar duplicated" ;
+    skos:member ex:NonRecoverable .
+
+ex:sap_idoc_multiple_objects a skos:Concept ;
+    skos:prefLabel "SAP IDoc Multiple Objects"@en ;
+    skos:altLabel "IDoc multiple objects", "IDoc error multile"@pt ;
+    skos:broader ex:DataError ;
+    ex:confidence 0.90 ;
+    skos:note "Patterns: IDOC_ERROR_MULTIPLE_OBJECTS, multiple.*objects.*idoc, idoc.*multiple.*objects" ;
+    skos:note "next_steps: Verificar IDoc no WE02/WE05 para objetos múltiplos, Confirmar se há mais de um documento com mesmo identifier, Revisar lógica de mapping na interface, Verificar se o partner profile está configurado corretamente" ;
+    skos:member ex:NonRecoverable .
+
+ex:sap_idoc_port_partner a skos:Concept ;
+    skos:prefLabel "SAP IDoc Port Partner"@en ;
+    skos:altLabel "IDoc status 68", "port not found", "partner port not found"@pt ;
+    skos:broader ex:DataError ;
+    ex:confidence 0.90 ;
+    skos:note "Patterns: IDoc.*status.*68, status.*68.*IDoc, IDOC.*SYNTAX.*ERROR.*SENDER, port.*not.*found.*partner, \\bporta?\\b.*n[aã]o.*encontrad, PARTNER.*PORT.*NOT.*FOUND" ;
+    skos:note "next_steps: Verificar portas configuradas no transactionWE20, Confirmar partner number e partner type no IDoc, Revisar message type e port assignment, Testar com IDoc de teste simples" ;
+    skos:member ex:NonRecoverable .
+
+ex:sap_badi_exception a skos:Concept ;
+    skos:prefLabel "SAP BAdI Exception"@en ;
+    skos:altLabel "BAdI exception", "enhancement spot exception", "CX_BADI"@pt ;
+    skos:broader ex:DataError ;
+    ex:confidence 0.90 ;
+    skos:note "Patterns: BAdI.*exception, BAdi.*error, enhancement.*spot.*exception, IF_EX_.*=>.*exception, CX_BADI" ;
+    skos:note "next_steps: Visualizar stack trace no transaction SE37/SE18 para detalhes da exception, Confirmar se a implementação BAdI está ativa, Revisar código da implementação para erros lógicos, Verificar transação SE18 para definir filter value, Acessartransaction ST22 para análise de dump" ;
+    skos:member ex:NonRecoverable .
+
+ex:sap_bapi_failure a skos:Concept ;
+    skos:prefLabel "SAP BAPI Failure"@en ;
+    skos:altLabel "BAPI return E", "BAPI failure", "BAPI error"@pt ;
+    skos:broader ex:DataError ;
+    ex:confidence 0.90 ;
+    skos:note "Patterns: BAPI.*RETURN.*E\\b, BAPI.*failure, BAPI.*error, BAPIRET.*TYPE.*E, BAPI_FAILURE, bapi.*retornou.*erro" ;
+    skos:note "next_steps: Verificar mensagem de erro na table BAPIRET2, Confirmar se os parâmetros de input estão corretos, Revisar logs de aplicação SAP para detalhes, Validar rules de negócio antes de chamada do BAPI" ;
+    skos:member ex:NonRecoverable .
+
+ex:sap_serial_number_duplicate a skos:Concept ;
+    skos:prefLabel "SAP Serial Number Duplicate"@en ;
+    skos:altLabel "serial duplicate", "serial already assigned", "MM60 serial"@pt ;
+    skos:broader ex:DataError ;
+    ex:confidence 0.90 ;
+    skos:note "Patterns: serial.*number.*duplicate, numero.*serie.*duplicado, serial.*already.*assigned, SERIALNR.*ALREADY, MM60.*serial, duplicate.*serial" ;
+    skos:note "next_steps: Verificar número de série no transaction IW31/IW32, Confirmar se o material permite serial numbers (MATMAS), Revisar transação IR01 para entrada de serial, Ajustar número de série ou usar número disponível, Verificar transação IQ03 para visualizar serial" ;
+    skos:member ex:NonRecoverable .
+
+ex:sap_sd_credit_block a skos:Concept ;
+    skos:prefLabel "SAP SD Credit Block"@en ;
+    skos:altLabel "credit block", "VKM1", "credit limit exceeded"@pt ;
+    skos:broader ex:DataError ;
+    ex:confidence 0.90 ;
+    skos:note "Patterns: credit.*block, bloqueio.*credito, credit.*limit.*exceeded, limite.*credito.*excedido, VKM1, RVKRED, credit.*check.*failed" ;
+    skos:note "next_steps: Verificar transação VKM1 para bloqueios de crédito, Confirmar limites de crédito no customer master (FD02), Revisar análise de crédito no sales order, Aprovar liberação de crédito ou ajustar pedido, Visualizar detalhes no transaction FD32" ;
+    skos:member ex:Recoverable .
+
+ex:SAPMDGMdiLock a skos:Concept ;
+    skos:prefLabel "SAP MDG/MDI Lock"@en ;
+    skos:altLabel "MDG lock", "MDI failure", "master data governance"@pt ;
+    skos:broader ex:DataError ;
+    ex:confidence 0.90 ;
+    skos:note "Patterns: MDG.*lock, MDI.*replicate.*fail, master.*data.*governance.*error, MDG.*error, MDI.*error, master.*data.*integration.*fail, BP.*lock.*governance" ;
+    skos:note "next_steps: Verificar transação MDG_MDM_UI para locks no MDG, Confirmar se há job de replicate em execução, Revisar logs de MDI para detalhes do erro, Ajustar configuração de governance ou aguardar liberação" ;
+    skos:member ex:Recoverable .

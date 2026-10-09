@@ -28,6 +28,7 @@ from app.admin.security import verify_admin_key
 from app.config import settings
 from app.db import get_db_session
 from app.llm.origins import canonical_origin
+from app.ontology.neo4j_loader import get_error_hierarchy
 from app.services.incident_repository import IncidentRepository
 
 logger = logging.getLogger(__name__)
@@ -920,3 +921,51 @@ async def delete_user(user_id: str, session: SessionReq) -> None:
     from app import auth_guard
 
     auth_guard.revoke_user_sessions(username)
+
+
+class ErrorHierarchyResponse(BaseModel):
+    uri: str
+    broader: list[str]
+    narrower: list[str]
+
+
+@router.get("/ontology/hierarchy", response_model=ErrorHierarchyResponse)
+async def get_ontology_hierarchy(
+    uri: str = Query(..., description="Error concept URI (e.g., urn:error:OAuth2)"),
+) -> dict[str, Any]:
+    """Retrieve SKOS hierarchy (broader/narrower) for an error concept from Neo4j.
+
+    Returns the error concept URI along with its broader and narrower error concepts
+    based on the SKOS taxonomy loaded into Neo4j.
+
+    Returns 404 if the error concept is not found in Neo4j.
+    Returns 503 if Neo4j is not configured or unavailable.
+    """
+    if not settings.neo4j_uri or not settings.neo4j_user or not settings.neo4j_password:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Neo4j service unavailable",
+        )
+
+    try:
+        result = get_error_hierarchy(
+            settings.neo4j_uri,
+            settings.neo4j_user,
+            settings.neo4j_password,
+            uri,
+        )
+    except Exception as exc:
+        logger.warning("Neo4j query failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Neo4j service unavailable",
+        ) from exc
+
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Error concept not found")
+
+    return {
+        "uri": result[0]["root_uri"],
+        "broader": result[0]["broader"],
+        "narrower": result[0]["narrower"],
+    }

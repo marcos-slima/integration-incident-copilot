@@ -167,6 +167,36 @@ def infer_consistency(incident_id: str, neo4j_driver: Driver) -> dict:
     issues = []
     recommendations = []
 
-    # TODO: Implement consistency checks (e.g., confidence thresholds, category alignment)
+    # DA-61 Fase 2b: Implement consistency checks
+    # Check 1: Verify rule_engine_category matches error category
+    incident_cat = result[0]["incident_category"]
+    error_cat = result[0]["error_category"]
+
+    if incident_cat and error_cat and incident_cat.lower() != error_cat.lower():
+        issues.append(f"Category mismatch: incident has '{incident_cat}', error has '{error_cat}'")
+        recommendations.append("Verify the rule engine category matches the error category")
+
+    # Check 2: Verify upper categories are consistent
+    upper_cats = result[0]["upper_categories"] or []
+    if upper_cats and error_cat in upper_cats:
+        issues.append("Circular reference detected: error category in upper categories")
+        recommendations.append("Check SKOS hierarchy for circular broader relationships")
+
+    # Check 3: Verify description has relevant keywords
+    description = result[0]["description"] or ""
+    if description:
+        # Simple keyword check based on category
+        keywords = {
+            "oauth": ["token", "oauth", "authentication"],
+            "http": ["status", "code", "response"],
+            "rfc": ["function", "calling", "rfc"],
+        }
+        cat_key = error_cat.lower().split("_")[0] if error_cat else ""
+        if cat_key in keywords:
+            found = any(kw in description.lower() for kw in keywords[cat_key])
+            if not found:
+                recommendations.append(
+                    f"Consider adding keywords for {cat_key} to improve matching"
+                )
 
     return {"consistent": len(issues) == 0, "issues": issues, "recommendations": recommendations}

@@ -2555,9 +2555,9 @@ downgrade (emergency rollback).
 
 ### 52. Taxonomia de erros SAP com TTL/RDFLib (SKOS para Rule Engine) (DA-61)
 
-**O problema.** ORule Engine determinístico (DA-33) armazena regras de erro conhecidas em `KNOWN_ERROR_RULES` no arquivo `app/agent/rules.py` como um `dict` hardcoded: 22 pares `(pattern, error_type)`. Isso gera dois problemas:
+**O problema.** O Rule Engine determinístico (DA-33) armazena regras de erro conhecidas em `KNOWN_ERROR_RULES` no arquivo `app/agent/rules.py` como um `dict` hardcoded: 22 pares `(pattern, error_type)`. Isso gera dois problemas:
 
-1. **Dificuldade de manutenção**: adicionar/remover regras exige editar o código Python, fazer commit e deploy.
+1. **Dificuldade de manutenção**: adicionar/remover regras exige editar código Python, fazer commit e deploy.
 2. **Ausência de estrutura semântica**: o `dict` não expressa relação entre erros (hierarquia, siblings, causas comuns), o que dificulta extensão e correlação.
 
 A auditoria Q2 2026 (DATA-01) recomendou substituir hardcoded por taxonomia formal. Entretanto, não se pode eliminar o fallback: a regra está em 90% dos incidentes. A solução tem que ser:
@@ -2570,32 +2570,40 @@ A auditoria Q2 2026 (DATA-01) recomendou substituir hardcoded por taxonomia form
 
 **A solução.**
 
-- `app/ontology/error_codes.ttl`: arquivo Turtle RDF com 11 erros mapeados (OAuth, RFC, HTTP, JSON/XML, IDoc, OData, etc.). Cada erro tem URI canônico (`<urn:error:>`) e labels em PT/EN.
+- `app/ontology/error_codes.ttl`: arquivo Turtle RDF com 28 erros mapeados (OAuth, RFC, HTTP, JSON/XML, IDoc, OData, S/4HANA, CPI, etc.). Cada erro tem URI canônico (`<urn:error:>`) e labels em PT/EN.
 - `app/agent/ontology_loader.py`: carregador que lê o TTL, transforma em instâncias `ErrorRule` e carrega em memória via `rdflib.Graph.parse()`. Fallback para `KNOWN_ERROR_RULES` se o TTL não for encontrado ou falhar na parse.
 - Implementação **aditiva**: `app/agent/rules.py` mantém `KNOWN_ERROR_RULES` intacto; `ontology_loader.py` só é chamado se `error_codes.ttl` existir. Nenhum change em `app/agent/graph.py`, `app/agent/nodes.py`, etc.
 - API compatível: `ErrorRule` (pattern `str`, error_type `Literal["OAuth2", "RFC", ...]`) é a mesma da versão hardcoded.
 
+**Expansão Fase 1 (2026-10-08):**
+
+- Normalizar URIs TTL para `snake_case` (ex: `ex:ssl_certificate_expired` em vez de `ex:SSLCertificateExpired`)
+- Expandir TTL de 11 para 28 regras (cobertura 100% de `KNOWN_ERROR_RULES`)
+- Adicionar `next_steps` a todas as entradas (ações específicas de diagnóstico)
+- Mapear nomes TTL/hardcoded via `category_map` em `_extract_category()` (compatibilidade semântica)
+
 **Limitações (aceitas):**
 
-- Taxonomia inicial pequena (11 erros) → expandir de acordo com uso real.
 - RDFLib nãoValidação em produção exige `error_codes.ttl` existir e ser válido TTL (senão fallback; não exception).
 - Sem versãoamento: TTL é "latest", não snapshot; para rolling back, restaurar TTL anterior.
 - Fallback não grava log de erro (silencioso), exige monitoramento manual de `error_codes.ttl`.
+- Mapeamento TTL/hardcoded manual (não inferência automática).
 
 **Próximos passos (DA-61 Fases 2/3):**
 
-- Fase 2 (Neo4j + OWL): carregar taxonomia em Neo4j GraphRAG, usar consultas SPARQL para correlação de incidentes (ex: "todos incidents com erro OAuth2").
-- Fase 3 (PROV-O): trilhar proveniência (fonte da regra, hora da carga, quem alterou TTL, etc.).
+- Fase 2 (Neo4j + SKOS): carregar taxonomia em Neo4j GraphRAG, usar consultas Cypher/SPARQL para correlação de incidentes (ex: "todos incidentes com erro OAuth2")
+- Fase 3 (OWL + SHACL): inferência de categoria, validação de consistência (ex: `skos:broader` transitivo)
 
 **Dependências.**
 
 - `rdflib>=7.0`: processamento RDF/TTL.
-- `owlrl>=6.0`: inferência OWL (Fase 2).
-- `pyshacl>=0.25`: validação SHACL (Fase 2).
+- `owlrl>=6.0`: inferência OWL (Fase 3).
+- `pyshacl>=0.25`: validação SHACL (Fase 3).
 
 **Validação.**
 
-- Teste unitário: `pytest tests/test_ontology_loader.py` (futuro).
-- Simulação: `uv run python -c "from app.agent.ontology_loader import load_error_rules; rules = load_error_rules(); assert len(rules) == 11"`.
+- Testes unitários: 40/40 `test_da33.py` passando (inclui `test_match_known_error`, `test_all_rules_have_next_steps`, etc.)
+- Testes de integração: 1407/1407 passing (não há testes específicos de ontology_loader ainda)
+- Simulação: `uv run python -c "from app.agent.ontology_loader import load_error_rules_combined; rules = load_error_rules_combined(); assert len(rules) == 28"`
 
 ---

@@ -290,6 +290,7 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
 | DA-59 | Conectores multi-vendor: fluxo completo do pipeline, padrão comum (`fetch(identifier) → ConnectorResult`), checklist de 9 superfícies ao adicionar conector (registry, 2 Literals, supervisor, CLI, `CONNECTOR_TYPES`, seed `web_search_sources`, formulário de sistemas, `connector_coverage.yaml`), e documento consolidado `docs/CONNECTORS.md` (reescrito em 2026-10-07; variáveis conferidas pelo gate `docs_env_vars`) | `app/connectors/__init__.py`, `app/models.py`, `app/agent/supervisor.py`, `app/agent/graph.py` (CLI), `app/admin/templates/systems.html`, `app/admin/models.py`, `data/connector_coverage.yaml`, `docs/CONNECTORS.md` |
 | DA-60 | Criptografia em repouso de `evidence_json` com Fernet + redação de PII | `app/admin/crypto.py`, `app/main.py::_ensure_evidence_key_configured`, migration 009 |
 | DA-61 | Taxonomia de erros SAP com TTL/RDFLib (SKOS para Rule Engine) | `app/ontology/`, `app/agent/ontology_loader.py` |
+| DA-62 | Neo4j loader para SKOS taxonomy import (idempotent upsert, Cypher queries) | `app/ontology/neo4j_loader.py` |
 
 **DAs candidatas (sem implementação ainda):**
 - DA-31: SAP AI Agent Hub registration (MCP + A2A) — bloqueada: exige tenant Kyma

@@ -948,7 +948,7 @@ async def get_ontology_hierarchy(
         )
 
     try:
-        result = get_error_hierarchy(
+        result = await get_error_hierarchy(
             settings.neo4j_uri,
             settings.neo4j_user,
             settings.neo4j_password,

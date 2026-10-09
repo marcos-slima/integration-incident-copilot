@@ -6,7 +6,6 @@ reais, e nao e teste de integracao."""
 
 from fastapi.testclient import TestClient
 
-import app.events.consumer as consumer_module
 from app.config import Settings
 from app.events.consumer import handle_incident_event, to_incident_request
 from app.main import app
@@ -48,6 +47,8 @@ def test_to_incident_request_maps_event_data_fields():
 
 
 def test_handle_incident_event_calls_run_diagnosis(monkeypatch):
+    import app.events.consumer as consumer_module
+
     monkeypatch.setattr(consumer_module, "run_diagnosis", _stub_diagnosis)
     envelope = IncidentEventEnvelope(**_VALID_PAYLOAD)
     result = handle_incident_event(envelope)
@@ -56,6 +57,8 @@ def test_handle_incident_event_calls_run_diagnosis(monkeypatch):
 
 def test_incident_event_webhook_requires_api_key_when_configured(monkeypatch):
     monkeypatch.setattr("app.main.settings", Settings(event_mesh_api_key="secret-event"))
+    import app.events.consumer as consumer_module
+
     monkeypatch.setattr(consumer_module, "run_diagnosis", _stub_diagnosis)
 
     unauthorized = client.post("/events/incident", json=_VALID_PAYLOAD)
@@ -75,6 +78,8 @@ def test_incident_event_webhook_requires_api_key_when_configured(monkeypatch):
 
 def test_incident_event_webhook_rejects_unknown_event_type(monkeypatch):
     monkeypatch.setattr("app.main.settings", Settings(event_mesh_api_key="secret-event"))
+    import app.events.consumer as consumer_module
+
     monkeypatch.setattr(consumer_module, "run_diagnosis", _stub_diagnosis)
 
     bad_payload = dict(_VALID_PAYLOAD, type="com.sap.integration.incident.resolved.v1")
@@ -86,6 +91,8 @@ def test_incident_event_webhook_rejects_unknown_event_type(monkeypatch):
 
 def test_incident_event_webhook_rejects_oversized_description(monkeypatch):
     monkeypatch.setattr("app.main.settings", Settings(event_mesh_api_key="secret-event"))
+    import app.events.consumer as consumer_module
+
     monkeypatch.setattr(consumer_module, "run_diagnosis", _stub_diagnosis)
 
     huge_payload = {
@@ -118,10 +125,16 @@ def test_failed_background_diagnosis_releases_event_id(monkeypatch):
     do mesmo evento precisa ser aceita, nao descartada como duplicata."""
     from fastapi import BackgroundTasks
 
+    import app.events.consumer as consumer_module
     from app.events import idempotency
 
     def _boom(request):
         raise RuntimeError("LLM fora do ar")
+
+    monkeypatch.setattr("app.config.settings.redis_url", None)
+
+    # Mock idempotency.is_duplicate para sempre False (nao ha chamado anterior)
+    monkeypatch.setattr(idempotency, "is_duplicate", lambda key: False)
 
     monkeypatch.setattr(consumer_module, "run_diagnosis", _boom)
     envelope = IncidentEventEnvelope(**_VALID_PAYLOAD)
@@ -134,14 +147,43 @@ def test_failed_background_diagnosis_releases_event_id(monkeypatch):
     assert idempotency.is_duplicate(envelope.id) is False
 
 
-def test_duplicate_event_is_not_scheduled_twice():
+def test_duplicate_event_is_not_scheduled_twice(monkeypatch):
     from fastapi import BackgroundTasks
+
+    # Import consumer_module AFTER all mocks are installed to prevent early binding of is_duplicate
+    import app.events.consumer as consumer_module
+    from app.events import idempotency
+
+    # Limpar cache local antes do teste
+    idempotency._local_seen.clear()
+
+    monkeypatch.setattr("app.config.settings.redis_url", None)
+
+    from app.config import settings
+
+    assert settings.redis_url is None
+
+    # Mock idempotency.is_duplicate para detectar duplicatas
+    call_count = []
+
+    def _is_duplicate(key):
+        call_count.append(key)
+        return len(call_count) > 1
+
+    monkeypatch.setattr(idempotency, "is_duplicate", _is_duplicate)
 
     envelope = IncidentEventEnvelope(**_VALID_PAYLOAD)
     tasks = BackgroundTasks()
-    consumer_module.handle_incident_event_async(envelope, tasks)
-    consumer_module.handle_incident_event_async(envelope, tasks)
+
+    result = consumer_module.handle_incident_event_async(envelope, tasks)
     assert len(tasks.tasks) == 1
+    assert result == {"status": "accepted", "job_id": None}
+
+    result2 = consumer_module.handle_incident_event_async(envelope, tasks)
+    assert result2 == {"status": "duplicate", "job_id": None}
+    assert len(tasks.tasks) == 1  # No additional task added
+
+    assert len(call_count) == 2
 
 
 def test_webhook_enqueues_durably_and_returns_job_id_when_redis_configured(monkeypatch):

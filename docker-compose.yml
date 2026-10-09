@@ -158,7 +158,7 @@ services:
     profiles: ["observability"]
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${GRAFANA_HOST_PORT:-3001}:3000"
+      - "127.0.0.1:${GRAFANA_HOST_PORT:-3002}:3000"
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?REQUIRED_SET_IN_ENV}
       GF_USERS_ALLOW_SIGN_UP: "false"

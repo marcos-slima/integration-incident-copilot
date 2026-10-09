@@ -17,6 +17,63 @@ limitações aceitas. É o "porquê" do projeto; o "o quê" e o "onde" estão em
 
 ## Índice
 
+| Número | Título | Seção |
+|---|---|---|
+| 1 | RAG top-1 (evita mistura de contexto) | [1](#1-rag-top-1-evita-mistura-de-contexto) |
+| 2 | `seed=42` obrigatório para determinismo Ollama | [2](#2-seed42-obrigatório-para-determinismo-ollama) |
+| 3 | Guardrails em código, não em prompt | [3](#3-guardrails-em-código-não-em-prompt) |
+| 4/8 | Comparações de modelo via promptfoo: `qwen2.5-coder:32b` vence | [4/8](#48-comparações-de-modelo-via-promptfoo-qwen25-coder32b-vence) |
+| 12 | Troca final do modelo canônico para `qwen3-coder-next:latest` | [12](#12-troca-final-do-modelo-cânônico-para-qwen3-coder-nextlatest) |
+| 14 | Evidence/Trust Layer determinística | [14](#14-evidencetrust-layer-determinística) |
+| 15 | `is_grounded` via evidence_strength (nunca autoavaliação LLM) | [15](#15-is_grounded-via-evidence_strength-nunca-autoavaliação-llm) |
+| 16 | Fallback para reference_library quando evidência fraca | [16](#16-fallback-para-reference_library-quando-evidência-fraca) |
+| 17 | Auth X-API-Key obrigatória em `/diagnose` e `/a2a` | [17](#17-auth-x-api-key-obrigatória-em-diagnose-e-a2a) |
+| 18 | Servidor MCP (capability catalog) | [18](#18-servidor-mcp-capability-catalog) |
+| 19 | Hybrid Inference: Ollama local → cloud fallback | [19](#19-hybrid-inference-ollama-local--cloud-fallback) |
+| 20 | GraphRAG hardening: `(DriverError, TransientError)` vs `Neo4jError` | [20](#20-graphrag-hardening-drivererror-transienterror-vs-neo4jerror) |
+| 21 | Multi-agent: supervisor → sap/saas/generic (sem LLM) | [21](#21-multi-agent-supervisor--sapsaasgeneric-sem-llm) |
+| 22 | Event Mesh via webhook CloudEvents → `run_diagnosis()` | [22](#22-event-mesh-via-webhook-cloudevents--run_diagnosis) |
+| 23 | Deploy SAP BTP Kyma Runtime | [23](#23-deploy-sap-btp-kyma-runtime) |
+| 24 | Evidence/Trust Layer v2 + threshold RAG pós-reranker | [24](#24-evidencetrust-layer-v2--threshold-rag-pós-reranker) |
+| 25 | AI Gateway v1: policy + circuit breaker + budget | [25](#25-ai-gateway-v1-policy--circuit-breaker--budget) |
+| 26 | Capability Registry FAIL-CLOSED | [26](#26-capability-registry-fail-closed) |
+| 27 | Escala calibrada por sigmoid para o rerank score | [27](#27-escala-calibrada-por-sigmoid-para-o-rerank-score) |
+| 28 | Soberania de dados por origin real, fail-closed | [28](#28-soberania-de-dados-por-origin-real-fail-closed) |
+| 29 | Fallback para reference_library quando evidência fraca (DA-17) | [29](#29-fallback-para-reference_library-quando-evidência-fraca-da-17) |
+| 30 | PII redaction ampliado + smart log truncation + backoff exponencial | [30](#30-pii-redaction-ampliado--smart-log-truncation--backoff-exponencial) |
+| 31 | Consumidor AMQP 1.0 assíncrono para Solace Cloud / SAP Event Mesh (corrigido pela DA-40) | [31](#31-consumidor-amqp-10-assíncrono-para-solace-cloud--sap-event-mesh-corrigido-pela-da-40) |
+| 32 | Circuit breaker com backend Redis compartilhado (fallback em memória sem infra obrigatória) | [32](#32-circuit-breaker-com-backend-redis-compartilhado-fallback-em-memória-sem-infra-obrigatória) |
+| 33 | Escala calibrada por sigmoid para o rerank score (DA-28) | [33](#33-escala-calibrada-por-sigmoid-para-o-rerank-score-da-28) |
+| 34 | Soberania de dados por origin real, fail-closed (DA-28) | [34](#34-soberania-de-dados-por-origin-real-fail-closed-da-28) |
+| 35 | Fallback para reference_library quando evidência fraca (DA-17) | [35](#35-fallback-para-reference_library-quando-evidência-fraca-da-17) |
+| 36 | Evidence/Trust Layer v2 + threshold RAG pós-reranker (DA-24) | [36](#36-evidencetrust-layer-v2--threshold-rag-pós-reranker-da-24) |
+| 37 | AI Gateway v1: policy + circuit breaker + budget (DA-25) | [37](#37-ai-gateway-v1-policy--circuit-breaker--budget-da-25) |
+| 38 | Capability Registry FAIL-CLOSED (DA-26) | [38](#38-capability-registry-fail-closed-da-26) |
+| 39 | Escala calibrada por sigmoid para o rerank score | [39](#39-escala-calibrada-por-sigmoid-para-o-rerank-score) |
+| 40 | Soberania de dados por origin real, fail-closed | [40](#40-soberania-de-dados-por-origin-real-fail-closed) |
+| 41 | Evidence/Trust Layer determinística (DA-14) | [41](#41-evidencetrust-layer-determinística-da-14) |
+| 42 | `is_grounded` via evidence_strength (nunca autoavaliação LLM) (DA-15) | [42](#42-is_grounded-via-evidence_strength-nunca-autoavaliação-llm-da-15) |
+| 43 | Fallback para reference_library quando evidência fraca (DA-16) | [43](#43-fallback-para-reference_library-quando-evidência-fraca-da-16) |
+| 44 | Auth X-API-Key obrigatória em `/diagnose` e `/a2a` (DA-17) | [44](#44-auth-x-api-key-obrigatória-em-diagnose-e-a2a-da-17) |
+| 45 | Servidor MCP (capability catalog) (DA-18) | [45](#45-servidor-mcp-capability-catalog-da-18) |
+| 46 | Hybrid Inference: Ollama local → cloud fallback (DA-19) | [46](#46-hybrid-inference-ollama-local--cloud-fallback-da-19) |
+| 47 | GraphRAG hardening: `(DriverError, TransientError)` vs `Neo4jError` (DA-20) | [47](#47-graphrag-hardening-drivererror-transienterror-vs-neo4jerror-da-20) |
+| 48 | Multi-agent: supervisor → sap/saas/generic (sem LLM) (DA-21) | [48](#48-multi-agent-supervisor--sapsaasgeneric-sem-llm-da-21) |
+| 49 | Event Mesh via webhook CloudEvents → `run_diagnosis()` (DA-22) | [49](#49-event-mesh-via-webhook-cloudevents--run_diagnosis-da-22) |
+| 50 | Deploy SAP BTP Kyma Runtime (DA-23) | [50](#50-deploy-sap-btp-kyma-runtime-da-23) |
+| 51 | Evidence/Trust Layer v2 + threshold RAG pós-reranker (DA-24) | [51](#51-evidencetrust-layer-v2--threshold-rag-pós-reranker-da-24) |
+| 52 | AI Gateway v1: policy + circuit breaker + budget (DA-25) | [52](#52-ai-gateway-v1-policy--circuit-breaker--budget-da-25) |
+| 53 | Capability Registry FAIL-CLOSED (DA-26) | [53](#53-capability-registry-fail-closed-da-26) |
+| 54 | Escala calibrada por sigmoid para o rerank score | [54](#54-escala-calibrada-por-sigmoid-para-o-rerank-score) |
+| 55 | Soberania de dados por origin real, fail-closed | [55](#55-soberania-de-dados-por-origin-real-fail-closed) |
+| 56 | Evidence/Trust Layer determinística (DA-14) | [56](#56-evidencetrust-layer-determinística-da-14) |
+| 57 | `is_grounded` via evidence_strength (nunca autoavaliação LLM) (DA-15) | [57](#57-is_grounded-via-evidence_strength-nunca-autoavaliação-llm-da-15) |
+| 58 | Fallback para reference_library quando evidência fraca (DA-16) | [58](#58-fallback-para-reference_library-quando-evidência-fraca-da-16) |
+| 59 | Auth X-API-Key obrigatória em `/diagnose` e `/a2a` (DA-17) | [59](#59-auth-x-api-key-obrigatória-em-diagnose-e-a2a-da-17) |
+| 60 | Servidor MCP (capability catalog) (DA-18) | [60](#60-servidor-mcp-capability-catalog-da-18) |
+| 61 | Taxonomia de erros SAP com TTL/RDFLib (SKOS para Rule Engine) | [61](#61-taxonomia-de-erros-sap-com-ttl-rdflib-skos-para-rule-engine-da-61) |
+| 62 | Neo4j loader para SKOS taxonomy import | [53](#53-neo4j-loader-para-skos-taxonomy-import-da-62) |
+
 Registro dos problemas reais encontrados durante o desenvolvimento e
 como foram resolvidos — processo de engenharia, não só o resultado
 final.
@@ -78,6 +135,7 @@ final.
 | 59 | [50](#50-conectores-multi-vendor-fluxo-completo-padrão-comum-e-documentação-da-59) | Conectores multi-vendor: fluxo completo, padrão comum, checklist de 8 superfícies ao adicionar conector, documento consolidado `/docs/CONNECTORS.md` |
 | 60 | [51](#51-criptografia-em-repouso-de-evidence_json-com-fernet-da-60) | Criptografia em repouso de `evidence_json` com Fernet (`LLM_CREDENTIALS_MASTER_KEY`) + migration idempotente `009_encrypt_evidence_json.py` |
 | 61 | [52](#52-taxonomia-de-erros-sap-com-ttl-rdflib-da-61) | Taxonomia de erros SAP com TTL/RDFLib (SKOS) para Rule Engine: carregamento dinâmico vs hardcoded, zero breaking changes (DA-61 Fase 1) |
+| 62 | [53](#53-neo4j-loader-para-skos-taxonomy-import-da-62) | Neo4j loader para SKOS taxonomy import (idempotent upsert, Cypher queries) |
 
 ---
 

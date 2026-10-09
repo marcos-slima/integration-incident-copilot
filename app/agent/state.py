@@ -86,8 +86,15 @@ class CopilotState(TypedDict, total=False):
     incident_id: str
     connector_data: ConnectorResult | None
     retrieved_context: list[dict]
+    ontology_candidates: dict
     graph_history: list
     diagnosis: dict
+    hitl_request: dict
+    hitl_response: dict
+    confidence_adjustment: float
+    risk_level: str
+    risk_confidence: float
+    risk_factors: list[str]
     web_search_results: list[dict]
     report_markdown: str
     debug: bool

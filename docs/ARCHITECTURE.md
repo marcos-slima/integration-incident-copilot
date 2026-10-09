@@ -123,6 +123,9 @@ flowchart TD
     saas_diagnose["saas_diagnose<br/>rule engine; senao LLM via gateway<br/>+ guardrails + evidencia"]
     generic_diagnose["generic_diagnose<br/>rule engine; senao LLM via gateway<br/>+ guardrails + evidencia"]
     report["report<br/>relatorio Markdown"]
+    ontology_enrich["ontology_enrich<br/>SKOS/rdflib: upper categories + next steps<br/>(independente de GraphRAG)"]
+    hitl_review["hitl_review<br/>pause para revisao humana se confianca < 0.7<br/>(DA-61 Phase 6)"]
+    risk_assessment["risk_assessment<br/>avalia risk/confidence antes do report<br/>(HITL feedback + ontology candidates)"]
     fim(["DiagnosisResponse<br/>+ escalation (DA-44)<br/>+ record_incident"])
     inicio --> supervisor
     connector --> retrieve
@@ -148,6 +151,9 @@ flowchart TD
     saas_diagnose["saas_diagnose<br/>rule engine; senao LLM via gateway<br/>+ guardrails + evidencia"]
     generic_diagnose["generic_diagnose<br/>rule engine; senao LLM via gateway<br/>+ guardrails + evidencia"]
     report["report<br/>relatorio Markdown"]
+    ontology_enrich["ontology_enrich<br/>SKOS/rdflib: upper categories + next steps<br/>(independente de GraphRAG)"]
+    hitl_review["hitl_review<br/>pause para revisao humana se confianca < 0.7<br/>(DA-61 Phase 6)"]
+    risk_assessment["risk_assessment<br/>avalia risk/confidence antes do report<br/>(HITL feedback + ontology candidates)"]
     graph_enrich["graph_enrich<br/>historico Neo4j<br/>(so verificado vira fato)"]
     graph_write["graph_write<br/>grava hipotese no Neo4j<br/>(descricao redigida)"]
     fim(["DiagnosisResponse<br/>+ escalation (DA-44)<br/>+ record_incident"])
@@ -159,7 +165,10 @@ flowchart TD
     graph_enrich -.->|"sap"| sap_diagnose
     graph_write --> report
     report --> fim
+    retrieve -.->|"generic"| generic_diagnose
     retrieve --> graph_enrich
+    retrieve -.->|"saas (default)"| saas_diagnose
+    retrieve -.->|"sap"| sap_diagnose
     saas_diagnose --> graph_write
     sap_diagnose --> graph_write
     supervisor --> connector
@@ -221,7 +230,13 @@ flowchart LR
         gw["graph_write"] --> n4j[("Neo4j: efeito colateral,<br/>nao escreve no estado")]
     end
     morto["web_search_results<br/>(nenhum no do grafo escreve)"]
+    ont["ontology_enrich"] --> s7["ontology_candidates"]
+    hitl["hitl_review"] --> s8["hitl_request, hitl_response, confidence_adjustment"]
+    risk["risk_assessment"] --> s9["risk_level, risk_confidence, risk_factors"]
     entrada --> nos
+    ont --> s7
+    hitl --> s8
+    risk --> s9
 ```
 
 **Memoria, por camada:**

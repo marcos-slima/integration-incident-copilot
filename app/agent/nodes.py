@@ -47,6 +47,14 @@ from app.rag.graph_store import (
     upsert_incident_graph,
 )
 from app.rag.retriever import retrieve
+
+try:
+    from app.ontology.enrichment import get_upper_categories_from_category
+    from app.rag.ontology_aware_retriever import retrieve_hybrid_ontology_aware
+except (ImportError, ModuleNotFoundError):
+    get_upper_categories_from_category = None
+    retrieve_hybrid_ontology_aware = None
+
 from app.redaction import redact_pii_deep, redact_pii_text
 
 # DA-57: a fonte de busca web aprovada por `interface_type` deixou de ser
@@ -146,7 +154,31 @@ def _effective_query(state: CopilotState) -> str:
 
 @observe_span(name="retrieve")
 def retrieve_node(state: CopilotState) -> CopilotState:
-    hits = retrieve(_effective_query(state), target="incidents", top_k=3)
+    query = _effective_query(state)
+
+    if settings.ontology_enrichment_enabled and get_upper_categories_from_category is not None:
+        try:
+            category = state.get("connector_data", {}).get("error_code")
+            if category:
+                upper_cats = get_upper_categories_from_category(category)
+                if upper_cats:
+                    ontology_category = upper_cats[0]
+                else:
+                    ontology_category = None
+            else:
+                ontology_category = None
+        except (FileNotFoundError, ValueError):
+            ontology_category = None
+
+        if ontology_category and retrieve_hybrid_ontology_aware is not None:
+            hits = retrieve_hybrid_ontology_aware(
+                query, target="incidents", top_k=3, ontology_category=ontology_category
+            )
+        else:
+            hits = retrieve(query, target="incidents", top_k=3)
+    else:
+        hits = retrieve(query, target="incidents", top_k=3)
+
     return {"retrieved_context": hits}
 
 
@@ -1379,122 +1411,3 @@ def report_node(state: CopilotState) -> CopilotState:
 {supporting_md}
 """
     return {"report_markdown": report}
-
-
-def hitl_review_node(state: CopilotState) -> CopilotState:
-    """Node to pause and request human review when confidence is low.
-
-    Decision logic:
-    1. Check if ONTOLOGY_ENRICHMENT_ENABLED and confidence < HITL_CONFIDENCE_THRESHOLD
-    2. Build review payload from state
-    3. *In production*, this would trigger an external review workflow (email, UI, API)
-    4. For now, simulate review with default values (can be overridden by tests)
-
-    Args:
-        state: Current CopilotState
-
-    Returns:
-        CopilotState with hitl_request and hitl_response fields
-    """
-    HITL_CONFIDENCE_THRESHOLD = 0.7
-
-    # Skip HITL if disabled or confidence is sufficient
-    if not settings.ontology_enrichment_enabled:
-        _logger.debug("HITL disabled, skipping review")
-        return state
-
-    if state.get("confidence") is None:
-        _logger.debug("No confidence score available, skipping HITL")
-        return state
-
-    if state["confidence"] >= HITL_CONFIDENCE_THRESHOLD:
-        _logger.debug("Confidence %.2f >= threshold, skipping HITL", state["confidence"])
-        return state
-
-    # Build review request
-    hitl_request = {
-        "incident_id": state.get("incident_id", "unknown"),
-        "summary": state.get("summary", "")[:500],
-        "current_confidence": state["confidence"],
-        "ontology_candidates": state.get("ontology_candidates", {}),
-        "diagnostic_hypothesis": state.get("diagnostic_hypothesis", ""),
-    }
-
-    # Simulate human review
-    hitl_response = {
-        "reviewed": True,
-        "confidence_adjustment": -0.2,
-        "corrected_categories": [],
-        "comments": "Low confidence diagnostic, using fallback path",
-        "status": "approved",
-    }
-
-    state["hitl_request"] = hitl_request
-    state["hitl_response"] = hitl_response
-    state["confidence_adjustment"] = hitl_response["confidence_adjustment"]
-
-    return state
-
-
-HITL_CONFIDENCE_THRESHOLD = 0.7
-
-
-def risk_assessment_node(state: CopilotState) -> CopilotState:
-    """Avalia risco do diagnóstico com base em HITL feedback e ontologia.
-
-    DA-61 Fase 6: risk assessment como gate final antes de emitir relatório.
-    Usa:
-    - HITL review (se presente): confiança ajustada, comments, status
-    - Ontology candidates: concordância entre categorias SKOS
-
-    Limites empíricos:
-    - risk_threshold = 0.7: abaixo disso, risk=high (requer humano)
-    - risk_medium_threshold = 0.85: entre 0.7 e 0.85 → risk=medium
-
-    Retorna state atualizado com:
-    - risk_level: "low" | "medium" | "high"
-    - risk_factors: list[str] de justificativas
-    - risk_confidence: confidence ajustado (float)
-    """
-    risk_factors = []
-    risk_confidence = state.get("confidence", 1.0)
-
-    # Ajustar confiança com hitl_correction se disponível
-    hitl_response = state.get("hitl_response")
-    if hitl_response:
-        adjustment = hitl_response.get("confidence_adjustment", 0.0)
-        risk_confidence = max(0.0, min(1.0, risk_confidence + adjustment))
-        state["risk_confidence"] = risk_confidence
-
-        if hitl_response.get("status") == "rejected":
-            risk_factors.append("HITL review rejected diagnostic")
-        if hitl_response.get("corrected_categories"):
-            risk_factors.append("HITL corrected categories")
-
-    # Ontology candidates como indicador adicional
-    ontology_candidates = state.get("ontology_candidates", {})
-    if ontology_candidates:
-        candidate_count = len(ontology_candidates)
-        if candidate_count > 1:
-            risk_factors.append(f"{candidate_count} ontology candidates present")
-        elif candidate_count == 1:
-            risk_factors.append("Single ontology candidate, low ambiguity")
-
-    # Avaliar risco baseado na confiança ajustada
-    if risk_confidence >= HITL_CONFIDENCE_THRESHOLD + 0.15:
-        state["risk_level"] = "low"
-    elif risk_confidence >= HITL_CONFIDENCE_THRESHOLD:
-        state["risk_level"] = "medium"
-    else:
-        state["risk_level"] = "high"
-
-    state["risk_factors"] = risk_factors
-
-    _logger.debug(
-        "risk_assessment_node: risk_level=%s, confidence=%.2f, factors=%s",
-        state["risk_level"],
-        risk_confidence,
-        risk_factors,
-    )
-
-    return state

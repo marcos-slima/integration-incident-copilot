@@ -112,6 +112,22 @@ def _extract_category(g: Graph, concept: URIRef) -> str:
         "http403forbidden": "auth_forbidden",
         "connectionrefused": "network_connection_refused",
         "http429toomanyrequests": "rate_limit_exceeded",
+        "sapmateriallock": "sap_material_lock",
+        "sappricingconditionmissing": "sap_pricing_condition_missing",
+        "sapidocstatus51": "sap_idoc_status_51",
+        "sapidocstatus26": "sap_idoc_status_26",
+        "http503unavailable": "http_503_unavailable",
+        "cpi_mapping_error": "cpi_mapping_error",
+        "ssl_certificate_expired": "ssl_certificate_expired",
+        "rfc_destination_error": "rfc_destination_error",
+        "duplicate_document": "duplicate_document",
+        "sap_idoc_multiple_objects": "sap_idoc_multiple_objects",
+        "sap_idoc_port_partner": "sap_idoc_port_partner",
+        "sap_badi_exception": "sap_badi_exception",
+        "sap_bapi_failure": "sap_bapi_failure",
+        "sap_serial_number_duplicate": "sap_serial_number_duplicate",
+        "sap_sd_credit_block": "sap_sd_credit_block",
+        "sapmdgmdilock": "sap_mdg_mdi_lock",
     }
     return category_map.get(base, base)
 

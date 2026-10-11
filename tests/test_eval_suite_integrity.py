@@ -170,3 +170,43 @@ def test_assert_nao_pode_ter_confianca_como_unica_afirmacao(config, indice, caso
             f"para caso de qualidade, adicione uma segunda verificacao sobre "
             f"conteudo ou modo de falha."
         )
+
+
+_RETURN = re.compile(r"\breturn\b")
+
+
+@pytest.mark.parametrize(
+    ("config", "indice", "caso"),
+    CASOS,
+    ids=[f"{c}-{i}" for c, i, _ in CASOS],
+)
+def test_assert_javascript_multilinha_exige_return(config, indice, caso):
+    """Assert javascript MULTI-LINHA vira CORPO de funcao no promptfoo
+    (`new Function("output","context","process", body)`), SEM return
+    implicito: sem `return` o resultado e' `undefined` e o caso SEMPRE
+    falha ("Custom function must return a boolean... Got type undefined"),
+    independentemente do modelo. Ja' um bloco de UMA linha recebe wrap
+    automatico e NAO pode ter `return` (viraria SyntaxError: 'return'
+    outside function).
+
+    Defeito real medido em 2026-10-11: o caso de guardrail do
+    promptfooconfig.yaml reprovava nos QUATRO modelos locais ao mesmo
+    tempo por estar sem `return`. O conhecimento ja' estava no comentario
+    do promptfooconfig.compare.yaml, mas o fix nunca chegou ao config
+    principal - este teste impede que volte em qualquer config."""
+    for assert_ in caso.get("assert") or []:
+        if assert_.get("type") != "javascript":
+            continue
+        valor = str(assert_.get("value", ""))
+        if "\n" in valor:
+            assert _RETURN.search(valor), (
+                f"{config} caso[{indice}]: assert javascript multi-linha sem "
+                f"`return` vira funcao que devolve undefined e o caso SEMPRE "
+                f"falha, em qualquer modelo. Adicione `return`."
+            )
+        else:
+            assert not _RETURN.search(valor), (
+                f"{config} caso[{indice}]: assert javascript de UMA linha com "
+                f"`return` recebe wrap automatico e vira SyntaxError. Remova o "
+                f"`return` (deixe como expressao)."
+            )

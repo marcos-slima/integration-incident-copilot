@@ -118,6 +118,13 @@ def is_loopback_origin(origin: str) -> bool:
     DA-43 (que so restringe origin REMOTA). Nao confundir "local" com
     "confiavel": o que se evita aqui e o dado sair da maquina, nao a
     qualidade do modelo.
+
+    "host.docker.internal" e o alias que Docker composes expoe dentro
+    de containers apontando para o host do container. Usado por esta
+    repo para OLLAMA_HOST quando o LLM roda fora (host nativo, ROCm)
+    e o app roda dentro do compose. Para a policy, equivale a loopback:
+    o tráfego continua dentro da maquina do operador, mesmo passando
+    pela interface de bridge do Docker.
     """
     if not origin:
         return False
@@ -130,4 +137,10 @@ def is_loopback_origin(origin: str) -> bool:
     # rotas (DA-45). "0.0.0.0" aparece como *alvo a rejeitar* (apontar rota
     # enterprise para 0.0.0.0 e' exatamente o que o gate recusa), nunca como
     # endereco de escuta. O bandit le "0.0.0.0" e nao ve o uso.
-    return host in {"localhost", "127.0.0.1", "::1", "0.0.0.0"}  # nosec B104
+    return host in {
+        "localhost",
+        "127.0.0.1",
+        "::1",
+        "0.0.0.0",  # nosec B104
+        "host.docker.internal",
+    }

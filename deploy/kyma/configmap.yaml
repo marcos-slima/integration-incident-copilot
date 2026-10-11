@@ -17,6 +17,12 @@ data:
   LLM_PROVIDER: "openai"
   LLM_FALLBACK_PROVIDER: "azure_openai"
   LLM_MODEL: "gpt-4o-mini"
+  # Excecao consciente ao modelo canonico (`qwen3.8:27b`, ver CLAUDE.md ->
+  # "Modelo canonico"): este deploy e cloud-by-design (LLM_PROVIDER=openai,
+  # sem Ollama no cluster, ver bloco acima), entao o default local nao se
+  # aplica. O gate deployed_model_evaluated AVISA que este modelo nao tem
+  # baseline medido (o promptfoo mediu o qwen3.8) - WARN esperado, nao
+  # regressao. Re-baselinar se este deploy passar a usar um modelo local.
   # Validacao 2026-10-07 (DEP-01): embeddings in-process (fastembed,
   # BAAI/bge-small-en-v1.5, ja embutido na imagem). O default do app e
   # "ollama" (nomic-embed-text), mas este ConfigMap assume que NAO ha

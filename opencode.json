@@ -1,12 +1,14 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "copilot-mcp": {
-      "type": "remote",
-      "url": "http://127.0.0.1:8000/mcp/",
-      "enabled": true,
-      "headers": {
-        "X-API-Key": "{env:API_KEY}"
+    "servers": {
+      "copilot-mcp": {
+        "type": "remote",
+        "url": "http://127.0.0.1:8000/mcp/",
+        "disabled": false,
+        "headers": {
+          "X-API-Key": "{env:API_KEY}"
+        }
       }
     }
   }

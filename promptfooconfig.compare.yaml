@@ -3,7 +3,7 @@
 # Credenciais e nomes de modelo vem do ambiente - nunca deste arquivo:
 #   GEMINI_API_KEY, GEMINI_MODEL  (chave em https://aistudio.google.com)
 #   GROQ_API_KEY,   GROQ_MODEL    (chave em https://console.groq.com)
-#   OLLAMA_MODEL          (OLLAMA,        default qwen3-coder-next:latest)
+#   OLLAMA_MODEL          (OLLAMA,        default qwen3.8:27b)
 #   OLLAMA_STRICT_MODEL   (OLLAMA_STRICT, default qwen3-strict:latest)
 # Uso:
 #   uv sync --extra openai

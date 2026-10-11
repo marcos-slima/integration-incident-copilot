@@ -68,7 +68,7 @@ services:
 (repita para `worker` se usar o perfil `async`). Suba e baixe os modelos dentro do container:
 ```bash
 docker compose --profile container-ollama up -d
-docker compose exec ollama ollama pull qwen3-coder-next:latest
+docker compose exec ollama ollama pull qwen3.8:27b
 docker compose exec ollama ollama pull nomic-embed-text
 ```
 O ingest da seção 6 roda no host e usa o `OLLAMA_HOST=http://127.0.0.1:11434` do `.env`, que alcança a porta publicada.

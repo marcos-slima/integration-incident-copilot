@@ -139,7 +139,7 @@ Resposta, resumida:
 
 - **Documentação interativa da API:** <http://127.0.0.1:8000/docs>.
 - **Incidentes em texto livre** (o que as regras não cobrem) precisam de LLM:
-  - local: `ollama pull qwen3-coder-next` e mantenha `LLM_PROVIDER=ollama`;
+  - local: `ollama pull qwen3.8:27b` e mantenha `LLM_PROVIDER=ollama`;
   - nuvem: `LLM_PROVIDER=openai` ou `azure_openai` com as credenciais, e
     libere a origem como na seção 6 do
     [guia de troubleshooting](docs/TROUBLESHOOTING.md).

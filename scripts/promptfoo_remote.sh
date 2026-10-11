@@ -9,7 +9,7 @@
 # Credenciais e nomes de modelo vem do ambiente - nunca deste arquivo:
 #   GEMINI_API_KEY, GEMINI_MODEL, GEMINI_BASE_URL (opcional)
 #   GROQ_API_KEY,   GROQ_MODEL,   GROQ_BASE_URL   (opcional)
-#   OLLAMA_MODEL,          (OLLAMA,        default qwen3-coder-next:latest)
+#   OLLAMA_MODEL,          (OLLAMA,        default qwen3.8:27b)
 #   OLLAMA_STRICT_MODEL,   (OLLAMA_STRICT, default qwen3-strict:latest)
 #   OLLAMA_HOST
 set -euo pipefail
@@ -42,7 +42,7 @@ case "$PROVIDER" in
         BASE_URL="${GROQ_BASE_URL:-https://api.groq.com/openai/v1}"
         ;;
     OLLAMA)
-        LLM_MODEL="${OLLAMA_MODEL:-qwen3-coder-next:latest}"
+        LLM_MODEL="${OLLAMA_MODEL:-qwen3.8:27b}"
         API_KEY=""
         BASE_URL=""
         ;;

@@ -64,7 +64,7 @@ reordenados por um cross-encoder. Termos técnicos exatos
 (`RFC_COMM_FAILURE`, `status 51`) pesam tanto quanto a semântica.
 
 **5. Diagnóstico (LLM com guardrails de código)** — o documento recuperado
-fundamenta o modelo (`qwen3-coder-next`, MoE 80B/3B ativos). A confiança é
+fundamenta o modelo (`qwen3.8:27b`). A confiança é
 ajustada deterministicamente em código, nunca no prompt: o teto é sempre
 `evidence_strength + 0.25`; identificador não reconhecido pelo conector
 (fallback) limita a 0.4; sem documento, conector ou regra, a 0.3; e um
@@ -183,7 +183,7 @@ principais, valores ilustrativos):
   "next_steps": ["Adicionar $filter e paginação ($top/$skip) na query", "..."],
   "matched_source": "odata_timeout_cpi.md",
   "evidence_strength": 0.83,
-  "llm_model": "qwen3-coder-next:latest",
+  "llm_model": "qwen3.8:27b",
   "prompt_version": "1.0.0",
   "prompt_digest": "sha256:...",
   "incident_id": "8f14e45f-ea...",

@@ -156,7 +156,7 @@ jobs:
         env:
           LLM_PROVIDER: ollama
           OLLAMA_HOST: http://localhost:11434
-          LLM_MODEL: qwen3-coder-next:latest
+          LLM_MODEL: qwen3.8:27b
 
       - name: Aguardar API responder /health
         run: |

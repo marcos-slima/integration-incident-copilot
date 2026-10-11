@@ -293,7 +293,21 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
 | DA-62 | Neo4j loader para SKOS taxonomy import (idempotent upsert, Cypher queries) | `app/ontology/neo4j_loader.py` |
 
 **DAs candidatas (sem implementação ainda):**
-- DA-31: SAP AI Agent Hub registration (MCP + A2A) — bloqueada: exige tenant Kyma
+- **DA-31 — SAP AI Agent Hub registration (MCP + A2A)** · bloqueada: exige tenant Kyma.
+  - **O que é.** Publicar o copiloto como agente no SAP AI Agent Hub, apontando para as
+    superfícies que já existem: o servidor MCP (Streamable HTTP em `/mcp`) e a camada
+    A2A (`GET /.well-known/agent-card.json` + JSON-RPC), para descoberta e orquestração
+    pelo hub da SAP.
+  - **Por que ainda não foi entregue.** O cadastro exige um tenant Kyma provisionado no
+    SAP BTP, indisponível no ambiente atual — sem ele não há onde registrar o AgentCard
+    nem o endpoint MCP.
+  - **O que já existe.** As duas superfícies locais (MCP e A2A) estão prontas e pertencem
+    a decisões próprias; a pendência é só a *registration* externa no hub. O número já é
+    citado em `app/a2a/task_manager.py` para os campos `kind`/`contextId` exigidos pelo
+    spec A2A 0.3.
+  - **Critério de entrada.** Tenant Kyma disponível → registrar o AgentCard e o endpoint
+    MCP no hub → então esta decisão ganha seção própria em
+    `docs/DECISOES_DE_ARQUITETURA.md`, linha no índice e no livro-razão, e sai desta lista.
 
 > A DA-32 (AMQP 1.0 via Solace Cloud) **já foi entregue** (`app/events/amqp_consumer.py`,
 > commit `67b78e8`). Ela ficou nesta lista até a DA-51 criar o gate

@@ -1,4 +1,4 @@
-description: "Avaliacao qwen3-coder-next:latest (producao) no diagnostico do SAP Integration Copilot (pipeline real: conector + RAG + guardrails)"
+description: "Avaliacao qwen3.8:27b (producao) no diagnostico do SAP Integration Copilot (pipeline real: conector + RAG + guardrails)"
 
 prompts:
   - file://prompts/case.txt
@@ -6,8 +6,8 @@ prompts:
 concurrency: 1
 
 providers:
-  - id: "exec:uv run python3 scripts/promptfoo_provider.py qwen3-coder-next:latest"
-    label: "qwen3-coder-next (producao atual)"
+  - id: "exec:uv run python3 scripts/promptfoo_provider.py qwen3.8:27b"
+    label: "qwen3.8 (producao atual)"
 
 # Validacao 2026-10-07 (M-21): `metadata.path` diz QUEM responde o caso no
 # pipeline atual - "rule_engine" (regra deterministica, DA-33; o LLM nem e

@@ -17,7 +17,12 @@ x-common-env: &common-env
   # Redis e opt-in (profile "async", ver servico abaixo) - vazio
   # por default: sem REDIS_URL, app/a2a/task_store.py cai no fallback
   # em memoria (§3.7: degradacao graciosamente).
-  REDIS_URL: ${REDIS_URL:-}
+  #
+  # Container: o Redis e o servico-irmao "redis" da rede do compose (mesmo
+  # principio de QDRANT_URL acima / CONTAINER_DATABASE_URL abaixo) - REDIS_URL
+  # no .env aponta p/ 127.0.0.1, so valido em modo NATIVO. Defina
+  # CONTAINER_REDIS_URL no .env (veja .env.example); vazio = herda REDIS_URL.
+  REDIS_URL: ${CONTAINER_REDIS_URL:-${REDIS_URL:-}}
   # Persistência de incidentes (Fase 1 Observabilidade Grafana)
   # Opt-in: vazio = sem PostgreSQL (padrão). Configure no .env para ativar.
   #
@@ -291,7 +296,13 @@ services:
       - ".venv/bin/rq"
       - "worker"
       - "--url"
-      - "${REDIS_URL:-REQUIRED_SET_IN_ENV_FOR_ASYNC_PROFILE}"
+      # Container: RQ tem que falar com o servico-irmao "redis" da rede do
+      # compose, NAO com 127.0.0.1 (loopback do proprio container, onde nao ha
+      # nada). MESMA estrategia de CONTAINER_DATABASE_URL (linha 31) e
+      # QDRANT_URL em x-common-env: REDIS_URL no .env vale s/ modo nativo;
+      # CONTAINER_REDIS_URL aponta para o servico. A-12: senha via
+      # REDIS_PASSWORD. Override: CONTAINER_REDIS_URL=redis://:SENHA@redis:6379/0
+      - "${CONTAINER_REDIS_URL:-redis://:${REDIS_PASSWORD:-}@redis:6379/0}"
       - "diagnosis"
     extra_hosts:
       - "host.docker.internal:host-gateway"

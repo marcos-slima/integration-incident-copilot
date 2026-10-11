@@ -359,6 +359,27 @@ class TestPromptfooComparison:
         payload = [{"pass": True}, {"pass": False}]
         assert normalize_promptfoo_results(payload) == {"case_0": True, "case_1": False}
 
+    def test_normaliza_saida_real_do_promptfoo_success(self):
+        """A saida real de `promptfoo eval -o resultados.json` usa `success`, nao `pass`.
+
+        Achado ao gravar o baseline do qwen3.8: a receita documentada
+        (`npx promptfoo eval -o resultados.json` -> `--write-promptfoo-baseline`)
+        quebrava com "sem campo 'pass'", deixando `llm_baseline` impossivel de fechar.
+        """
+        payload = {
+            "results": {
+                "results": [
+                    {"success": True, "testCase": {"description": "caso A"}},
+                    {"success": False, "testCase": {"description": "caso B"}},
+                ]
+            }
+        }
+        assert normalize_promptfoo_results(payload) == {"caso A": True, "caso B": False}
+
+    def test_usa_grading_result_como_fallback(self):
+        payload = [{"gradingResult": {"pass": True}, "testCase": {"description": "caso C"}}]
+        assert normalize_promptfoo_results(payload) == {"caso C": True}
+
     def test_formato_nao_reconhecido_falha(self):
         with pytest.raises(ValueError, match="nao reconhecido"):
             normalize_promptfoo_results({"foo": 1})

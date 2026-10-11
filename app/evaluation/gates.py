@@ -1554,6 +1554,30 @@ def run_all(root: Path = REPO_ROOT, thresholds: Thresholds = DEFAULT_THRESHOLDS)
     return findings
 
 
+def _promptfoo_entry_pass(entry: Any) -> bool | None:
+    """Extrai o veredito de UMA entrada do promptfoo, em qualquer dos formatos.
+
+    O `npx promptfoo eval -c ... -o resultados.json` grava linhas do tipo
+    `EvaluateResult`, que tem `success` e `gradingResult.pass` — mas NAO tem
+    `pass` no topo. O `pass` existe no `EvaluateTableOutput`, um formato
+    achatado diferente. Exigir so' `pass` (como antes) quebrava a gravacao do
+    baseline com a saida real do promptfoo (achado ao medir o qwen3.8: o gate
+    documentado falhava com "sem campo 'pass'", tornando `llm_baseline`
+    impossivel de fechar). Aceita os tres, em ordem de autoridade:
+    `pass` -> `success` -> `gradingResult.pass`. `None` quando nenhum existe.
+    """
+    if not isinstance(entry, dict):
+        return None
+    if "pass" in entry:
+        return bool(entry["pass"])
+    if "success" in entry:
+        return bool(entry["success"])
+    grading = entry.get("gradingResult")
+    if isinstance(grading, dict) and "pass" in grading:
+        return bool(grading["pass"])
+    return None
+
+
 def normalize_promptfoo_results(payload: Any) -> dict[str, bool]:
     """Reduz a saida do promptfoo a {nome_do_caso: passou}. Tolera o envelope de --output.
 
@@ -1570,8 +1594,9 @@ def normalize_promptfoo_results(payload: Any) -> dict[str, bool]:
 
     cases: dict[str, bool] = {}
     for index, entry in enumerate(payload):
-        if not isinstance(entry, dict) or "pass" not in entry:
-            raise ValueError(f"entrada #{index} do promptfoo sem campo 'pass'")
+        passed = _promptfoo_entry_pass(entry)
+        if passed is None:
+            raise ValueError(f"entrada #{index} do promptfoo sem campo 'pass'/'success'")
         test_case = entry.get("testCase") or {}
         name = (
             test_case.get("description")
@@ -1581,7 +1606,7 @@ def normalize_promptfoo_results(payload: Any) -> dict[str, bool]:
         )
         if name in cases:
             name = f"{name}#{index}"
-        cases[str(name)] = bool(entry["pass"])
+        cases[str(name)] = passed
     return cases
 
 

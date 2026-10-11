@@ -1,0 +1,18 @@
+{
+  "generated_at": null,
+  "model": "qwen3.8:27b",
+  "cases": {
+    "401 sem conector": true,
+    "401 com conector OData": true,
+    "IDoc 51 com conector RFC (caso que ja quebrou 2x manualmente)": true,
+    "RFC connection refused com conector": true,
+    "OData timeout sem conector": true,
+    "IDoc 51 sem conector": true,
+    "RFC connection refused sem conector": true,
+    "Identificador desconhecido - guardrail de seguranca (nao deve ter alta confianca)": false,
+    "OData com conector em fallback (sem identifier) - nao pode usar o 500 do mock": true,
+    "OData timeout com identifier desconhecido - causa correta, confianca limitada": true,
+    "OData timeout com CPI-TIMEOUT-DEMO - documento e sistema convergem": false
+  },
+  "pass_rate": 0.8182
+}

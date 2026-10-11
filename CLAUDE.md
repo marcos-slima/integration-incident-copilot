@@ -447,7 +447,11 @@ A auditoria Q2 2026 (DATA-01) recomendou substituir hardcoded por taxonomia form
 3. Adicionar seção `### N. Título (DA-N)` em `docs/DECISOES_DE_ARQUITETURA.md` com problema/solução/limitações
    — o `(DA-N)` é obrigatório: sem ele a prosa existe mas é invisível para qualquer
    busca por número, que foi exatamente o que aconteceu com 15 seções. DAs entregues
-   na mesma mudança podem compartilhar a seção (`(DA-46/47/48)`)
+   na mesma mudança podem compartilhar a seção (`(DA-46/47/48)`). Se a DA criou
+   tabela/esquema, cite as migrations no arquivo `NOME_*.py` exato (ex.:
+   `005_create_system_contracts.py`), não só o número — número isolado quebra a
+   referência quando o arquivo se renomeia; o CI roda `alembic upgrade head` +
+   `alembic check` contra Postgres real no job `migrations_and_dashboards`.
 4. Acrescentar a linha `| DA-N | ... |` na tabela acima e a entrada no **índice** de `docs/DECISOES_DE_ARQUITETURA.md`
    (seção `## Índice`). Os dois gates reprovam o build se algum dos dois faltar
 5. Commitar com prefixo `feat(DA-N):` no commit message

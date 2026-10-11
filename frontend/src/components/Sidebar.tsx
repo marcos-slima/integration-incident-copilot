@@ -102,8 +102,8 @@ export function Sidebar({ view, setView, historyCount, username, onLogout }: Sid
       {/* Modelo ativo */}
       <div className="model-info">
         <div className="model-label">modelo ativo</div>
-        <div className="model-name">qwen3-coder-next</div>
-        <div className="model-meta">80B/3B · 262K ctx</div>
+        <div className="model-name">qwen3.8</div>
+        <div className="model-meta">27B · 17.7 GB</div>
       </div>
 
       {/* DA-54: sessão — quem está logado e saída */}

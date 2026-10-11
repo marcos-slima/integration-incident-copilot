@@ -132,6 +132,7 @@ def test_normalize_origin_descarta_credencial_do_userinfo():
     [
         ("http://localhost:11434", True),
         ("http://127.0.0.1:8000", True),
+        ("http://host.docker.internal:11434", True),
         ("https://api.openai.com", False),
         ("", False),
     ],

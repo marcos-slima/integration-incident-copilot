@@ -20,7 +20,7 @@ Portfólio da trilha SAP Architect → AI Architect (Marcos Lima).
 | API | FastAPI + Pydantic |
 | Orquestração | LangGraph (`app/agent/graph.py`) |
 | LLM | Ollama local (default) → OpenAI / Azure como fallback (DA-20/26) |
-| Modelo canônico | `qwen3-coder-next:latest` (MoE 80B/3B ativo, 262K ctx; 10/10 no promptfoo da Fase 12 — substituiu `qwen2.5-coder:32b`, ver DA-4/8 + Fase 12). **Ressalva (validação 2026-10-07, M-21):** 4 dos 11 casos atuais são resolvidos pelo rule engine e não medem o LLM (`metadata.path` no YAML), e o modelo reprovou o caso "queue manager" do compare — o placar precisa ser re-medido |
+| Modelo canônico | `qwen3.8:27b` (17B dense, 128k ctx) — default em `app/config.py`, `.env.example`, `docker-compose.yml` e no promptfoo (troca em 2026-10-11; o anterior, `qwen3-coder-next:latest`, segue registrado em DA-4/8 + DA-12 como histórico). **Ressalva (validação 2026-10-07, M-21):** casos resolvidos pelo rule engine não medem o LLM (`metadata.path` no YAML); baseline oficial gravado em `data/eval/promptfoo_baseline.json` (9/11 com `qwen3.8:27b`) e o placar precisa ser re-medido |
 | RAG | LangChain + Qdrant (hybrid dense+sparse BM25, fusão RRF) |
 | Reranker | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` (benchmark DA-29; não usar ms-marco-L6) |
 | GraphRAG | Neo4j (`app/rag/graph_store.py`), opt-in via `GRAPH_RAG_ENABLED=true` |

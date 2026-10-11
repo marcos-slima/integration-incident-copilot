@@ -87,9 +87,13 @@ tests:
     # com `confidence` como unica afirmacao.
     assert:
       - type: javascript
+        # Multi-linha vira CORPO de funcao no promptfoo (sem return
+        # implicito) -> exige `return`, senao o resultado e' undefined e o
+        # caso reprova em QUALQUER modelo. Ver comentario equivalente em
+        # promptfooconfig.compare.yaml e tests/test_eval_suite_integrity.py.
         value: |
           const o = JSON.parse(output);
-          o.matched_source === null && o.confidence < 0.6
+          return o.matched_source === null && o.confidence < 0.6;
 
   # --- Casos da validacao manual de 26/09/2026 (ambiente Docker + Ollama do host) ---
   # Resultado manual: 33% com causa raiz errada, construida sobre o "500"
@@ -111,10 +115,14 @@ tests:
       - type: javascript
         value: "const o = JSON.parse(output); o.confidence <= 0.4 && /timeout|tempo limite|filtro/i.test(o.probable_root_cause)"
 
-  # Resultado manual: 95%, causa especifica (sem $filter/$top, 60 s do adapter OData V2).
+  # DA-33: o Rule Engine responde antes do LLM para este identificador
+  # conhecido e devolve matched_source = "rule_engine:http_timeout" (nao o
+  # documento RAG). O assert aceita os dois, como os demais casos
+  # path=rule_engine. Ate 2026-10-11 ele exigia so 'odata_timeout_cpi.md' e
+  # reprovava sempre (medido: matched_source='rule_engine:http_timeout').
   - description: "OData timeout com CPI-TIMEOUT-DEMO - documento e sistema convergem"
     metadata: { path: "rule_engine" }
     vars: { description: "Chamada OData do CPI para o S/4HANA excede o tempo limite", interface_type: "odata", identifier: "CPI-TIMEOUT-DEMO" }
     assert:
       - type: javascript
-        value: "const o = JSON.parse(output); o.matched_source === 'odata_timeout_cpi.md' && o.confidence >= 0.8"
+        value: "const o = JSON.parse(output); ['odata_timeout_cpi.md','rule_engine:http_timeout'].includes(o.matched_source) && o.confidence >= 0.8"

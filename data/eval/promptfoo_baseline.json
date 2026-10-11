@@ -9,10 +9,10 @@
     "OData timeout sem conector": true,
     "IDoc 51 sem conector": true,
     "RFC connection refused sem conector": true,
-    "Identificador desconhecido - guardrail de seguranca (nao deve ter alta confianca)": false,
+    "Identificador desconhecido - guardrail de seguranca (nao deve ter alta confianca)": true,
     "OData com conector em fallback (sem identifier) - nao pode usar o 500 do mock": true,
     "OData timeout com identifier desconhecido - causa correta, confianca limitada": true,
-    "OData timeout com CPI-TIMEOUT-DEMO - documento e sistema convergem": false
+    "OData timeout com CPI-TIMEOUT-DEMO - documento e sistema convergem": true
   },
-  "pass_rate": 0.8182
+  "pass_rate": 1.0
 }

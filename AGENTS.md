@@ -20,7 +20,7 @@ Salesforce, Workday, Ariba, SuccessFactors, CAP, APIManagement, SAP PO/PI).
 |---|---|
 | API | FastAPI + Pydantic |
 | Orchestration | LangGraph (`app/agent/graph.py`) |
-| LLM | Ollama local (default) → OpenAI/Azure fallback. Canonical model `qwen3-coder-next:latest` (100k ctx); MoE 80B/3B active (DA-12, DA-4/8, DA-51 prompt_baseline) |
+| LLM | Ollama local (default) → OpenAI/Azure fallback. Canonical model `qwen3.8:27b` (17B dense, 128k ctx) from 2026-10-11 — default in `app/config.py`, `.env`, `docker-compose.yml` and the promptfoo config. `qwen3-coder-next:latest` (MoE 80B/3B) was the previous pick (DA-4/8, DA-12); re-baseline pending (DA-51) |
 | RAG | LangChain + Qdrant (hybrid dense+sparse BM25, RRF fusion) |
 | Reranker | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` (DA-29 benchmark) — **do not change** |
 | GraphRAG | Neo4j (`app/rag/graph_store.py`), opt-in `GRAPH_RAG_ENABLED=true` |

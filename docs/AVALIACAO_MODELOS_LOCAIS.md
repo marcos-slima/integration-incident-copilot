@@ -1,7 +1,7 @@
 # Avaliação empírica dos modelos locais e do ambiente OpenCode
 
-**Data:** 2026-10-11 · **Status:** concluída, com uma pendência de runtime
-(§7.2) e uma revisão de DA pendente (§6).
+**Data:** 2026-10-11 · **Status:** concluída — §7.2 resolvido (2026-10-12),
+revisão DA-8 concluída (2026-10-12).
 
 Este documento registra **método, processo e software** da avaliação que
 escolheu o modelo local padrão do OpenCode para este projeto e montou o
@@ -241,31 +241,26 @@ Trecho relevante do estado final:
 }
 ```
 
-### 7.2 Pendência aberta — como remover um modelo do runtime
+### 7.2 Resolvido — `disabled: true` por modelo (OpenCode V2)
 
-"Apenas documental, fora do runtime" ainda **não** é garantido pelo
-mecanismo de config. O que foi testado empiricamente, com `opencode models`:
+O mecanismo foi encontrado na fonte do OpenCode (commit `dev`): a chave
+`disabled: true` em um modelo da config inverte para `model.enabled = false`,
+excluindo-o de `Model.available` e do picker. Testado empiricamente:
 
-| Tentativa | Resultado |
-|---|---|
-| Remover a entrada do mapa `models` | O modelo **continua** listado (descoberto do Ollama instalado) |
-| `blacklist: [...]` no provider | Sem efeito na lista |
-| `whitelist: [...]` no provider | Em `--standalone` a lista ficou **vazia** — não é allowlist de modelos |
-| Inserir modelo fake no mapa | **Aparece** (adição funciona) |
-| Remover o fake | **Some** (remoção de entrada declarada funciona) |
-| `opencode models --standalone` | **Zero** modelos Ollama (o servidor privado não faz descoberta) |
+```bash
+# Config adicionada ao mapa ollama.models:
+"qwen3-coder:latest": { "disabled": true },
+"qwen3.8:27b": { "disabled": true }
 
-Interpretação observada: a lista do runtime é a **união** das entradas
-declaradas no mapa `models` com os modelos **auto-descobertos** do Ollama
-local (filtrados por compatibilidade — o `tev1` instalado não aparece). O
-schema V2 não tem campo `enabled` por modelo. Para tornar os dois modelos
-não-opções de runtime, restam dois caminhos:
+opencode reload
+opencode models | grep ollama
+# → apenas qwen3.6 e qwen3-coder-next (os dois removidos)
+```
 
-1. achar o mecanismo correto do OpenCode (não confirmado nesta avaliação); ou
-2. `ollama rm qwen3-coder:latest qwen3.8:27b` — garantido, libera ~35 GB,
-   mas exige re-pull para restaurar.
-
-**Decisão pendente do usuário.**
+**Decisão:** os dois modelos seguem instalados no Ollama (recuperáveis a
+qualquer momento tirando o `disabled` da config), mas não são mais opção de
+runtime do OpenCode. A config está em `~/.config/opencode/opencode.jsonc`
+(fora do git).
 
 ---
 

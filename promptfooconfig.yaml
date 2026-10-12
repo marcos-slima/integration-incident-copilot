@@ -126,3 +126,66 @@ tests:
     assert:
       - type: javascript
         value: "const o = JSON.parse(output); ['odata_timeout_cpi.md','rule_engine:http_timeout'].includes(o.matched_source) && o.confidence >= 0.8"
+
+  # --- Casos "quase-iguais" (2026-10-11) - endurecer a discriminacao ---
+  # A suite tinha UM unico caso com poder discriminativo (o guardrail de
+  # abstencao); os outros 5 eram resolvidos por TODOS os 4 modelos locais
+  # medidos. Estes casos usam pares que os PROPRIOS documentos distinguem
+  # (ex.: "connection refused" e' imediato; pool de gateway esgotado conecta
+  # e estoura ~60s). A descricao evoca os DOIS sintomas e so' o detalhe
+  # decide - por isso medem raciocinio sobre o documento recuperado, nao eco
+  # de palavra-chave (ver tests/test_eval_suite_integrity.py). Todos com
+  # interface_type=none para garantir path=llm: nenhum texto casa
+  # KNOWN_ERROR_RULES (DA-33).
+  #
+  # Medicao 2026-10-11 (qwen3.8:27b, qwen3-coder-next, qwen3.6:35b-a3b e
+  # qwen3-coder): os QUATRO modelos fizeram 6/6 nestes casos. Eles endurecem
+  # a suite (pegam confusao entre docs quase-iguais e regressao de abstenção)
+  # mas NAO discriminam estes modelos: o gargalo e' a recuperacao (os docs sao
+  # keyword-rich e o reranker acha o certo), nao a decisao do LLM.
+  - description: "RFC pool esgotado no fechamento - nao e connection refused"
+    metadata: { path: "llm" }
+    vars: { description: "Chamada RFC sincrona via destino SM59 falha apos cerca de 60 segundos com SYSTEM_FAILURE durante o fechamento de mes; nao ha falha imediata de conexao e o destino responde a outros testes.", interface_type: "none", identifier: "none" }
+    assert:
+      - type: javascript
+        value: "JSON.parse(output).matched_source === 'rfc_gateway_pool_timeout.md'"
+
+  - description: "OData mudou de contrato apos patch - nao e timeout"
+    metadata: { path: "llm" }
+    vars: { description: "Depois do ultimo patch do S/4HANA o consumidor OData passou a receber 404 ao ler uma propriedade; o servico responde, mas o campo nao existe mais no $metadata.", interface_type: "none", identifier: "none" }
+    assert:
+      - type: javascript
+        value: "JSON.parse(output).matched_source === 'odata_contract_drift.md'"
+
+  - description: "API Management barra por volume e proxy de 55s - nao e 401 do SAP"
+    metadata: { path: "llm" }
+    vars: { description: "O gateway de API Management rejeita chamadas quando o volume sobe e outras cortam perto de 55 segundos; o backend S/4HANA responde normalmente quando chamado direto.", interface_type: "none", identifier: "none" }
+    assert:
+      - type: javascript
+        value: "JSON.parse(output).matched_source === 'apim_gateway_auth_throttle.md'"
+
+  - description: "Mensagem presa no PO sem avancar - nao e duplicidade nem ordem"
+    metadata: { path: "llm" }
+    vars: { description: "Uma mensagem no monitor do SAP PO/PI aparece como em processamento e nao avanca, sem ser concluida com sucesso; o time suspeita de lentidao do backend SAP.", interface_type: "none", identifier: "none" }
+    assert:
+      - type: javascript
+        value: "JSON.parse(output).matched_source === 'po_pi_stuck_message.md'"
+
+  - description: "Case Salesforce - falha silenciosa no middleware, nao e o ITSM"
+    metadata: { path: "llm" }
+    vars: { description: "Um Case no Salesforce relata que um pedido criado no CRM nao aparece no SAP; o envio do Salesforce ao middleware teve sucesso e nao ha erro visivel no lado CRM.", interface_type: "none", identifier: "none" }
+    assert:
+      - type: javascript
+        value: "JSON.parse(output).matched_source === 'salesforce_case_sap_sync_failure.md'"
+
+  # Segundo guardrail: generaliza a abstencao (um caso sozinho pode ser sorte).
+  # Medido 2026-10-11: os 4 modelos abstêm (matched_source=null) - nao separa
+  # os modelos, mas trava o comportamento contra regressao.
+  - description: "Guardrail 2 - identificador desconhecido plausivel (nao deve anexar doc)"
+    metadata: { path: "llm" }
+    vars: { description: "Nao sei dizer o que esta errado, so que a integracao parou de funcionar ontem.", interface_type: "none", identifier: "INT-2026-Q3-XYZ" }
+    assert:
+      - type: javascript
+        value: |
+          const o = JSON.parse(output);
+          return o.matched_source === null && o.confidence < 0.6;

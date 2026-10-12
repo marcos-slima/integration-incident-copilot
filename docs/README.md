@@ -65,6 +65,7 @@ atual está no código, no `ARCHITECTURE.md` e nos testes.
 | [`TUTORIAL_ACESSIBILIDADE_MULTIVENDOR.md`](TUTORIAL_ACESSIBILIDADE_MULTIVENDOR.md) | LLM Gateway e conector multi-vendor, passo a passo (Fase 8) |
 | [`TUTORIAL_FASE9_MULTIVENDOR_GRAPHRAG_A2A.md`](TUTORIAL_FASE9_MULTIVENDOR_GRAPHRAG_A2A.md) | Complementar ao anterior: GraphRAG e A2A (Fase 9) |
 | [`TCO_SAP_AI_CORE_VS_SELF_HOSTED.md`](TCO_SAP_AI_CORE_VS_SELF_HOSTED.md) | SAP AI Core vs. IA local sob medida — comparação de custo para conversa com cliente |
+| [`AVALIACAO_MODELOS_LOCAIS.md`](AVALIACAO_MODELOS_LOCAIS.md) | Avaliação empírica dos modelos locais (harness de refactoring) e ajuste do ambiente OpenCode — método, resultados e proveniência (2026-10-11) |
 
 ---
 

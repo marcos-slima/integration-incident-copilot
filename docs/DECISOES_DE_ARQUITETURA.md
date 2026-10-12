@@ -247,6 +247,17 @@ critério formal sempre que surge um candidato relevante, com a mesma
 metodologia e o mesmo pipeline real usados desde a primeira vez,
 gerando decisões comparáveis ao longo do tempo.
 
+> **Revisão (2026-10-12):** a falha de JSON estruturado foi investigada na
+> fonte e identificada como bug de runtime do Ollama (#10929), corrigido no
+> v0.34.4 (commit `5a0ff311`, 2026-09-23). O placar empírico desta sessão
+> rodou no **0.40.2** (já contém a correção) e o `qwen3.6:35b-a3b` não
+> apresentou nenhuma falha de JSON estruturado em 72 execuções (18/18).
+> A decisão original — manter o modelo atual quando há falha determinística
+> no caso crítico — **não é revogada**; a evidência apenas mostra que o
+> sintoma era do runtime, não do modelo. O `qwen3.6` segue como default do
+> OpenCode (melhor placar em todos os eixos), mas o modelo canônico do app
+> (`app/config.py`) permanece `qwen3.8:27b`.
+
 ### 9. Achados de code review: estado global, parsing frágil, limites ausentes (nota informal — sem DA)
 
 Uma revisão de código externa identificou 10 pontos; a triagem separou

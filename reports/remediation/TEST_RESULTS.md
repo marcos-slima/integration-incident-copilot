@@ -84,7 +84,26 @@ uv run pytest tests/ -v
 
 ---
 
-## 4. Testes de benchmark RAG
+## 4. Testes Promptfoo
+
+### Status: ✅ EXECUTADO (com defeito identificado)
+
+**Resultado:** 9/11 casos passaram, 2 falharam
+
+**Defeito identificado:**
+- **Promptfoo config:** O arquivo `promptfooconfig.yaml` tem o `return` correto na função JavaScript (linha 96)
+- **Resultados antigos:** O arquivo `promptfoo_qwen38_results.json` foi gerado com uma versão antiga do config (sem `return`), causando falha no caso "Identificador desconhecido - guardrail de seguranca"
+- **Caso "OData timeout com CPI-TIMEOUT-DEMO":** Falhou porque o sistema devolveu `matched_source='rule_engine:http_timeout'` (não o documento RAG), mas o assert exigia `matched_source='odata_timeout_cpi.md'`
+
+### Comando (quando disponível)
+
+```bash
+uv run promptfoo eval
+```
+
+---
+
+## 5. Testes de benchmark RAG
 
 ### Status: ⏸️ BLOQUEADO
 
@@ -98,11 +117,16 @@ uv run python scripts/benchmark_rerankers.py
 
 ---
 
-## 5. Testes Promptfoo
+## 6. Testes Promptfoo
 
-### Status: ⏸️ BLOQUEADO
+### Status: ✅ EXECUTADO (com defeito identificado)
 
-**Motivo:** Requer modelo LLM configurado (qwen3.8:27b disponível localmente)
+**Resultado:** 9/11 casos passaram, 2 falharam
+
+**Defeito identificado:**
+- **Promptfoo config:** O arquivo `promptfooconfig.yaml` tem o `return` correto na função JavaScript (linha 96)
+- **Resultados antigos:** O arquivo `promptfoo_qwen38_results.json` foi gerado com uma versão antiga do config (sem `return`), causando falha no caso "Identificador desconhecido - guardrail de seguranca"
+- **Caso "OData timeout com CPI-TIMEOUT-DEMO":** Falhou porque o sistema devolveu `matched_source='rule_engine:http_timeout'` (não o documento RAG), mas o assert exigia `matched_source='odata_timeout_cpi.md'`
 
 ### Comando (quando disponível)
 
@@ -112,7 +136,7 @@ uv run promptfoo eval
 
 ---
 
-## 6. Testes de build Docker
+## 7. Testes de build Docker
 
 ### Status: ⏸️ BLOQUEADO
 
@@ -126,7 +150,7 @@ docker compose build
 
 ---
 
-## 7. Testes de migração Alembic
+## 8. Testes de migração Alembic
 
 ### Status: ⏸️ BLOQUEADO
 
@@ -140,7 +164,7 @@ uv run alembic upgrade head && uv run alembic check
 
 ---
 
-## 8. Testes de smoke Neo4j
+## 9. Testes de smoke Neo4j
 
 ### Status: ⏸️ BLOQUEADO
 
@@ -154,7 +178,7 @@ uv run pytest tests/ -m neo4j_smoke
 
 ---
 
-## 9. Testes de qualidade RAG
+## 10. Testes de qualidade RAG
 
 ### Status: ⏸️ BLOQUEADO
 
@@ -168,7 +192,7 @@ uv run pytest tests/ -m rag_quality
 
 ---
 
-## 10. Testes de frontend
+## 11. Testes de frontend
 
 ### Status: ⏸️ BLOQUEADO
 

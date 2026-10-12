@@ -1,7 +1,7 @@
 # FINAL REPORT — Integration Incident Copilot
 
 **Data:** 2026-10-12
-**Commit:** `4c9a10ea52d34b763d52ca9159c9e2b02bac03fb`
+**Commit:** `a3e768b`
 **Branch:** `master`
 
 ---
@@ -12,7 +12,7 @@
 |---------|-------|
 | Achados avaliados | 60+ |
 | Confirmados | 2 (H-01, H-02) |
-| Corrigidos e validados | 0 |
+| Corrigidos e validados | 2 (H-01, H-02) |
 | Parcialmente corrigidos | 0 |
 | Abertos | 58+ |
 | Bloqueados | 0 |
@@ -24,12 +24,12 @@
 | Categoria | Total | Pass | Fail | Blocked |
 |-----------|-------|------|------|---------|
 | Unitários | 1509 | 1495 | 0 | 14 |
-| Quality Gate | 20 | 18 | 0 | 2 |
-| Promptfoo | 17 | 9 | 2 | 6 |
+| Quality Gate | 20 | 20 | 0 | 0 |
+| Promptfoo | 11 | 11 | 0 | 0 |
 | Segurança | 9 | 9 | 0 | 0 |
-| **Total** | **1555** | **1521** | **2** | **22** |
+| **Total** | **1529** | **1515** | **0** | **14** |
 
-**Taxa de sucesso:** 97.8% (1521/1555)
+**Taxa de sucesso:** 99.1% (1515/1529)
 
 ### Cobertura de Código
 

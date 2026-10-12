@@ -1,6 +1,6 @@
 {
   "generated_at": null,
-  "model": null,
+  "model": "qwen3.8:27b",
   "cases": {
     "401 sem conector": true,
     "401 com conector OData": true,

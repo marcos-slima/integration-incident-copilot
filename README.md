@@ -195,7 +195,7 @@ Variables, demo identifiers and how to add a connector:
 | Retrieval on the bundled evaluation set (18 in-scope queries, 10 out of scope) | Hit@1 94.4 %, Hit@3 100 %, MRR 0.972; 9 of 10 out-of-scope queries rejected | CI job `rag-quality` |
 | Quality gates | 20 deterministic checks: dataset, reranker invariant, prompt digest vs. the measured prompt, documentation links, symbols and environment variables, connector reachability | CI job `deterministic` |
 | Database | migrations applied and checked; the 45 dashboard queries and the contract-drift end-to-end tests run against a real PostgreSQL | CI job `migrations_and_dashboards` |
-| Use cases | nine scenarios with the numbers measured by tests | [`docs/CASOS_DE_USO.md`](docs/CASOS_DE_USO.md) |
+| Test coverage | 1495 tests passing, 82.29% code coverage | CI job `tests` |
 
 The evaluation set is small, and the chosen reranker's advantage over the
 baseline (ms-marco-L6) is one query out of 18, which is not statistically

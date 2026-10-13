@@ -16,7 +16,7 @@
 obrigatória — custo fixo de €36.000 a €480.000/ano **independente do
 quanto de IA for usado** — o que exclui, na prática, quem ainda está
 em ECC on-premise (40-45% da base mundial de clientes SAP ECC, segundo
-Gartner/IDC, permanecerá em legado além de 2027) ou não tem
+CIO 2025, permanecerá em legado além de 2027) ou não tem
 orçamento/infra para BTP. Números e fontes completas em
 [`TCO_SAP_AI_CORE_VS_SELF_HOSTED.md`](TCO_SAP_AI_CORE_VS_SELF_HOSTED.md).
 

@@ -17,7 +17,7 @@ data:
   LLM_PROVIDER: "openai"
   LLM_FALLBACK_PROVIDER: "azure_openai"
   LLM_MODEL: "gpt-4o-mini"
-  # Excecao consciente ao modelo canonico (`qwen3.8:27b`, ver CLAUDE.md ->
+  # Excecao consciente ao modelo canonico (`qwen3.6:35b-a3b`, ver CLAUDE.md ->
   # "Modelo canonico"): este deploy e cloud-by-design (LLM_PROVIDER=openai,
   # sem Ollama no cluster, ver bloco acima), entao o default local nao se
   # aplica. O gate deployed_model_evaluated AVISA que este modelo nao tem

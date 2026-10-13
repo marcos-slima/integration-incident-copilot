@@ -83,7 +83,7 @@ if command -v ollama >/dev/null 2>&1; then
   fi
   wait_http "http://localhost:11434" "Ollama"
 
-  for model in "qwen3.8:27b" "nomic-embed-text"; do
+  for model in "qwen3.6:35b-a3b" "nomic-embed-text"; do
     if ! ollama list 2>/dev/null | grep -q "${model%%:*}"; then
       warn "Modelo '$model' não encontrado — baixando..."
       ollama pull "$model"

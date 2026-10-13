@@ -1,4 +1,4 @@
-description: "Avaliacao qwen3.8:27b (producao) no diagnostico do SAP Integration Copilot (pipeline real: conector + RAG + guardrails)"
+description: "Avaliacao qwen3.6:35b-a3b (producao) no diagnostico do SAP Integration Copilot (pipeline real: conector + RAG + guardrails)"
 
 prompts:
   - file://prompts/case.txt
@@ -6,8 +6,8 @@ prompts:
 concurrency: 1
 
 providers:
-  - id: "exec:uv run python3 scripts/promptfoo_provider.py qwen3.8:27b"
-    label: "qwen3.8 (producao atual)"
+  - id: "exec:uv run python3 scripts/promptfoo_provider.py qwen3.6:35b-a3b"
+    label: "qwen3.6 (producao atual)"
 
 # Validacao 2026-10-07 (M-21): `metadata.path` diz QUEM responde o caso no
 # pipeline atual - "rule_engine" (regra deterministica, DA-33; o LLM nem e
@@ -138,7 +138,7 @@ tests:
   # interface_type=none para garantir path=llm: nenhum texto casa
   # KNOWN_ERROR_RULES (DA-33).
   #
-  # Medicao 2026-10-11 (qwen3.8:27b, qwen3-coder-next, qwen3.6:35b-a3b e
+  # Medicao 2026-10-13 (qwen3.6:35b-a3b, qwen3-coder-next, qwen3-coder) — qwen3.8:27b foi descartado por 6 timeouts em 18 execuções (harness de código, não diagnóstico)
   # qwen3-coder): os QUATRO modelos fizeram 6/6 nestes casos. Eles endurecem
   # a suite (pegam confusao entre docs quase-iguais e regressao de abstenção)
   # mas NAO discriminam estes modelos: o gargalo e' a recuperacao (os docs sao

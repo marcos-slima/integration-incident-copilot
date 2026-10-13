@@ -20,7 +20,7 @@ Salesforce, Workday, Ariba, SuccessFactors, CAP, APIManagement, SAP PO/PI).
 |---|---|
 | API | FastAPI + Pydantic |
 | Orchestration | LangGraph (`app/agent/graph.py`) |
-| LLM | Ollama local (default) → OpenAI/Azure fallback. Canonical model `qwen3.8:27b` (17B dense, 128k ctx) from 2026-10-11 — default in `app/config.py`, `.env`, `docker-compose.yml` and the promptfoo config. `qwen3-coder-next:latest` (MoE 80B/3B) was the previous pick (DA-4/8, DA-12); re-baseline pending (DA-51) |
+| LLM | Ollama local (default) → OpenAI/Azure fallback. Canonical model `qwen3.6:35b-a3b` (35B MoE, 128k ctx) from 2026-10-13 — default in `app/config.py`, `.env`, `docker-compose.yml` and the promptfoo config. `qwen3-coder-next:latest` (MoE 80B/3B) was the previous pick (DA-4/8, DA-12); re-baseline pending (DA-51) |
 | RAG | LangChain + Qdrant (hybrid dense+sparse BM25, RRF fusion) |
 | Reranker | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` (DA-29 benchmark) — **do not change** |
 | GraphRAG | Neo4j (`app/rag/graph_store.py`), opt-in `GRAPH_RAG_ENABLED=true` |
@@ -243,6 +243,27 @@ PATH="$PWD/.venv/bin:$PATH" git commit -m "feat(DA-N): description"
   Salesforce, and CAP were validated against real instances; OData, Workday,
   Ariba, SuccessFactors, and PO/PI were not (PO/PI has a non-public API).
   `docs/ARCHITECTURE.md` is the source of truth.
+
+---
+
+## 11. Operational principles (AI agents)
+
+When answering questions about this project, **always**:
+
+1. **Be factual, not presumptive.** Do not assume behavior without checking the
+   source code or documentation first. If you are unsure, say so explicitly and
+   verify before proceeding.
+2. **Use local artifacts as your primary evidence.** The authoritative sources are:
+   - `app/` — current source of truth (not memory or prior knowledge)
+   - `docs/DECISOES_DE_ARQUITETURA.md` — architecture decisions prose
+   - `CLAUDE.md` — DA index + invariantes
+   - `AGENTS.md` — this file
+3. **Never be lazy or skip verification.** If a claim depends on a specific file,
+   read it. If it depends on a config value, grep for it. If it depends on a
+   migration, check `alembic/versions/`. Cite line numbers when possible.
+4. **Distinguish between what you verified vs. what you infer.** When reasoning
+   from patterns (e.g., "this likely follows the same convention as X"), state
+   that explicitly — do not present inference as fact.
 
 ---
 

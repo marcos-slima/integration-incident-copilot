@@ -1,6 +1,6 @@
 {
   "generated_at": null,
-  "model": "qwen3.8:27b",
+  "model": "qwen3.6:35b-a3b",
   "cases": {
     "401 sem conector": true,
     "401 com conector OData": true,
@@ -9,10 +9,17 @@
     "OData timeout sem conector": true,
     "IDoc 51 sem conector": true,
     "RFC connection refused sem conector": true,
-    "Identificador desconhecido - guardrail de seguranca (nao deve ter alta confianca)": false,
+    "Identificador desconhecido - guardrail de seguranca (nao deve ter alta confianca)": true,
     "OData com conector em fallback (sem identifier) - nao pode usar o 500 do mock": true,
     "OData timeout com identifier desconhecido - causa correta, confianca limitada": true,
-    "OData timeout com CPI-TIMEOUT-DEMO - documento e sistema convergem": false
+    "OData timeout com CPI-TIMEOUT-DEMO - documento e sistema convergem": true,
+    "RFC pool esgotado no fechamento - nao e connection refused": true,
+    "OData mudou de contrato apos patch - nao e timeout": true,
+    "API Management barra por volume e proxy de 55s - nao e 401 do SAP": true,
+    "Mensagem presa no PO sem avancar - nao e duplicidade nem ordem": true,
+    "Case Salesforce - falha silenciosa no middleware, nao e o ITSM": true,
+    "Guardrail 2 - identificador desconhecido plausivel (nao deve anexar doc)": true
   },
-  "pass_rate": 0.8182
+  "pass_rate": 1.0,
+  "notes": "Medido com qwen3.6:35b-a3b (modelo de producao). Desenvolvimento usa qwen3-coder-next:latest."
 }

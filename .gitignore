@@ -67,6 +67,9 @@ docs/INGEST_REFERENCE.md
 # Relatórios/auditorias gerados manualmente (não versionados)
 ARCHITECTURE_REVIEW.md
 
+# Diagramas e gráficos (não versionados)
+docs/graphics/
+
 # Validacao 2026-10-06: artefatos locais que nao podem ir para o repositorio
 # publico (relatorios de auditoria com mapa de segredos, scripts manuais com
 # dados pessoais/senhas reais).

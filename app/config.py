@@ -176,7 +176,7 @@ class Settings(BaseSettings):
 
     # Ollama (default local-first)
     ollama_host: str = "http://127.0.0.1:11434"
-    llm_model: str = "qwen3.8:27b"
+    llm_model: str = "qwen3.6:35b-a3b"
     embedding_model: str = "nomic-embed-text"
     # DA-38: "ollama" (default, EMBEDDING_MODEL via Ollama) ou "fastembed"
     # (BAAI/bge-small-en-v1.5 em processo). Validacao 2026-10-07: era lido so

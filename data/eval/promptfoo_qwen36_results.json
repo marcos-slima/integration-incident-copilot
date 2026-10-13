@@ -1,0 +1,2403 @@
+{
+  "evalId": "eval-Sc7-2026-10-13T17:56:04",
+  "results": {
+    "version": 3,
+    "timestamp": "2026-10-13T17:56:04.501Z",
+    "prompts": [
+      {
+        "raw": "{{description}}|||{{interface_type}}|||{{identifier}}",
+        "label": "prompts/case.txt: {{description}}|||{{interface_type}}|||{{identifier}}",
+        "id": "14f625818939b734d156b66975623d2cf5b383c290009d42be62b1f8a3dd2349",
+        "provider": "qwen3.6 (producao atual)",
+        "metrics": {
+          "score": 17,
+          "testPassCount": 17,
+          "testFailCount": 0,
+          "testErrorCount": 0,
+          "assertPassCount": 17,
+          "assertFailCount": 0,
+          "totalLatencyMs": 1432952,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 17,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0
+              }
+            },
+            "incurredTokenUsage": {
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "total": 0,
+              "numRequests": 15,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0
+              },
+              "assertions": {
+                "total": 0,
+                "prompt": 0,
+                "completion": 0,
+                "cached": 0,
+                "numRequests": 0,
+                "completionDetails": {
+                  "reasoning": 0,
+                  "acceptedPrediction": 0,
+                  "rejectedPrediction": 0,
+                  "cacheReadInputTokens": 0,
+                  "cacheCreationInputTokens": 0
+                }
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "namedScoreWeights": {},
+          "cost": 0
+        }
+      }
+    ],
+    "results": [
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "JSON.parse(output).matched_source === 'cpi_http_401.md'"
+              }
+            }
+          ]
+        },
+        "id": "5b7837f3-65d1-4f27-81bc-097a5bceab6f",
+        "latencyMs": 121305,
+        "namedScores": {},
+        "prompt": {
+          "raw": "iFlow falhando com erro 401|||none|||none",
+          "label": "prompts/case.txt: {{description}}|||{{interface_type}}|||{{identifier}}",
+          "config": {}
+        },
+        "promptId": "14f625818939b734d156b66975623d2cf5b383c290009d42be62b1f8a3dd2349",
+        "promptIdx": 0,
+        "provider": {
+          "id": "exec:uv run python3 scripts/promptfoo_provider.py qwen3.6:35b-a3b",
+          "label": "qwen3.6 (producao atual)"
+        },
+        "response": {
+          "output": "{\"matched_source\": \"cpi_http_401.md\", \"model_used\": \"qwen3.6:35b-a3b\", \"confidence\": 0.848, \"diagnosis_confidence\": 0.848, \"model_confidence\": 0.85, \"probable_root_cause\": \"Credenciais ou token OAuth2 armazenados no Security Material da CPI expirados, incorretos ou não atualizados após alteração no sistema de destino.\"}"
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "401 sem conector",
+          "metadata": {
+            "path": "llm"
+          },
+          "vars": {
+            "description": "iFlow falhando com erro 401",
+            "interface_type": "none",
+            "identifier": "none"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "JSON.parse(output).matched_source === 'cpi_http_401.md'"
+            }
+          ],
+          "options": {}
+        },
+        "testIdx": 0,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "description": "iFlow falhando com erro 401",
+          "interface_type": "none",
+          "identifier": "none"
+        },
+        "metadata": {
+          "path": "llm",
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "JSON.parse(output).matched_source === 'cpi_http_401.md' && JSON.parse(output).confidence >= 0.6"
+              }
+            }
+          ]
+        },
+        "id": "fe7d2586-3bf3-46d9-949f-bb1638b22d0d",
+        "latencyMs": 89533,
+        "namedScores": {},
+        "prompt": {
+          "raw": "investigar falha reportada no iFlow|||odata|||CPI-401-DEMO",
+          "label": "prompts/case.txt: {{description}}|||{{interface_type}}|||{{identifier}}",
+          "config": {}
+        },
+        "promptId": "14f625818939b734d156b66975623d2cf5b383c290009d42be62b1f8a3dd2349",
+        "promptIdx": 0,
+        "provider": {
+          "id": "exec:uv run python3 scripts/promptfoo_provider.py qwen3.6:35b-a3b",
+          "label": "qwen3.6 (producao atual)"
+        },
+        "response": {
+          "output": "{\"matched_source\": \"cpi_http_401.md\", \"model_used\": \"qwen3.6:35b-a3b\", \"confidence\": 0.949, \"diagnosis_confidence\": 0.949, \"model_confidence\": 0.95, \"probable_root_cause\": \"O token de acesso OAuth2 expirou e o adapter CPI não está configurado para renovação automática, confirmado diretamente pelo campo 'Access token expired' nos dados brutos do conector.\"}"
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "401 com conector OData",
+          "metadata": {
+            "path": "llm"
+          },
+          "vars": {
+            "description": "investigar falha reportada no iFlow",
+            "interface_type": "odata",
+            "identifier": "CPI-401-DEMO"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "JSON.parse(output).matched_source === 'cpi_http_401.md' && JSON.parse(output).confidence >= 0.6"
+            }
+          ],
+          "options": {}
+        },
+        "testIdx": 1,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "description": "investigar falha reportada no iFlow",
+          "interface_type": "odata",
+          "identifier": "CPI-401-DEMO"
+        },
+        "metadata": {
+          "path": "llm",
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "['idoc_status_51.md','rule_engine:sap_idoc_status_51'].includes(JSON.parse(output).matched_source) && JSON.parse(output).confidence >= 0.6"
+              }
+            }
+          ]
+        },
+        "id": "adb0c71a-8c71-409c-b6f1-cf5640107409",
+        "latencyMs": 10,
+        "namedScores": {},
+        "prompt": {
+          "raw": "IDoc travado|||rfc|||RFC-IDOC-51-DEMO",
+          "label": "prompts/case.txt: {{description}}|||{{interface_type}}|||{{identifier}}",
+          "config": {}
+        },
+        "promptId": "14f625818939b734d156b66975623d2cf5b383c290009d42be62b1f8a3dd2349",
+        "promptIdx": 0,
+        "provider": {
+          "id": "exec:uv run python3 scripts/promptfoo_provider.py qwen3.6:35b-a3b",
+          "label": "qwen3.6 (producao atual)"
+        },
+        "response": {
+          "output": "{\"matched_source\": \"rule_engine:sap_idoc_status_51\", \"model_used\": \"qwen3.6:35b-a3b\", \"confidence\": 0.9, \"diagnosis_confidence\": 0.9, \"model_confidence\": 0.9, \"probable_root_cause\": \"Erro conhecido detectado via taxonomia SKOS.\"}",
+          "cached": true,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0
+              }
+            },
+            "incurredTokenUsage": {
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "total": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0
+              },
+              "assertions": {
+                "total": 0,
+                "prompt": 0,
+                "completion": 0,
+                "cached": 0,
+                "numRequests": 0,
+                "completionDetails": {
+                  "reasoning": 0,
+                  "acceptedPrediction": 0,
+                  "rejectedPrediction": 0,
+                  "cacheReadInputTokens": 0,
+                  "cacheCreationInputTokens": 0
+                }
+              }
+            }
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "IDoc 51 com conector RFC (caso que ja quebrou 2x manualmente)",
+          "metadata": {
+            "path": "rule_engine"
+          },
+          "vars": {
+            "description": "IDoc travado",
+            "interface_type": "rfc",
+            "identifier": "RFC-IDOC-51-DEMO"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "['idoc_status_51.md','rule_engine:sap_idoc_status_51'].includes(JSON.parse(output).matched_source) && JSON.parse(output).confidence >= 0.6"
+            }
+          ],
+          "options": {}
+        },
+        "testIdx": 2,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          },
+          "incurredTokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0
+              }
+            }
+          }
+        },
+        "vars": {
+          "description": "IDoc travado",
+          "interface_type": "rfc",
+          "identifier": "RFC-IDOC-51-DEMO"
+        },
+        "metadata": {
+          "path": "rule_engine",
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "['rfc_connection_refused.md','rule_engine:network_connection_refused'].includes(JSON.parse(output).matched_source) && JSON.parse(output).confidence >= 0.6"
+              }
+            }
+          ]
+        },
+        "id": "deebe564-2c37-47e2-8c7c-0f51e21e2465",
+        "latencyMs": 10,
+        "namedScores": {},
+        "prompt": {
+          "raw": "SM59 não conecta|||rfc|||RFC-CONN-REFUSED-DEMO",
+          "label": "prompts/case.txt: {{description}}|||{{interface_type}}|||{{identifier}}",
+          "config": {}
+        },
+        "promptId": "14f625818939b734d156b66975623d2cf5b383c290009d42be62b1f8a3dd2349",
+        "promptIdx": 0,
+        "provider": {
+          "id": "exec:uv run python3 scripts/promptfoo_provider.py qwen3.6:35b-a3b",
+          "label": "qwen3.6 (producao atual)"
+        },
+        "response": {
+          "output": "{\"matched_source\": \"rule_engine:network_connection_refused\", \"model_used\": \"qwen3.6:35b-a3b\", \"confidence\": 0.85, \"diagnosis_confidence\": 0.85, \"model_confidence\": 0.85, \"probable_root_cause\": \"Erro conhecido detectado via taxonomia SKOS.\"}",
+          "cached": true,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0
+              }
+            },
+            "incurredTokenUsage": {
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "total": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0
+              },
+              "assertions": {
+                "total": 0,
+                "prompt": 0,
+                "completion": 0,
+                "cached": 0,
+                "numRequests": 0,
+                "completionDetails": {
+                  "reasoning": 0,
+                  "acceptedPrediction": 0,
+                  "rejectedPrediction": 0,
+                  "cacheReadInputTokens": 0,
+                  "cacheCreationInputTokens": 0
+                }
+              }
+            }
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "RFC connection refused com conector",
+          "metadata": {
+            "path": "rule_engine"
+          },
+          "vars": {
+            "description": "SM59 não conecta",
+            "interface_type": "rfc",
+            "identifier": "RFC-CONN-REFUSED-DEMO"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "['rfc_connection_refused.md','rule_engine:network_connection_refused'].includes(JSON.parse(output).matched_source) && JSON.parse(output).confidence >= 0.6"
+            }
+          ],
+          "options": {}
+        },
+        "testIdx": 3,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          },
+          "incurredTokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0
+              }
+            }
+          }
+        },
+        "vars": {
+          "description": "SM59 não conecta",
+          "interface_type": "rfc",
+          "identifier": "RFC-CONN-REFUSED-DEMO"
+        },
+        "metadata": {
+          "path": "rule_engine",
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "JSON.parse(output).matched_source === 'odata_timeout_cpi.md'"
+              }
+            }
+          ]
+        },
+        "id": "49d1acc5-cd0c-42af-bf22-40a7093fa30d",
+        "latencyMs": 119416,
+        "namedScores": {},
+        "prompt": {
+          "raw": "iFlow travando ao consumir OData sem retorno|||none|||none",
+          "label": "prompts/case.txt: {{description}}|||{{interface_type}}|||{{identifier}}",
+          "config": {}
+        },
+        "promptId": "14f625818939b734d156b66975623d2cf5b383c290009d42be62b1f8a3dd2349",
+        "promptIdx": 0,
+        "provider": {
+          "id": "exec:uv run python3 scripts/promptfoo_provider.py qwen3.6:35b-a3b",
+          "label": "qwen3.6 (producao atual)"
+        },
+        "response": {
+          "output": "{\"matched_source\": \"odata_timeout_cpi.md\", \"model_used\": \"qwen3.6:35b-a3b\", \"confidence\": 0.797, \"diagnosis_confidence\": 0.797, \"model_confidence\": 0.8, \"probable_root_cause\": \"Consulta OData sem filtros retornando volume excessivo de dados que ultrapassa o timeout padrão do adapter (geralmente 60s), potencializada por alta carga no backend ou pool de conexões HTTP esgotado no Cloud Connector.\"}"
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "OData timeout sem conector",
+          "metadata": {
+            "path": "llm"
+          },
+          "vars": {
+            "description": "iFlow travando ao consumir OData sem retorno",
+            "interface_type": "none",
+            "identifier": "none"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "JSON.parse(output).matched_source === 'odata_timeout_cpi.md'"
+            }
+          ],
+          "options": {}
+        },
+        "testIdx": 4,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "description": "iFlow travando ao consumir OData sem retorno",
+          "interface_type": "none",
+          "identifier": "none"
+        },
+        "metadata": {
+          "path": "llm",
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "['idoc_status_51.md','rule_engine:sap_idoc_status_51'].includes(JSON.parse(output).matched_source)"
+              }
+            }
+          ]
+        },
+        "id": "8780b3ea-b651-46d8-ba64-07dc12849a5e",
+        "latencyMs": 14683,
+        "namedScores": {},
+        "prompt": {
+          "raw": "IDoc parado com status 51|||none|||none",
+          "label": "prompts/case.txt: {{description}}|||{{interface_type}}|||{{identifier}}",
+          "config": {}
+        },
+        "promptId": "14f625818939b734d156b66975623d2cf5b383c290009d42be62b1f8a3dd2349",
+        "promptIdx": 0,
+        "provider": {
+          "id": "exec:uv run python3 scripts/promptfoo_provider.py qwen3.6:35b-a3b",
+          "label": "qwen3.6 (producao atual)"
+        },
+        "response": {
+          "output": "{\"matched_source\": \"rule_engine:sap_idoc_status_51\", \"model_used\": \"qwen3.6:35b-a3b\", \"confidence\": 0.9, \"diagnosis_confidence\": 0.9, \"model_confidence\": 0.9, \"probable_root_cause\": \"Erro conhecido detectado via taxonomia SKOS.\"}"
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "IDoc 51 sem conector",
+          "metadata": {
+            "path": "rule_engine"
+          },
+          "vars": {
+            "description": "IDoc parado com status 51",
+            "interface_type": "none",
+            "identifier": "none"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "['idoc_status_51.md','rule_engine:sap_idoc_status_51'].includes(JSON.parse(output).matched_source)"
+            }
+          ],
+          "options": {}
+        },
+        "testIdx": 5,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "description": "IDoc parado com status 51",
+          "interface_type": "none",
+          "identifier": "none"
+        },
+        "metadata": {
+          "path": "rule_engine",
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "['rfc_connection_refused.md','rule_engine:network_connection_refused'].includes(JSON.parse(output).matched_source)"
+              }
+            }
+          ]
+        },
+        "id": "d8833920-618e-430f-95d3-d9a79069b6dc",
+        "latencyMs": 13743,
+        "namedScores": {},
+        "prompt": {
+          "raw": "SM59 dando erro de conexão recusada|||none|||none",
+          "label": "prompts/case.txt: {{description}}|||{{interface_type}}|||{{identifier}}",
+          "config": {}
+        },
+        "promptId": "14f625818939b734d156b66975623d2cf5b383c290009d42be62b1f8a3dd2349",
+        "promptIdx": 0,
+        "provider": {
+          "id": "exec:uv run python3 scripts/promptfoo_provider.py qwen3.6:35b-a3b",
+          "label": "qwen3.6 (producao atual)"
+        },
+        "response": {
+          "output": "{\"matched_source\": \"rule_engine:network_connection_refused\", \"model_used\": \"qwen3.6:35b-a3b\", \"confidence\": 0.85, \"diagnosis_confidence\": 0.85, \"model_confidence\": 0.85, \"probable_root_cause\": \"Erro conhecido detectado via taxonomia SKOS.\"}"
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "RFC connection refused sem conector",
+          "metadata": {
+            "path": "rule_engine"
+          },
+          "vars": {
+            "description": "SM59 dando erro de conexão recusada",
+            "interface_type": "none",
+            "identifier": "none"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "['rfc_connection_refused.md','rule_engine:network_connection_refused'].includes(JSON.parse(output).matched_source)"
+            }
+          ],
+          "options": {}
+        },
+        "testIdx": 6,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "description": "SM59 dando erro de conexão recusada",
+          "interface_type": "none",
+          "identifier": "none"
+        },
+        "metadata": {
+          "path": "rule_engine",
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "const o = JSON.parse(output);\nreturn o.matched_source === null && o.confidence < 0.6;\n"
+              }
+            }
+          ]
+        },
+        "id": "03115500-4c72-4c86-af89-9e5e7b4dd794",
+        "latencyMs": 141966,
+        "namedScores": {},
+        "prompt": {
+          "raw": "algo estranho aconteceu|||odata|||XPTO-999-NAO-EXISTE",
+          "label": "prompts/case.txt: {{description}}|||{{interface_type}}|||{{identifier}}",
+          "config": {}
+        },
+        "promptId": "14f625818939b734d156b66975623d2cf5b383c290009d42be62b1f8a3dd2349",
+        "promptIdx": 0,
+        "provider": {
+          "id": "exec:uv run python3 scripts/promptfoo_provider.py qwen3.6:35b-a3b",
+          "label": "qwen3.6 (producao atual)"
+        },
+        "response": {
+          "output": "{\"matched_source\": null, \"model_used\": \"qwen3.6:35b-a3b\", \"confidence\": 0.204, \"diagnosis_confidence\": 0.204, \"model_confidence\": 0.3, \"probable_root_cause\": \"O identificador ou endpoint configurado no conector OData não corresponde a um serviço ativo no SAP Gateway, possivelmente devido à desativação, renomeação ou remoção do recurso, ou a uma configuração incorreta no conector. A ausência total de resposta HTTP impede a confirmação direta.\"}"
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Identificador desconhecido - guardrail de seguranca (nao deve ter alta confianca)",
+          "metadata": {
+            "path": "llm"
+          },
+          "vars": {
+            "description": "algo estranho aconteceu",
+            "interface_type": "odata",
+            "identifier": "XPTO-999-NAO-EXISTE"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "const o = JSON.parse(output);\nreturn o.matched_source === null && o.confidence < 0.6;\n"
+            }
+          ],
+          "options": {}
+        },
+        "testIdx": 7,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "description": "algo estranho aconteceu",
+          "interface_type": "odata",
+          "identifier": "XPTO-999-NAO-EXISTE"
+        },
+        "metadata": {
+          "path": "llm",
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "const o = JSON.parse(output); o.confidence < 0.6 && !/\\b500\\b/.test(o.probable_root_cause)"
+              }
+            }
+          ]
+        },
+        "id": "f7b4e276-a78b-48b5-9072-59a898e6e5e8",
+        "latencyMs": 131822,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Pedidos do Salesforce nao chegam ao S/4HANA. OData retorna Read timed out after 60000 ms.|||odata|||none",
+          "label": "prompts/case.txt: {{description}}|||{{interface_type}}|||{{identifier}}",
+          "config": {}
+        },
+        "promptId": "14f625818939b734d156b66975623d2cf5b383c290009d42be62b1f8a3dd2349",
+        "promptIdx": 0,
+        "provider": {
+          "id": "exec:uv run python3 scripts/promptfoo_provider.py qwen3.6:35b-a3b",
+          "label": "qwen3.6 (producao atual)"
+        },
+        "response": {
+          "output": "{\"matched_source\": null, \"model_used\": \"qwen3.6:35b-a3b\", \"confidence\": 0.249, \"diagnosis_confidence\": 0.249, \"model_confidence\": 0.25, \"probable_root_cause\": \"Timeout na comunicação OData (60s) devido a latência de rede, gargalo de processamento no backend S/4HANA ou configuração inadequada do tempo limite para operações complexas.\"}"
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "OData com conector em fallback (sem identifier) - nao pode usar o 500 do mock",
+          "metadata": {
+            "path": "llm"
+          },
+          "vars": {
+            "description": "Pedidos do Salesforce nao chegam ao S/4HANA. OData retorna Read timed out after 60000 ms.",
+            "interface_type": "odata",
+            "identifier": "none"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "const o = JSON.parse(output); o.confidence < 0.6 && !/\\b500\\b/.test(o.probable_root_cause)"
+            }
+          ],
+          "options": {}
+        },
+        "testIdx": 8,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "description": "Pedidos do Salesforce nao chegam ao S/4HANA. OData retorna Read timed out after 60000 ms.",
+          "interface_type": "odata",
+          "identifier": "none"
+        },
+        "metadata": {
+          "path": "llm",
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "const o = JSON.parse(output); o.confidence <= 0.4 && /timeout|tempo limite|filtro/i.test(o.probable_root_cause)"
+              }
+            }
+          ]
+        },
+        "id": "bd9a5ad2-0664-44e1-91f1-f09733d24a1d",
+        "latencyMs": 128764,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Chamada OData do CPI para o S/4HANA excede o tempo limite (Read timed out after 60000 ms)|||odata|||SO-SF-000123",
+          "label": "prompts/case.txt: {{description}}|||{{interface_type}}|||{{identifier}}",
+          "config": {}
+        },
+        "promptId": "14f625818939b734d156b66975623d2cf5b383c290009d42be62b1f8a3dd2349",
+        "promptIdx": 0,
+        "provider": {
+          "id": "exec:uv run python3 scripts/promptfoo_provider.py qwen3.6:35b-a3b",
+          "label": "qwen3.6 (producao atual)"
+        },
+        "response": {
+          "output": "{\"matched_source\": \"odata_timeout_cpi.md\", \"model_used\": \"qwen3.6:35b-a3b\", \"confidence\": 0.295, \"diagnosis_confidence\": 0.295, \"model_confidence\": 0.3, \"probable_root_cause\": \"A chamada OData no iFlow provavelmente está retornando um volume excessivo de dados devido à ausência ou inadequação de filtros ($filter, $top/$skip), excedendo o timeout padrão de 60s do adapter HTTP, ou o backend S/4HANA estava sob alta carga durante a execução.\"}"
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "OData timeout com identifier desconhecido - causa correta, confianca limitada",
+          "metadata": {
+            "path": "llm"
+          },
+          "vars": {
+            "description": "Chamada OData do CPI para o S/4HANA excede o tempo limite (Read timed out after 60000 ms)",
+            "interface_type": "odata",
+            "identifier": "SO-SF-000123"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "const o = JSON.parse(output); o.confidence <= 0.4 && /timeout|tempo limite|filtro/i.test(o.probable_root_cause)"
+            }
+          ],
+          "options": {}
+        },
+        "testIdx": 9,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "description": "Chamada OData do CPI para o S/4HANA excede o tempo limite (Read timed out after 60000 ms)",
+          "interface_type": "odata",
+          "identifier": "SO-SF-000123"
+        },
+        "metadata": {
+          "path": "llm",
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "const o = JSON.parse(output); ['odata_timeout_cpi.md','rule_engine:http_timeout'].includes(o.matched_source) && o.confidence >= 0.8"
+              }
+            }
+          ]
+        },
+        "id": "f2d2c77a-ce12-494d-8021-e28c91175263",
+        "latencyMs": 15380,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Chamada OData do CPI para o S/4HANA excede o tempo limite|||odata|||CPI-TIMEOUT-DEMO",
+          "label": "prompts/case.txt: {{description}}|||{{interface_type}}|||{{identifier}}",
+          "config": {}
+        },
+        "promptId": "14f625818939b734d156b66975623d2cf5b383c290009d42be62b1f8a3dd2349",
+        "promptIdx": 0,
+        "provider": {
+          "id": "exec:uv run python3 scripts/promptfoo_provider.py qwen3.6:35b-a3b",
+          "label": "qwen3.6 (producao atual)"
+        },
+        "response": {
+          "output": "{\"matched_source\": \"rule_engine:http_timeout\", \"model_used\": \"qwen3.6:35b-a3b\", \"confidence\": 0.85, \"diagnosis_confidence\": 0.85, \"model_confidence\": 0.85, \"probable_root_cause\": \"Erro conhecido detectado via taxonomia SKOS.\"}"
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "OData timeout com CPI-TIMEOUT-DEMO - documento e sistema convergem",
+          "metadata": {
+            "path": "rule_engine"
+          },
+          "vars": {
+            "description": "Chamada OData do CPI para o S/4HANA excede o tempo limite",
+            "interface_type": "odata",
+            "identifier": "CPI-TIMEOUT-DEMO"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "const o = JSON.parse(output); ['odata_timeout_cpi.md','rule_engine:http_timeout'].includes(o.matched_source) && o.confidence >= 0.8"
+            }
+          ],
+          "options": {}
+        },
+        "testIdx": 10,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "description": "Chamada OData do CPI para o S/4HANA excede o tempo limite",
+          "interface_type": "odata",
+          "identifier": "CPI-TIMEOUT-DEMO"
+        },
+        "metadata": {
+          "path": "rule_engine",
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "JSON.parse(output).matched_source === 'rfc_gateway_pool_timeout.md'"
+              }
+            }
+          ]
+        },
+        "id": "dc6f326f-620c-469f-af65-c09504e388e0",
+        "latencyMs": 114646,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Chamada RFC sincrona via destino SM59 falha apos cerca de 60 segundos com SYSTEM_FAILURE durante o fechamento de mes; nao ha falha imediata de conexao e o destino responde a outros testes.|||none|||none",
+          "label": "prompts/case.txt: {{description}}|||{{interface_type}}|||{{identifier}}",
+          "config": {}
+        },
+        "promptId": "14f625818939b734d156b66975623d2cf5b383c290009d42be62b1f8a3dd2349",
+        "promptIdx": 0,
+        "provider": {
+          "id": "exec:uv run python3 scripts/promptfoo_provider.py qwen3.6:35b-a3b",
+          "label": "qwen3.6 (producao atual)"
+        },
+        "response": {
+          "output": "{\"matched_source\": \"rfc_gateway_pool_timeout.md\", \"model_used\": \"qwen3.6:35b-a3b\", \"confidence\": 0.9, \"diagnosis_confidence\": 0.9, \"model_confidence\": 0.9, \"probable_root_cause\": \"Esgotamento do pool de processos de diálogo do RFC Gateway devido à alta carga concorrente durante o fechamento de mês, resultando em timeout de ~60s e retorno de SYSTEM_FAILURE.\"}"
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "RFC pool esgotado no fechamento - nao e connection refused",
+          "metadata": {
+            "path": "llm"
+          },
+          "vars": {
+            "description": "Chamada RFC sincrona via destino SM59 falha apos cerca de 60 segundos com SYSTEM_FAILURE durante o fechamento de mes; nao ha falha imediata de conexao e o destino responde a outros testes.",
+            "interface_type": "none",
+            "identifier": "none"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "JSON.parse(output).matched_source === 'rfc_gateway_pool_timeout.md'"
+            }
+          ],
+          "options": {}
+        },
+        "testIdx": 11,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "description": "Chamada RFC sincrona via destino SM59 falha apos cerca de 60 segundos com SYSTEM_FAILURE durante o fechamento de mes; nao ha falha imediata de conexao e o destino responde a outros testes.",
+          "interface_type": "none",
+          "identifier": "none"
+        },
+        "metadata": {
+          "path": "llm",
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "JSON.parse(output).matched_source === 'odata_contract_drift.md'"
+              }
+            }
+          ]
+        },
+        "id": "b0c3147b-c163-4e7c-88dc-63bebfa8373c",
+        "latencyMs": 109036,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Depois do ultimo patch do S/4HANA o consumidor OData passou a receber 404 ao ler uma propriedade; o servico responde, mas o campo nao existe mais no $metadata.|||none|||none",
+          "label": "prompts/case.txt: {{description}}|||{{interface_type}}|||{{identifier}}",
+          "config": {}
+        },
+        "promptId": "14f625818939b734d156b66975623d2cf5b383c290009d42be62b1f8a3dd2349",
+        "promptIdx": 0,
+        "provider": {
+          "id": "exec:uv run python3 scripts/promptfoo_provider.py qwen3.6:35b-a3b",
+          "label": "qwen3.6 (producao atual)"
+        },
+        "response": {
+          "output": "{\"matched_source\": \"odata_contract_drift.md\", \"model_used\": \"qwen3.6:35b-a3b\", \"confidence\": 0.799, \"diagnosis_confidence\": 0.799, \"model_confidence\": 0.8, \"probable_root_cause\": \"O patch do S/4HANA alterou o contrato do serviço OData, removendo ou renomeando a propriedade solicitada no $metadata, o que quebra a compatibilidade com o consumidor atual.\"}"
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "OData mudou de contrato apos patch - nao e timeout",
+          "metadata": {
+            "path": "llm"
+          },
+          "vars": {
+            "description": "Depois do ultimo patch do S/4HANA o consumidor OData passou a receber 404 ao ler uma propriedade; o servico responde, mas o campo nao existe mais no $metadata.",
+            "interface_type": "none",
+            "identifier": "none"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "JSON.parse(output).matched_source === 'odata_contract_drift.md'"
+            }
+          ],
+          "options": {}
+        },
+        "testIdx": 12,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "description": "Depois do ultimo patch do S/4HANA o consumidor OData passou a receber 404 ao ler uma propriedade; o servico responde, mas o campo nao existe mais no $metadata.",
+          "interface_type": "none",
+          "identifier": "none"
+        },
+        "metadata": {
+          "path": "llm",
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "JSON.parse(output).matched_source === 'apim_gateway_auth_throttle.md'"
+              }
+            }
+          ]
+        },
+        "id": "f27319ce-2fd5-4e81-a1ac-1752452e4979",
+        "latencyMs": 109743,
+        "namedScores": {},
+        "prompt": {
+          "raw": "O gateway de API Management rejeita chamadas quando o volume sobe e outras cortam perto de 55 segundos; o backend S/4HANA responde normalmente quando chamado direto.|||none|||none",
+          "label": "prompts/case.txt: {{description}}|||{{interface_type}}|||{{identifier}}",
+          "config": {}
+        },
+        "promptId": "14f625818939b734d156b66975623d2cf5b383c290009d42be62b1f8a3dd2349",
+        "promptIdx": 0,
+        "provider": {
+          "id": "exec:uv run python3 scripts/promptfoo_provider.py qwen3.6:35b-a3b",
+          "label": "qwen3.6 (producao atual)"
+        },
+        "response": {
+          "output": "{\"matched_source\": \"apim_gateway_auth_throttle.md\", \"model_used\": \"qwen3.6:35b-a3b\", \"confidence\": 0.847, \"diagnosis_confidence\": 0.847, \"model_confidence\": 0.85, \"probable_root_cause\": \"O gateway de API Management está aplicando políticas de throttling (limite de taxa) que rejeitam chamadas sob alto volume (429) e/ou possui um timeout configurado em ~55 segundos que corta requisições mais longas, enquanto o backend S/4HANA opera normalmente.\"}"
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "API Management barra por volume e proxy de 55s - nao e 401 do SAP",
+          "metadata": {
+            "path": "llm"
+          },
+          "vars": {
+            "description": "O gateway de API Management rejeita chamadas quando o volume sobe e outras cortam perto de 55 segundos; o backend S/4HANA responde normalmente quando chamado direto.",
+            "interface_type": "none",
+            "identifier": "none"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "JSON.parse(output).matched_source === 'apim_gateway_auth_throttle.md'"
+            }
+          ],
+          "options": {}
+        },
+        "testIdx": 13,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "description": "O gateway de API Management rejeita chamadas quando o volume sobe e outras cortam perto de 55 segundos; o backend S/4HANA responde normalmente quando chamado direto.",
+          "interface_type": "none",
+          "identifier": "none"
+        },
+        "metadata": {
+          "path": "llm",
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "JSON.parse(output).matched_source === 'po_pi_stuck_message.md'"
+              }
+            }
+          ]
+        },
+        "id": "6c04d4d6-5afe-4eb0-9a1c-d8d65399f65c",
+        "latencyMs": 116543,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Uma mensagem no monitor do SAP PO/PI aparece como em processamento e nao avanca, sem ser concluida com sucesso; o time suspeita de lentidao do backend SAP.|||none|||none",
+          "label": "prompts/case.txt: {{description}}|||{{interface_type}}|||{{identifier}}",
+          "config": {}
+        },
+        "promptId": "14f625818939b734d156b66975623d2cf5b383c290009d42be62b1f8a3dd2349",
+        "promptIdx": 0,
+        "provider": {
+          "id": "exec:uv run python3 scripts/promptfoo_provider.py qwen3.6:35b-a3b",
+          "label": "qwen3.6 (producao atual)"
+        },
+        "response": {
+          "output": "{\"matched_source\": \"po_pi_stuck_message.md\", \"model_used\": \"qwen3.6:35b-a3b\", \"confidence\": 0.85, \"diagnosis_confidence\": 0.85, \"model_confidence\": 0.85, \"probable_root_cause\": \"Timeout ou lentidão no backend SAP impedindo a conclusão do processamento da mensagem, mantendo-a no estado \\\"in process\\\" sem avançar.\"}"
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Mensagem presa no PO sem avancar - nao e duplicidade nem ordem",
+          "metadata": {
+            "path": "llm"
+          },
+          "vars": {
+            "description": "Uma mensagem no monitor do SAP PO/PI aparece como em processamento e nao avanca, sem ser concluida com sucesso; o time suspeita de lentidao do backend SAP.",
+            "interface_type": "none",
+            "identifier": "none"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "JSON.parse(output).matched_source === 'po_pi_stuck_message.md'"
+            }
+          ],
+          "options": {}
+        },
+        "testIdx": 14,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "description": "Uma mensagem no monitor do SAP PO/PI aparece como em processamento e nao avanca, sem ser concluida com sucesso; o time suspeita de lentidao do backend SAP.",
+          "interface_type": "none",
+          "identifier": "none"
+        },
+        "metadata": {
+          "path": "llm",
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "JSON.parse(output).matched_source === 'salesforce_case_sap_sync_failure.md'"
+              }
+            }
+          ]
+        },
+        "id": "dec300e1-7617-4823-a457-d8acef22af79",
+        "latencyMs": 116204,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Um Case no Salesforce relata que um pedido criado no CRM nao aparece no SAP; o envio do Salesforce ao middleware teve sucesso e nao ha erro visivel no lado CRM.|||none|||none",
+          "label": "prompts/case.txt: {{description}}|||{{interface_type}}|||{{identifier}}",
+          "config": {}
+        },
+        "promptId": "14f625818939b734d156b66975623d2cf5b383c290009d42be62b1f8a3dd2349",
+        "promptIdx": 0,
+        "provider": {
+          "id": "exec:uv run python3 scripts/promptfoo_provider.py qwen3.6:35b-a3b",
+          "label": "qwen3.6 (producao atual)"
+        },
+        "response": {
+          "output": "{\"matched_source\": \"salesforce_case_sap_sync_failure.md\", \"model_used\": \"qwen3.6:35b-a3b\", \"confidence\": 0.85, \"diagnosis_confidence\": 0.85, \"model_confidence\": 0.85, \"probable_root_cause\": \"Falha silenciosa no middleware ou na camada de recepção SAP (ex: erro de mapeamento, validação de payload ou problema de roteamento) que não propaga o status de erro para o Salesforce.\"}"
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Case Salesforce - falha silenciosa no middleware, nao e o ITSM",
+          "metadata": {
+            "path": "llm"
+          },
+          "vars": {
+            "description": "Um Case no Salesforce relata que um pedido criado no CRM nao aparece no SAP; o envio do Salesforce ao middleware teve sucesso e nao ha erro visivel no lado CRM.",
+            "interface_type": "none",
+            "identifier": "none"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "JSON.parse(output).matched_source === 'salesforce_case_sap_sync_failure.md'"
+            }
+          ],
+          "options": {}
+        },
+        "testIdx": 15,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "description": "Um Case no Salesforce relata que um pedido criado no CRM nao aparece no SAP; o envio do Salesforce ao middleware teve sucesso e nao ha erro visivel no lado CRM.",
+          "interface_type": "none",
+          "identifier": "none"
+        },
+        "metadata": {
+          "path": "llm",
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "const o = JSON.parse(output);\nreturn o.matched_source === null && o.confidence < 0.6;\n"
+              }
+            }
+          ]
+        },
+        "id": "c235e6b5-442c-480c-9919-b885f904149b",
+        "latencyMs": 90148,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Nao sei dizer o que esta errado, so que a integracao parou de funcionar ontem.|||none|||INT-2026-Q3-XYZ",
+          "label": "prompts/case.txt: {{description}}|||{{interface_type}}|||{{identifier}}",
+          "config": {}
+        },
+        "promptId": "14f625818939b734d156b66975623d2cf5b383c290009d42be62b1f8a3dd2349",
+        "promptIdx": 0,
+        "provider": {
+          "id": "exec:uv run python3 scripts/promptfoo_provider.py qwen3.6:35b-a3b",
+          "label": "qwen3.6 (producao atual)"
+        },
+        "response": {
+          "output": "{\"matched_source\": null, \"model_used\": \"qwen3.6:35b-a3b\", \"confidence\": 0.0, \"diagnosis_confidence\": 0.0, \"model_confidence\": 0.1, \"probable_root_cause\": \"O contexto fornecido não corresponde ao sintoma descrito; sem sinais técnicos específicos, a causa raiz não pode ser determinada com precisão, mas falhas súbitas geralmente envolvem expiração de credenciais, indisponibilidade remota ou mudanças de configuração.\"}"
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Guardrail 2 - identificador desconhecido plausivel (nao deve anexar doc)",
+          "metadata": {
+            "path": "llm"
+          },
+          "vars": {
+            "description": "Nao sei dizer o que esta errado, so que a integracao parou de funcionar ontem.",
+            "interface_type": "none",
+            "identifier": "INT-2026-Q3-XYZ"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "const o = JSON.parse(output);\nreturn o.matched_source === null && o.confidence < 0.6;\n"
+            }
+          ],
+          "options": {}
+        },
+        "testIdx": 16,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "description": "Nao sei dizer o que esta errado, so que a integracao parou de funcionar ontem.",
+          "interface_type": "none",
+          "identifier": "INT-2026-Q3-XYZ"
+        },
+        "metadata": {
+          "path": "llm",
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      }
+    ],
+    "stats": {
+      "successes": 17,
+      "failures": 0,
+      "errors": 0,
+      "tokenUsage": {
+        "prompt": 0,
+        "completion": 0,
+        "cached": 0,
+        "total": 0,
+        "numRequests": 17,
+        "completionDetails": {
+          "reasoning": 0,
+          "acceptedPrediction": 0,
+          "rejectedPrediction": 0,
+          "cacheReadInputTokens": 0,
+          "cacheCreationInputTokens": 0
+        },
+        "assertions": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "numRequests": 0,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          }
+        },
+        "incurredTokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 15,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        }
+      },
+      "durationMs": 369642,
+      "evaluationDurationMs": 369642
+    }
+  },
+  "config": {
+    "tags": {},
+    "description": "Avaliacao qwen3.6:35b-a3b (producao) no diagnostico do SAP Integration Copilot (pipeline real: conector + RAG + guardrails)",
+    "prompts": [
+      "file:///home/marcos-lima/MyProjects/GitHub/integration-incident-copilot/prompts/case.txt"
+    ],
+    "providers": [
+      {
+        "id": "exec:uv run python3 scripts/promptfoo_provider.py qwen3.6:35b-a3b",
+        "label": "qwen3.6 (producao atual)"
+      }
+    ],
+    "tests": [
+      {
+        "description": "401 sem conector",
+        "metadata": {
+          "path": "llm"
+        },
+        "vars": {
+          "description": "iFlow falhando com erro 401",
+          "interface_type": "none",
+          "identifier": "none"
+        },
+        "assert": [
+          {
+            "type": "javascript",
+            "value": "JSON.parse(output).matched_source === 'cpi_http_401.md'"
+          }
+        ]
+      },
+      {
+        "description": "401 com conector OData",
+        "metadata": {
+          "path": "llm"
+        },
+        "vars": {
+          "description": "investigar falha reportada no iFlow",
+          "interface_type": "odata",
+          "identifier": "CPI-401-DEMO"
+        },
+        "assert": [
+          {
+            "type": "javascript",
+            "value": "JSON.parse(output).matched_source === 'cpi_http_401.md' && JSON.parse(output).confidence >= 0.6"
+          }
+        ]
+      },
+      {
+        "description": "IDoc 51 com conector RFC (caso que ja quebrou 2x manualmente)",
+        "metadata": {
+          "path": "rule_engine"
+        },
+        "vars": {
+          "description": "IDoc travado",
+          "interface_type": "rfc",
+          "identifier": "RFC-IDOC-51-DEMO"
+        },
+        "assert": [
+          {
+            "type": "javascript",
+            "value": "['idoc_status_51.md','rule_engine:sap_idoc_status_51'].includes(JSON.parse(output).matched_source) && JSON.parse(output).confidence >= 0.6"
+          }
+        ]
+      },
+      {
+        "description": "RFC connection refused com conector",
+        "metadata": {
+          "path": "rule_engine"
+        },
+        "vars": {
+          "description": "SM59 não conecta",
+          "interface_type": "rfc",
+          "identifier": "RFC-CONN-REFUSED-DEMO"
+        },
+        "assert": [
+          {
+            "type": "javascript",
+            "value": "['rfc_connection_refused.md','rule_engine:network_connection_refused'].includes(JSON.parse(output).matched_source) && JSON.parse(output).confidence >= 0.6"
+          }
+        ]
+      },
+      {
+        "description": "OData timeout sem conector",
+        "metadata": {
+          "path": "llm"
+        },
+        "vars": {
+          "description": "iFlow travando ao consumir OData sem retorno",
+          "interface_type": "none",
+          "identifier": "none"
+        },
+        "assert": [
+          {
+            "type": "javascript",
+            "value": "JSON.parse(output).matched_source === 'odata_timeout_cpi.md'"
+          }
+        ]
+      },
+      {
+        "description": "IDoc 51 sem conector",
+        "metadata": {
+          "path": "rule_engine"
+        },
+        "vars": {
+          "description": "IDoc parado com status 51",
+          "interface_type": "none",
+          "identifier": "none"
+        },
+        "assert": [
+          {
+            "type": "javascript",
+            "value": "['idoc_status_51.md','rule_engine:sap_idoc_status_51'].includes(JSON.parse(output).matched_source)"
+          }
+        ]
+      },
+      {
+        "description": "RFC connection refused sem conector",
+        "metadata": {
+          "path": "rule_engine"
+        },
+        "vars": {
+          "description": "SM59 dando erro de conexão recusada",
+          "interface_type": "none",
+          "identifier": "none"
+        },
+        "assert": [
+          {
+            "type": "javascript",
+            "value": "['rfc_connection_refused.md','rule_engine:network_connection_refused'].includes(JSON.parse(output).matched_source)"
+          }
+        ]
+      },
+      {
+        "description": "Identificador desconhecido - guardrail de seguranca (nao deve ter alta confianca)",
+        "metadata": {
+          "path": "llm"
+        },
+        "vars": {
+          "description": "algo estranho aconteceu",
+          "interface_type": "odata",
+          "identifier": "XPTO-999-NAO-EXISTE"
+        },
+        "assert": [
+          {
+            "type": "javascript",
+            "value": "const o = JSON.parse(output);\nreturn o.matched_source === null && o.confidence < 0.6;\n"
+          }
+        ]
+      },
+      {
+        "description": "OData com conector em fallback (sem identifier) - nao pode usar o 500 do mock",
+        "metadata": {
+          "path": "llm"
+        },
+        "vars": {
+          "description": "Pedidos do Salesforce nao chegam ao S/4HANA. OData retorna Read timed out after 60000 ms.",
+          "interface_type": "odata",
+          "identifier": "none"
+        },
+        "assert": [
+          {
+            "type": "javascript",
+            "value": "const o = JSON.parse(output); o.confidence < 0.6 && !/\\b500\\b/.test(o.probable_root_cause)"
+          }
+        ]
+      },
+      {
+        "description": "OData timeout com identifier desconhecido - causa correta, confianca limitada",
+        "metadata": {
+          "path": "llm"
+        },
+        "vars": {
+          "description": "Chamada OData do CPI para o S/4HANA excede o tempo limite (Read timed out after 60000 ms)",
+          "interface_type": "odata",
+          "identifier": "SO-SF-000123"
+        },
+        "assert": [
+          {
+            "type": "javascript",
+            "value": "const o = JSON.parse(output); o.confidence <= 0.4 && /timeout|tempo limite|filtro/i.test(o.probable_root_cause)"
+          }
+        ]
+      },
+      {
+        "description": "OData timeout com CPI-TIMEOUT-DEMO - documento e sistema convergem",
+        "metadata": {
+          "path": "rule_engine"
+        },
+        "vars": {
+          "description": "Chamada OData do CPI para o S/4HANA excede o tempo limite",
+          "interface_type": "odata",
+          "identifier": "CPI-TIMEOUT-DEMO"
+        },
+        "assert": [
+          {
+            "type": "javascript",
+            "value": "const o = JSON.parse(output); ['odata_timeout_cpi.md','rule_engine:http_timeout'].includes(o.matched_source) && o.confidence >= 0.8"
+          }
+        ]
+      },
+      {
+        "description": "RFC pool esgotado no fechamento - nao e connection refused",
+        "metadata": {
+          "path": "llm"
+        },
+        "vars": {
+          "description": "Chamada RFC sincrona via destino SM59 falha apos cerca de 60 segundos com SYSTEM_FAILURE durante o fechamento de mes; nao ha falha imediata de conexao e o destino responde a outros testes.",
+          "interface_type": "none",
+          "identifier": "none"
+        },
+        "assert": [
+          {
+            "type": "javascript",
+            "value": "JSON.parse(output).matched_source === 'rfc_gateway_pool_timeout.md'"
+          }
+        ]
+      },
+      {
+        "description": "OData mudou de contrato apos patch - nao e timeout",
+        "metadata": {
+          "path": "llm"
+        },
+        "vars": {
+          "description": "Depois do ultimo patch do S/4HANA o consumidor OData passou a receber 404 ao ler uma propriedade; o servico responde, mas o campo nao existe mais no $metadata.",
+          "interface_type": "none",
+          "identifier": "none"
+        },
+        "assert": [
+          {
+            "type": "javascript",
+            "value": "JSON.parse(output).matched_source === 'odata_contract_drift.md'"
+          }
+        ]
+      },
+      {
+        "description": "API Management barra por volume e proxy de 55s - nao e 401 do SAP",
+        "metadata": {
+          "path": "llm"
+        },
+        "vars": {
+          "description": "O gateway de API Management rejeita chamadas quando o volume sobe e outras cortam perto de 55 segundos; o backend S/4HANA responde normalmente quando chamado direto.",
+          "interface_type": "none",
+          "identifier": "none"
+        },
+        "assert": [
+          {
+            "type": "javascript",
+            "value": "JSON.parse(output).matched_source === 'apim_gateway_auth_throttle.md'"
+          }
+        ]
+      },
+      {
+        "description": "Mensagem presa no PO sem avancar - nao e duplicidade nem ordem",
+        "metadata": {
+          "path": "llm"
+        },
+        "vars": {
+          "description": "Uma mensagem no monitor do SAP PO/PI aparece como em processamento e nao avanca, sem ser concluida com sucesso; o time suspeita de lentidao do backend SAP.",
+          "interface_type": "none",
+          "identifier": "none"
+        },
+        "assert": [
+          {
+            "type": "javascript",
+            "value": "JSON.parse(output).matched_source === 'po_pi_stuck_message.md'"
+          }
+        ]
+      },
+      {
+        "description": "Case Salesforce - falha silenciosa no middleware, nao e o ITSM",
+        "metadata": {
+          "path": "llm"
+        },
+        "vars": {
+          "description": "Um Case no Salesforce relata que um pedido criado no CRM nao aparece no SAP; o envio do Salesforce ao middleware teve sucesso e nao ha erro visivel no lado CRM.",
+          "interface_type": "none",
+          "identifier": "none"
+        },
+        "assert": [
+          {
+            "type": "javascript",
+            "value": "JSON.parse(output).matched_source === 'salesforce_case_sap_sync_failure.md'"
+          }
+        ]
+      },
+      {
+        "description": "Guardrail 2 - identificador desconhecido plausivel (nao deve anexar doc)",
+        "metadata": {
+          "path": "llm"
+        },
+        "vars": {
+          "description": "Nao sei dizer o que esta errado, so que a integracao parou de funcionar ontem.",
+          "interface_type": "none",
+          "identifier": "INT-2026-Q3-XYZ"
+        },
+        "assert": [
+          {
+            "type": "javascript",
+            "value": "const o = JSON.parse(output);\nreturn o.matched_source === null && o.confidence < 0.6;\n"
+          }
+        ]
+      }
+    ],
+    "env": {},
+    "outputPath": [
+      "data/eval/promptfoo_qwen36_results.json"
+    ],
+    "extensions": [],
+    "metadata": {},
+    "evaluateOptions": {},
+    "basePath": "/home/marcos-lima/MyProjects/GitHub/integration-incident-copilot"
+  },
+  "shareableUrl": null,
+  "metadata": {
+    "promptfooVersion": "0.124.1",
+    "nodeVersion": "v24.20.0",
+    "platform": "linux",
+    "arch": "x64",
+    "exportedAt": "2026-10-13T18:02:14.192Z",
+    "evaluationCreatedAt": "2026-10-13T17:56:04.501Z"
+  },
+  "vars": [
+    "description",
+    "interface_type",
+    "identifier"
+  ],
+  "runtimeOptions": {
+    "eventSource": "cli",
+    "showProgressBar": true,
+    "repeat": 1,
+    "maxConcurrency": 4,
+    "cache": true
+  }
+}

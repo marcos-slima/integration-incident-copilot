@@ -137,7 +137,8 @@ Abridged response:
 
 - **Interactive API docs:** <http://127.0.0.1:8000/docs>.
 - **Free-text incidents** (anything the rules do not cover) need an LLM:
-  - local: `ollama pull qwen3.8:27b` and keep `LLM_PROVIDER=ollama`;
+  - local development: `ollama pull qwen3-coder-next:latest` (faster, better reasoning for refactorings);
+  - local production: `ollama pull qwen3.6:35b-a3b` (stable, fast enough for incident diagnosis);
   - cloud: set `LLM_PROVIDER=openai` or `azure_openai` with its credentials,
     and allow the origin as described in section 6 of the
     [troubleshooting guide](docs/TROUBLESHOOTING.md).
@@ -195,7 +196,7 @@ Variables, demo identifiers and how to add a connector:
 | Retrieval on the bundled evaluation set (18 in-scope queries, 10 out of scope) | Hit@1 94.4 %, Hit@3 100 %, MRR 0.972; 9 of 10 out-of-scope queries rejected | CI job `rag-quality` |
 | Quality gates | 20 deterministic checks: dataset, reranker invariant, prompt digest vs. the measured prompt, documentation links, symbols and environment variables, connector reachability | CI job `deterministic` |
 | Database | migrations applied and checked; the 45 dashboard queries and the contract-drift end-to-end tests run against a real PostgreSQL | CI job `migrations_and_dashboards` |
-| Test coverage | 1495 tests passing, 82.29% code coverage | CI job `tests` |
+| Test coverage | 1491 tests passing, 81% code coverage | CI job `tests` |
 
 The evaluation set is small, and the chosen reranker's advantage over the
 baseline (ms-marco-L6) is one query out of 18, which is not statistically
@@ -264,8 +265,8 @@ Each of these is documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 ## Current status (2026-10-13)
 
 - ✅ All 16 remediation phases completed
-- ✅ 1495 tests passing, 82.29% code coverage
-- ✅ Quality gate: 20/20 PASS
+- ✅ 1491 tests passing, 81% code coverage
+- ✅ Quality gate: 17 PASS, 3 WARN
 - ✅ README corrected: 28 rules (22 hardcoded + 6 SKOS), 53 decisions, CIO 2025 source
 - ✅ Evidence matrix added with implementation status (VER/NVAL/OPC/PARC/AUS)
 - ✅ Root cause explanations added for Qdrant and web search gaps

@@ -42,7 +42,7 @@ case "$PROVIDER" in
         BASE_URL="${GROQ_BASE_URL:-https://api.groq.com/openai/v1}"
         ;;
     OLLAMA)
-        LLM_MODEL="${OLLAMA_MODEL:-qwen3.8:27b}"
+        LLM_MODEL="${OLLAMA_MODEL:-qwen3.6:35b-a3b}"
         API_KEY=""
         BASE_URL=""
         ;;

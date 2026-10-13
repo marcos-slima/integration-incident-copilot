@@ -261,6 +261,15 @@ followed by verified fixes, and these limits remain open:
 
 Each of these is documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+## Current status (2026-10-13)
+
+- ✅ All 16 remediation phases completed
+- ✅ 1495 tests passing, 82.29% code coverage
+- ✅ Quality gate: 20/20 PASS
+- ✅ README corrected: 28 rules (22 hardcoded + 6 SKOS), 53 decisions, CIO 2025 source
+- ✅ Evidence matrix added with implementation status (VER/NVAL/OPC/PARC/AUS)
+- ✅ Root cause explanations added for Qdrant and web search gaps
+
 ## Documentation
 
 | If you want to… | Read |

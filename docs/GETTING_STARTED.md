@@ -50,7 +50,7 @@ docker compose config -q   # sem saída = interpolação ok
 ## 2. Baixe os modelos
 
 ```bash
-ollama pull qwen3.8:27b
+ollama pull qwen3.6:35b-a3b
 ollama pull nomic-embed-text
 ```
 
@@ -342,7 +342,7 @@ nome do serviço dentro da rede do compose e não resolve na máquina.
 
 **Modelo não encontrado**
 ```bash
-ollama pull qwen3.8:27b && ollama pull nomic-embed-text
+ollama pull qwen3.6:35b-a3b && ollama pull nomic-embed-text
 ```
 
 **Confiança sempre baixa**

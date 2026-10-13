@@ -39,7 +39,7 @@ DEFAULT_MODELS = [
     "qwen3.6:35b-a3b",
     "qwen3-coder:latest",
     "qwen3-coder-next:latest",
-    "qwen3.8:27b",
+    "qwen3.6:35b-a3b",
 ]
 _TOOLS = [
     {

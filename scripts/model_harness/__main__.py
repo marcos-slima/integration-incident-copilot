@@ -26,7 +26,7 @@ DEFAULT_MODELS = [
     "ollama/qwen3.6:35b-a3b",
     "ollama/qwen3-coder:latest",
     "ollama/qwen3-coder-next:latest",
-    "ollama/qwen3.8:27b",
+    "ollama/qwen3.6:35b-a3b",
 ]
 
 

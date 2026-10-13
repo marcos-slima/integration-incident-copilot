@@ -1,0 +1,31 @@
+{
+  "collections": {
+    "sap_incident_docs": {
+      "dense_size": 768,
+      "embedding": {
+        "dense_size": 768,
+        "embedding_model": "nomic-embed-text",
+        "provider": "ollama"
+      },
+      "files_processed": 15,
+      "generated_at": "2026-10-13T20:44:03+00:00",
+      "points": 70,
+      "source_dir": "data/sample_docs",
+      "target": "incidents"
+    },
+    "sap_reference_library": {
+      "dense_size": 768,
+      "embedding": {
+        "dense_size": 768,
+        "embedding_model": "nomic-embed-text",
+        "provider": "ollama"
+      },
+      "files_processed": 2112,
+      "generated_at": "2026-10-13T21:25:29+00:00",
+      "points": 18535,
+      "source_dir": "data/reference_library",
+      "target": "reference"
+    }
+  },
+  "schema": 1
+}

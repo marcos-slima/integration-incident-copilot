@@ -79,7 +79,10 @@ import logging
 from uuid import NAMESPACE_URL, uuid5
 
 from qdrant_client.http import models
-from qdrant_client.http.exceptions import UnexpectedResponse
+from qdrant_client.http.exceptions import (
+    ResponseHandlingException,
+    UnexpectedResponse,
+)
 from qdrant_client.http.models import Distance, VectorParams
 
 _logger = logging.getLogger(__name__)
@@ -206,12 +209,13 @@ def read_fingerprint(client, collection_name: str) -> str | None:
             with_payload=True,
             with_vectors=False,
         )
-    except UnexpectedResponse:
+    except (UnexpectedResponse, ResponseHandlingException):
         # Collection lateral ausente: o Qdrant responde 404 (ou 400 quando
         # a collection nem existe ainda, verificado na 1.19.0). Ausente e'
         # "nao sei", nao erro - quem decide a severidade e'
         # `verify_collection_embedding`.
         #
+        # ResponseHandlingException cobre timeout/connection refused.
         # Nao e' `except Exception`: rede caida seria mascarada como
         # "sem fingerprint", que e' o estado que emite o AVISO de
         # identidade desconhecida. Um Qdrant inalcancavel precisa
@@ -238,7 +242,7 @@ def describe_dense_size(client, collection_name: str) -> int | None:
     """
     try:
         collection_info = client.get_collection(collection_name)
-    except UnexpectedResponse:
+    except (UnexpectedResponse, ResponseHandlingException):
         return None
     vectors = getattr(getattr(collection_info, "config", None), "params", None)
     vectors = getattr(vectors, "vectors", None)
@@ -376,13 +380,26 @@ def verify_once(
     chave = (collection_name, embedding_fingerprint(model, provider))
     if chave in _VERIFIED:
         return
-    aviso = verify_collection_embedding(
-        client,
-        collection_name,
-        expected_model=model,
-        expected_size=expected_size,
-        provider=provider,
-    )
+    try:
+        aviso = verify_collection_embedding(
+            client,
+            collection_name,
+            expected_model=model,
+            expected_size=expected_size,
+            provider=provider,
+        )
+    except (UnexpectedResponse, ResponseHandlingException):
+        # Qdrant inacessivel durante verificacao de embedding.
+        # Nao e' possivel determinar se o embedding e' compativel.
+        # Loga como warning e continua (o retrieval vai falhar depois,
+        # mas com mensagem mais especifica).
+        _logger.warning(
+            "[embedding_guard] Qdrant indisponivel para verificacao de embedding (%s) — "
+            "continuando sem validacao: %s",
+            collection_name,
+            exc_info=True,
+        )
+        aviso = None
     # So entra no cache DEPOIS de verificar (validacao 2026-10-07, R15):
     # antes a chave era gravada antes da checagem, entao a 1a chamada
     # levantava EmbeddingMismatchError e todas as seguintes passavam em

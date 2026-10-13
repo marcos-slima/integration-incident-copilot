@@ -21,7 +21,10 @@ import numpy as np
 from fastembed import SparseTextEmbedding, TextEmbedding
 from langchain_ollama import OllamaEmbeddings
 from qdrant_client import QdrantClient
-from qdrant_client.http.exceptions import UnexpectedResponse
+from qdrant_client.http.exceptions import (
+    ResponseHandlingException,
+    UnexpectedResponse,
+)
 from qdrant_client.models import Fusion, FusionQuery, Prefetch, SparseVector
 from sentence_transformers import CrossEncoder
 
@@ -177,16 +180,24 @@ def _retrieve_hybrid(query: str, collection_name: str, top_k: int) -> list[dict]
     # escolher entre mais opcoes.
     fusion_limit = max(top_k * 5, HYBRID_PREFETCH_LIMIT)
 
-    fused = client.query_points(
-        collection_name=collection_name,
-        prefetch=[
-            Prefetch(query=dense_query, using="dense", limit=HYBRID_PREFETCH_LIMIT),
-            Prefetch(query=sparse_query, using="sparse", limit=HYBRID_PREFETCH_LIMIT),
-        ],
-        query=FusionQuery(fusion=Fusion.RRF),
-        limit=fusion_limit,
-        with_vectors=["dense"],
-    ).points
+    try:
+        fused = client.query_points(
+            collection_name=collection_name,
+            prefetch=[
+                Prefetch(query=dense_query, using="dense", limit=HYBRID_PREFETCH_LIMIT),
+                Prefetch(query=sparse_query, using="sparse", limit=HYBRID_PREFETCH_LIMIT),
+            ],
+            query=FusionQuery(fusion=Fusion.RRF),
+            limit=fusion_limit,
+            with_vectors=["dense"],
+        ).points
+    except (ResponseHandlingException, UnexpectedResponse) as exc:
+        _logger.warning(
+            "[retriever] Qdrant indisponivel (%s) — continuando sem contexto: %s",
+            collection_name,
+            exc,
+        )
+        return []
 
     # Score composto: combina cosseno denso (semantica) com rank posicional
     # normalizado (sinal do BM25 esparso via RRF do Qdrant).
@@ -259,12 +270,22 @@ def _retrieve_dense_only(
     _prov, _modelo = embedding_identity()
     verify_once(client, collection_name, _modelo, provider=_prov)
     query_vector = _get_embeddings().embed_query(query)
-    results = client.query_points(
-        collection_name=collection_name,
-        query=query_vector,
-        limit=top_k,
-        score_threshold=score_threshold,
-    ).points
+
+    try:
+        results = client.query_points(
+            collection_name=collection_name,
+            query=query_vector,
+            limit=top_k,
+            score_threshold=score_threshold,
+        ).points
+    except (ResponseHandlingException, UnexpectedResponse) as exc:
+        _logger.warning(
+            "[retriever] Qdrant indisponivel (%s) — continuando sem contexto: %s",
+            collection_name,
+            exc,
+        )
+        return []
+
     return [
         {
             "source": hit.payload.get("source"),
@@ -468,9 +489,15 @@ def _retrieve_unified(
                         REFERENCE_FALLBACK_THRESHOLD,
                     )
                 )
-        except (ValueError, RuntimeError, UnexpectedResponse) as _ref_err:
+        except (
+            ValueError,
+            RuntimeError,
+            ResponseHandlingException,
+            UnexpectedResponse,
+        ) as _ref_err:
             # Distingue falha de infra (Qdrant inacessivel) de colecao vazia:
             # sem log, o diagnóstico parece correto quando na verdade o retrieval falhou.
+            # ResponseHandlingException cobre timeout/connection refused.
             # UnexpectedResponse cobre o 404 do Qdrant quando a collection
             # sap_reference_library nao existe (ambiente novo, biblioteca
             # nao indexada) - antes escapava do except e derrubava o

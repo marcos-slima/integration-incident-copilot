@@ -210,8 +210,8 @@ followed by verified fixes, and these limits remain open:
 
 - **Kyma:** the manifests in `deploy/kyma/` have never been applied to a real cluster.
 - **Connectors:** six of the ten have not been validated against a real instance (table above).
-- **Vector store outage:** with Qdrant down, `/diagnose` returns 500 even when a rule would have answered (the fallback to rule engine only is not yet implemented).
-- **Prompt-injection gap:** web-search results returned to the ReAct agent are not yet sanitized.
+- **Vector store outage:** with Qdrant down, `/diagnose` returns 500 even when a rule would have answered. The `retrieve_node` node attempts to query Qdrant before the rule engine is invoked; a fallback to rule-engine-only mode when Qdrant is unavailable is not yet implemented.
+- **Prompt-injection gap:** web-search results returned to the ReAct agent are not yet sanitized. The `web_search_tool` tool is invoked by the ReAct agent, but its results are not sanitized before being passed to the LLM, which could allow an attacker to inject malicious instructions via web search results.
 
 Each of these is documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 

@@ -35,7 +35,7 @@ cost comparison is in [`docs/TCO_SAP_AI_CORE_VS_SELF_HOSTED.md`](docs/TCO_SAP_AI
 
 | | What it means in practice |
 |---|---|
-| **Deterministic first** | 22 curated rules answer known errors (IDoc 51, expired OAuth, RFC connection refused…) before any LLM call: instant, free, auditable. Such answers carry no prompt version, because no prompt produced them. |
+| **Deterministic first** | 28 curated rules answer known errors (IDoc 51, expired OAuth, RFC connection refused…) before any LLM call: instant, free, auditable. 22 rules are hardcoded; 6 more come from the SKOS taxonomy. Such answers carry no prompt version, because no prompt produced them. |
 | **Evidence, not self-assessment** | Every answer lists its sources with a trust level (`system_observed`, `retrieved_document`, `simulated`, `user_reported`). Confidence is capped by the evidence, and a source the LLM cites but was never retrieved is discarded. |
 | **Data sovereignty by real origin** | Free text is treated as confidential by default. Confidential data only reaches a local model or a cloud origin you explicitly allowlist; the decision is made on the provider's real URL, not its label. `GET /llm/policy` shows the effective policy. |
 | **Multi-agent, deterministic routing** | A supervisor routes each incident to an SAP, SaaS or generic specialist with plain code, not with an LLM. |
@@ -221,7 +221,7 @@ Each of these is documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 |---|---|
 | Run it for the first time | [Getting started](docs/GETTING_STARTED.md) → [User guide](docs/USER_GUIDE.md) |
 | See how it works, with diagrams | [Architecture](docs/ARCHITECTURE.md) |
-| Understand *why* it was built this way | [Architecture decisions](docs/DECISOES_DE_ARQUITETURA.md) (50 recorded decisions) |
+| Understand *why* it was built this way | [Architecture decisions](docs/DECISOES_DE_ARQUITETURA.md) (53 recorded decisions) |
 | Follow real scenarios end to end | [Use cases](docs/CASOS_DE_USO.md) |
 | Configure a connector | [Connectors](docs/CONNECTORS.md) |
 | Fix something | [Troubleshooting](docs/TROUBLESHOOTING.md) |

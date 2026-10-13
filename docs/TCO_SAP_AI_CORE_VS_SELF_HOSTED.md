@@ -32,13 +32,13 @@ expiram em 12 meses, convertendo para cobrança on-demand com prêmio de
 
 **Por que isso exclui estruturalmente boa parte da base SAP:** a
 exigência de HANA Cloud como camada obrigatória pressupõe estar em
-S/4HANA sobre BTP. Segundo Gartner/IDC, cerca de **40-45% da base de
+S/4HANA sobre BTP. Segundo CIO (2025), cerca de **40-45% da base de
 clientes SAP ECC** deve permanecer em sistemas legados além de 2027
 (entre 13 mil e 17 mil clientes, a depender do horizonte), muitas
 vezes por anos — com custo de migração para S/4HANA variando de US$ 2
 milhões a US$ 1 bilhão, dependendo da complexidade.
 
-*Fonte: [Nearly half of SAP ECC customers may stick with legacy ERP beyond 2027 (CIO)](https://www.cio.com/article/4000543/nearly-half-of-sap-ecc-customers-may-stick-with-legacy-erp-beyond-2027.html).*
+*Fonte: [CIO: Nearly half of SAP ECC customers may stick with legacy ERP beyond 2027](https://www.cio.com/article/4000543/nearly-half-of-sap-ecc-customers-may-stick-with-legacy-erp-beyond-2027.html), consultado em 2025.*
 
 ## O custo de uma alternativa local/sob medida
 

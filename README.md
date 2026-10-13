@@ -210,7 +210,7 @@ followed by verified fixes, and these limits remain open:
 
 - **Kyma:** the manifests in `deploy/kyma/` have never been applied to a real cluster.
 - **Connectors:** six of the ten have not been validated against a real instance (table above).
-- **Vector store outage:** with Qdrant down, `/diagnose` returns 500 even when a rule would have answered.
+- **Vector store outage:** with Qdrant down, `/diagnose` returns 500 even when a rule would have answered (the fallback to rule engine only is not yet implemented).
 - **Prompt-injection gap:** web-search results returned to the ReAct agent are not yet sanitized.
 
 Each of these is documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).

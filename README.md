@@ -203,6 +203,52 @@ significant; see [`docs/RERANKER_BENCHMARK.md`](docs/RERANKER_BENCHMARK.md).
 What the gates **do not** cover is listed in
 [`docs/QUALITY_GATES.md`](docs/QUALITY_GATES.md).
 
+## Evidence matrix
+
+The table below maps each capability to its implementation status and evidence.
+
+| Capability | Class | Evidence | Notes |
+|---|---|---|---|
+| Supervisor → connector → retrieve → specialist → report flow | VER | `app/agent/graph.py:84-131`; diagram generated and tested against code | Not retrieve → diagnose → report |
+| Deterministic supervisor (sap/saas/generic) | VER | `app/agent/supervisor.py:107-133` | No LLM |
+| Three specialists, one per incident | VER | `graph.py:87-89` | |
+| Rule engine before LLM | VER | `nodes.py` (_run_diagnosis_agent); `rules.py:28-37, 97`; measured: ttl=28, hardcoded=22, combined=28 | README previously said 22 |
+| ReAct agent with optional web search | VER | `nodes.py:1085-1128` | One agent per incident, no autonomous action |
+| Hybrid RAG (dense + BM25) + reranker | VER | `app/rag/retriever.py:41`; CI job `rag-quality` | Production reranker: mmarco-mMiniLMv2-L12-H384-v1 |
+| Retrieval metrics (Hit@1 94.4%, MRR 0.972) | NVAL | README/CI; not reproduced (require Qdrant) | Always cite with n=18 and "reported by CI" |
+| Reranker advantage | VER | `docs/RERANKER_BENCHMARK.md`; 17/18 vs 16/18, McNemar p=1.0; gate `reranker_invariant` = WARN | Not statistically significant |
+| GraphRAG / Neo4j | OPC | `config.py:378`; `graph.py:96`; CI `neo4j-smoke` | Disabled by default |
+| SKOS error taxonomy feeding rules | VER | `app/ontology/error_codes.ttl` (39 skos:Concept); `ontology_loader.py:211` | Error code taxonomy, not formal domain ontology |
+| Semantic enrichment in retrieval | OPC | `config.py:385`; `nodes.py:159` | Disabled by default |
+| Evidence with trust_level | VER | `nodes.py:756, 834`; `_assemble_evidence` | |
+| Confidence capped by evidence (+0.25) | VER | `nodes.py:715, 893` | |
+| 0.4 cap with fallback data | VER | `nodes.py:897` | |
+| Only most relevant document in prompt | VER | `nodes.py:615-630` | DA-1 |
+| seed=42 | VER | `app/llm/factory.py:152` | Sent only when destination accepts |
+| AI Gateway: sensitivity, breaker, budget, audit | VER | `app/llm/gateway.py:9-26, 126-158`; `GET /llm/policy` | Default confidential (`config.py:159`) |
+| PII redaction by patterns | VER | `app/redaction.py` (email, CPF, CNPJ, IDoc 16 digits, bearer, passwords) | No NER/classifier |
+| Sanitization against prompt injection | PARC | `nodes.py:501-691` | Gap: ReAct agent web tool results return raw (`nodes.py:1043-1048`) |
+| Web search only with approved source (fail-closed) | VER | `nodes.py:1000-1030`, DA-57 | |
+| 10 connectors under one contract | VER | `app/connectors/` | |
+| Validation in real system | PARC | ServiceNow, Salesforce, CAP: yes; RFC: logon; 6 without validation | `docs/ARCHITECTURE.md:644-652`; gate `connector_validation_matrix` |
+| REST `/diagnose` and `/diagnose/async` (RQ + Redis) | VER | `app/main.py`, `app/queue.py`, tests | Async requires worker |
+| MCP server (2 read-only tools only) | VER | `app/mcp/policy.py:95-125` | Policy denies unregistered tool by default |
+| A2A 0.3 | VER | `app/a2a/` | Note: GA inbound from Joule expected Q4/2026 (`docs/ARCHITECTURE.md:888`) |
+| CloudEvents ingestion (webhook) | VER | `app/events/consumer.py`, `tests/test_events.py` | |
+| AMQP 1.0 consumer | NVAL | `app/events/amqp_consumer.py`; 14 tests in `tests/test_amqp_consumer.py` | No real broker evidence |
+| OData contract drift detection | VER | `app/contracts/`; test diff/observe/e2e | OData connector never validated in real tenant |
+| Escalation (`should_escalate`) | PARC | `app/agent/escalation.py`; `graph.py:271, 311` | Only signals and logs; tier 3 (paid model) "not part of DA" |
+| HITL a posteriori | VER | `POST /incidents/{id}/verify`, `main.py:777-884` | SQL, `VERIFIED_AS` (if GraphRAG on), Langfuse score |
+| HITL before action | AUS | `policy.py: approval_required` exists; `approved` depends on "not implemented in v1" mechanism | No action to approve today |
+| Langfuse | VER | `observe_span` in retrieve, graph_enrich, graph_write, web_search, 3 specialists, report and root; CallbackHandler on LLM | supervisor and connector not instrumented |
+| Tests | VER | 1523 collected; `-m "not integration"`: 1491 passed, 19 skipped, 14 deselected, 0 failures | Without Qdrant, Ollama and Neo4j |
+| Coverage | VER | 81% (7622 lines; 1433 uncovered); CI requires ≥80% (`tests.yml:55`) | |
+| Quality gates | VER | 20 defined (`gates.py:1515`); 17 PASS, 3 WARN, 0 FAIL | WARN: reranker, deployed model, index_manifest |
+| CI | VER | `tests.yml` (lint, tests, security, compose smoke, rag-quality, neo4j-smoke) and `quality.yml` | |
+| Kyma | NVAL | `deploy/kyma/` (10 files) | Never applied to real cluster |
+| Failure without Qdrant | VER | README, "Project status" | `/diagnose` returns 500 |
+| Architecture decisions | VER | 53 sections in `docs/DECISOES_DE_ARQUITETURA.md`; 44 with DA | |
+
 ## Project status
 
 The project is under active development. In 2026-10 a full audit was

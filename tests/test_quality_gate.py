@@ -19,6 +19,7 @@ from app.evaluation.gates import (
     check_docs_markup_integrity,
     check_documented_das,
     check_index_current,
+    check_llm_baseline,
     check_promptfoo_configs,
     check_rag_dataset,
     check_reranker_invariant,
@@ -1540,3 +1541,145 @@ def test_connector_reachable_usa_o_parser_do_runtime(tmp_path: Path) -> None:
     falhas = [f for f in check_connector_reachable(root) if f.is_failure]
     assert falhas
     assert "nao mapeados para dominio" in falhas[0].message
+
+
+# ── gate llm_baseline: generated_at + freshness (M-24) ─────────────
+
+
+def _llm_baseline_root(tmp_path: Path, generated_at: str | None = None) -> Path:
+    """Cria um baseline minimo com `generated_at` controlado."""
+    root = tmp_path
+    (root / "data").mkdir(exist_ok=True)
+    (root / "data/eval").mkdir(parents=True, exist_ok=True)
+    baseline = {
+        "generated_at": generated_at,
+        "model": "qwen3.6:35b-a3b",
+        "cases": {"caso_a": True},
+        "pass_rate": 1.0,
+    }
+    (root / "data/eval/promptfoo_baseline.json").write_text(
+        json.dumps(baseline, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    return root
+
+
+def test_llm_baseline_pass_com_timestamp_real(tmp_path: Path) -> None:
+    """Baseline com timestamp real do promptfoo passa sem aviso."""
+    root = _llm_baseline_root(tmp_path, "2026-10-13T17:56:04.501Z")
+    assert not [f for f in check_llm_baseline(root) if f.is_failure]
+
+
+def test_llm_baseline_falha_com_generated_at_null(tmp_path: Path) -> None:
+    """generated_at null é falha — data de medição ausente."""
+    root = _llm_baseline_root(tmp_path, None)
+    falhas = [f for f in check_llm_baseline(root) if f.is_failure]
+    assert len(falhas) == 1
+    assert "null" in falhas[0].message
+
+
+def test_llm_baseline_warn_com_freshness_maior_30_dias(tmp_path: Path) -> None:
+    """Baseline com mais de 30 dias vira WARN, nao FAIL."""
+    root = _llm_baseline_root(tmp_path, "2026-08-01T00:00:00Z")
+    avisos = [f for f in check_llm_baseline(root) if f.severity == "warn"]
+    assert len(avisos) == 1
+    assert "dias de idade" in avisos[0].message
+    # Mas nao e' falha.
+    assert not [f for f in check_llm_baseline(root) if f.is_failure]
+
+
+def test_llm_baseline_falha_com_data_no_futuro(tmp_path: Path) -> None:
+    """Data no futuro é rejeitada — provavel data digitada a mao."""
+    root = _llm_baseline_root(tmp_path, "2030-01-01T00:00:00Z")
+    falhas = [f for f in check_llm_baseline(root) if f.is_failure]
+    assert len(falhas) == 1
+    assert "futuro" in falhas[0].message
+
+
+def test_llm_baseline_falha_com_iso_invalido(tmp_path: Path) -> None:
+    """String que nao e' ISO 8601 valida reprova."""
+    root = _llm_baseline_root(tmp_path, "ontem-de-tarde")
+    falhas = [f for f in check_llm_baseline(root) if f.is_failure]
+    assert len(falhas) == 1
+    assert "ISO 8601" in falhas[0].message
+
+
+def test_llm_baseline_pass_com_timestamp_sem_fuso(tmp_path: Path) -> None:
+    """Timestamp sem fuso (ex: '2026-10-13T17:56:04') e' ISO valido;
+    o gate normaliza para UTC antes de comparar."""
+    root = _llm_baseline_root(tmp_path, "2026-10-13T17:56:04")
+    assert not [f for f in check_llm_baseline(root) if f.is_failure]
+
+
+# ── gravador _write_baseline (fecha o ciclo com o gate) ─────────────
+
+
+def _make_promptfoo_json(data: dict | list, tmp_path: Path) -> Path:
+    """Cria um arquivo JSON simulando saida do promptfoo em tmp_path."""
+    p = tmp_path / "result.json"
+    p.write_text(json.dumps(data), encoding="utf-8")
+    return p
+
+
+def test_write_baseline_com_dict_e_timestamp(tmp_path: Path) -> None:
+    """Payload dict com results.timestamp gera generated_at nao-null."""
+    from scripts.quality_gate import _write_baseline
+
+    src = _make_promptfoo_json(
+        {
+            "results": {
+                "results": [{"pass": True, "testCase": {"description": "A"}}],
+                "timestamp": "2026-10-13T17:56:04.501Z",
+            }
+        },
+        tmp_path,
+    )
+    dst = tmp_path / "baseline.json"
+    _write_baseline(src, dst)
+    loaded = json.loads(dst.read_text())
+    assert loaded["generated_at"] == "2026-10-13T17:56:04.501Z"
+
+
+def test_write_baseline_com_dict_sem_timestamp_grava_null(tmp_path: Path) -> None:
+    """Payload dict sem timestamp gera generated_at null — o gate reprova."""
+    from scripts.quality_gate import _write_baseline
+
+    src = _make_promptfoo_json(
+        {"results": {"results": [{"pass": True, "testCase": {"description": "A"}}]}},
+        tmp_path,
+    )
+    dst = tmp_path / "baseline.json"
+    _write_baseline(src, dst)
+    loaded = json.loads(dst.read_text())
+    assert loaded["generated_at"] is None
+
+
+def test_write_baseline_com_lista_nao_quebra(tmp_path: Path) -> None:
+    """Payload lista (formato alternativo do promptfoo) nao causa AttributeError."""
+    from scripts.quality_gate import _write_baseline
+
+    src = _make_promptfoo_json(
+        [
+            {"pass": True, "testCase": {"description": "A"}},
+            {"pass": False, "testCase": {"description": "B"}},
+        ],
+        tmp_path,
+    )
+    dst = tmp_path / "baseline.json"
+    # Antes do fix: AttributeError: 'list' object has no attribute 'get'
+    _write_baseline(src, dst)
+    loaded = json.loads(dst.read_text())
+    assert loaded["cases"] == {"A": True, "B": False}
+
+
+def test_write_baseline_grava_model_quando_fornecido(tmp_path: Path) -> None:
+    """O argumento --baseline-model e' gravado no baseline."""
+    from scripts.quality_gate import _write_baseline
+
+    src = _make_promptfoo_json(
+        {"results": {"results": [{"pass": True, "testCase": {"description": "A"}}]}},
+        tmp_path,
+    )
+    dst = tmp_path / "baseline.json"
+    _write_baseline(src, dst, model="gpt-4o-mini")
+    loaded = json.loads(dst.read_text())
+    assert loaded["model"] == "gpt-4o-mini"

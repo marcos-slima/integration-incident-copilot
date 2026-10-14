@@ -43,8 +43,17 @@ def _print_report(findings: list[dict[str, str]]) -> None:
 def _write_baseline(results_path: Path, destination: Path, model: str | None = None) -> int:
     payload = json.loads(results_path.read_text(encoding="utf-8"))
     cases = normalize_promptfoo_results(payload)
+    # Extrair timestamp do resultado real do promptfoo (results.timestamp).
+    # Se ausente, deixar None — o gate reprova null e exige --write-promptfoo-baseline.
+    generated_at: str | None = None
+    if isinstance(payload, dict):
+        results_meta = payload.get("results") or payload
+        if isinstance(results_meta, dict):
+            ts = results_meta.get("timestamp")
+            if ts:
+                generated_at = str(ts)
     baseline = {
-        "generated_at": None,
+        "generated_at": generated_at,
         # DEP-01: o gate deployed_model_evaluated compara com o LLM_MODEL do Kyma.
         "model": model,
         "cases": cases,

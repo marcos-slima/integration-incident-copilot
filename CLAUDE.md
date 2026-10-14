@@ -20,7 +20,7 @@ Portfólio da trilha SAP Architect → AI Architect (Marcos Lima).
 | API | FastAPI + Pydantic |
 | Orquestração | LangGraph (`app/agent/graph.py`) |
 | LLM | Ollama local (default) → OpenAI / Azure como fallback (DA-20/26) |
-| Modelo canônico | `qwen3.6:35b-a3b` (35B MoE, 128k ctx) — default em `app/config.py`, `.env.example`, `docker-compose.yml` e no promptfoo (troca em 2026-10-13; o anterior, `qwen3-coder-next:latest`, segue registrado em DA-4/8 + DA-12 como histórico). **Ressalva (validação 2026-10-07, M-21):** casos resolvidos pelo rule engine não medem o LLM (`metadata.path` no YAML); baseline oficial gravado em `data/eval/promptfoo_baseline.json` (17/17 total; 12/12 LLM-only) e o placar precisa ser re-medido |
+| Modelo canônico | `qwen3.6:35b-a3b` (35B MoE, 128k ctx) — default em `app/config.py`, `.env.example`, `docker-compose.yml` e no promptfoo (troca em 2026-10-13; o anterior, `qwen3-coder-next:latest`, segue registrado em DA-4/8 + DA-12 como histórico). **Ressalva (validação 2026-10-07, M-21):** casos resolvidos pelo rule engine não medem o LLM (`metadata.path` no YAML); baseline oficial gravado em `data/eval/promptfoo_baseline.json` (17/17 total; 12/12 LLM-only) |
 | RAG | LangChain + Qdrant (hybrid dense+sparse BM25, fusão RRF) |
 | Reranker | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` (benchmark DA-29; não usar ms-marco-L6) |
 | GraphRAG | Neo4j (`app/rag/graph_store.py`), opt-in via `GRAPH_RAG_ENABLED=true` |

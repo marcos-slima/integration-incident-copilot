@@ -35,6 +35,15 @@ AgentDomain = Literal["sap", "saas", "generic"]
 # DA-63: mapeamento declarativo interface_type -> dominio, derivado do
 # skill registry (data/skills/*.yaml). Construido uma vez no import.
 _DOMAIN_INDEX = build_domain_index()
+# Indice vazio nao e' "nenhum conector": e' skill ausente (diretorio fora
+# da imagem, SKILLS_DIR errado, YAML invalido). Seguir em frente rotearia
+# todo interface_type para generic sem erro — falha no import, como o
+# boot sem master key (DA-60).
+if not _DOMAIN_INDEX:
+    raise RuntimeError(
+        "DA-63: indice de dominios vazio — nenhuma skill valida com 'domains' em "
+        "data/skills/ (ou em SKILLS_DIR); o supervisor nao roteia sem ele"
+    )
 
 # Compatibilidade com o quality gate (DA-51, check_connector_reachable):
 # o gate ancora em _SAP_INTERFACE_TYPES / _SAAS_INTERFACE_TYPES como

@@ -790,6 +790,7 @@ def check_index_current(root: Path = REPO_ROOT) -> list[Finding]:
 DOCS_DIR = Path("docs")
 PIPELINE_MODEL_SOURCE = Path("app/models.py")
 CONNECTORS_SOURCE = Path("app/connectors/__init__.py")
+SKILLS_DIR = Path("data/skills")
 SUPERVISOR_SOURCE = Path("app/agent/supervisor.py")
 ADMIN_SYSTEMS_SOURCE = Path("app/admin/models.py")
 CLI_SOURCE = Path("app/agent/graph.py")
@@ -1229,24 +1230,27 @@ def check_connector_reachable(root: Path = REPO_ROOT) -> list[Finding]:
     # depois fallback para _SAP_INTERFACE_TYPES / _SAAS_INTERFACE_TYPES.
     domain_index = re.search(r"_DOMAIN_INDEX\s*=", supervisor)
     if domain_index is not None:
-        # Novo padrao: _DOMAIN_INDEX existe — verifica se o skill registry
-        # tem os arquivos correspondentes. O gate confia que build_domain_index()
-        # e' deterministica e deriva os cobertos do diretório data/skills/.
-        # Tenta root/data/skills (caso de tests) e root.parent/data/skills (caso real).
-        skills_dir = root / "data" / "skills"
-        if not skills_dir.is_dir():
-            skills_dir = root.parent / "data" / "skills"
-        if skills_dir.is_dir():
-            for yaml_file in sorted(skills_dir.glob("*.yaml")):
-                try:
-                    import yaml as _yaml  # local import para gate
+        # Mesmo parser do runtime (app/mcp/skill_registry.py, so yaml +
+        # stdlib): o gate nao pode aceitar um YAML que o supervisor rejeita.
+        # So <root>/data/skills conta — nao ha diretorio "vizinho" valido.
+        from app.mcp.skill_registry import build_domain_index, load_skills
 
-                    data = _yaml.safe_load(yaml_file.read_text(encoding="utf-8"))
-                    domains = data.get("domains") or {}
-                    for it_list in domains.values():
-                        cobertos |= set(re.findall(r"""['"]([a-z_]+)['"]""", str(it_list)))
-                except (OSError, KeyError, TypeError):
-                    pass  # YAML invalido ou erro de leitura — ignora, o fallback pega
+        skills_dir = root / SKILLS_DIR
+        if not skills_dir.is_dir():
+            problemas.append(f"{SKILLS_DIR} nao existe — o supervisor nao tem indice de dominios")
+        else:
+            try:
+                cobertos |= set(build_domain_index(load_skills(skills_dir)))
+            except ValueError as exc:
+                problemas.append(str(exc))
+        # A imagem precisa levar as skills: sem o COPY o supervisor do
+        # container nao tem indice (achado na revisao de 2026-10-14, quando
+        # o Dockerfile so copiava data/sample_docs/).
+        dockerfile = root / "Dockerfile"
+        if dockerfile.is_file() and not re.search(
+            r"^COPY\b.*\bdata/skills/?\s", dockerfile.read_text(encoding="utf-8"), re.MULTILINE
+        ):
+            problemas.append(f"Dockerfile nao copia {SKILLS_DIR}/ para a imagem")
     else:
         # Padrao antigo: _SAP_INTERFACE_TYPES / _SAAS_INTERFACE_TYPES hardcoded.
         for nome in ("_SAP_INTERFACE_TYPES", "_SAAS_INTERFACE_TYPES"):

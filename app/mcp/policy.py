@@ -53,33 +53,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-import yaml
+from app.mcp.skill_registry import load_skills
 
 RiskLevel = Literal["low", "medium", "high", "critical"]
 DataSensitivity = Literal["public", "confidential"]
-
-
-def _load_skills_from_yaml() -> dict[str, dict[str, Any]]:
-    """Carrega skills declarativas de data/skills/*.yaml."""
-    import os as _os
-    from pathlib import Path as _Path
-
-    skills_dir = _Path(_os.environ.get("SKILLS_DIR", "data/skills"))
-    if not skills_dir.is_dir():
-        return {}
-    skills: dict[str, dict[str, Any]] = {}
-    for path in sorted(skills_dir.glob("*.yaml")):
-        try:
-            data = yaml.safe_load(path.read_text(encoding="utf-8"))
-            if not isinstance(data, dict):
-                continue
-            name = data.get("name")
-            if not name:
-                continue
-            skills[name] = data
-        except (yaml.YAMLError, OSError):
-            continue
-    return skills
 
 
 def _build_capability_registry_from_skills(
@@ -137,18 +114,14 @@ class ExecutionContext:
 # (app/mcp/server.py). enforce() e FAIL-CLOSED - uma tool ausente
 # daqui e negada, nunca permitida por omissao.
 # DA-63: CAPABILITY_REGISTRY e' derivado das skills declarativas em
-# data/skills/*.yaml. Se o diretorio existir, usa-o como fonte de
-# verdade; caso contrario, usa o dict estatico abaixo (fallback para
-# compatibilidade com ambientes sem YAML).
-try:
-    _SKILLS_DIR = __import__("pathlib").Path("data/skills")
-    if _SKILLS_DIR.is_dir() and any(_SKILLS_DIR.glob("*.yaml")):
-        CAPABILITY_REGISTRY: dict[str, ToolPolicy] = _build_capability_registry_from_skills(
-            _load_skills_from_yaml()
-        )
-    else:
-        raise FileNotFoundError  # forca fallback
-except (FileNotFoundError, yaml.YAMLError, OSError):
+# data/skills/*.yaml (app/mcp/skill_registry.py, caminho ancorado no repo,
+# nao no diretorio corrente). Sem nenhuma skill valida, usa o dict
+# estatico abaixo — com os MESMOS valores dos YAMLs; o teste
+# tests/test_skill_registry.py reprova se os dois divergirem.
+_SKILLS = load_skills()
+if _SKILLS:
+    CAPABILITY_REGISTRY: dict[str, ToolPolicy] = _build_capability_registry_from_skills(_SKILLS)
+else:
     CAPABILITY_REGISTRY: dict[str, ToolPolicy] = {
         "diagnose_incident": ToolPolicy(
             name="diagnose_incident",

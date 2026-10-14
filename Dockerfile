@@ -121,6 +121,9 @@ COPY --chown=appuser:appuser alembic/ alembic/
 COPY --chown=appuser:appuser alembic.ini ./
 
 COPY --chown=appuser:appuser data/sample_docs/ data/sample_docs/
+# DA-63: skills declarativas (roteamento do supervisor + Capability Registry).
+# Sem elas o supervisor nao sobe (indice de dominios vazio).
+COPY --chown=appuser:appuser data/skills/ data/skills/
 
 # DA-24: static/ nao e versionado; o stage "frontend-build" gera o dist/
 # e o stage "final" copia para static/dist.

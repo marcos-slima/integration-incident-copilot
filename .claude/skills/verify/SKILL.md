@@ -14,11 +14,11 @@ until curl -s -o /dev/null localhost:8765/health; do sleep 1; done
 - Pass `API_KEY=<value>` in the env to get a known key; otherwise one is generated at startup.
 
 ## Flows worth driving
-- `GET /health` — liveness only: always 200, no Qdrant/Ollama probes (returns connectors/infra from .env).
+- `GET /health` — liveness only: always 200, no Qdrant/Ollama probes. With `X-API-Key` it also returns the connectors/infra status from `.env`; without it the body is just `{"status": "ok"}`.
 - `GET /ready` — readiness: probes Qdrant/Ollama; 503 when a configured service is degraded. Simulate with `OLLAMA_HOST=http://127.0.0.1:1`.
-- `POST /diagnose` (header `X-API-Key`) — full LLM run with `qwen3-coder-next:latest` takes ~80s.
-  `interface_type` must be one of odata/rfc/servicenow/salesforce/workday/ariba/successfactors/cap/apim (not `idoc`).
-- `POST /events/incident` (header `X-Event-Mesh-Api-Key`), body `{"specversion":"1.0","type":"com.sap.integration.incident.detected.v1","source":"/sap/cpi","id":"...","data":{...}}` (CloudEvents 1.0: the four attributes are required; dedup key is `source`+`id`).
+- `POST /diagnose` (header `X-API-Key`) — the LLM path uses `LLM_MODEL` (default `qwen3.6:35b-a3b` in `app/config.py`); ~80s was measured with the previous model, `qwen3-coder-next:latest`. A known error (e.g. IDoc status 51) is answered by the rule engine without the LLM.
+  `interface_type` must be one of odata/rfc/servicenow/salesforce/workday/ariba/successfactors/cap/apim/po (not `idoc`); the routing domain comes from `data/skills/diagnose_incident.yaml` (DA-63).
+- `POST /events/incident` (header `X-Event-Mesh-Api-Key`), body `{"specversion":"1.0","type":"com.sap.integration.incident.detected.v1","source":"/sap/cpi","id":"...","data":{"description":"..."}}` (CloudEvents 1.0: the four attributes are required, and `data.description` too; dedup key is `source`+`id`).
 - Circuit breaker: isolated Redis (`docker run -d --rm -p 127.0.0.1:6390:6379 redis:7-alpine`), then
   `REDIS_URL=redis://127.0.0.1:6390/0 ODATA_SERVICE_URL=http://127.0.0.1:1/x CONNECTOR_CIRCUIT_FAILURE_THRESHOLD=2 OLLAMA_HOST=http://127.0.0.1:2`;
   calls fail fast (500 from dead Ollama) and `redis-cli hgetall cb:conn:OData` shows the state.

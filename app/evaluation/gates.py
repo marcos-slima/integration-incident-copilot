@@ -382,12 +382,13 @@ def check_llm_baseline(root: Path = REPO_ROOT) -> list[Finding]:
     """O gate de LLM so fecha o ciclo com baseline versionado; sem ele, o job agendado nao tem com o que comparar.
 
     Validacao 2026-10-14 (M-24): antes deste gate so verificava existencia +
-    campo 'cases'. Agora tambim confere:
+    campo 'cases'. Agora tambem confere:
 
     - `generated_at` nao e' null (data de medição presente)
     - `generated_at` tem menos de 30 dias (freshness — baseline velho perde
       valor porque o prompt pode mudar sem que o digest mude se o gate
       `prompt_digest_measured` for ignorado)
+    - `generated_at` nao aponta para o futuro (evita data digitada a mao)
     """
     check = "llm_baseline"
     baseline_path = root / PROMPTFOO_BASELINE
@@ -419,12 +420,23 @@ def check_llm_baseline(root: Path = REPO_ROOT) -> list[Finding]:
         from datetime import datetime
 
         dt = datetime.fromisoformat(gen)
-        age_days = (datetime.now(UTC) - dt).days
+        # Normalizar timestamp sem fuso para UTC (promptfoo grava ISO com Z).
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+        now = datetime.now(UTC)
+        age_days = (now - dt).days
         if age_days > 30:
             return _warn(
                 check,
                 f"{PROMPTFOO_BASELINE} tem {age_days} dias de idade "
                 f"(gerado em {gen}); considere re-medir com promptfoo",
+            )
+        # Data no futuro — provavel data digitada a mao.
+        if dt > now:
+            return _fail(
+                check,
+                f"{PROMPTFOO_BASELINE} 'generated_at' aponta para o futuro ({gen}); "
+                "data digitada a mao invalida — use --write-promptfoo-baseline",
             )
     except (ValueError, TypeError):
         return _fail(check, f"{PROMPTFOO_BASELINE} 'generated_at' nao e' ISO 8601 valido: {gen!r}")

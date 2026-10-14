@@ -1,0 +1,15 @@
+# DA-63: skill declarativa — list_connectors
+# Esta entrada e' a fonte de verdade para o Capability Registry (DA-27).
+
+name: list_connectors
+version: "1.0"
+risk_level: low
+destructive: false
+scopes_required:
+  - integration.read
+approval_required: false
+data_sensitivity: public
+timeout_seconds: 5.0
+
+# list_connectors nao roteia por dominio — so lista conectores disponiveis.
+domains: {}

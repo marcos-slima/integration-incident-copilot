@@ -245,7 +245,7 @@ atributos, retorna `422 Unprocessable Content`.
 | `dependency failed to start: container ...-ollama-1 is unhealthy` | Stack antigo com `api`/`worker` dependendo do Ollama em container | O Ollama do host é o padrão; o container `ollama` só sobe com `--profile container-ollama` |
 | `401` mesmo com `API_KEY` no `.env` | A variável não chega ao container (precisa estar em `x-common-env`), ou há linhas `API_KEY=` duplicadas/vazias no `.env`, ou a chave foi colada na linha anterior (`.env` sem quebra de linha final) | `docker compose exec api env \| grep ^API_KEY` deve mostrar a chave; `grep -n ^API_KEY= .env` deve mostrar uma única linha |
 | `"/frontend/dist": not found` no build | O Vite gera em `../static/dist` (`outDir`), ou seja, `/static/dist` no estágio `frontend-build` | Dockerfile usa `COPY --from=frontend-build /static/dist static/dist` |
-| `DATABASE_URL` com `@localhost` falha dentro do container | `localhost` é o próprio container | Usar `@postgres:5432` com `--profile observability`, ou deixar `DATABASE_URL` vazio |
+| `CONTAINER_DATABASE_URL` com `@localhost` falha dentro do container | `localhost` é o próprio container. O `DATABASE_URL` do `.env` não chega ao container: `x-common-env` define `DATABASE_URL` (variável de ambiente vence o `.env` no Pydantic Settings) | Deixar `CONTAINER_DATABASE_URL` vazio (usa `@postgres:5432`, com `--profile observability`) ou apontar para um host alcançável pelo container. Não há como desligar o Postgres no modo container: o default sempre aponta para `postgres` |
 | Variável de `.env` com `$` interpretada como interpolação do Compose (warning `variable is not set`) | `$` literal em segredo (ex: `CAP_CLIENT_SECRET`) | Escapar como `$$` no `.env` |
 
 ---

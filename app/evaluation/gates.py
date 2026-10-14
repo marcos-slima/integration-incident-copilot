@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from datetime import UTC
 from pathlib import Path
 from typing import Any
 
@@ -378,7 +379,16 @@ def check_promptfoo_configs(root: Path = REPO_ROOT) -> list[Finding]:
 
 
 def check_llm_baseline(root: Path = REPO_ROOT) -> list[Finding]:
-    """O gate de LLM so fecha o ciclo com baseline versionado; sem ele, o job agendado nao tem com o que comparar."""
+    """O gate de LLM so fecha o ciclo com baseline versionado; sem ele, o job agendado nao tem com o que comparar.
+
+    Validacao 2026-10-14 (M-24): antes deste gate so verificava existencia +
+    campo 'cases'. Agora tambim confere:
+
+    - `generated_at` nao e' null (data de medição presente)
+    - `generated_at` tem menos de 30 dias (freshness — baseline velho perde
+      valor porque o prompt pode mudar sem que o digest mude se o gate
+      `prompt_digest_measured` for ignorado)
+    """
     check = "llm_baseline"
     baseline_path = root / PROMPTFOO_BASELINE
     if not baseline_path.exists():
@@ -393,6 +403,32 @@ def check_llm_baseline(root: Path = REPO_ROOT) -> list[Finding]:
         return _fail(check, str(exc))
     if not isinstance(data, dict) or not isinstance(data.get("cases"), dict):
         return _fail(check, f"{PROMPTFOO_BASELINE} sem mapa 'cases'")
+
+    # 1) generated_at nao pode ser null
+    gen = data.get("generated_at")
+    if gen is None:
+        return _fail(
+            check,
+            f"{PROMPTFOO_BASELINE} tem 'generated_at': null — a data de "
+            "medição está ausente; grave com --write-promptfoo-baseline",
+        )
+
+    # 2) freshness: baseline com mais de 30 dias é WARN (nao FAIL, porque o
+    #    gate prompt_digest_measured ja protege contra drift do prompt)
+    try:
+        from datetime import datetime
+
+        dt = datetime.fromisoformat(gen)
+        age_days = (datetime.now(UTC) - dt).days
+        if age_days > 30:
+            return _warn(
+                check,
+                f"{PROMPTFOO_BASELINE} tem {age_days} dias de idade "
+                f"(gerado em {gen}); considere re-medir com promptfoo",
+            )
+    except (ValueError, TypeError):
+        return _fail(check, f"{PROMPTFOO_BASELINE} 'generated_at' nao e' ISO 8601 valido: {gen!r}")
+
     return _ok(check)
 
 

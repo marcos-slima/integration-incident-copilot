@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-14T12:00:00Z",
+  "generated_at": "2026-10-13T17:56:04.501Z",
   "model": "qwen3.6:35b-a3b",
   "cases": {
     "401 sem conector": true,

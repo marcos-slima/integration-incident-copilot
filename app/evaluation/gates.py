@@ -1224,17 +1224,43 @@ def check_connector_reachable(root: Path = REPO_ROOT) -> list[Finding]:
     # valores e um supervisor que so conhece 8 roteia um deles para generic.
     supervisor = (root / SUPERVISOR_SOURCE).read_text(encoding="utf-8")
     cobertos: set[str] = set()
-    for nome in ("_SAP_INTERFACE_TYPES", "_SAAS_INTERFACE_TYPES"):
-        bloco = re.search(rf"{re.escape(nome)}\s*=\s*\{{([^}}]*)\}}", supervisor)
-        if bloco is None:
-            problemas.append(f"{SUPERVISOR_SOURCE}: {nome} nao encontrado")
-            continue
-        cobertos |= set(re.findall(r"""['"]([a-z_]+)['"]""", bloco.group(1)))
+
+    # DA-63: verifica o padrao declarativo (_DOMAIN_INDEX) primeiro,
+    # depois fallback para _SAP_INTERFACE_TYPES / _SAAS_INTERFACE_TYPES.
+    domain_index = re.search(r"_DOMAIN_INDEX\s*=", supervisor)
+    if domain_index is not None:
+        # Novo padrao: _DOMAIN_INDEX existe — verifica se o skill registry
+        # tem os arquivos correspondentes. O gate confia que build_domain_index()
+        # e' deterministica e deriva os cobertos do diretório data/skills/.
+        # Tenta root/data/skills (caso de tests) e root.parent/data/skills (caso real).
+        skills_dir = root / "data" / "skills"
+        if not skills_dir.is_dir():
+            skills_dir = root.parent / "data" / "skills"
+        if skills_dir.is_dir():
+            for yaml_file in sorted(skills_dir.glob("*.yaml")):
+                try:
+                    import yaml as _yaml  # local import para gate
+
+                    data = _yaml.safe_load(yaml_file.read_text(encoding="utf-8"))
+                    domains = data.get("domains") or {}
+                    for it_list in domains.values():
+                        cobertos |= set(re.findall(r"""['"]([a-z_]+)['"]""", str(it_list)))
+                except (OSError, KeyError, TypeError):
+                    pass  # YAML invalido ou erro de leitura — ignora, o fallback pega
+    else:
+        # Padrao antigo: _SAP_INTERFACE_TYPES / _SAAS_INTERFACE_TYPES hardcoded.
+        for nome in ("_SAP_INTERFACE_TYPES", "_SAAS_INTERFACE_TYPES"):
+            bloco = re.search(rf"{re.escape(nome)}\s*=\s*\{{([^}}]*)\}}", supervisor)
+            if bloco is None:
+                problemas.append(f"{SUPERVISOR_SOURCE}: {nome} nao encontrado")
+                continue
+            cobertos |= set(re.findall(r"""['"]([a-z_]+)['"]""", bloco.group(1)))
+
     # apim e cross-vendor de proposito: cai em generic por design.
     orphans = sorted(conectores - cobertos - {"apim"})
     if orphans:
         problemas.append(
-            f"{SUPERVISOR_SOURCE}: nem _SAP_INTERFACE_TYPES nem _SAAS_INTERFACE_TYPES cobrem {orphans} "
+            f"{SUPERVISOR_SOURCE}: interface_type(s) nao mapeados para dominio: {orphans} "
             "— caem em generic mesmo com interface_type explicito"
         )
 

@@ -761,6 +761,7 @@ def _connector_root(
     matriz: str | None = None,
     seed: str | None = None,
     form: str | None = None,
+    skills: dict[str, str] | None = None,
 ) -> Path:
     (tmp_path / "app/connectors").mkdir(parents=True)
     (tmp_path / "app/agent").mkdir(parents=True)
@@ -790,6 +791,11 @@ def _connector_root(
     # do formulario de sistemas do admin.
     (tmp_path / "app/admin/templates").mkdir(parents=True)
     (tmp_path / _ADMIN_SYSTEMS_FORM).write_text(form or _SANE_SISTEMS_FORM, encoding="utf-8")
+    # DA-63: se skills declarativas forem fornecidas, cria data/skills/*.yaml.
+    if skills:
+        (tmp_path / "data/skills").mkdir(parents=True)
+        for name, content in skills.items():
+            (tmp_path / f"data/skills/{name}").write_text(content, encoding="utf-8")
     return tmp_path
 
 
@@ -838,6 +844,21 @@ _SANE_REGISTRY = (
 # "qualquer um" trazia sensitivity_level junto.
 
 _SANE_SUPERVISOR = "_SAP_INTERFACE_TYPES = {'odata'}\n_SAAS_INTERFACE_TYPES = {'successfactors'}\n"
+
+# Supervisor no padrao DA-63 (declarativo): _DOMAIN_INDEX derivado do skill
+# registry. O quality gate verifica este padrao primeiro, depois fallback
+# para o antigo (_SAP_INTERFACE_TYPES / _SAAS_INTERFACE_TYPES).
+_SANE_SUPERVISOR_DA63 = """_DOMAIN_INDEX = build_domain_index()
+
+def classify_domain(state):
+    interface_type = (state.get('interface_type') or '').lower()
+    domain = _DOMAIN_INDEX.get(interface_type)
+    if domain == 'sap':
+        return 'sap'
+    if domain == 'saas':
+        return 'saas'
+    return 'generic'
+"""
 
 # Catalogo de sistemas do admin (DA-49) cobrindo o registro sane acima.
 _SANE_ADMIN = 'CONNECTOR_TYPES = ("odata", "successfactors", "apim")\n'
@@ -1401,3 +1422,76 @@ def test_link_para_doc_git_ignored_conta_como_quebrado(tmp_path: Path) -> None:
     refs = gates.check_docs_code_references(tmp_path)
     assert markup[0].is_failure and "PRIVADO.md" in markup[0].message
     assert refs[0].is_failure and "PRIVADO.md" in refs[0].message
+
+
+# ── DA-63: declarative skill registry tests ──────────────────────────
+
+_SKILL_DIAGNOSE = """name: diagnose_incident
+version: "1.0"
+risk_level: low
+destructive: false
+scopes_required:
+  - integration.read
+approval_required: false
+data_sensitivity: confidential
+timeout_seconds: 180.0
+max_retries: 1
+domains:
+  sap: [odata, rfc, cap, po]
+  saas: [servicenow, salesforce, workday, ariba, successfactors]
+"""
+
+_SKILL_LIST = """name: list_connectors
+version: "1.0"
+risk_level: low
+destructive: false
+scopes_required:
+  - integration.read
+approval_required: false
+data_sensitivity: public
+timeout_seconds: 5.0
+domains: {}
+"""
+
+
+def test_connector_reachable_pass_com_padrao_declarativo(tmp_path: Path) -> None:
+    """O gate reconhece _DOMAIN_INDEX + data/skills/*.yaml como fonte de
+    verdade para o mapeamento interface_type -> dominio."""
+    root = _connector_root(
+        tmp_path,
+        _SANE_REGISTRY,
+        _literal_fiel(),
+        _SANE_SUPERVISOR_DA63,
+        skills={"diagnose_incident.yaml": _SKILL_DIAGNOSE, "list_connectors.yaml": _SKILL_LIST},
+    )
+    assert not [f for f in check_connector_reachable(root) if f.is_failure]
+
+
+def test_connector_reachable_falha_skill_sem_dominio_completo(tmp_path: Path) -> None:
+    """Se o skill registry nao mapear um interface_type, ele cai em generic."""
+    # Skill que so mapeia sap — falta saas
+    partial = _SKILL_DIAGNOSE.replace(
+        "  saas: [servicenow, salesforce, workday, ariba, successfactors]\n", ""
+    )
+    root = _connector_root(
+        tmp_path,
+        _SANE_REGISTRY,
+        _literal_fiel(),
+        _SANE_SUPERVISOR_DA63,
+        skills={"diagnose_incident.yaml": partial},
+    )
+    falhas = [f for f in check_connector_reachable(root) if f.is_failure]
+    assert falhas
+    assert "nao mapeados para dominio" in falhas[0].message
+
+
+def test_connector_reachable_fallback_antigo_com_declarativo_pendente(tmp_path: Path) -> None:
+    """Quando nao ha _DOMAIN_INDEX no supervisor, o gate volta ao padrao
+    antigo (_SAP_INTERFACE_TYPES / _SAAS_INTERFACE_TYPES)."""
+    root = _connector_root(
+        tmp_path,
+        _SANE_REGISTRY,
+        _literal_fiel(),
+        _SANE_SUPERVISOR,  # usa padrao antigo
+    )
+    assert not [f for f in check_connector_reachable(root) if f.is_failure]

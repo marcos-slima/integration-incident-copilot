@@ -14,8 +14,12 @@ Classificacao e DETERMINISTICA (mapeamento de interface_type + poucas
 palavras-chave), nao uma chamada de LLM: mesmo principio da DA-3 do
 README.md (guardrails em codigo, nao em prompt), de que decisoes
 estruturais pertencem a codigo e nao a autoavaliacao de um modelo -
-o roteamento e barato,
-explicavel e 100% testavel sem depender de LLM real.
+o roteamento e barato, explicavel e 100% testavel sem depender de LLM real.
+
+DA-63: os conjuntos de roteamento sao derivados do skill registry
+declarativo (data/skills/*.yaml) ao invés de hardcoded. Isso permite
+que novos conectores sejam registrados como skills sem tocar no
+supervisor — o domain index e' reconstruido automaticamente.
 """
 
 from __future__ import annotations
@@ -24,16 +28,24 @@ import re
 from typing import Literal
 
 from app.agent.state import CopilotState
+from app.mcp.skill_registry import build_domain_index
 
 AgentDomain = Literal["sap", "saas", "generic"]
 
-# interface_type (ver Literal fechado em app/models.py::IncidentRequest)
-# mapeado para o dominio do sub-agente especialista.
-# "po" = SAP PO/PI on-premise: middleware SAP de integracao, nao SaaS.
-_SAP_INTERFACE_TYPES = {"odata", "rfc", "cap", "po"}
-# successfactors: SaaS de RH da SAP, mesmo caso do Ariba — marca SAP,
-# produto multi-tenant entregue como servico (OAuth, nao RFC on-premise).
-_SAAS_INTERFACE_TYPES = {"servicenow", "salesforce", "workday", "ariba", "successfactors"}
+# DA-63: mapeamento declarativo interface_type -> dominio, derivado do
+# skill registry (data/skills/*.yaml). Construido uma vez no import.
+_DOMAIN_INDEX = build_domain_index()
+
+# Compatibilidade com o quality gate (DA-51, check_connector_reachable):
+# o gate ancora em _SAP_INTERFACE_TYPES / _SAAS_INTERFACE_TYPES como
+# conjunto de fontes de verdade. Derivamos dos sets a partir do index
+# para manter a verificacao sem reescrever o regex do gate.
+_SAP_INTERFACE_TYPES: frozenset[str] = frozenset(
+    it for it, domain in _DOMAIN_INDEX.items() if domain == "sap"
+)
+_SAAS_INTERFACE_TYPES: frozenset[str] = frozenset(
+    it for it, domain in _DOMAIN_INDEX.items() if domain == "saas"
+)
 
 # Heuristica de fallback quando interface_type nao foi informado (fluxo
 # livre por descricao textual, ver test_graph_e2e.py casos com
@@ -110,11 +122,16 @@ def classify_domain(state: CopilotState) -> AgentDomain:
     Prioridade: interface_type explicito (mais confiavel, vem da
     requisicao estruturada) > palavras-chave na descricao textual >
     "generic" (nenhum sinal de dominio - ainda assim precisa de UM
-    especialista, o generalista multi-fornecedor cobre esse caso)."""
+    especialista, o generalista multi-fornecedor cobre esse caso).
+
+    DA-63: a lookup de interface_type usa _DOMAIN_INDEX derivado do
+    skill registry declarativo. O fallback por palavras-chave permanece
+    para casos onde interface_type nao e' informado."""
     interface_type = (state.get("interface_type") or "").lower()
-    if interface_type in _SAP_INTERFACE_TYPES:
+    domain = _DOMAIN_INDEX.get(interface_type)
+    if domain == "sap":
         return "sap"
-    if interface_type in _SAAS_INTERFACE_TYPES:
+    if domain == "saas":
         return "saas"
 
     description = (state.get("description") or "").lower()

@@ -51,10 +51,55 @@ Nao-objetivos explicitos desta v1 (backlog em aberto):
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
+
+import yaml
 
 RiskLevel = Literal["low", "medium", "high", "critical"]
 DataSensitivity = Literal["public", "confidential"]
+
+
+def _load_skills_from_yaml() -> dict[str, dict[str, Any]]:
+    """Carrega skills declarativas de data/skills/*.yaml."""
+    import os as _os
+    from pathlib import Path as _Path
+
+    skills_dir = _Path(_os.environ.get("SKILLS_DIR", "data/skills"))
+    if not skills_dir.is_dir():
+        return {}
+    skills: dict[str, dict[str, Any]] = {}
+    for path in sorted(skills_dir.glob("*.yaml")):
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                continue
+            name = data.get("name")
+            if not name:
+                continue
+            skills[name] = data
+        except (yaml.YAMLError, OSError):
+            continue
+    return skills
+
+
+def _build_capability_registry_from_skills(
+    skills: dict[str, dict[str, Any]],
+) -> dict[str, ToolPolicy]:
+    """Converte skills declarativas em ToolPolicy para o enforcement."""
+    registry: dict[str, ToolPolicy] = {}
+    for name, skill in skills.items():
+        scopes = skill.get("scopes_required") or []
+        registry[name] = ToolPolicy(
+            name=name,
+            risk_level=skill.get("risk_level", "high"),
+            destructive=bool(skill.get("destructive", False)),
+            scopes_required=tuple(scopes),
+            approval_required=bool(skill.get("approval_required", False)),
+            data_sensitivity=skill.get("data_sensitivity", "confidential"),
+            timeout_seconds=float(skill.get("timeout_seconds", 30.0)),
+            max_retries=int(skill.get("max_retries", 0)),
+        )
+    return registry
 
 
 class PolicyDeniedError(Exception):
@@ -91,36 +136,49 @@ class ExecutionContext:
 # Capability Registry: uma entrada por tool exposta pelo servidor MCP
 # (app/mcp/server.py). enforce() e FAIL-CLOSED - uma tool ausente
 # daqui e negada, nunca permitida por omissao.
-CAPABILITY_REGISTRY: dict[str, ToolPolicy] = {
-    "diagnose_incident": ToolPolicy(
-        name="diagnose_incident",
-        risk_level="low",
-        destructive=False,
-        scopes_required=("integration.read",),
-        approval_required=False,
-        # Pode envolver dado real de conector (nao mock) na resposta -
-        # mesma classificacao usada pelo AI Gateway (DA-26).
-        data_sensitivity="confidential",
-        # M-27: aplicado de fato (teto do grafo, min com
-        # DIAGNOSIS_TIMEOUT_SECONDS). 60 s cortava diagnosticos com LLM
-        # local (~80 s medidos); 180 s = o default do pipeline.
-        timeout_seconds=180.0,
-        # Retry so em sobrecarga do semaforo (ver server.py).
-        max_retries=1,
-    ),
-    "list_connectors": ToolPolicy(
-        name="list_connectors",
-        risk_level="low",
-        destructive=False,
-        scopes_required=("integration.read",),
-        approval_required=False,
-        # So inspeciona config local (settings) - nunca faz chamada de
-        # rede nem devolve dado de incidente algum, ver docstring da
-        # tool em app/mcp/server.py.
-        data_sensitivity="public",
-        timeout_seconds=5.0,
-    ),
-}
+# DA-63: CAPABILITY_REGISTRY e' derivado das skills declarativas em
+# data/skills/*.yaml. Se o diretorio existir, usa-o como fonte de
+# verdade; caso contrario, usa o dict estatico abaixo (fallback para
+# compatibilidade com ambientes sem YAML).
+try:
+    _SKILLS_DIR = __import__("pathlib").Path("data/skills")
+    if _SKILLS_DIR.is_dir() and any(_SKILLS_DIR.glob("*.yaml")):
+        CAPABILITY_REGISTRY: dict[str, ToolPolicy] = _build_capability_registry_from_skills(
+            _load_skills_from_yaml()
+        )
+    else:
+        raise FileNotFoundError  # forca fallback
+except (FileNotFoundError, yaml.YAMLError, OSError):
+    CAPABILITY_REGISTRY: dict[str, ToolPolicy] = {
+        "diagnose_incident": ToolPolicy(
+            name="diagnose_incident",
+            risk_level="low",
+            destructive=False,
+            scopes_required=("integration.read",),
+            approval_required=False,
+            # Pode envolver dado real de conector (nao mock) na resposta -
+            # mesma classificacao usada pelo AI Gateway (DA-26).
+            data_sensitivity="confidential",
+            # M-27: aplicado de fato (teto do grafo, min com
+            # DIAGNOSIS_TIMEOUT_SECONDS). 60 s cortava diagnosticos com LLM
+            # local (~80 s medidos); 180 s = o default do pipeline.
+            timeout_seconds=180.0,
+            # Retry so em sobrecarga do semaforo (ver server.py).
+            max_retries=1,
+        ),
+        "list_connectors": ToolPolicy(
+            name="list_connectors",
+            risk_level="low",
+            destructive=False,
+            scopes_required=("integration.read",),
+            approval_required=False,
+            # So inspeciona config local (settings) - nunca faz chamada de
+            # rede nem devolve dado de incidente algum, ver docstring da
+            # tool em app/mcp/server.py.
+            data_sensitivity="public",
+            timeout_seconds=5.0,
+        ),
+    }
 
 # Contexto default usado quando o caller (app/mcp/server.py) nao passa
 # um explicito - reflete o estado ATUAL do servidor MCP: uma unica

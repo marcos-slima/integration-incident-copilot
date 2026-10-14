@@ -79,6 +79,7 @@ final.
 | 60 | [51](#51-criptografia-em-repouso-de-evidence_json-com-fernet-da-60) | Criptografia em repouso de `evidence_json` com Fernet (`LLM_CREDENTIALS_MASTER_KEY`) + migration idempotente `009_encrypt_evidence_json.py` |
 | 61 | [52](#52-taxonomia-de-erros-sap-com-ttl-rdflib-da-61) | Taxonomia de erros SAP com TTL/RDFLib (SKOS) para Rule Engine: carregamento dinâmico vs hardcoded, zero breaking changes (DA-61 Fase 1) |
 | 62 | [53](#53-neo4j-loader-para-skos-taxonomy-import-da-62) | Neo4j loader para SKOS taxonomy import (idempotent upsert, Cypher queries) |
+| 63 | [54](#54-skills-declarativas---yaml-como-fonte-de-verdade-para-capability-e-roteamento-da-63) | Skills declarativas — YAML como fonte de verdade para capability e roteamento (DA-63) |
 
 > **Ordenação da prosa:** as seções §42–§47 (DA-42, DA-38, DA-39, DA-40,
 > DA-41, DA-12) foram retro-registradas em bloco, fora da ordem crescente de
@@ -2662,5 +2663,45 @@ A auditoria Q2 2026 (DATA-01) recomendou substituir hardcoded por taxonomia form
 - 4 testes `test_nodes_ontology_degradation.py` passando.
 - Testes de integração: 1407/1407 passing (não há testes específicos de ontology_loader ainda)
 - Simulação: `uv run python -c "from app.agent.ontology_loader import load_error_rules_combined; rules = load_error_rules_combined(); assert len(rules) == 28"`
+
+---
+
+### 54. Skills declarativas — YAML como fonte de verdade para capability e roteamento (DA-63)
+
+**Contexto:** antes desta DA, as skills do Copilot viviam como código Python
+estático: `CAPABILITY_REGISTRY` em `app/mcp/policy.py` era um dict hardcoded
+e o supervisor (`app/agent/supervisor.py`) usava `_SAP_INTERFACE_TYPES` /
+`_SAAS_INTERFACE_TYPES` fixos para roteamento. Isso tornava a adição de novas
+skills ou conectores uma mudança de código, não de dados.
+
+**Decisão:** cada skill passa a ser um artefato declarativo em `data/skills/*.yaml`
+com schema versionado (nome, versão, risk_level, scopes, approval_required,
+data_sensitivity, timeout, domains). O módulo `app/mcp/skill_registry.py`
+carrega esses arquivos e expõe:
+
+- `load_skills()` — dicionário `{name: skill_dict}` carregado do disco.
+- `build_domain_index()` — mapeia `interface_type → dominio` (sap|saas) derivado
+  das skills, substituindo os sets hardcoded.
+- `build_capability_registry()` — converte skills em `ToolPolicy` para o
+  enforcement (DA-27).
+
+O `CAPABILITY_REGISTRY` em `policy.py` agora tenta carregar de YAML primeiro;
+fallback para dict estatico quando `data/skills/` não existe. O supervisor
+deriva `_DOMAIN_INDEX`, `_SAP_INTERFACE_TYPES` e `_SAAS_INTERFACE_TYPES` do
+registry, mantendo compatibilidade com o quality gate (DA-51).
+
+**Impacto nas superfícies do connector check (DA-59):**
+- A superficie de roteamento (supervisor) agora é derivada de `data/skills/*.yaml`.
+- O quality gate (`check_connector_reachable`) verifica YAMLs em `data/skills/`
+  quando `_DOMAIN_INDEX` existe no supervisor.
+- Novos conectores precisam: (1) entrada no Literal, (2) linha em `data/skills/diagnose_incident.yaml` → domains, (3) registro no admin, (4) CLI, (5) UI dropdown, (6) seed web_search, (7) formulário, (8) connector_coverage.yaml.
+
+**Validação.**
+- `app/mcp/skill_registry.py` — loader + builders.
+- `data/skills/diagnose_incident.yaml` e `list_connectors.yaml`.
+- `app/agent/supervisor.py` — `_DOMAIN_INDEX` derivado, sets compatíveis.
+- `app/mcp/policy.py` — CAPABILITY_REGISTRY com fallback YAML→static.
+- `app/evaluation/gates.py` — gate reconhece padrao declarativo + fallback.
+- `tests/test_quality_gate.py` — 3 novos testes para padrao DA-63.
 
 ---

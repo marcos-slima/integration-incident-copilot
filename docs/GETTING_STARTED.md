@@ -332,9 +332,12 @@ docker compose up -d qdrant
 ```
 
 **`could not translate host name "postgres"` (modo container)**
-O `.env` está apontando para `127.0.0.1` e o container precisa do nome do
-serviço. Apague `DATABASE_URL`/`NEO4J_URI` do `.env`: o compose injeta os
-hosts internos sozinho (ver passo 5b).
+O serviço `postgres` não está de pé. No modo container o `DATABASE_URL` do
+`.env` não é usado: `x-common-env` sempre injeta `DATABASE_URL` apontando
+para `postgres` (ou para `CONTAINER_DATABASE_URL`), e a variável de ambiente
+vence o `.env`. Suba o banco com
+`docker compose --profile observability up -d postgres`, ou defina
+`CONTAINER_DATABASE_URL` para um Postgres externo (ver passo 5b).
 
 **Postgres nativo recusa a conexão**
 O `.env` precisa de `127.0.0.1:5432`, não `postgres:5432` — `postgres` é o

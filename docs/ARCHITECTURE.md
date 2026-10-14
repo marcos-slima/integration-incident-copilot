@@ -1604,7 +1604,8 @@ testes que precisam forcar o caminho LLM.
 **Economia esperada:** 60-70% de reducao de chamadas LLM para cargas de
 trabalho de suporte SAP com erros repetitivos.
 
-**Validacao:** `tests/test_da33.py` (40 testes) — todos os 21 patterns
+**Validacao:** `tests/test_da33.py` (40 testes) — os patterns de cada regra
+(21 na entrega; hoje sao 22, com `sap_mdg_mdi_lock`)
 individualmente, integracao com estado LangGraph, e invariante de
 catalogo (nenhuma regra duplicada, nenhum pattern vazio).
 
@@ -1752,7 +1753,7 @@ contem o bloco AMQP todo comentado como referencia de configuracao.
 
 **Commit:** `fec432d` | **Data:** 2026-09-22
 
-### Rule Engine: 14 → 21 regras
+### Rule Engine: 14 → 21 regras (historico; hoje 22)
 
 O catálogo de `app/agent/rules.py` foi expandido de 14 para **21 regras**
 com 7 novas entradas cobrindo classes de erro SAP/integração frequentes:

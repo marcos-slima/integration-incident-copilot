@@ -4,10 +4,13 @@ Este teste roda o dataset de avaliacao completo e falha se as metricas
 caírem abaixo dos thresholds definidos. Requer Qdrant com a base de
 avaliacao ingerida (job `rag-quality` do CI, EMBEDDING_BACKEND=fastembed).
 
-Thresholds baseados no baseline medido em 2026-09-15:
-  Hit@1:  92.3% -> threshold conservador: 85%
-  Hit@3: 100.0% -> threshold conservador: 92%
-  MRR:    0.949 -> threshold conservador: 0.85
+Thresholds definidos sobre o baseline de 2026-09-15 (Hit@1 92.3%,
+Hit@3 100%, MRR 0.949). Re-medido em 2026-10-14 (HEAD 65b0b7c,
+EMBEDDING_BACKEND=fastembed, Qdrant 1.15, `scripts/eval_rag.py`):
+  Hit@1:  94.4% (17/18) -> threshold conservador: 85%
+  Hit@3: 100.0% (18/18) -> threshold conservador: 92%
+  MRR:    0.972          -> threshold conservador: 0.85
+  fora do escopo rejeitados: 9/10 -> threshold: 0.40
 """
 
 import pytest

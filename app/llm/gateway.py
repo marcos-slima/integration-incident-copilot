@@ -47,10 +47,10 @@ Nao-objetivos explicitos desta v1 (backlog em aberto):
   NER/classificador de PII de verdade (nomes proprios, enderecos,
   outros formatos de documento nao cobertos pelos 3 padroes acima).
 - Tenant isolation: o projeto ainda e single-tenant.
-- Circuit breaker compartilhado entre replicas: e in-memory, por
-  processo - nao compartilhado entre os 2+ pods do deploy Kyma
-  (DA-24). Precisaria de um backend compartilhado (Redis, por exemplo)
-  para isso em producao multi-instancia.
+- (Resolvido pela DA-41) Circuit breaker compartilhado entre replicas:
+  com REDIS_URL o estado fica no Redis e vale para todos os pods
+  (app/circuit_breaker.py); sem REDIS_URL, ou com o Redis fora do ar,
+  cai para memoria, por processo.
 """
 
 import logging

@@ -74,6 +74,9 @@ dependencies = [
     # profile "async") nao teria o que rodar.
     "rq>=2.12.0",
     "rdflib>=7.6.0",
+    # DA-63: app/mcp/skill_registry.py le data/skills/*.yaml em runtime;
+    # antes so chegava como dependencia transitiva (huggingface-hub).
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]

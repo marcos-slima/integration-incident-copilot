@@ -1495,3 +1495,48 @@ def test_connector_reachable_fallback_antigo_com_declarativo_pendente(tmp_path: 
         _SANE_SUPERVISOR,  # usa padrao antigo
     )
     assert not [f for f in check_connector_reachable(root) if f.is_failure]
+
+
+def test_connector_reachable_falha_sem_diretorio_de_skills(tmp_path: Path) -> None:
+    """Supervisor declarativo sem data/skills: o gate reprova (antes ele
+    procurava em root.parent e, sem achar, so acusava orfaos)."""
+    root = _connector_root(tmp_path, _SANE_REGISTRY, _literal_fiel(), _SANE_SUPERVISOR_DA63)
+    falhas = [f for f in check_connector_reachable(root) if f.is_failure]
+    assert falhas
+    assert "data/skills nao existe" in falhas[0].message
+
+
+def test_connector_reachable_falha_quando_dockerfile_nao_copia_skills(tmp_path: Path) -> None:
+    root = _connector_root(
+        tmp_path,
+        _SANE_REGISTRY,
+        _literal_fiel(),
+        _SANE_SUPERVISOR_DA63,
+        skills={"diagnose_incident.yaml": _SKILL_DIAGNOSE, "list_connectors.yaml": _SKILL_LIST},
+    )
+    (root / "Dockerfile").write_text(
+        "COPY --chown=appuser:appuser data/sample_docs/ data/sample_docs/\n", encoding="utf-8"
+    )
+    falhas = [f for f in check_connector_reachable(root) if f.is_failure]
+    assert falhas
+    assert "Dockerfile nao copia data/skills/" in falhas[0].message
+    (root / "Dockerfile").write_text(
+        "COPY --chown=appuser:appuser data/skills/ data/skills/\n", encoding="utf-8"
+    )
+    assert not [f for f in check_connector_reachable(root) if f.is_failure]
+
+
+def test_connector_reachable_usa_o_parser_do_runtime(tmp_path: Path) -> None:
+    """Dominio invalido e' rejeitado pelo skill_registry; o gate nao pode
+    aceitar o que o supervisor descarta."""
+    invalido = _SKILL_DIAGNOSE.replace("  sap: [", "  sapp: [")
+    root = _connector_root(
+        tmp_path,
+        _SANE_REGISTRY,
+        _literal_fiel(),
+        _SANE_SUPERVISOR_DA63,
+        skills={"diagnose_incident.yaml": invalido},
+    )
+    falhas = [f for f in check_connector_reachable(root) if f.is_failure]
+    assert falhas
+    assert "nao mapeados para dominio" in falhas[0].message

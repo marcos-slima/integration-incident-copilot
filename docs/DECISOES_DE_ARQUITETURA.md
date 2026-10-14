@@ -2682,8 +2682,10 @@ carrega esses arquivos e expõe:
 - `load_skills()` — dicionário `{name: skill_dict}` carregado do disco.
 - `build_domain_index()` — mapeia `interface_type → dominio` (sap|saas) derivado
   das skills, substituindo os sets hardcoded.
-- `build_capability_registry()` — converte skills em `ToolPolicy` para o
-  enforcement (DA-27).
+
+A conversão de skill em `ToolPolicy` para o enforcement (DA-27) fica em
+`app/mcp/policy.py::_build_capability_registry_from_skills`, não no registry
+(o texto original citava um `build_capability_registry()` que não existe).
 
 O `CAPABILITY_REGISTRY` em `policy.py` agora tenta carregar de YAML primeiro;
 fallback para dict estatico quando `data/skills/` não existe. O supervisor
@@ -2694,7 +2696,7 @@ registry, mantendo compatibilidade com o quality gate (DA-51).
 - A superficie de roteamento (supervisor) agora é derivada de `data/skills/*.yaml`.
 - O quality gate (`check_connector_reachable`) verifica YAMLs em `data/skills/`
   quando `_DOMAIN_INDEX` existe no supervisor.
-- Novos conectores precisam: (1) entrada no Literal, (2) linha em `data/skills/diagnose_incident.yaml` → domains, (3) registro no admin, (4) CLI, (5) UI dropdown, (6) seed web_search, (7) formulário, (8) connector_coverage.yaml.
+- Novos conectores continuam com as 9 superfícies da DA-59 (`docs/CONNECTORS.md` §4); muda só a 4ª: o supervisor dá lugar a `domains` em `data/skills/diagnose_incident.yaml`.
 
 **Validação.**
 - `app/mcp/skill_registry.py` — loader + builders.
@@ -2703,5 +2705,30 @@ registry, mantendo compatibilidade com o quality gate (DA-51).
 - `app/mcp/policy.py` — CAPABILITY_REGISTRY com fallback YAML→static.
 - `app/evaluation/gates.py` — gate reconhece padrao declarativo + fallback.
 - `tests/test_quality_gate.py` — 3 novos testes para padrao DA-63.
+
+**Atualização (2026-10-14) — índice vazio fora da raiz do repo.** A primeira
+versão lia `data/skills` relativo ao diretório corrente, e o `Dockerfile` só
+copiava `data/sample_docs/`. Na imagem, e em qualquer processo iniciado fora
+da raiz, `_DOMAIN_INDEX` ficava `{}` e **todo** `interface_type` caía em
+`generic`, sem erro (reproduzido: `rfc`, `odata`, `servicenow`,
+`successfactors` e `po` → `generic`). Os testes não pegavam porque rodam com
+cwd na raiz. Correções:
+
+- `app/mcp/skill_registry.py::DEFAULT_SKILLS_DIR` ancorado no pacote;
+  `SKILLS_DIR` segue como override.
+- Um só parser: `policy.py` e o gate `connector_reachable` usam
+  `load_skills`/`build_domain_index` (havia uma cópia do loader em
+  `policy.py` e outra leitura de YAML no gate, que buscava também em
+  `root.parent` e não capturava `yaml.YAMLError`).
+- Schema validado (`validate_skill`): `risk_level`, `data_sensitivity` e
+  domínio fora de `sap`/`saas` fazem a skill ser pulada com warning, nunca
+  recebem default permissivo; `interface_type` em dois domínios levanta
+  `ValueError` (antes "o último vencia" por ordem de arquivo).
+- `app/agent/supervisor.py` falha no import com índice vazio.
+- `Dockerfile` copia `data/skills/`, e o gate reprova se o `COPY` sumir.
+- `pyyaml` declarado em `pyproject.toml` (chegava só como transitiva).
+- `tests/test_skill_registry.py`: roteamento com cwd fora do repo, import sem
+  skills, schema inválido, ambiguidade, índice = conectores registrados menos
+  `apim`, e `CAPABILITY_REGISTRY` igual ao fallback estático.
 
 ---

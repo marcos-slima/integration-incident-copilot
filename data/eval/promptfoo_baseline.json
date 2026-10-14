@@ -1,5 +1,5 @@
 {
-  "generated_at": null,
+  "generated_at": "2026-10-14T12:00:00Z",
   "model": "qwen3.6:35b-a3b",
   "cases": {
     "401 sem conector": true,
@@ -21,5 +21,5 @@
     "Guardrail 2 - identificador desconhecido plausivel (nao deve anexar doc)": true
   },
   "pass_rate": 1.0,
-  "notes": "Medido com qwen3.6:35b-a3b (modelo de producao). Desenvolvimento usa qwen3-coder-next:latest."
+  "notes": "Medido com qwen3.6:35b-a3b (modelo canônico de producao). O modelo qwen3-coder-next:latest foi o anterior (DA-4/8/12) e nao aparece neste baseline."
 }

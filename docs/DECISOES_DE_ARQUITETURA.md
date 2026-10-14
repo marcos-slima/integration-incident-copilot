@@ -2599,8 +2599,8 @@ A auditoria Q2 2026 (DATA-01) recomendou substituir hardcoded por taxonomia form
 
 **Limitações (aceitas):**
 
-- RDFLib nãoValidação em produção exige `error_codes.ttl` existir e ser válido TTL (senão fallback; não exception).
-- Sem versãoamento: TTL é "latest", não snapshot; para rolling back, restaurar TTL anterior.
+- Validação em produção exige `error_codes.ttl` existir e ser válido TTL (senão fallback; não exception).
+- Sem versionamento: TTL é "latest", não snapshot; para rolling back, restaurar TTL anterior.
 - Fallback não grava log de erro (silencioso), exige monitoramento manual de `error_codes.ttl`.
 - Mapeamento TTL/hardcoded manual (não inferência automática).
 

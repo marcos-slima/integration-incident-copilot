@@ -1,0 +1,20 @@
+# DA-63: skill declarativa — diagnose_incident
+# Esta entrada e' a fonte de verdade para o Capability Registry (DA-27)
+# e para o domain index do supervisor (DA-22).
+
+name: diagnose_incident
+version: "1.0"
+risk_level: low
+destructive: false
+scopes_required:
+  - integration.read
+approval_required: false
+data_sensitivity: confidential
+timeout_seconds: 180.0
+max_retries: 1
+
+# Mapeamento declarativo interface_type -> dominio do sub-agente.
+# Substitui _SAP_INTERFACE_TYPES + _SAAS_INTERFACE_TYPES hardcoded.
+domains:
+  sap: [odata, rfc, cap, po]
+  saas: [servicenow, salesforce, workday, ariba, successfactors]

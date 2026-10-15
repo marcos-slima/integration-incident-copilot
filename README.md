@@ -257,7 +257,7 @@ followed by verified fixes, and these limits remain open:
 
 - **Kyma:** the manifests in `deploy/kyma/` have never been applied to a real cluster.
 - **Connectors:** six of the ten have not been validated against a real instance (table above).
-- **Vector store outage:** with Qdrant down, `_retrieve_hybrid` and `_retrieve_dense_only` catch the exception and return an empty list (DA-65). Known errors are still answered by the rule engine. Tested at the retriever level; the full `/diagnose → run_diagnosis` flow is pending an integration test.
+- **Vector store outage:** with Qdrant down, `_retrieve_hybrid` and `_retrieve_dense_only` catch the exception and return an empty list (DA-65). Known errors covered by rules are still diagnosed deterministically. Verified manually; end-to-end test pending.
 - **Prompt-injection gap:** web-search results returned to the ReAct agent are not yet sanitized. The `web_search_tool` tool is invoked by the ReAct agent, but its results are not sanitized before being passed to the LLM, which could allow an attacker to inject malicious instructions via web search results.
 
 Each of these is documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).

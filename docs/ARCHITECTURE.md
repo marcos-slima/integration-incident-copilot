@@ -1830,7 +1830,7 @@ incidentes. A solução tem que ser:
 
 - Normalizar URIs TTL para `snake_case` (ex: `ex:ssl_certificate_expired` em vez
   de `ex:SSLCertificateExpired`)
-- Expandir TTL de 11 para **28 regras** (cobertura 100% de `KNOWN_ERROR_RULES`)
+- Expandir TTL de 11 para **28 regras** (cobertura 100% de `KNOWN_ERROR_RULES`): 22 regras no catálogo Python + 6 regras derivadas do TTL SKOS, totalizando 28 na carga combinada.
 - Adicionar `next_steps` a todas as entradas (ações específicas de diagnóstico)
 - Mapear nomes TTL/hardcoded via `category_map` em `_extract_category()`
   (compatibilidade semântica)

@@ -247,8 +247,8 @@ The table below maps each capability to its implementation status and evidence.
 | Quality gates | VER | 20 defined (`gates.py:1515`); 17 PASS, 3 WARN, 0 FAIL | WARN: reranker, deployed model, index_manifest |
 | CI | VER | `tests.yml` (lint, tests, security, compose smoke, rag-quality, neo4j-smoke) and `quality.yml` | |
 | Kyma | NVAL | `deploy/kyma/` (10 files) | Never applied to real cluster |
-| Graceful degradation (Qdrant down) | VER | `app/rag/retriever.py`, DA-65, `tests/test_da65_rag_degradation.py` | Qdrant falha → `retrieve_node` retorna `[]` → rule engine ainda responde erros conhecidos → LLM funciona sem contexto RAG; `/diagnose` nunca retorna 500 por falha de Qdrant |
-| Architecture decisions | VER | 53 sections in `docs/DECISOES_DE_ARQUITETURA.md`; 44 with DA | |
+| Graceful degradation (Qdrant down) | VER | `app/rag/retriever.py`, DA-65, `tests/test_da65_rag_degradation.py` | Qdrant falha → `_retrieve_hybrid` e `_retrieve_dense_only` retornam `[]` → rule engine ainda responde erros conhecidos; sem regra casa, LLM funciona sem contexto RAG. `/diagnose` não retorna 500 por falha de Qdrant (testado em nível de retriever) |
+| Architecture decisions | VER | 55 sections in `docs/DECISOES_DE_ARQUITETURA.md`; 44 with DA | |
 
 ## Project status
 
@@ -265,9 +265,9 @@ Each of these is documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 ## Current status (2026-10-13)
 
 - ✅ All 16 remediation phases completed
-- ✅ 1491 tests passing, 81% code coverage
+- ✅ 1525 tests passing, 81% code coverage
 - ✅ Quality gate: 17 PASS, 3 WARN
-- ✅ README corrected: 28 rules (22 hardcoded + 6 SKOS), 53 decisions, CIO 2025 source
+- ✅ README corrected: 28 rules (22 hardcoded + 6 SKOS), 55 sections, CIO 2025 source
 - ✅ Evidence matrix added with implementation status (VER/NVAL/OPC/PARC/AUS)
 - ✅ Root cause explanations added for Qdrant and web search gaps
 
@@ -277,7 +277,7 @@ Each of these is documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 |---|---|
 | Run it for the first time | [Getting started](docs/GETTING_STARTED.md) → [User guide](docs/USER_GUIDE.md) |
 | See how it works, with diagrams | [Architecture](docs/ARCHITECTURE.md) |
-| Understand *why* it was built this way | [Architecture decisions](docs/DECISOES_DE_ARQUITETURA.md) (53 recorded decisions) |
+| Understand *why* it was built this way | [Architecture decisions](docs/DECISOES_DE_ARQUITETURA.md) (55 sections) |
 | Follow real scenarios end to end | [Use cases](docs/CASOS_DE_USO.md) |
 | Configure a connector | [Connectors](docs/CONNECTORS.md) |
 | Fix something | [Troubleshooting](docs/TROUBLESHOOTING.md) |

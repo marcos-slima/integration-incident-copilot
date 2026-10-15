@@ -17,6 +17,7 @@ automaticamente a cada build.
 
 | Você quer… | Leia, nesta ordem |
 |---|---|
+| **Aprender o projeto inteiro, acompanhando a aplicação no debugger** | [`MANUAL.md`](MANUAL.md) — fonte única didática, 17 capítulos, cada um com uma sessão de debug |
 | Rodar pela primeira vez | [`GETTING_STARTED.md`](GETTING_STARTED.md) → [`USER_GUIDE.md`](USER_GUIDE.md) |
 | Levar para um ambiente novo | [`DEPLOY.md`](DEPLOY.md) → [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) |
 | Entender o que existe hoje | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
@@ -34,6 +35,7 @@ deste documento.
 
 | Documento | Assunto |
 |---|---|
+| [`MANUAL.md`](MANUAL.md) | **Manual didático único**: do ambiente ao Kyma, na ordem em que os dados atravessam o sistema; cada capítulo fecha com breakpoint, comando e saída esperada. Apêndices: as 14 configurações do `launch.json`, mapa sintoma → breakpoint, e os números do projeto com o comando que os reconfere |
 | [`GETTING_STARTED.md`](GETTING_STARTED.md) | Do zero ao primeiro diagnóstico em menos de 10 minutos |
 | [`USER_GUIDE.md`](USER_GUIDE.md) | Guia de operação: autenticação, todas as superfícies (REST, UI, CLI, MCP, A2A, eventos), leitura do resultado, loop de verificação e onde ficam os logs por camada |
 | [`DEPLOY.md`](DEPLOY.md) | Caminho Docker Compose |

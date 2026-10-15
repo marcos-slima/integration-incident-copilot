@@ -2570,21 +2570,6 @@ downgrade (emergency rollback).
 
 ---
 
-### 53. Degradação graciosa do RAG quando Qdrant cai (DA-65)
-
-**O problema.** Sem a degradação, um outage do Qdrant faria `/diagnose` retornar 500 mesmo quando o rule engine poderia responder com uma regra conhecida — o usuário final vê erro de servidor para um incidente que tem diagnóstico determinístico.
-
-**A solução.** `_retrieve_hybrid` e `_retrieve_dense_only` (app/rag/retriever.py) capturam `ResponseHandlingException` e `UnexpectedResponse`, logam WARNING e retornam lista vazia. A lista vazia significa "sem contexto RAG", não "erro". O pipeline continua:
-
-1. **Rule engine** — se a descrição casa uma regra de `KNOWN_ERROR_RULES`, o diagnóstico é respondido imediatamente, sem LLM.
-2. **LLM fallback** — se nenhuma regra casa, o LLM recebe o prompt sem chunks RAG (contexto vazio). O modelo ainda produz diagnóstico, apenas com menos evidência contextual.
-
-**Limitações.** A degradação protege contra Qdrant indisponível, não contra Ollama/LLM indisponível. Se ambos Qdrant e o LLM caírem, `/diagnose` falha — mas isso é esperado: sem regra conhecida e sem modelo, não há diagnóstico possível.
-
-**Testes.** `tests/test_da65_rag_degradation.py`: 2 testes verificam que `_retrieve_hybrid` e `_retrieve_dense_only` retornam `[]` quando Qdrant lança exceção (não propagam). Não testam o fluxo completo `/diagnose → run_diagnosis` — isso exigiria fixture com servidor FastAPI.
-
----
-
 ### 52. Taxonomia de erros SAP com TTL/RDFLib (SKOS para Rule Engine) (DA-61)
 
 **O problema.** O Rule Engine determinístico (DA-33) armazena regras de erro conhecidas em `KNOWN_ERROR_RULES` no arquivo `app/agent/rules.py` como um `dict` hardcoded: 22 pares `(pattern, error_type)`. Isso gera dois problemas:
@@ -2683,7 +2668,7 @@ A auditoria Q2 2026 (DATA-01) recomendou substituir hardcoded por taxonomia form
 
 ---
 
-### 55. Skills declarativas — YAML como fonte de verdade para capability e roteamento (DA-63)
+### 54. Skills declarativas — YAML como fonte de verdade para capability e roteamento (DA-63)
 
 **Contexto:** antes desta DA, as skills do Copilot viviam como código Python
 estático: `CAPABILITY_REGISTRY` em `app/mcp/policy.py` era um dict hardcoded
@@ -2749,3 +2734,16 @@ cwd na raiz. Correções:
   `apim`, e `CAPABILITY_REGISTRY` igual ao fallback estático.
 
 ---
+
+### 55. Degradação graciosa do RAG quando Qdrant cai (DA-65)
+
+**O problema.** Sem a degradação, um outage do Qdrant faria `/diagnose` retornar 500 mesmo quando o rule engine poderia responder com uma regra conhecida — o usuário final vê erro de servidor para um incidente que tem diagnóstico determinístico.
+
+**A solução.** `_retrieve_hybrid` e `_retrieve_dense_only` (app/rag/retriever.py) capturam `ResponseHandlingException` e `UnexpectedResponse`, logam WARNING e retornam lista vazia. A lista vazia significa "sem contexto RAG", não "erro". O pipeline continua:
+
+1. **Rule engine** — se a descrição casa uma regra de `KNOWN_ERROR_RULES`, o diagnóstico é respondido imediatamente, sem LLM.
+2. **LLM fallback** — se nenhuma regra casa, o LLM recebe o prompt sem chunks RAG (contexto vazio). O modelo ainda produz diagnóstico, apenas com menos evidência contextual.
+
+**Limitações.** A degradação protege contra Qdrant indisponível, não contra Ollama/LLM indisponível. Se ambos Qdrant e o LLM caírem, `/diagnose` falha — mas isso é esperado: sem regra conhecida e sem modelo, não há diagnóstico possível.
+
+**Testes.** `tests/test_da65_rag_degradation.py`: 2 testes verificam que `_retrieve_hybrid` e `_retrieve_dense_only` retornam `[]` quando Qdrant lança exceção (não propagam). Não testam o fluxo completo `/diagnose → run_diagnosis` — isso exigiria fixture com servidor FastAPI.

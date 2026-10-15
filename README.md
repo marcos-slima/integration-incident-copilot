@@ -196,7 +196,7 @@ Variables, demo identifiers and how to add a connector:
 | Retrieval on the bundled evaluation set (18 in-scope queries, 10 out of scope) | Hit@1 94.4 %, Hit@3 100 %, MRR 0.972; 9 of 10 out-of-scope queries rejected | CI job `rag-quality` |
 | Quality gates | 20 deterministic checks: dataset, reranker invariant, prompt digest vs. the measured prompt, documentation links, symbols and environment variables, connector reachability | CI job `deterministic` |
 | Database | migrations applied and checked; the 45 dashboard queries and the contract-drift end-to-end tests run against a real PostgreSQL | CI job `migrations_and_dashboards` |
-| Test coverage | 1491 tests passing, 81% code coverage | CI job `tests` |
+| Test coverage | 1525 tests passing, 82% code coverage (7745 lines; 1359 uncovered) | CI job `tests` |
 
 The evaluation set is small, and the chosen reranker's advantage over the
 baseline (ms-marco-L6) is one query out of 18, which is not statistically
@@ -242,12 +242,12 @@ The table below maps each capability to its implementation status and evidence.
 | HITL a posteriori | VER | `POST /incidents/{id}/verify`, `main.py:777-884` | SQL, `VERIFIED_AS` (if GraphRAG on), Langfuse score |
 | HITL before action | AUS | `policy.py: approval_required` exists; `approved` depends on "not implemented in v1" mechanism | No action to approve today |
 | Langfuse | VER | `observe_span` in retrieve, graph_enrich, graph_write, web_search, 3 specialists, report and root; CallbackHandler on LLM | supervisor and connector not instrumented |
-| Tests | VER | 1523 collected; `-m "not integration"`: 1491 passed, 19 skipped, 14 deselected, 0 failures | Without Qdrant, Ollama and Neo4j |
-| Coverage | VER | 81% (7622 lines; 1433 uncovered); CI requires ≥80% (`tests.yml:55`) | |
-| Quality gates | VER | 20 defined (`gates.py:1515`); 17 PASS, 3 WARN, 0 FAIL | WARN: reranker, deployed model, index_manifest |
+| Tests | VER | 1525 collected; `-m "not integration"`: 1525 passed, 15 skipped, 14 deselected, 0 failures | Without Qdrant, Ollama and Neo4j |
+| Coverage | VER | 82% (7745 lines; 1359 uncovered); CI requires ≥80% (`tests.yml:55`) | |
+| Quality gates | VER | 20 defined (`gates.py:1515`); 18 PASS, 2 WARN, 0 FAIL | WARN: reranker, deployed model |
 | CI | VER | `tests.yml` (lint, tests, security, compose smoke, rag-quality, neo4j-smoke) and `quality.yml` | |
 | Kyma | NVAL | `deploy/kyma/` (10 files) | Never applied to real cluster |
-| Graceful degradation (Qdrant down) | VER | `app/rag/retriever.py`, DA-65, `tests/test_da65_rag_degradation.py` | Qdrant falha → `_retrieve_hybrid` e `_retrieve_dense_only` retornam `[]` → rule engine ainda responde erros conhecidos; sem regra casa, LLM funciona sem contexto RAG. `/diagnose` não retorna 500 por falha de Qdrant (testado em nível de retriever) |
+| Graceful degradation (Qdrant down) | VER | `app/rag/retriever.py`, DA-65, `tests/test_da65_rag_degradation.py` | `_retrieve_hybrid` e `_retrieve_dense_only` capturam exceção de Qdrant e retornam `[]` (DA-65); erros conhecidos ainda respondidos pelo rule engine. Testado em nível de retriever; fluxo completo `/diagnose → run_diagnosis` pendente de teste de integração |
 | Architecture decisions | VER | 55 sections in `docs/DECISOES_DE_ARQUITETURA.md`; 44 with DA | |
 
 ## Project status
@@ -265,8 +265,8 @@ Each of these is documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 ## Current status (2026-10-13)
 
 - ✅ All 16 remediation phases completed
-- ✅ 1525 tests passing, 81% code coverage
-- ✅ Quality gate: 17 PASS, 3 WARN
+- ✅ 1525 tests passing, 82% code coverage
+- ✅ Quality gate: 18 PASS, 2 WARN
 - ✅ README corrected: 28 rules (22 hardcoded + 6 SKOS), 55 sections, CIO 2025 source
 - ✅ Evidence matrix added with implementation status (VER/NVAL/OPC/PARC/AUS)
 - ✅ Root cause explanations added for Qdrant and web search gaps

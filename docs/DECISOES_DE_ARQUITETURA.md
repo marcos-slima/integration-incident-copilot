@@ -79,8 +79,8 @@ final.
 | 60 | [51](#51-criptografia-em-repouso-de-evidence_json-com-fernet-da-60) | Criptografia em repouso de `evidence_json` com Fernet (`LLM_CREDENTIALS_MASTER_KEY`) + migration idempotente `009_encrypt_evidence_json.py` |
 | 61 | [52](#52-taxonomia-de-erros-sap-com-ttl-rdflib-da-61) | Taxonomia de erros SAP com TTL/RDFLib (SKOS) para Rule Engine: carregamento dinâmico vs hardcoded, zero breaking changes (DA-61 Fase 1) |
 | 62 | [53](#53-neo4j-loader-para-skos-taxonomy-import-da-62) | Neo4j loader para SKOS taxonomy import (idempotent upsert, Cypher queries) |
-| 63 | [54](#54-skills-declarativas---yaml-como-fonte-de-verdade-para-capability-e-roteamento-da-63) | Skills declarativas — YAML como fonte de verdade para capability e roteamento (DA-63) |
-| 65 | [54](#54-degradação-graciosa-do-rag-quando-qdrant-cai-da-65) | Degradação graciosa do RAG: Qdrant cai → `retrieve_node` retorna `[]` → rule engine ainda responde erros conhecidos → `/diagnose` nunca 500 por falha de Qdrant |
+| 63 | [55](#55-skills-declarativas---yaml-como-fonte-de-verdade-para-capability-e-roteamento-da-63) | Skills declarativas — YAML como fonte de verdade para capability e roteamento (DA-63) |
+| 65 | [53](#53-degradação-graciosa-do-rag-quando-qdrant-cai-da-65) | Degradação graciosa do RAG: Qdrant cai → `retrieve_node` retorna `[]` → rule engine ainda responde erros conhecidos → `/diagnose` nunca 500 por falha de Qdrant |
 
 > **Ordenação da prosa:** as seções §42–§47 (DA-42, DA-38, DA-39, DA-40,
 > DA-41, DA-12) foram retro-registradas em bloco, fora da ordem crescente de
@@ -2569,16 +2569,18 @@ downgrade (emergency rollback).
 
 ---
 
-### 54. Degradação graciosa do RAG quando Qdrant cai (DA-65)
+### 53. Degradação graciosa do RAG quando Qdrant cai (DA-65)
 
 **O problema.** Sem a degradação, um outage do Qdrant faria `/diagnose` retornar 500 mesmo quando o rule engine poderia responder com uma regra conhecida — o usuário final vê erro de servidor para um incidente que tem diagnóstico determinístico.
 
-**A solução.** `retrieve_node` (app/rag/retriever.py) captura `ResponseHandlingException` e `UnexpectedResponse` em ambas as pernas (hibrida e densa), loga WARNING e retorna lista vazia. A lista vazia significa "sem contexto RAG", não "erro". O pipeline continua:
+**A solução.** `_retrieve_hybrid` e `_retrieve_dense_only` (app/rag/retriever.py) capturam `ResponseHandlingException` e `UnexpectedResponse`, logam WARNING e retornam lista vazia. A lista vazia significa "sem contexto RAG", não "erro". O pipeline continua:
 
 1. **Rule engine** — se a descrição casa uma regra de `KNOWN_ERROR_RULES`, o diagnóstico é respondido imediatamente, sem LLM.
 2. **LLM fallback** — se nenhuma regra casa, o LLM recebe o prompt sem chunks RAG (contexto vazio). O modelo ainda produz diagnóstico, apenas com menos evidência contextual.
 
-**Resultado.** `/diagnose` nunca retorna 500 por falha de Qdrant. A degradação é **graciosa**: qualidade do diagnóstico cai (menos contexto), mas o serviço continua disponível.
+**Limitações.** A degradação protege contra Qdrant indisponível, não contra Ollama/LLM indisponível. Se ambos Qdrant e o LLM caírem, `/diagnose` falha — mas isso é esperado: sem regra conhecida e sem modelo, não há diagnóstico possível.
+
+**Testes.** `tests/test_da65_rag_degradation.py`: 2 testes verificam que `_retrieve_hybrid` e `_retrieve_dense_only` retornam `[]` quando Qdrant lança exceção (não propagam). Não testam o fluxo completo `/diagnose → run_diagnosis` — isso exigiria fixture com servidor FastAPI.
 
 ---
 
@@ -2680,7 +2682,7 @@ A auditoria Q2 2026 (DATA-01) recomendou substituir hardcoded por taxonomia form
 
 ---
 
-### 54. Skills declarativas — YAML como fonte de verdade para capability e roteamento (DA-63)
+### 55. Skills declarativas — YAML como fonte de verdade para capability e roteamento (DA-63)
 
 **Contexto:** antes desta DA, as skills do Copilot viviam como código Python
 estático: `CAPABILITY_REGISTRY` em `app/mcp/policy.py` era um dict hardcoded

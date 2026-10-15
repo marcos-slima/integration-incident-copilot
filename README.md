@@ -242,7 +242,7 @@ The table below maps each capability to its implementation status and evidence.
 | HITL a posteriori | VER | `POST /incidents/{id}/verify`, `main.py:777-884` | SQL, `VERIFIED_AS` (if GraphRAG on), Langfuse score |
 | HITL before action | AUS | `policy.py: approval_required` exists; `approved` depends on "not implemented in v1" mechanism | No action to approve today |
 | Langfuse | VER | `observe_span` in retrieve, graph_enrich, graph_write, web_search, 3 specialists, report and root; CallbackHandler on LLM | supervisor and connector not instrumented |
-| Tests | VER | 1525 collected; `-m "not integration"`: 1525 passed, 15 skipped, 14 deselected, 0 failures | Without Qdrant, Ollama and Neo4j |
+| Tests | VER | 1553 collected; `-m "not integration"`: 1525 passed, 15 skipped, 14 deselected, 0 failures | Without Qdrant, Ollama and Neo4j |
 | Coverage | VER | 82% (7745 lines; 1359 uncovered); CI requires ≥80% (`tests.yml:55`) | |
 | Quality gates | VER | 20 defined (`gates.py:1515`); 18 PASS, 2 WARN, 0 FAIL | WARN: reranker, deployed model |
 | CI | VER | `tests.yml` (lint, tests, security, compose smoke, rag-quality, neo4j-smoke) and `quality.yml` | |
@@ -257,7 +257,7 @@ followed by verified fixes, and these limits remain open:
 
 - **Kyma:** the manifests in `deploy/kyma/` have never been applied to a real cluster.
 - **Connectors:** six of the ten have not been validated against a real instance (table above).
-- **Vector store outage:** with Qdrant down, `retrieve_node` catches the exception and returns an empty list (DA-65). The rule engine still answers known errors deterministically; the LLM fallback runs without RAG context. `/diagnose` never returns 500 due to Qdrant failure — degradation is graceful: diagnostic quality drops (less context) but the service remains available.
+- **Vector store outage:** with Qdrant down, `_retrieve_hybrid` and `_retrieve_dense_only` catch the exception and return an empty list (DA-65). Known errors are still answered by the rule engine. Tested at the retriever level; the full `/diagnose → run_diagnosis` flow is pending an integration test.
 - **Prompt-injection gap:** web-search results returned to the ReAct agent are not yet sanitized. The `web_search_tool` tool is invoked by the ReAct agent, but its results are not sanitized before being passed to the LLM, which could allow an attacker to inject malicious instructions via web search results.
 
 Each of these is documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).

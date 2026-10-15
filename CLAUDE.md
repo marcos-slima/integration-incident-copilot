@@ -296,6 +296,7 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
 | DA-61 | Taxonomia de erros SAP com TTL/RDFLib (SKOS para Rule Engine) | `app/ontology/`, `app/agent/ontology_loader.py` |
 | DA-62 | Neo4j loader para SKOS taxonomy import (idempotent upsert, Cypher queries) | `app/ontology/neo4j_loader.py` |
 | DA-63 | Skills declarativas: cada skill é um artefato YAML em data/skills/*.yaml com schema, versão e capability contract; supervisor deriva domain index do registry ao invés de hardcoded sets; CAPABILITY_REGISTRY carregado de YAML quando disponível | `data/skills/`, `app/mcp/skill_registry.py`, `app/mcp/policy.py`, `app/agent/supervisor.py` |
+| DA-65 | Degradação graciosa do RAG: quando Qdrant cai, `retrieve_node` retorna lista vazia (não propaga exceção) → rule engine ainda responde erros conhecidos → diagnóstico LLM funciona sem contexto RAG; `/diagnose` nunca retorna 500 por falha de Qdrant | `app/rag/retriever.py::_retrieve_hybrid`, `app/rag/retriever.py::_retrieve_dense_only`, `tests/test_da65_rag_degradation.py` |
 
 **DAs candidatas (sem implementação ainda):**
 - **DA-31 — SAP AI Agent Hub registration (MCP + A2A)** · bloqueada: exige tenant Kyma.

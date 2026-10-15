@@ -80,6 +80,7 @@ final.
 | 61 | [52](#52-taxonomia-de-erros-sap-com-ttl-rdflib-da-61) | Taxonomia de erros SAP com TTL/RDFLib (SKOS) para Rule Engine: carregamento dinâmico vs hardcoded, zero breaking changes (DA-61 Fase 1) |
 | 62 | [53](#53-neo4j-loader-para-skos-taxonomy-import-da-62) | Neo4j loader para SKOS taxonomy import (idempotent upsert, Cypher queries) |
 | 63 | [54](#54-skills-declarativas---yaml-como-fonte-de-verdade-para-capability-e-roteamento-da-63) | Skills declarativas — YAML como fonte de verdade para capability e roteamento (DA-63) |
+| 65 | [54](#54-degradação-graciosa-do-rag-quando-qdrant-cai-da-65) | Degradação graciosa do RAG: Qdrant cai → `retrieve_node` retorna `[]` → rule engine ainda responde erros conhecidos → `/diagnose` nunca 500 por falha de Qdrant |
 
 > **Ordenação da prosa:** as seções §42–§47 (DA-42, DA-38, DA-39, DA-40,
 > DA-41, DA-12) foram retro-registradas em bloco, fora da ordem crescente de
@@ -2565,6 +2566,19 @@ existentes exige migration: não se pode apenas adicionar a função de encrypt;
 os dados já gravados (potencialmente milhares de linhas) precisam ser
 processados. Migration garantido idempotência (re-run não quebra dados) e
 downgrade (emergency rollback).
+
+---
+
+### 54. Degradação graciosa do RAG quando Qdrant cai (DA-65)
+
+**O problema.** Sem a degradação, um outage do Qdrant faria `/diagnose` retornar 500 mesmo quando o rule engine poderia responder com uma regra conhecida — o usuário final vê erro de servidor para um incidente que tem diagnóstico determinístico.
+
+**A solução.** `retrieve_node` (app/rag/retriever.py) captura `ResponseHandlingException` e `UnexpectedResponse` em ambas as pernas (hibrida e densa), loga WARNING e retorna lista vazia. A lista vazia significa "sem contexto RAG", não "erro". O pipeline continua:
+
+1. **Rule engine** — se a descrição casa uma regra de `KNOWN_ERROR_RULES`, o diagnóstico é respondido imediatamente, sem LLM.
+2. **LLM fallback** — se nenhuma regra casa, o LLM recebe o prompt sem chunks RAG (contexto vazio). O modelo ainda produz diagnóstico, apenas com menos evidência contextual.
+
+**Resultado.** `/diagnose` nunca retorna 500 por falha de Qdrant. A degradação é **graciosa**: qualidade do diagnóstico cai (menos contexto), mas o serviço continua disponível.
 
 ---
 

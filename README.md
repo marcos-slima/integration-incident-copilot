@@ -247,7 +247,7 @@ The table below maps each capability to its implementation status and evidence.
 | Quality gates | VER | 20 defined (`gates.py:1515`); 17 PASS, 3 WARN, 0 FAIL | WARN: reranker, deployed model, index_manifest |
 | CI | VER | `tests.yml` (lint, tests, security, compose smoke, rag-quality, neo4j-smoke) and `quality.yml` | |
 | Kyma | NVAL | `deploy/kyma/` (10 files) | Never applied to real cluster |
-| Failure without Qdrant | VER | README, "Project status" | `/diagnose` returns 500 |
+| Graceful degradation (Qdrant down) | VER | `app/rag/retriever.py`, DA-65, `tests/test_da65_rag_degradation.py` | Qdrant falha → `retrieve_node` retorna `[]` → rule engine ainda responde erros conhecidos → LLM funciona sem contexto RAG; `/diagnose` nunca retorna 500 por falha de Qdrant |
 | Architecture decisions | VER | 53 sections in `docs/DECISOES_DE_ARQUITETURA.md`; 44 with DA | |
 
 ## Project status
@@ -257,7 +257,7 @@ followed by verified fixes, and these limits remain open:
 
 - **Kyma:** the manifests in `deploy/kyma/` have never been applied to a real cluster.
 - **Connectors:** six of the ten have not been validated against a real instance (table above).
-- **Vector store outage:** with Qdrant down, `/diagnose` returns 500 even when a rule would have answered. The `retrieve_node` node attempts to query Qdrant before the rule engine is invoked; a fallback to rule-engine-only mode when Qdrant is unavailable is not yet implemented.
+- **Vector store outage:** with Qdrant down, `retrieve_node` catches the exception and returns an empty list (DA-65). The rule engine still answers known errors deterministically; the LLM fallback runs without RAG context. `/diagnose` never returns 500 due to Qdrant failure — degradation is graceful: diagnostic quality drops (less context) but the service remains available.
 - **Prompt-injection gap:** web-search results returned to the ReAct agent are not yet sanitized. The `web_search_tool` tool is invoked by the ReAct agent, but its results are not sanitized before being passed to the LLM, which could allow an attacker to inject malicious instructions via web search results.
 
 Each of these is documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
@@ -301,3 +301,7 @@ enterprise landscapes.
 ## License
 
 [MIT](LICENSE)
+
+## Disclaimer
+
+This project is not affiliated with, endorsed by, or connected to SAP SE or any of its subsidiaries. All trademarks belong to their respective owners.

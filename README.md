@@ -276,14 +276,14 @@ Each of these is documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 | If you want to… | Read |
 |---|---|
 | Run it for the first time | [Getting started](docs/GETTING_STARTED.md) → [User guide](docs/USER_GUIDE.md) |
-| See how it works, with diagrams | [Architecture](docs/ARCHITECTURE.md) |
-| Understand *why* it was built this way | [Architecture decisions](docs/DECISOES_DE_ARQUITETURA.md) (55 sections) |
-| Follow real scenarios end to end | [Use cases](docs/CASOS_DE_USO.md) |
+| See how it works, with diagrams | [Architecture](docs/ARCHITECTURE.md) (Portuguese only) |
+| Understand *why* it was built this way | [Architecture decisions](docs/DECISOES_DE_ARQUITETURA.md) (Portuguese only) |
+| Follow real scenarios end to end | [Use cases](docs/CASOS_DE_USO.md) (Portuguese only) |
 | Configure a connector | [Connectors](docs/CONNECTORS.md) |
-| Fix something | [Troubleshooting](docs/TROUBLESHOOTING.md) |
+| Fix something | [Troubleshooting](docs/TROUBLESHOOTING.md) (Portuguese only) |
 | Index of everything | [docs/README.md](docs/README.md) |
 
-The documentation beyond this page is in Portuguese.
+The documentation beyond this page is in Portuguese. English translations are available in `docs/en/` for the most important documents (getting started, user guide, connectors). Study/reference material remains in Portuguese only.
 
 ## Tech stack
 

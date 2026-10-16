@@ -135,6 +135,13 @@ class RuntimeConfigPatch(BaseModel):
     llm_provider: str | None = None
     llm_route: str | None = None
     llm_fallback_provider: str | None = None
+    llm_credentials_master_key: str | None = None
+    data_sovereignty_mode: str | None = None
+    confidential_allowed_origins: str | None = None
+    require_auth: bool | None = None
+    rule_engine_enabled: bool | None = None
+    diagnosis_timeout_seconds: float | None = None
+    llm_request_timeout_seconds: float | None = None
 
 
 # Validacao de provider — Literal do .env (invariante: so esses tres sao possiveis)
@@ -196,15 +203,30 @@ def _model_out(model: Any, usage: Any | None) -> dict[str, Any]:
 async def registry_status(
     session: SessionDep,
 ) -> dict[str, Any]:
-    """Estado do registro: flags de config e, se banco vivo, contagem."""
+    """Estado do registro: flags de config e, se banco vivo, contagem.
+
+    Adiciona `runtime_config_source` indicando se os valores de runtime
+    vem do banco (override) ou do .env (default)."""
     from app.admin.crypto import master_key_configured
+    from app.admin.repository import get_runtime_config as _get
     from app.config import settings
+
+    db = session.get_bind() if hasattr(session, "get_bind") else None
+    db_available = db is not None or bool(settings.database_url)
+
+    # Determinar fonte dos valores de runtime
+    runtime_source = "env"
+    if db_available:
+        overrides = _get()
+        if overrides and any(v is not None for v in overrides.values()):
+            runtime_source = "db"
 
     result: dict[str, Any] = {
         "managed": settings.llm_registry_db,
         "db_configured": bool(settings.database_url),
         "master_key_configured": master_key_configured(),
         "metering_enabled": settings.metering_enabled,
+        "runtime_config_source": runtime_source,
         "models_count": None,
         "systems_count": None,
         "incidents_count": None,
@@ -253,6 +275,13 @@ async def get_runtime_config(session: SessionDep) -> dict[str, Any]:
                 "llm_provider": settings.llm_provider,
                 "llm_route": settings.llm_route,
                 "llm_fallback_provider": settings.llm_fallback_provider,
+                "llm_credentials_master_key": settings.llm_credentials_master_key,
+                "data_sovereignty_mode": settings.data_sovereignty_mode,
+                "confidential_allowed_origins": settings.confidential_allowed_origins,
+                "require_auth": settings.require_auth,
+                "rule_engine_enabled": settings.rule_engine_enabled,
+                "diagnosis_timeout_seconds": settings.diagnosis_timeout_seconds,
+                "llm_request_timeout_seconds": settings.llm_request_timeout_seconds,
             }
             return result
         # Sem banco: retorna defaults que refletem o .env atual
@@ -261,6 +290,13 @@ async def get_runtime_config(session: SessionDep) -> dict[str, Any]:
             "llm_provider": settings.llm_provider,
             "llm_route": settings.llm_route,
             "llm_fallback_provider": settings.llm_fallback_provider,
+            "llm_credentials_master_key": settings.llm_credentials_master_key,
+            "data_sovereignty_mode": settings.data_sovereignty_mode,
+            "confidential_allowed_origins": settings.confidential_allowed_origins,
+            "require_auth": settings.require_auth,
+            "rule_engine_enabled": settings.rule_engine_enabled,
+            "diagnosis_timeout_seconds": settings.diagnosis_timeout_seconds,
+            "llm_request_timeout_seconds": settings.llm_request_timeout_seconds,
             "env_values": None,  # sem banco = nao ha diferenca possivel
         }
 
@@ -271,6 +307,13 @@ async def get_runtime_config(session: SessionDep) -> dict[str, Any]:
             "llm_provider": settings.llm_provider,
             "llm_route": settings.llm_route,
             "llm_fallback_provider": settings.llm_fallback_provider,
+            "llm_credentials_master_key": settings.llm_credentials_master_key,
+            "data_sovereignty_mode": settings.data_sovereignty_mode,
+            "confidential_allowed_origins": settings.confidential_allowed_origins,
+            "require_auth": settings.require_auth,
+            "rule_engine_enabled": settings.rule_engine_enabled,
+            "diagnosis_timeout_seconds": settings.diagnosis_timeout_seconds,
+            "llm_request_timeout_seconds": settings.llm_request_timeout_seconds,
         }
         return result
     # Sem linha no banco (migration nao aplicada): retorna .env
@@ -279,6 +322,13 @@ async def get_runtime_config(session: SessionDep) -> dict[str, Any]:
         "llm_provider": settings.llm_provider,
         "llm_route": settings.llm_route,
         "llm_fallback_provider": settings.llm_fallback_provider,
+        "llm_credentials_master_key": settings.llm_credentials_master_key,
+        "data_sovereignty_mode": settings.data_sovereignty_mode,
+        "confidential_allowed_origins": settings.confidential_allowed_origins,
+        "require_auth": settings.require_auth,
+        "rule_engine_enabled": settings.rule_engine_enabled,
+        "diagnosis_timeout_seconds": settings.diagnosis_timeout_seconds,
+        "llm_request_timeout_seconds": settings.llm_request_timeout_seconds,
         "env_values": None,  # sem linha = nao ha diferenca possivel
     }
 
@@ -295,7 +345,7 @@ async def patch_runtime_config(
     if not updates:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Envie pelo menos um campo: llm_registry_db, llm_provider ou llm_route",
+            detail="Envie pelo menos um campo: llm_registry_db, llm_provider, llm_route, llm_fallback_provider, llm_credentials_master_key, data_sovereignty_mode, confidential_allowed_origins, require_auth, rule_engine_enabled, diagnosis_timeout_seconds ou llm_request_timeout_seconds",
         )
 
     # GAP-8: validar provider antes de salvar — evita erro genérico em runtime
@@ -317,6 +367,110 @@ async def patch_runtime_config(
             detail="Persistencia nao configurada — impossivel salvar overrides de runtime",
         )
     return result
+
+
+@router.get("/effective-config")
+async def effective_config(session: SessionDep) -> dict[str, Any]:
+    """GAP de usabilidade: exportar configuracao efetiva via UI.
+
+    Combina overrides do banco (llm_runtime_config) com valores atuais do
+    .env (mascarados para campos sensiveis). Cada campo mostra sua fonte
+    ("db" ou "env") e o valor efetivo (override DB quando presente, senao .env).
+
+    Retorna tambem `sensitive_fields` com a lista de nomes de campos que sao
+    tratados como sensiveis (mascarados na saida).
+    """
+    from app.admin.repository import get_runtime_config as _get
+    from app.config import settings
+
+    db = await session.get_bind() if hasattr(session, "get_bind") else None
+    db_available = db is not None or bool(settings.database_url)
+
+    # Ler overrides do banco (best-effort)
+    overrides: dict[str, Any] | None = _get() if db_available else None
+
+    # Campos sensiveis que devem ser mascarados na saida
+    sensitive_fields = frozenset(
+        {
+            "llm_credentials_master_key",
+            "openai_api_key",
+            "azure_openai_api_key",
+            "sap_password",
+            "odata_client_secret",
+            "salesforce_client_secret",
+            "workday_client_secret",
+            "sfsf_client_secret",
+            "po_password",
+            "po_oauth_client_secret",
+            "ariba_client_secret",
+            "cap_client_secret",
+            "apim_client_secret",
+            "admin_api_key",
+            "a2a_api_key",
+            "event_mesh_api_key",
+            "smtp_password",
+            "amqp_password",
+        }
+    )
+
+    # Campos que o runtime_config pode sobrescrever
+    config_fields = [
+        "llm_registry_db",
+        "llm_provider",
+        "llm_route",
+        "llm_fallback_provider",
+        "llm_credentials_master_key",
+        "data_sovereignty_mode",
+        "confidential_allowed_origins",
+        "require_auth",
+        "rule_engine_enabled",
+        "diagnosis_timeout_seconds",
+        "llm_request_timeout_seconds",
+    ]
+
+    # Montar a lista de campos com fonte e valor efetivo
+    effective: list[dict[str, Any]] = []
+    for field in config_fields:
+        db_val = overrides.get(field) if overrides else None
+        env_val = getattr(settings, field, None)
+
+        # Fonte: "db" se o override existe e nao e' None, senao "env"
+        source = "db" if (overrides and db_val is not None) else "env"
+        effective_value = db_val if source == "db" else env_val
+
+        # Mascara valores sensiveis
+        is_sensitive = field in sensitive_fields
+        display_value = _mask_sensitive(effective_value, is_sensitive)
+
+        effective.append(
+            {
+                "field": field,
+                "source": source,
+                "value": display_value,
+                "raw_db": db_val,  # sempre cru (para comparacao na UI)
+                "raw_env": env_val,
+                "is_sensitive": is_sensitive,
+            }
+        )
+
+    return {
+        "effective": effective,
+        "sensitive_fields": list(sensitive_fields),
+        "db_available": db_available,
+        "overrides_count": len(overrides) if overrides else 0,
+    }
+
+
+def _mask_sensitive(value: Any, is_sensitive: bool) -> str:
+    """Mascara valores sensiveis para exibicao na UI."""
+    if not is_sensitive:
+        return str(value) if value is not None else "(vazio)"
+    s = str(value) if value is not None else ""
+    if not s:
+        return "(vazio)"
+    if len(s) <= 6:
+        return "*" * len(s)
+    return f"{s[:3]}...{s[-3:]}"
 
 
 @router.get("/runtime-config/check-activate")

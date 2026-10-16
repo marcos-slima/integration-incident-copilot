@@ -108,12 +108,27 @@ def _resolve_runtime_overrides(cfg: Settings) -> Settings:
         return cfg
 
     # Construir um novo Settings com os overrides aplicados.
-    # Passamos tudo que o Settings precisa + sobrescrevemos os 4 campos.
+    # Passamos tudo que o Settings precisa + sobrescrevemos os 9 campos.
     kw: dict = {
         "llm_registry_db": overrides.get("llm_registry_db", cfg.llm_registry_db),
         "llm_provider": overrides.get("llm_provider", cfg.llm_provider),
         "llm_route": overrides.get("llm_route", cfg.llm_route),
         "llm_fallback_provider": overrides.get("llm_fallback_provider", cfg.llm_fallback_provider),
+        "llm_credentials_master_key": overrides.get(
+            "llm_credentials_master_key", cfg.llm_credentials_master_key
+        ),
+        "data_sovereignty_mode": overrides.get("data_sovereignty_mode", cfg.data_sovereignty_mode),
+        "confidential_allowed_origins": overrides.get(
+            "confidential_allowed_origins", cfg.confidential_allowed_origins
+        ),
+        "require_auth": overrides.get("require_auth", cfg.require_auth),
+        "rule_engine_enabled": overrides.get("rule_engine_enabled", cfg.rule_engine_enabled),
+        "diagnosis_timeout_seconds": overrides.get(
+            "diagnosis_timeout_seconds", cfg.diagnosis_timeout_seconds
+        ),
+        "llm_request_timeout_seconds": overrides.get(
+            "llm_request_timeout_seconds", cfg.llm_request_timeout_seconds
+        ),
     }
     # Repassar campos que o Settings precisa para funcionar (sem alterar).
     for key in (

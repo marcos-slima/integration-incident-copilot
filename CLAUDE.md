@@ -396,6 +396,10 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
    (seção `## Índice`). Os dois gates reprovam o build se algum dos dois faltar
 5. Commitar com prefixo `feat(DA-N):` no commit message
 
+## Documentação bilíngue
+
+PT em `docs/` é a fonte; EN em `docs/en/` acompanha; alterações entram primeiro no PT; cabeçalho de cada arquivo EN registra o commit-fonte.
+
 ---
 
 ## Debug rápido no VS Code

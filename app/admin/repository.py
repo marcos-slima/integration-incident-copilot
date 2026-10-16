@@ -555,6 +555,13 @@ def get_runtime_config() -> dict[str, Any] | None:
                 "llm_provider": row.llm_provider,
                 "llm_route": row.llm_route,
                 "llm_fallback_provider": row.llm_fallback_provider,
+                "llm_credentials_master_key": row.llm_credentials_master_key,
+                "data_sovereignty_mode": row.data_sovereignty_mode,
+                "confidential_allowed_origins": row.confidential_allowed_origins,
+                "require_auth": row.require_auth,
+                "rule_engine_enabled": row.rule_engine_enabled,
+                "diagnosis_timeout_seconds": row.diagnosis_timeout_seconds,
+                "llm_request_timeout_seconds": row.llm_request_timeout_seconds,
             }
     except Exception:
         logger.exception("[runtime_config] Falha ao ler overrides de runtime")
@@ -574,8 +581,21 @@ def update_runtime_config(fields: dict[str, Any]) -> dict[str, Any] | None:
             ).scalar_one_or_none()
             if row is None:
                 return None
+            _ALLOWED_RUNTIME_KEYS = {
+                "llm_registry_db",
+                "llm_provider",
+                "llm_route",
+                "llm_fallback_provider",
+                "llm_credentials_master_key",
+                "data_sovereignty_mode",
+                "confidential_allowed_origins",
+                "require_auth",
+                "rule_engine_enabled",
+                "diagnosis_timeout_seconds",
+                "llm_request_timeout_seconds",
+            }
             for key, value in fields.items():
-                if key in {"llm_registry_db", "llm_provider", "llm_route", "llm_fallback_provider"}:
+                if key in _ALLOWED_RUNTIME_KEYS:
                     setattr(row, key, value)
             session.commit()
             return {
@@ -583,6 +603,13 @@ def update_runtime_config(fields: dict[str, Any]) -> dict[str, Any] | None:
                 "llm_provider": row.llm_provider,
                 "llm_route": row.llm_route,
                 "llm_fallback_provider": row.llm_fallback_provider,
+                "llm_credentials_master_key": row.llm_credentials_master_key,
+                "data_sovereignty_mode": row.data_sovereignty_mode,
+                "confidential_allowed_origins": row.confidential_allowed_origins,
+                "require_auth": row.require_auth,
+                "rule_engine_enabled": row.rule_engine_enabled,
+                "diagnosis_timeout_seconds": row.diagnosis_timeout_seconds,
+                "llm_request_timeout_seconds": row.llm_request_timeout_seconds,
             }
     except Exception:
         logger.exception("[runtime_config] Falha ao atualizar overrides de runtime")

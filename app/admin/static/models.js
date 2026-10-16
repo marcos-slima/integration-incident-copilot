@@ -25,6 +25,13 @@ function loadRuntimeConfig() {
       { key: 'llm_provider',    label: 'LLM_PROVIDER',    type: 'text' },
       { key: 'llm_route',       label: 'LLM_ROUTE',       type: 'text' },
       { key: 'llm_fallback_provider', label: 'LLM_FALLBACK_PROVIDER', type: 'select', options: ['', 'ollama', 'openai', 'azure_openai'] },
+      { key: 'llm_credentials_master_key', label: 'LLM_CREDENTIALS_MASTER_KEY', type: 'text' },
+      { key: 'data_sovereignty_mode', label: 'DATA_SOVEREIGNTY_MODE', type: 'select', options: ['', 'strict', 'cloud_with_dlp'] },
+      { key: 'confidential_allowed_origins', label: 'CONFIDENTIAL_ALLOWED_ORIGINS', type: 'text' },
+      { key: 'require_auth', label: 'REQUIRE_AUTH', type: 'toggle' },
+      { key: 'rule_engine_enabled', label: 'RULE_ENGINE_ENABLED', type: 'toggle' },
+      { key: 'diagnosis_timeout_seconds', label: 'DIAGNOSIS_TIMEOUT_SECONDS', type: 'text' },
+      { key: 'llm_request_timeout_seconds', label: 'LLM_REQUEST_TIMEOUT_SECONDS', type: 'text' },
     ];
 
     for (const f of fields) {
@@ -89,7 +96,7 @@ function showRuntimeDiffBanner(cfg) {
     return;
   }
 
-  const diffFields = ['llm_registry_db', 'llm_provider', 'llm_route', 'llm_fallback_provider'];
+  const diffFields = ['llm_registry_db', 'llm_provider', 'llm_route', 'llm_fallback_provider', 'llm_credentials_master_key', 'data_sovereignty_mode', 'confidential_allowed_origins', 'require_auth', 'rule_engine_enabled', 'diagnosis_timeout_seconds', 'llm_request_timeout_seconds'];
   let hasDiff = false;
   for (const key of diffFields) {
     if (String(cfg[key]) !== String(envValues[key])) {
@@ -142,6 +149,39 @@ function editRuntimeConfig(key, currentVal) {
   adminFetch('/admin/api/runtime-config', {method:'PATCH', body: JSON.stringify({[key]: newVal || null})})
     .then(r => r.ok ? loadRuntimeConfig() : r.json().then(j => { throw new Error(j.detail); }))
     .catch(e => document.getElementById('msg').textContent = 'Erro: ' + e.message);
+}
+
+// GAP-A: Exportar configuração efetiva
+function exportEffectiveConfig() {
+  const btn = actionButton('exportEffectiveConfig');
+  const originalText = btn.textContent;
+  btn.textContent = 'Exportando...';
+  btn.disabled = true;
+
+  adminFetch('/admin/api/effective-config').then(r => {
+    if (r.status === 401) throw new Error('Chave admin inválida — insira acima');
+    return r.json();
+  }).then(cfg => {
+    const preview = document.getElementById('effective-config-preview');
+    const jsonStr = JSON.stringify(cfg, null, 2);
+    preview.textContent = jsonStr;
+    preview.style.display = 'block';
+
+    // Copiar para a área de transferência
+    navigator.clipboard.writeText(jsonStr).then(() => {
+      alert('Configuração efetiva copiada para a área de transferência!');
+    }).catch(() => {
+      // Fallback: selecionar e copiar manualmente
+      preview.select();
+      document.execCommand('copy');
+      alert('Configuração efetiva copiada para a área de transferência!');
+    });
+  }).catch(e => {
+    document.getElementById('msg').textContent = 'Erro: ' + e.message;
+  }).finally(() => {
+    btn.textContent = originalText;
+    btn.disabled = false;
+  });
 }
 
 // ---------------------------------------------------------------------------

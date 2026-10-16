@@ -134,6 +134,11 @@ class RuntimeConfigPatch(BaseModel):
     llm_registry_db: bool | None = None
     llm_provider: str | None = None
     llm_route: str | None = None
+    llm_fallback_provider: str | None = None
+
+
+# Validacao de provider — Literal do .env (invariante: so esses tres sao possiveis)
+_VALID_PROVIDERS = frozenset({"ollama", "openai", "azure_openai", ""})
 
 
 def _require_session(session: SessionDep) -> AsyncSession:
@@ -231,30 +236,50 @@ async def get_runtime_config(session: SessionDep) -> dict[str, Any]:
     """Overrides de runtime armazenados no banco.
 
     Retorna valores do banco quando disponivel; senao, retorna None para
-    cada campo (sinaliza que o .env e' a fonte de verdade)."""
+    cada campo (sinaliza que o .env e' a fonte de verdade).
+
+    Tambem retorna `env_values` com os valores atuais do .env para
+    comparacao visual na UI (banner quando DB != .env)."""
     from app.admin.repository import get_runtime_config as _get
+    from app.config import settings
 
     db = await session.get_bind() if hasattr(session, "get_bind") else None
     if db is None:
         # SessionDep sem banco real → melhor-effort sync path
         result = _get()
         if result is not None:
+            result["env_values"] = {
+                "llm_registry_db": settings.llm_registry_db,
+                "llm_provider": settings.llm_provider,
+                "llm_route": settings.llm_route,
+                "llm_fallback_provider": settings.llm_fallback_provider,
+            }
             return result
         # Sem banco: retorna defaults que refletem o .env atual
         return {
             "llm_registry_db": settings.llm_registry_db,
             "llm_provider": settings.llm_provider,
             "llm_route": settings.llm_route,
+            "llm_fallback_provider": settings.llm_fallback_provider,
+            "env_values": None,  # sem banco = nao ha diferenca possivel
         }
 
     result = _get()
     if result is not None:
+        result["env_values"] = {
+            "llm_registry_db": settings.llm_registry_db,
+            "llm_provider": settings.llm_provider,
+            "llm_route": settings.llm_route,
+            "llm_fallback_provider": settings.llm_fallback_provider,
+        }
         return result
     # Sem linha no banco (migration nao aplicada): retorna .env
     return {
         "llm_registry_db": settings.llm_registry_db,
         "llm_provider": settings.llm_provider,
         "llm_route": settings.llm_route,
+        "llm_fallback_provider": settings.llm_fallback_provider,
+        "env_values": None,  # sem linha = nao ha diferenca possivel
     }
 
 
@@ -273,6 +298,16 @@ async def patch_runtime_config(
             detail="Envie pelo menos um campo: llm_registry_db, llm_provider ou llm_route",
         )
 
+    # GAP-8: validar provider antes de salvar — evita erro genérico em runtime
+    if "llm_provider" in updates and updates["llm_provider"] not in _VALID_PROVIDERS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                f"llm_provider invalido: '{updates['llm_provider']}'. "
+                "Valores possiveis: ollama, openai, azure_openai (ou vazio)."
+            ),
+        )
+
     from app.admin.repository import update_runtime_config as _update
 
     result = _update(updates)
@@ -281,6 +316,79 @@ async def patch_runtime_config(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Persistencia nao configurada — impossivel salvar overrides de runtime",
         )
+    return result
+
+
+@router.get("/runtime-config/check-activate")
+async def check_activate_registry(session: SessionDep) -> dict[str, Any]:
+    """GAP-2: pré-check antes de ativar LLM_REGISTRY_DB.
+
+    Verifica se ha modelos registrados para a origem que seria usada
+    (baseada no provider atual ou no .env). Retorna warnings quando
+    a ativacao causaria fail-closed."""
+    from app.admin.repository import get_runtime_config as _get
+    from app.config import settings
+
+    db = await session.get_bind() if hasattr(session, "get_bind") else None
+    db_available = db is not None or bool(settings.database_url)
+
+    # Determinar provider que seria usado
+    overrides = _get() if db_available else None
+    provider = (overrides.get("llm_provider") if overrides else None) or settings.llm_provider
+
+    result: dict[str, Any] = {
+        "provider": provider,
+        "db_available": db_available,
+        "models_count": 0,
+        "enabled_models_count": 0,
+        "has_default": False,
+        "warnings": [],
+    }
+
+    if not db_available:
+        result["warnings"].append(
+            "Banco nao configurado (DATABASE_URL). Sem banco, o registro de modelos "
+            "nao esta disponivel — ativar LLM_REGISTRY_DB causaria fail-closed."
+        )
+        return result
+
+    try:
+        from sqlalchemy import select
+
+        from app.admin.models import LlmModel
+        from app.admin.repository import _get_sync_session_factory
+
+        with _get_sync_session_factory()() as db_session:
+            all_models = (
+                db_session.execute(select(LlmModel).where(LlmModel.provider_origin == provider))
+                .scalars()
+                .all()
+            )
+            enabled = [m for m in all_models if m.enabled]
+            default = next((m for m in enabled if m.is_default), None)
+
+            result["models_count"] = len(all_models)
+            result["enabled_models_count"] = len(enabled)
+            result["has_default"] = default is not None
+
+            if not all_models:
+                result["warnings"].append(
+                    f"Nenhum modelo registrado para a origem '{provider}'. "
+                    "Registre um modelo antes de ativar LLM_REGISTRY_DB."
+                )
+            elif not enabled:
+                result["warnings"].append(
+                    f"Modelos registrados para '{provider}' existem, mas nenhum esta "
+                    "habilitado. Habilite pelo menos um antes de ativar."
+                )
+            elif not default and len(enabled) > 1:
+                result["warnings"].append(
+                    f"{len(enabled)} modelos habilitados para '{provider}' sem default. "
+                    "Defina um como padrao ou desative os extras para evitar ambiguidade."
+                )
+    except RuntimeError:
+        result["warnings"].append("Erro ao verificar modelos — tente novamente.")
+
     return result
 
 

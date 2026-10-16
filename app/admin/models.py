@@ -433,3 +433,4 @@ class LlmRuntimeConfig(Base):
     llm_registry_db: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     llm_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
     llm_route: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    llm_fallback_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)

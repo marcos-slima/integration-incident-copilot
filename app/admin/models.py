@@ -407,3 +407,29 @@ class WebSearchSource(Base):
             f"<WebSearchSource {self.interface_type} enabled={self.enabled} "
             f"term={self.tech_term!r}>"
         )
+
+
+# ---------------------------------------------------------------------------
+# llm_runtime_config (DA-XX: overrides de runtime via admin UI)
+# ---------------------------------------------------------------------------
+# Uma unica linha (pk fixa = 1) que armazena overrides de configuracao de
+# infraestrutura que o administrador precisa trocar sem tocar .env nem fazer
+# deploy. Quando preenchida, vence o valor do .env.
+
+
+class LlmRuntimeConfig(Base):
+    """Overrides de runtime para o plano LLM (DA-XX).
+
+    Colunas:
+        llm_registry_db  — liga o catalogo admin como fonte de verdade
+                           (substitui LLM_REGISTRY_DB do .env)
+        llm_provider     — provider atual (ollama/openai/azure_openai)
+        llm_route        — nome da rota auditada (vazio = desligado)
+    """
+
+    __tablename__ = "llm_runtime_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)  # sempre 1
+    llm_registry_db: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    llm_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    llm_route: Mapped[str | None] = mapped_column(String(64), nullable=True)

@@ -95,6 +95,70 @@ def _transport_failure_exceptions() -> tuple[type[BaseException], ...]:
 TRANSPORT_FAILURE_EXCEPTIONS = _transport_failure_exceptions()
 
 
+def _resolve_runtime_overrides(cfg: Settings) -> Settings:
+    """DA-N (runtime-config): ler overrides de llm_runtime_config antes do .env.
+
+    Retorna um novo ``Settings`` com os valores da tabela aplicados.
+    Best-effort: sem banco ou erro → devolve `cfg` intacto (fail-closed).
+    """
+    from app.admin.repository import get_runtime_config
+
+    overrides = get_runtime_config()
+    if not overrides:
+        return cfg
+
+    # Construir um novo Settings com os overrides aplicados.
+    # Passamos tudo que o Settings precisa + sobrescrevemos os 3 campos.
+    kw: dict = {
+        "llm_registry_db": overrides.get("llm_registry_db", cfg.llm_registry_db),
+        "llm_provider": overrides.get("llm_provider", cfg.llm_provider),
+        "llm_route": overrides.get("llm_route", cfg.llm_route),
+    }
+    # Repassar campos que o Settings precisa para funcionar (sem alterar).
+    for key in (
+        "database_url",
+        "llm_model",
+        "ollama_host",
+        "openai_api_key",
+        "azure_openai_endpoint",
+        "azure_openai_api_key",
+        "azure_openai_deployment",
+        "llm_fallback_provider",
+        "llm_request_timeout_seconds",
+    ):
+        if hasattr(cfg, key):
+            kw[key] = getattr(cfg, key)
+    new_cfg = Settings(**kw)
+
+    # Validar llm_route vinda do DB (boot-time nao pode ler o banco).
+    _validate_llm_route_from_db(new_cfg.llm_route)
+
+    return new_cfg
+
+
+def _validate_llm_route_from_db(route_name: str) -> None:
+    """DA-N: validar rota vinda de llm_runtime_config no boot.
+
+    A validacao original (_validate_llm_route em config.py) roda na
+    construcao do Settings a partir do .env — nao pode ler o banco.
+    Rotas vindas da tabela precisam ser validadas aqui, antes de serem
+    usadas pelo runtime.
+
+    FAIL-CLOSED: rota invalida ou inexistente gera ConfigurationError.
+    """
+    if not route_name:
+        return
+    from app.llm.routes import get_route
+
+    route = get_route(route_name)
+    if route is None:
+        raise ConfigurationError(
+            f"llm_route='{route_name}' nao e uma rota valida em "
+            f"app/llm/routes.py::LLM_ROUTES — verifique o nome da rota no "
+            "/admin/api/runtime-config."
+        )
+
+
 def resolve_registry_config(cfg: Settings, model_name: str | None = None) -> Settings:
     """DA-46: no modo gerenciado (LLM_REGISTRY_DB=true) devolve o Settings
     com modelo, base_url e credencial vindos do registro (app/admin/);
@@ -108,6 +172,9 @@ def resolve_registry_config(cfg: Settings, model_name: str | None = None) -> Set
     FAIL-CLOSED: sem modelo habilitado para a origem (ou, p/ origem cloud,
     sem credencial cifrada) a chamada e rejeitada - nunca cai para o .env.
     """
+    # DA-N: ler llm_registry_db do DB antes de confiar no .env.
+    cfg = _resolve_runtime_overrides(cfg)
+
     if not cfg.llm_registry_db:
         return cfg
     provider = cfg.llm_provider
@@ -137,6 +204,10 @@ def get_chat_model(
     continua vindo de `config.llm_provider`.
     """
     cfg = config or settings
+
+    # DA-N: aplicar overrides do DB antes de ler provider — senao o admin
+    # troca llm_provider na UI mas o factory continua usando .env.
+    cfg = _resolve_runtime_overrides(cfg)
     provider = cfg.llm_provider
 
     if not registry_resolved:
@@ -288,6 +359,11 @@ def invoke_with_hybrid_fallback(build_and_invoke, model_name=None, config=None):
     so o primario estiver configurado e falhar).
     """
     cfg = config or settings
+
+    # DA-N: aplicar overrides do DB antes de ler provider (mesmo problema
+    # de get_chat_model: o admin troca llm_provider na UI mas aqui
+    # continuariamos lendo .env).
+    cfg = _resolve_runtime_overrides(cfg)
 
     primary_llm = get_chat_model(model_name=model_name, config=cfg)
     try:

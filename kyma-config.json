@@ -1,0 +1,21 @@
+{
+  "name": "edc28716-kyma-trial",
+  "gvisor": { "enabled": false },
+  "modules": { "default": true, "channel": "regular" },
+  "oidc": {
+    "list": [
+      {
+        "clientID": "12b13a26-d993-4d0c-aa08-5f5852bbdff6",
+        "encodedJwksArray": "",
+        "groupsClaim": "groups",
+        "groupsPrefix": "-",
+        "issuerURL": "https://kyma.accounts.ondemand.com",
+        "requiredClaims": [],
+        "signingAlgs": ["RS256"],
+        "usernameClaim": "sub",
+        "usernamePrefix": "-"
+      }
+    ]
+  },
+  "administrators": ["s.marcos.lima@gmail.com"]
+}

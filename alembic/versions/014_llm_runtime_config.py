@@ -4,8 +4,9 @@ Revision ID: 014
 Revises: 013
 Create Date: 2026-10-16
 
-Permite que o administrador troque LLM_REGISTRY_DB, LLM_PROVIDER e
-LLM_ROUTE sem tocar .env nem fazer deploy. Uma unica linha (id=1).
+Permite que o administrador troque LLM_REGISTRY_DB, LLM_PROVIDER,
+LLM_ROUTE e LLM_FALLBACK_PROVIDER sem tocar .env nem fazer deploy. Uma
+unica linha (id=1).
 
 Sem DATABASE_URL a tabela nao existe; resolve_registry_config() cai no
 comportamento de sempre (.env) — fail-closed: sem banco, sem override.
@@ -30,11 +31,12 @@ def upgrade() -> None:
         sa.Column("llm_registry_db", sa.Boolean(), nullable=False, server_default="f"),
         sa.Column("llm_provider", sa.String(32), nullable=True),
         sa.Column("llm_route", sa.String(64), nullable=True),
+        sa.Column("llm_fallback_provider", sa.String(32), nullable=True),
     )
     # Linha inicial (id=1) com valores default
     op.execute(
-        "INSERT INTO llm_runtime_config (id, llm_registry_db, llm_provider, llm_route) "
-        "VALUES (1, false, NULL, NULL)"
+        "INSERT INTO llm_runtime_config (id, llm_registry_db, llm_provider, llm_route, llm_fallback_provider) "
+        "VALUES (1, false, NULL, NULL, NULL)"
     )
 
 

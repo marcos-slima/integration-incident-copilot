@@ -108,11 +108,12 @@ def _resolve_runtime_overrides(cfg: Settings) -> Settings:
         return cfg
 
     # Construir um novo Settings com os overrides aplicados.
-    # Passamos tudo que o Settings precisa + sobrescrevemos os 3 campos.
+    # Passamos tudo que o Settings precisa + sobrescrevemos os 4 campos.
     kw: dict = {
         "llm_registry_db": overrides.get("llm_registry_db", cfg.llm_registry_db),
         "llm_provider": overrides.get("llm_provider", cfg.llm_provider),
         "llm_route": overrides.get("llm_route", cfg.llm_route),
+        "llm_fallback_provider": overrides.get("llm_fallback_provider", cfg.llm_fallback_provider),
     }
     # Repassar campos que o Settings precisa para funcionar (sem alterar).
     for key in (

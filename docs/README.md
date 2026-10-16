@@ -11,6 +11,21 @@ estiver errado, corrija o código e, se for uma decisão, registre uma DA. Ver
 [`QUALITY_GATES.md`](QUALITY_GATES.md) para o que é verificado
 automaticamente a cada build.
 
+**Documentação bilíngue:** PT em `docs/` é a fonte; EN em `docs/en/` acompanha; alterações entram primeiro no PT; cabeçalho de cada arquivo EN registra o commit-fonte.
+
+---
+
+## English translation
+
+The English translation of this index is at [`docs/en/README.md`](en/README.md).
+Documents with translation status:
+- ✅ Translated: `README.md`, `GETTING_STARTED.md`, `USER_GUIDE.md`, `CONNECTORS.md`
+- 🔄 In progress: `ARCHITECTURE.md`, `QUALITY_GATES.md`, `DEPLOY.md`, `TROUBLESHOOTING.md`
+- ⏳ Planned (index only): `DECISOES_DE_ARQUITETURA.md`
+- 🇵🇹 Portuguese only (study/reference material): `MANUAL.md`, `TUTORIAL_ARQUITETURA_DEBUG.md`, `TUTORIAL_ACESSIBILIDADE_MULTIVENDOR.md`, `TUTORIAL_FASE9_MULTIVENDOR_GRAPHRAG_A2A.md`, `TCO_SAP_AI_CORE_VS_SELF_HOSTED.md`, `AVALIACAO_MODELOS_LOCAIS.md`, `RERANKER_BENCHMARK.md`, `COVERAGE_MAP.md`
+
+For the English version of this index, see [`docs/en/README.md`](en/README.md).
+
 ---
 
 ## Comece por aqui

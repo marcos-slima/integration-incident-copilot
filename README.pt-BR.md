@@ -9,6 +9,8 @@
 
 [English](README.md) · Português (Brasil)
 
+English translation of the documentation is available in `docs/en/` for the most important documents (getting started, user guide, connectors, architecture, quality gates). Study/reference material remains in Portuguese only.
+
 Um IDoc travado em status 51, um token OAuth que expirou num iFlow do CPI, um
 chamado do ServiceNow sobre uma sincronização do Salesforce que falhou: o
 Copilot lê o incidente, busca os fatos no sistema de origem, consulta a base

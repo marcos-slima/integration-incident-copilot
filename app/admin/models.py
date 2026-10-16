@@ -421,10 +421,20 @@ class LlmRuntimeConfig(Base):
     """Overrides de runtime para o plano LLM (DA-XX).
 
     Colunas:
-        llm_registry_db  — liga o catalogo admin como fonte de verdade
-                           (substitui LLM_REGISTRY_DB do .env)
-        llm_provider     — provider atual (ollama/openai/azure_openai)
-        llm_route        — nome da rota auditada (vazio = desligado)
+        llm_registry_db              — liga o catalogo admin como fonte de
+                                       verdade (substitui LLM_REGISTRY_DB)
+        llm_provider                 — provider atual (ollama/openai/...)
+        llm_route                    — nome da rota auditada (vazio = desligado)
+        llm_fallback_provider        — provider de fallback em caso de falha
+        llm_credentials_master_key   — chave Fernet para cifrar credenciais
+                                       no registro (GAP critico)
+        data_sovereignty_mode        — politica de soberania ("strict" ou
+                                       "cloud_with_dlp")
+        confidential_allowed_origins — origens permitidas para dados confidenciais
+        require_auth                 — exige chave API para subir o processo
+        rule_engine_enabled          — liga/desliga o motor de regras (DA-33)
+        diagnosis_timeout_seconds    — timeout do grafo de diagnostico (seg.)
+        llm_request_timeout_seconds  — timeout de chamada LLM (seg.)
     """
 
     __tablename__ = "llm_runtime_config"
@@ -434,3 +444,10 @@ class LlmRuntimeConfig(Base):
     llm_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
     llm_route: Mapped[str | None] = mapped_column(String(64), nullable=True)
     llm_fallback_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    llm_credentials_master_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    data_sovereignty_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    confidential_allowed_origins: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    require_auth: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    rule_engine_enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    diagnosis_timeout_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    llm_request_timeout_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)

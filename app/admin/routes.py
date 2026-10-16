@@ -130,6 +130,12 @@ class WebSearchSourcePatch(BaseModel):
     notes: str | None = None
 
 
+class RuntimeConfigPatch(BaseModel):
+    llm_registry_db: bool | None = None
+    llm_provider: str | None = None
+    llm_route: str | None = None
+
+
 def _require_session(session: SessionDep) -> AsyncSession:
     if session is None:
         raise HTTPException(
@@ -212,6 +218,69 @@ async def registry_status(
             result["unverified_count"] = await incidents.count(verified=False)
         except Exception:
             logger.warning("[admin] Falha ao contar incidentes para registry/status", exc_info=True)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Runtime config (DA-XX: overrides de infraestrutura via admin UI)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/runtime-config")
+async def get_runtime_config(session: SessionDep) -> dict[str, Any]:
+    """Overrides de runtime armazenados no banco.
+
+    Retorna valores do banco quando disponivel; senao, retorna None para
+    cada campo (sinaliza que o .env e' a fonte de verdade)."""
+    from app.admin.repository import get_runtime_config as _get
+
+    db = await session.get_bind() if hasattr(session, "get_bind") else None
+    if db is None:
+        # SessionDep sem banco real → melhor-effort sync path
+        result = _get()
+        if result is not None:
+            return result
+        # Sem banco: retorna defaults que refletem o .env atual
+        return {
+            "llm_registry_db": settings.llm_registry_db,
+            "llm_provider": settings.llm_provider,
+            "llm_route": settings.llm_route,
+        }
+
+    result = _get()
+    if result is not None:
+        return result
+    # Sem linha no banco (migration nao aplicada): retorna .env
+    return {
+        "llm_registry_db": settings.llm_registry_db,
+        "llm_provider": settings.llm_provider,
+        "llm_route": settings.llm_route,
+    }
+
+
+@router.patch("/runtime-config")
+async def patch_runtime_config(
+    payload: RuntimeConfigPatch,
+    session: SessionReq,
+) -> dict[str, Any]:
+    """Atualiza overrides de runtime.
+
+    Campos nao enviados ficam inalterados. Retorna o estado apos a atualizacao."""
+    updates = {k: v for k, v in payload.model_dump(exclude_unset=True).items()}
+    if not updates:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Envie pelo menos um campo: llm_registry_db, llm_provider ou llm_route",
+        )
+
+    from app.admin.repository import update_runtime_config as _update
+
+    result = _update(updates)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Persistencia nao configurada — impossivel salvar overrides de runtime",
+        )
     return result
 
 

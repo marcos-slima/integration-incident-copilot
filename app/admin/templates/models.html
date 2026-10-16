@@ -2,7 +2,35 @@
 {% block title %}Modelos · Admin{% endblock %}
 {% block content %}
 <main>
-  <h2>Modelos registrados (por origem)</h2>
+  <h2>Configuração de Runtime</h2>
+  <p style="color: var(--text); margin-bottom: 1.5rem;">
+    Overrides de infraestrutura — substituem variáveis do .env em tempo real.
+    Sem banco: mostra o valor atual do .env (somente leitura).
+  </p>
+
+  <div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3 style="margin: 0; color: var(--text);">Overrides de Runtime</h3>
+      <button class="btn btn-primary" data-click="loadRuntimeConfig">🔄 Recarregar</button>
+    </div>
+
+    <table id="runtime-config-table" style="width: 100%;">
+      <thead>
+        <tr>
+          <th style="width: 220px;">Variável</th>
+          <th>Valor atual</th>
+          <th style="width: 180px;">Ações</th>
+        </tr>
+      </thead>
+      <tbody id="runtime-config-body">
+        <tr><td colspan="3" style="text-align: center; padding: 2rem;">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="alert" id="msg" style="background: #fee2e2; border-color: #fecaca; color: #991b1b; display: none;"></p>
+
+  <h2 style="margin-top: 3rem;">Modelos registrados (por origem)</h2>
   <p style="color: var(--text); margin-bottom: 1.5rem;">Gerencie chaves, preços e limites de uso</p>
 
   <div class="card">

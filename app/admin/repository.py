@@ -31,6 +31,7 @@ from app.admin.models import (
     IntegrationSystem,
     LlmCredential,
     LlmModel,
+    LlmRuntimeConfig,
     LlmUsage,
     WebSearchSource,
     percent_consumed,
@@ -526,4 +527,61 @@ def registry_prices(origin: str, model_id: str) -> tuple[float | None, float | N
             return (row[0], row[1]) if row else None
     except Exception:
         logger.exception("[metering] Falha ao ler preco do registro (%s/%s)", origin, model_id)
+        return None
+
+
+# ---------------------------------------------------------------------------
+# llm_runtime_config (DA-XX: overrides de runtime via admin UI)
+# ---------------------------------------------------------------------------
+
+_RUNTIME_CONFIG_ID = 1
+
+
+def get_runtime_config() -> dict[str, Any] | None:
+    """Lê a linha de overrides de runtime. Best-effort: sem banco → None."""
+    if not settings.database_url:
+        return None
+    try:
+        from sqlalchemy import select
+
+        with _get_sync_session_factory()() as session:
+            row = session.execute(
+                select(LlmRuntimeConfig).where(LlmRuntimeConfig.id == _RUNTIME_CONFIG_ID)
+            ).scalar_one_or_none()
+            if row is None:
+                return None
+            return {
+                "llm_registry_db": row.llm_registry_db,
+                "llm_provider": row.llm_provider,
+                "llm_route": row.llm_route,
+            }
+    except Exception:
+        logger.exception("[runtime_config] Falha ao ler overrides de runtime")
+        return None
+
+
+def update_runtime_config(fields: dict[str, Any]) -> dict[str, Any] | None:
+    """Atualiza a linha de overrides de runtime. Best-effort: sem banco → None."""
+    if not settings.database_url:
+        return None
+    try:
+        from sqlalchemy import select
+
+        with _get_sync_session_factory()() as session:
+            row = session.execute(
+                select(LlmRuntimeConfig).where(LlmRuntimeConfig.id == _RUNTIME_CONFIG_ID)
+            ).scalar_one_or_none()
+            if row is None:
+                return None
+            for key, value in fields.items():
+                if key in {"llm_registry_db", "llm_provider", "llm_route"}:
+                    setattr(row, key, value)
+            session.commit()
+            return {
+                "llm_registry_db": row.llm_registry_db,
+                "llm_provider": row.llm_provider,
+                "llm_route": row.llm_route,
+            }
+    except Exception:
+        logger.exception("[runtime_config] Falha ao atualizar overrides de runtime")
         return None

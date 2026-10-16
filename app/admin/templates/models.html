@@ -16,7 +16,7 @@
 
     <!-- Banner quando DB != .env -->
     <div id="runtime-diff-banner" style="display:none; padding: 0.75rem 1rem; margin-bottom: 1rem; background: #fff3cd; border-radius: 6px; font-size: 0.9rem;">
-      ⚠️ Valores do banco diferem do .env — algumas mudanças podem exigir restart do processo.
+      ⚠️ Valores do banco diferem do .env — campos que exigem restart: LLM_REGISTRY_DB, LLM_PROVIDER, LLM_ROUTE, LLM_FALLBACK_PROVIDER. Demais campos (DATA_SOVEREIGNTY_MODE, CONFIDENTIAL_ALLOWED_ORIGINS, REQUIRE_AUTH, RULE_ENGINE_ENABLED, DIAGNOSIS_TIMEOUT_SECONDS, LLM_REQUEST_TIMEOUT_SECONDS) sao aplicados em tempo real.
     </div>
 
     <table id="runtime-config-table" style="width: 100%;">
@@ -31,6 +31,18 @@
         <tr><td colspan="3" style="text-align: center; padding: 2rem;">Carregando...</td></tr>
       </tbody>
     </table>
+  </div>
+
+  <!-- GAP-A: Exportar config efetiva -->
+  <div class="card" style="margin-top: 2rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3 style="margin: 0; color: var(--text);">Configuração Efetiva (Export)</h3>
+      <button class="btn btn-primary" data-click="exportEffectiveConfig">📥 Exportar JSON</button>
+    </div>
+    <p style="color: var(--text); font-size: 0.9rem;">
+      Combina overrides do banco com valores do .env. Valores sensíveis são mascarados.
+    </p>
+    <pre id="effective-config-preview" style="background: #f8f9fa; padding: 1rem; border-radius: 6px; font-size: 0.85rem; overflow: auto; max-height: 400px; display: none;"></pre>
   </div>
 
   <p class="alert" id="msg" style="background: #fee2e2; border-color: #fecaca; color: #991b1b; display: none;"></p>

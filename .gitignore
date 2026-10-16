@@ -54,7 +54,7 @@ Modelfile
 .continue/
 
 # Documentação privada de treinamento (não versionada)
-docs/DA_AULA_*.md
+docs/learning/
 docs/DEPLOYMENT.md
 docs/GUIA_DE_ESTUDOS.md
 docs/MODOLO_*.md

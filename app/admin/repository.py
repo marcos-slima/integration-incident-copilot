@@ -554,6 +554,7 @@ def get_runtime_config() -> dict[str, Any] | None:
                 "llm_registry_db": row.llm_registry_db,
                 "llm_provider": row.llm_provider,
                 "llm_route": row.llm_route,
+                "llm_fallback_provider": row.llm_fallback_provider,
             }
     except Exception:
         logger.exception("[runtime_config] Falha ao ler overrides de runtime")
@@ -574,13 +575,14 @@ def update_runtime_config(fields: dict[str, Any]) -> dict[str, Any] | None:
             if row is None:
                 return None
             for key, value in fields.items():
-                if key in {"llm_registry_db", "llm_provider", "llm_route"}:
+                if key in {"llm_registry_db", "llm_provider", "llm_route", "llm_fallback_provider"}:
                     setattr(row, key, value)
             session.commit()
             return {
                 "llm_registry_db": row.llm_registry_db,
                 "llm_provider": row.llm_provider,
                 "llm_route": row.llm_route,
+                "llm_fallback_provider": row.llm_fallback_provider,
             }
     except Exception:
         logger.exception("[runtime_config] Falha ao atualizar overrides de runtime")

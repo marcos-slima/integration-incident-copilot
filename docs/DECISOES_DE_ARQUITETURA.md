@@ -76,6 +76,7 @@ final.
 | 57 | [48](#48-fontes-de-busca-web-como-configuração-e-approved-que-não-era-no-op-da-57) | Fontes de busca web como configuração (`web_search_sources`): `WEB_SEARCH_POLICY=approved` deixa de ser no-op |
 | 58 | [49](#49-mapa-de-cobertura-dedicated-generic-e-absent-da-58) | Mapa de cobertura produto SAP × mecanismo, calculado de dados versionados: 3 níveis (`dedicated` / `generic` / `absent`) em vez de um booleano |
 | 59 | [50](#50-conectores-multi-vendor-fluxo-completo-padrão-comum-e-documentação-da-59) | Conectores multi-vendor: fluxo completo, padrão comum, checklist de 8 superfícies ao adicionar conector, documento consolidado `/docs/CONNECTORS.md` |
+| 66 | [56](#56-policy-engine-puro-para-roteamento-llm-da-66) | Policy Engine puro para roteamento LLM: duas fases (elegibilidade rígida → scoring de preferências), decisão auditável |
 | 60 | [51](#51-criptografia-em-repouso-de-evidence_json-com-fernet-da-60) | Criptografia em repouso de `evidence_json` com Fernet (`LLM_CREDENTIALS_MASTER_KEY`) + migration idempotente `009_encrypt_evidence_json.py` |
 | 61 | [52](#52-taxonomia-de-erros-sap-com-ttl-rdflib-da-61) | Taxonomia de erros SAP com TTL/RDFLib (SKOS) para Rule Engine: carregamento dinâmico vs hardcoded, zero breaking changes (DA-61 Fase 1) |
 | 62 | [53](#53-neo4j-loader-para-skos-taxonomy-import-da-62) | Neo4j loader para SKOS taxonomy import (idempotent upsert, Cypher queries) |
@@ -2747,3 +2748,55 @@ cwd na raiz. Correções:
 **Limitações.** A degradação protege contra Qdrant indisponível, não contra Ollama/LLM indisponível. Se ambos Qdrant e o LLM caírem, `/diagnose` falha — mas isso é esperado: sem regra conhecida e sem modelo, não há diagnóstico possível.
 
 **Testes.** `tests/test_da65_rag_degradation.py`: 2 testes verificam que `_retrieve_hybrid` e `_retrieve_dense_only` retornam `[]` quando Qdrant lança exceção (não propagam). Não testam o fluxo completo `/diagnose → run_diagnosis` — isso exigiria fixture com servidor FastAPI.
+
+---
+
+### 56. Policy Engine puro para roteamento LLM (DA-66)
+
+**O problema.** O AI Gateway v1 (DA-26) misturava a lógica de roteamento com a chamada ao LLM, tornando a decisão de provider não auditável e não testável isoladamente. A policy de soberania (DA-39/DA-43) era avaliada dentro de `invoke_via_gateway`, sem separação clara entre "quais providers são permitidos" e "como chamar o provider escolhido".
+
+**O caso de uso.** Um auditor de segurança ou um operador quer saber:
+- Por que um provider foi escolhido ou rejeitado?
+- Qual a política efetiva em vigor para dado confidencial?
+- O gateway está respeitando a soberania de dados?
+
+A resposta atual exigia ler código e inferir — não havia uma decisão explícita, auditável e testável.
+
+**A solução.** `app/llm/routing.py` extrai um **Policy Engine puro** com duas fases:
+
+1. **Elegibilidade rígida** (rejeita se faltar algo):
+   - Soberania/origin: provider local ou origin em `CONFIDENTIAL_ALLOWED_ORIGINS` (DA-43)
+   - Capacidades exigidas: `seed`, `response_format`, `tools`
+   - Circuit breaker: não tentar provider com circuito aberto
+   - Orçamento: custo estimado ≤ orçamento restante
+
+2. **Scoring de preferências** (ordena os elegíveis):
+   - Custo estimado (menor primeiro)
+   - Latência observada (quando disponível)
+
+A função `evaluate_routing()` aceita `RoutingRequest` e devolve `RoutingDecision` com:
+- Lista de candidatos ordenados
+- Motivo de rejeição para cada provider rejeitado
+- Provider selecionado e motivo da seleção
+
+A decisão é logada em audit log estruturado e exposta via `GET /llm/policy` (DA-43).
+
+**Implementação.**
+- `app/llm/routing.py`: Policy Engine puro com `RoutingRequest`, `RoutingDecision`, `RejectionReason` (enum)
+- `app/llm/gateway.py`: `invoke_via_gateway()` usa o engine, mantém backward compatibility com `_select_allowed_providers()` e `_provider_allows_sensitivity()`
+- `app/llm/capabilities.py`: `ProviderCapabilities` dataclass (reutilizado)
+
+**Validação.**
+- `tests/test_llm_gateway.py`: 31 testes passando (incluindo 5 novos para o Policy Engine)
+- Quality gate: `da_registered` e `docs_code_references` validam a DA
+
+**Limitações (registradas de propósito).**
+- Scoring de latência ainda não usa dados históricos (placeholder para DA-67/70)
+- Orçamento é estimado por heurística (substituído por contagem por família na DA-67)
+- Circuit breaker compartilhado entre réplicas requer Redis (DA-41)
+
+**Próximos passos.**
+- DA-67: Token budgeting com contagem por família e preço real do registry
+- DA-68: Matriz de falhas e failover tipado
+- DA-69: Checkpointing e execução resumível
+- DA-70: Métricas FinOps e dashboards

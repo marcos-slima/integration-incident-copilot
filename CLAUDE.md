@@ -297,6 +297,7 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
 | DA-62 | Neo4j loader para SKOS taxonomy import (idempotent upsert, Cypher queries) | `app/ontology/neo4j_loader.py` |
 | DA-63 | Skills declarativas: cada skill é um artefato YAML em data/skills/*.yaml com schema, versão e capability contract; supervisor deriva domain index do registry ao invés de hardcoded sets; CAPABILITY_REGISTRY carregado de YAML quando disponível | `data/skills/`, `app/mcp/skill_registry.py`, `app/mcp/policy.py`, `app/agent/supervisor.py` |
 | DA-65 | Degradação graciosa do RAG: quando Qdrant cai, `_retrieve_hybrid` e `_retrieve_dense_only` (app/rag/retriever.py) retornam lista vazia (não propaga exceção) → rule engine ainda responde erros conhecidos; fluxo completo `/diagnose → run_diagnosis` pendente de teste de integração | `app/rag/retriever.py::_retrieve_hybrid`, `app/rag/retriever.py::_retrieve_dense_only`, `tests/test_da65_rag_degradation.py` |
+| DA-66 | Policy Engine puro para roteamento LLM: extrai de `invoke_via_gateway` um Policy Engine com duas fases (elegibilidade rígida → scoring de preferências), decision auditável, `RoutingRequest`/`RoutingDecision` Pydantic models | `app/llm/routing.py`, `app/llm/gateway.py` (usa o engine) |
 
 **DAs candidatas (sem implementação ainda):**
 - **DA-31 — SAP AI Agent Hub registration (MCP + A2A)** · bloqueada: exige tenant Kyma.

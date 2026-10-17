@@ -124,6 +124,20 @@ if _PROMETHEUS_AVAILABLE:
         labelnames=["rule_id"],
     )
 
+    # DA-67: Budget ledger metrics
+    LLM_BUDGET_DEVIATION = Histogram(
+        "iic_llm_budget_deviation_ratio",
+        "Desvio entre custo estimado e real (ratio = (actual - estimated) / estimated)",
+        labelnames=["provider", "model"],
+        buckets=(0.0, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, float("inf")),
+    )
+
+    LLM_BUDGET_EXCEEDED_TOTAL = Counter(
+        "iic_llm_budget_exceeded_total",
+        "Total de chamadas LLM que excederam o orçamento",
+        labelnames=["provider", "model"],
+    )
+
 else:
     # Stubs para quando prometheus_client não está instalado
     class _NullMetric:
@@ -151,6 +165,8 @@ else:
     CIRCUIT_BREAKER_STATE = _null  # type: ignore[assignment]
     LLM_FALLBACK_TOTAL = _null  # type: ignore[assignment]
     RULE_ENGINE_HIT_TOTAL = _null  # type: ignore[assignment]
+    LLM_BUDGET_DEVIATION = _null  # type: ignore[assignment]
+    LLM_BUDGET_EXCEEDED_TOTAL = _null  # type: ignore[assignment]
 
 
 # ---------------------------------------------------------------------------
@@ -258,3 +274,23 @@ def observe_diagnosis(
             SENSITIVE_INCIDENT_TOTAL.labels(sensitivity_level=level).inc()
     except Exception:
         logger.debug("metricas do diagnostico nao registradas", exc_info=True)
+
+
+def observe_budget_ledger(
+    *,
+    provider: str,
+    model: str,
+    deviation_ratio: float | None,
+    exceeded: bool,
+) -> None:
+    """DA-67: metricas de budget ledger.
+
+    Nunca levanta: metrica e observacao, nao pode derrubar o diagnostico."""
+    try:
+        if _PROMETHEUS_AVAILABLE and LLM_BUDGET_DEVIATION is not None:
+            if deviation_ratio is not None:
+                LLM_BUDGET_DEVIATION.labels(provider=provider, model=model).observe(deviation_ratio)
+            if exceeded:
+                LLM_BUDGET_EXCEEDED_TOTAL.labels(provider=provider, model=model).inc()
+    except Exception:
+        logger.debug("metricas de budget ledger nao registradas", exc_info=True)

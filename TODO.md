@@ -19,9 +19,9 @@
 - [x] Quality gate aprovado (21/21 checks)
 - [x] Todos os 1525 testes unitários passando
 
-# Tarefa 2: DA-67 — Token budgeting e orçamento por tarefa
+# Tarefa 2: DA-67 — Token budgeting e orçamento por tarefa ✅
 
-## Status: Em progresso (Incrementos 1 e 2 concluídos)
+## Status: Concluído (6 incrementos)
 
 ### Incremento 1: Tokenizer real ✅
 - [x] Substituir `len//4` por `tiktoken` (cl100k_base) em `app/llm/gateway.py`
@@ -43,20 +43,23 @@
 - [x] Best-effort: sem DATABASE_URL ou erro, não bloqueia diagnóstico
 - [x] Criar testes de ledger (4 testes passando)
 
-### Incremento 4: Métrica Prometheus de desvio
-- [ ] Expor desvio estimado/real como métrica Prometheus
-- [ ] Estender `app/metrics.py`
-- [ ] Criar testes de métrica
+### Incremento 4: Métrica Prometheus de desvio ✅
+- [x] Expor desvio estimado/real como métrica Prometheus
+- [x] Estender `app/metrics.py` com `LLM_BUDGET_DEVIATION` e `LLM_BUDGET_EXCEEDED_TOTAL`
+- [x] Criar função `observe_budget_ledger()` para registrar métricas
+- [x] Chamar `observe_budget_ledger` após `record_budget_ledger` em `gateway.py`
+- [x] Criar testes de métrica (já incluídos nos testes de gateway)
 
 ### Incremento 5: Testes de esgotamento de orçamento ✅
 - [x] Criar testes de orçamento com tokenizer real
 - [x] Criar testes de orçamento com preços reais
 - [x] Criar testes de ledger
 
-### Incremento 6: Documentação
-- [ ] Atualizar `docs/DECISOES_DE_ARQUITETURA.md` com DA-67
-- [ ] Atualizar `docs/ARCHITECTURE.md`
-- [ ] Rodar `scripts/quality_gate.py`
+### Incremento 6: Documentação ✅
+- [x] Atualizar `docs/DECISOES_DE_ARQUITETURA.md` com DA-67 (seção 57 já existente)
+- [x] Atualizar `docs/ARCHITECTURE.md` com DA-67
+- [x] Atualizar TODO.md com progresso DA-67
+- [x] Rodar `scripts/quality_gate.py` (21/21 checks passando)
 
 # Tarefa 3: DA-68 — Matriz de falhas e failover tipado
 - [ ] Taxonomia de erro fechada (`transient`, `rate_limited/quota`, `unavailable`, `timeout`, `context_limit`, `output_limit`, `budget_exhausted`, `validation_error`, `quality_failure`)

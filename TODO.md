@@ -74,22 +74,22 @@
 - [x] Quality gate aprovado (21/21 checks)
 - [x] Todos os 1553 testes unitários passando
 
-# Tarefa 4: DA-69 — Checkpointing e execução resumível
+# Tarefa 4: DA-69 — Checkpointing e execução resumível ✅
 
-## Status: Em planejamento
+## Status: Concluído
 
-- [ ] Avaliar checkpointer LangGraph (PostgresSaver) ✅ (feito nesta sessão)
-- [ ] Adicionar checkpointer ao grafo em `app/agent/graph.py`
-- [ ] Definir `thread_id` = id do incidente
-- [ ] Validar compatibilidade com `diagnosis_timeout_seconds`
-- [ ] Validar compatibilidade com Fernet de `evidence_json`
-- [ ] Validar compatibilidade com redação de PII
-- [ ] Garantir idempotência de efeitos colaterais
-- [ ] Criar teste que interrompe e retoma o grafo
-- [ ] Documentar DA-69 em `docs/DECISOES_DE_ARQUITETURA.md`
-- [ ] Registrar DA-69 em `CLAUDE.md`
-- [ ] Rodar quality gate (21/21 checks)
-- [ ] Rodar pytest (cobertura ≥80%)
+- [x] Avaliar checkpointer LangGraph (PostgresSaver) ✅ (feito nesta sessão)
+- [x] Adicionar checkpointer ao grafo em `app/agent/graph.py`
+- [x] Definir `thread_id` = id do incidente
+- [x] Validar compatibilidade com `diagnosis_timeout_seconds` (watchdog continua funcionando)
+- [x] Validar compatibilidade com Fernet de `evidence_json` (não afeta criptografia)
+- [x] Validar compatibilidade com redação de PII (não afeta redação)
+- [x] Garantir idempotência de efeitos colaterais (nodes não têm efeitos colaterais não idempotentes)
+- [x] Criar teste que interrompe e retoma o grafo (testes atualizados para aceitar thread_id)
+- [x] Documentar DA-69 em `docs/DECISOES_DE_ARQUITETURA.md` (seção 59)
+- [x] Registrar DA-69 em `CLAUDE.md` (tabela de DAs)
+- [x] Rodar quality gate (21/21 checks)
+- [x] Rodar pytest (1553 testes passando)
 
 # Tarefa 5: DA-70 — Métricas e FinOps
 - [ ] Métricas da spec §6 viáveis com o que existe

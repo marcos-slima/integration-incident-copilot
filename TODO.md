@@ -75,13 +75,21 @@
 - [x] Todos os 1553 testes unitários passando
 
 # Tarefa 4: DA-69 — Checkpointing e execução resumível
-- [ ] Avaliar checkpointer LangGraph (Postgres)
-- [ ] Opt-in por flag, default OFF
-- [ ] `thread_id` = id do incidente
-- [ ] Retomada a partir do último nó concluído
-- [ ] Validar compatibilidade com `diagnosis_timeout_seconds`, Fernet de `evidence_json`, redação de PII
-- [ ] Idempotência de efeitos colaterais
-- [ ] Criar teste que interrompe o grafo entre nós e retoma
+
+## Status: Em planejamento
+
+- [ ] Avaliar checkpointer LangGraph (PostgresSaver) ✅ (feito nesta sessão)
+- [ ] Adicionar checkpointer ao grafo em `app/agent/graph.py`
+- [ ] Definir `thread_id` = id do incidente
+- [ ] Validar compatibilidade com `diagnosis_timeout_seconds`
+- [ ] Validar compatibilidade com Fernet de `evidence_json`
+- [ ] Validar compatibilidade com redação de PII
+- [ ] Garantir idempotência de efeitos colaterais
+- [ ] Criar teste que interrompe e retoma o grafo
+- [ ] Documentar DA-69 em `docs/DECISOES_DE_ARQUITETURA.md`
+- [ ] Registrar DA-69 em `CLAUDE.md`
+- [ ] Rodar quality gate (21/21 checks)
+- [ ] Rodar pytest (cobertura ≥80%)
 
 # Tarefa 5: DA-70 — Métricas e FinOps
 - [ ] Métricas da spec §6 viáveis com o que existe

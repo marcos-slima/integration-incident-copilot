@@ -41,7 +41,7 @@
 - [x] Registrar ledger após cada chamada LLM bem-sucedida (app/llm/gateway.py)
 - [x] Calcular desvio_ratio = (actual - estimated) / estimated
 - [x] Best-effort: sem DATABASE_URL ou erro, não bloqueia diagnóstico
-- [ ] Criar testes de ledger
+- [x] Criar testes de ledger (4 testes passando)
 
 ### Incremento 4: Métrica Prometheus de desvio
 - [ ] Expor desvio estimado/real como métrica Prometheus

@@ -99,7 +99,14 @@ __all__ = [
     "normalize_origin",
     "resolve_provider_origin",
 ]
-from app.metrics import CIRCUIT_BREAKER_OPEN_TOTAL, CIRCUIT_BREAKER_STATE, LLM_FALLBACK_TOTAL
+from app.metrics import (
+    CIRCUIT_BREAKER_OPEN_TOTAL,
+    CIRCUIT_BREAKER_STATE,
+    LLM_FALLBACK_TOTAL,
+    observe_llm_cost,
+    observe_llm_request,
+    observe_llm_tokens,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -516,6 +523,30 @@ def invoke_via_gateway(
             circuit_breaker.record_success(provider)
             CIRCUIT_BREAKER_STATE.labels(target=provider).set(0)
             record_usage_observed(metering_cb, successful=True)
+
+            # DA-70: incrementar métricas FinOps
+            try:
+                # Contagem de chamadas LLM
+                observe_llm_request(provider=provider, model=model_name or cfg.llm_model)
+
+                # Tokens e custo (se disponíveis)
+                if metering_cb and metering_cb.has_usage:
+                    observe_llm_tokens(
+                        provider=provider,
+                        model=model_name or cfg.llm_model,
+                        input_tokens=metering_cb.tokens_in,
+                        output_tokens=metering_cb.tokens_out,
+                    )
+                    # Custo real (já calculado no record_usage_observed)
+                    actual_cost = metering_cb.cost_usd if hasattr(metering_cb, "cost_usd") else None
+                    if actual_cost is not None:
+                        observe_llm_cost(
+                            provider=provider,
+                            model=model_name or cfg.llm_model,
+                            cost_usd=actual_cost,
+                        )
+            except Exception:
+                logger.debug("metricas FinOps nao registradas", exc_info=True)
             # DA-67: registrar budget ledger (estimado × real)
             actual_cost = None
             if metering_cb and metering_cb.has_usage:

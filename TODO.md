@@ -61,13 +61,18 @@
 - [x] Atualizar TODO.md com progresso DA-67
 - [x] Rodar `scripts/quality_gate.py` (21/21 checks passando)
 
-# Tarefa 3: DA-68 — Matriz de falhas e failover tipado
-- [ ] Taxonomia de erro fechada (`transient`, `rate_limited/quota`, `unavailable`, `timeout`, `context_limit`, `output_limit`, `budget_exhausted`, `validation_error`, `quality_failure`)
-- [ ] Mapear exceções reais → classe
-- [ ] Definir por classe: retry? backoff? abre circuito? failover? escala?
-- [ ] Estender fallback respeitando soberania (`confidential` nunca failover para cloud em `strict`)
-- [ ] Criar testes parametrizados para cada classe
-- [ ] Documentar matriz na DA
+# Tarefa 3: DA-68 — Matriz de falhas e failover tipado ✅
+
+## Status: Concluído
+
+- [x] Taxonomia de erro fechada (`transient`, `rate_limited/quota`, `unavailable`, `timeout`, `context_limit`, `output_limit`, `budget_exhausted`, `validation_error`, `quality_failure`)
+- [x] Mapear exceções reais → classe (`classify_failure()` em `app/llm/failures.py`)
+- [x] Definir por classe: retry? backoff? abre circuito? failover? escala? (`FAILURE_POLICIES`)
+- [x] Estender fallback respeitando soberania (`confidential` nunca failover para cloud em `strict`)
+- [x] Criar testes parametrizados para cada classe (`tests/test_llm_failures.py`, 21 testes)
+- [x] Documentar matriz na DA (`docs/DECISOES_DE_ARQUITETURA.md`, seção 58)
+- [x] Quality gate aprovado (21/21 checks)
+- [x] Todos os 1553 testes unitários passando
 
 # Tarefa 4: DA-69 — Checkpointing e execução resumível
 - [ ] Avaliar checkpointer LangGraph (Postgres)

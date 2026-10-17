@@ -8,12 +8,12 @@
 - [x] Definir `RoutingRequest` e `RoutingDecision` (Pydantic models)
 - [x] Implementar duas fases: elegibilidade rígida → scoring de preferências
 - [x] Reutilizar funções existentes (`_select_allowed_providers`, `_provider_allows_sensitivity`, `capabilities_for_origin`)
-- [x] Emitir decisão no audit log estruturado e como metadata do trace Langfuse
+- [x] Emitir decisão no audit log estruturado (não há integração com Langfuse metadata)
 - [x] Expor em `GET /llm/policy` (já existe via `describe_effective_policy`)
 - [x] Criar testes para cada motivo de rejeição
 - [x] Garantir comportamento idêntico ao v1 com config default
 - [x] Mensagem de erro inclui origem do provider e modo de soberania
-- [x] `describe_effective_policy` expõe `routing.allowed_for_confidential/public`
+- [x] `describe_effective_policy` expões `routing.allowed_for_confidential/public`
 - [x] Atualizar testes para verificar origem na mensagem de erro
 - [x] Registrar DA-66 em CLAUDE.md, DECISOES_DE_ARQUITETURA.md, ARCHITECTURE.md
 - [x] Quality gate aprovado (21/21 checks)

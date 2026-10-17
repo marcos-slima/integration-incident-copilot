@@ -495,3 +495,62 @@ class LlmRuntimeConfig(Base):
     rule_engine_enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     diagnosis_timeout_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     llm_request_timeout_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+# ---------------------------------------------------------------------------
+# llm_metrics (DA-70: FinOps metrics)
+# ---------------------------------------------------------------------------
+
+
+class LlmRequests(Base):
+    """Contagem de chamadas LLM por provider/model (DA-70).
+
+    Tabela usada para dashboards Grafana. Usa upsert para evitar
+    duplicatas em caso de concorrência.
+    """
+
+    __tablename__ = "llm_requests"
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, primary_key=True
+    )
+    provider: Mapped[str] = mapped_column(String(50), nullable=False, primary_key=True)
+    model: Mapped[str] = mapped_column(String(100), nullable=False, primary_key=True)
+    count: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)
+
+
+class LlmTokens(Base):
+    """Tokens LLM (input/output) por provider/model (DA-70).
+
+    Tabela usada para dashboards Grafana. Usa upsert para evitar
+    duplicatas em caso de concorrência.
+    """
+
+    __tablename__ = "llm_tokens"
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, primary_key=True
+    )
+    provider: Mapped[str] = mapped_column(String(50), nullable=False, primary_key=True)
+    model: Mapped[str] = mapped_column(String(100), nullable=False, primary_key=True)
+    token_type: Mapped[str] = mapped_column(
+        String(10), nullable=False, primary_key=True
+    )  # 'input' | 'output'
+    count: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)
+
+
+class LlmCost(Base):
+    """Custo LLM em USD por provider/model (DA-70).
+
+    Tabela usada para dashboards Grafana. Usa upsert para evitar
+    duplicatas em caso de concorrência.
+    """
+
+    __tablename__ = "llm_cost"
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, primary_key=True
+    )
+    provider: Mapped[str] = mapped_column(String(50), nullable=False, primary_key=True)
+    model: Mapped[str] = mapped_column(String(100), nullable=False, primary_key=True)
+    cost_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)

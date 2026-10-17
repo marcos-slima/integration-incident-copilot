@@ -99,10 +99,10 @@
 - [x] Identificar métricas FinOps necessárias (Prometheus)
 - [x] Implementar métricas: `llm_requests_total`, `llm_tokens_total`, `llm_cost_usd_total`
 - [x] Implementar métricas: `llm_budget_deviation_ratio`, `diagnosis_duration_seconds` (já existem)
-- [ ] Estender dashboards existentes
-- [ ] Validar com `scripts/validate_dashboards.py`
-- [ ] Declarar limites do que não é mensurável
-- [ ] Criar testes para métricas
+- [x] Estender dashboards existentes (3 painéis FinOps no dashboard_coi.json)
+- [x] Validar com `scripts/validate_dashboards.py` (SQL válido, requer Postgres para validação real)
+- [x] Declarar limites do que não é mensurável (custo de retrieval, GraphRAG, etc.)
+- [x] Criar testes para métricas (funções de observação e gravação)
 - [x] Documentar DA-70 em `docs/DECISOES_DE_ARQUITETURA.md` (seção 60 já existente)
 - [x] Registrar DA-70 em `CLAUDE.md` (tabela de DAs)
 - [x] Rodar quality gate (21/21 checks)

@@ -63,9 +63,14 @@ from app.circuit_breaker import CircuitBreaker
 from app.config import Settings, settings
 from app.exceptions import ConfigurationError
 from app.llm.factory import (
-    TRANSPORT_FAILURE_EXCEPTIONS,
     get_chat_model,
     resolve_registry_config,
+)
+from app.llm.failures import (
+    FAILURE_POLICIES,
+    FailureClass,
+    classify_failure,
+    get_failure_policy,
 )
 
 # DA-45: as duas funcoes passaram a morar em app/llm/origins.py porque o
@@ -437,35 +442,45 @@ def invoke_via_gateway(
         started_at = time.monotonic()
         try:
             result = build_and_invoke(llm)
-        except TRANSPORT_FAILURE_EXCEPTIONS as exc:
+        except Exception as exc:
+            # DA-68: classificar falha e aplicar política
+            try:
+                failure_class = classify_failure(exc)
+                policy = get_failure_policy(exc)
+            except ValueError:
+                # Falha não classificável -> tratada como transient
+                failure_class = FailureClass.TRANSIENT
+                policy = FAILURE_POLICIES[FailureClass.TRANSIENT]
+
             latency = time.monotonic() - started_at
-            circuit_breaker.record_failure(
-                provider,
-                cfg.llm_gateway_circuit_failure_threshold,
-                cfg.llm_gateway_circuit_cooldown_seconds,
-            )
-            CIRCUIT_BREAKER_STATE.labels(target=provider).set(
-                1
-                if circuit_breaker.is_open(provider, cfg.llm_gateway_circuit_cooldown_seconds)
-                else 0
-            )
-            # DA-30 — backoff exponencial com jitter antes de tentar o
-            # proximo provider. Evita bombardear um provider degradado
-            # com retentativas imediatas e reduz thundering herd em
-            # deploy multi-instancia (o jitter dispersa as janelas).
-            # base=0.0 desabilita (ex.: testes de velocidade).
+
+            # DA-68: abrir circuito se a política determinar
+            if policy.open_circuit:
+                circuit_breaker.record_failure(
+                    provider,
+                    cfg.llm_gateway_circuit_failure_threshold,
+                    cfg.llm_gateway_circuit_cooldown_seconds,
+                )
+                CIRCUIT_BREAKER_STATE.labels(target=provider).set(
+                    1
+                    if circuit_breaker.is_open(provider, cfg.llm_gateway_circuit_cooldown_seconds)
+                    else 0
+                )
+
+            # DA-68: backoff exponencial com jitter se a política determinar
             _backoff_base = cfg.llm_gateway_backoff_base_seconds
-            if _backoff_base > 0.0:
+            if policy.backoff and _backoff_base > 0.0:
                 _attempt = circuit_breaker.consecutive_failures(provider)
                 _raw_delay = _backoff_base * (2 ** min(_attempt - 1, 6))
                 _capped = min(_raw_delay, cfg.llm_gateway_backoff_max_seconds)
                 _jitter = _capped * random.uniform(-0.2, 0.2)
                 _delay = max(0.0, _capped + _jitter)
                 logger.debug(
-                    "AI Gateway backoff: provider=%s attempt=%d delay_s=%.2f",
+                    "AI Gateway backoff: provider=%s attempt=%d delay_s=%.2f failure_class=%s",
                     provider,
                     _attempt,
                     _delay,
+                    failure_class.name,
                 )
                 # LIMITACAO CONHECIDA: time.sleep() bloqueia a thread do
                 # uvicorn (FastAPI e WSGI por default, nao async). Para
@@ -477,17 +492,25 @@ def invoke_via_gateway(
                 # uvicorn --workers); para async completo, migrar
                 # invoke_via_gateway para async def + asyncio.sleep.
                 time.sleep(_delay)
+
             logger.warning(
                 "AI Gateway audit: provider=%s sensitivity=%s status=failure "
-                "latency_s=%.2f error=%s",
+                "failure_class=%s latency_s=%.2f error=%s",
                 provider,
                 sensitivity,
+                failure_class.name,
                 latency,
                 exc,
             )
             record_usage_observed(metering_cb, successful=False)
-            last_error = exc
-            continue
+
+            # DA-68: decidir se tenta o próximo provider (failover)
+            if policy.failover:
+                last_error = exc
+                continue
+            else:
+                # Não deve tentar outro provider -> parar o loop
+                raise
         else:
             latency = time.monotonic() - started_at
             circuit_breaker.record_success(provider)

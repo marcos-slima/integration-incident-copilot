@@ -1286,6 +1286,50 @@ roteamento, circuit breaker (abre/fecha/expira cooldown, isolado por
 provider) e budget, sem depender de nenhum provider real (mesmo padrao
 ja usado em `test_llm_factory.py` para `invoke_with_hybrid_fallback`).
 
+## AI Gateway v2 - Token budgeting e orçamento por tarefa (DA-67)
+
+Quarto item da evolucao planejada do AI Gateway (apos DA-26). A v1
+(DA-26) usa heuristica simples (`len(text) // 4`) para estimar tokens e
+custo. Isso e impreciso e nao usa preços reais do registry. A DA-67
+substitui essa heurística por:
+
+1. **Tokenizer real**: usar `tiktoken` (cl100k_base) para contar tokens
+   exatos, com fallback para heurística se `tiktoken` não estiver
+   disponível (`app/llm/gateway.py::_estimate_tokens`)
+
+2. **Preços reais**: usar `app/admin/repository.py::registry_prices()`
+   para obter `price_in_per_1m` e `price_out_per_1m` do registry, com
+   fallback para tabela interna se registry não disponível
+   (`app/llm/routing.py::_estimate_cost_usd`)
+
+3. **Budget ledger**: registrar estimado × real por diagnóstico
+   (`app/admin/models.py::LlmBudgetLedger`, `app/admin/repository.py::record_budget_ledger`).
+   Calcular `desvio_ratio = (actual - estimated) / estimated`. Best-effort:
+   sem DATABASE_URL ou erro, não bloqueia diagnóstico.
+
+4. **Métrica Prometheus**: expor desvio estimado/real como métrica
+   (`app/metrics.py::LLM_BUDGET_DEVIATION`, `LLM_BUDGET_EXCEEDED_TOTAL`,
+   `observe_budget_ledger()`)
+
+**Implementação.**
+- `app/llm/gateway.py`: substituir `_estimate_tokens()` por tokenizer real
+- `app/llm/routing.py`: usar `registry_prices()` em vez de tabela interna
+- `app/admin/models.py`: adicionar `LlmBudgetLedger` ORM
+- `app/admin/repository.py`: adicionar `record_budget_ledger()`
+- `app/metrics.py`: adicionar métricas de desvio estimado/real
+- `tests/test_llm_gateway.py`: testes de orçamento com tokenizer real
+- `tests/test_admin_repository.py`: testes de budget ledger
+
+**Validação.**
+- `tests/test_llm_gateway.py`: 34 testes (inclui 3 novos de orçamento)
+- `tests/test_admin_repository.py`: 13 testes (inclui 4 de budget ledger)
+- Quality gate: `llm_baseline` valida que estimativa é mais precisa
+
+**Limitações (registradas de propósito).**
+- Tokenizer real requer `tiktoken` (já está nas dependências)
+- Preços do registry requerem `DATABASE_URL` configurada
+- Budget ledger já existe (DA-48), falta apenas expor desvio
+
 ## Capability Registry + Agent Execution Policy (DA-27)
 
 Ultimo item P1 da segunda revisao arquitetural externa. O servidor

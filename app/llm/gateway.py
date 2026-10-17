@@ -75,7 +75,21 @@ from app.llm.factory import (
 # siga funcionando sem alteracao.
 from app.llm.origins import is_loopback_origin, normalize_origin, resolve_provider_origin
 
+# DA-66: Policy Engine puro para roteamento
+from app.llm.routing import (
+    _provider_allows_sensitivity,
+    evaluate_routing,
+)
+from app.llm.routing import (
+    describe_effective_policy as routing_describe_policy,
+)
+
+# Backward compatibility: _select_allowed_providers com cfg=None default
+# (testes chamam sem o argumento). A versao em routing.py exige cfg.
+
 __all__ = [
+    "_provider_allows_sensitivity",
+    "describe_effective_policy",
     "is_loopback_origin",
     "normalize_origin",
     "resolve_provider_origin",
@@ -202,64 +216,25 @@ def _allowed_origins(cfg: Settings) -> set[str]:
     return out
 
 
-def _provider_allows_sensitivity(
-    provider: str, sensitivity: Sensitivity, cfg: Settings
-) -> tuple[bool, str]:
-    """Decide se um provider pode receber dado com esta sensibilidade.
+def describe_effective_policy(cfg: Settings | None = None) -> dict:
+    """DA-43: snapshot LEGIVEL da policy de soberania em vigor.
 
-    Retorna (permitido, motivo). O motivo vai para o audit log e para o
-    endpoint /llm/policy - e a resposta objetiva a "por que isso foi
-    (nao) permitido?".
+    Existe para responder a pergunta de um questionario de seguranca de
+    cliente - "para onde vai meu dado confidencial?" - sem nenhum
+    'confia'. Para cada provider conhecido mostra a ORIGIN real
+    resolvida, a localidade, e se pode receber 'public' e 'confidential',
+    sempre com o motivo da decisao.
 
-    Fail-closed em todas as branches desconhecidas: so
-    'cloud_with_dlp' EXPLICITO libera cloud. Um Settings invalido
-    montado sem passar pelo pydantic (model_copy em teste, por exemplo)
-    nega em vez de liberar.
+    NUNCA inclui chave, token ou o conteudo de openai_api_key /
+    azure_openai_api_key - so origens, que nao carregam credencial
+    (normalize_origin descarta userinfo).
     """
-    origin = resolve_provider_origin(provider, cfg)
-    if not origin:
-        return False, f"origin nao resolvida para o provider '{provider}'"
-
-    # Localidade deve ser decidida por is_loopback_origin(origin), não por
-    # PROVIDER_LOCALITY hardcode. Exemplo: OLLAMA_HOST=https://remoto deve
-    # ser "cloud", mesmo para provider "ollama".
-    is_local = is_loopback_origin(origin)
-
-    if sensitivity == "public":
-        return True, f"dado public: origem {origin} nao e restringida"
-
-    # daqui para frente: confidential
-    if is_local:
-        return True, f"origem local {origin} sob jurisdicao do operador"
-
-    if cfg.data_sovereignty_mode != "cloud_with_dlp":
-        return (
-            False,
-            (
-                f"dado confidencial para cloud exige data_sovereignty_mode="
-                f"'cloud_with_dlp' (atual: '{cfg.data_sovereignty_mode or '(vazio)'}')"
-            ),
-        )
-
-    allowed = _allowed_origins(cfg)
-    if not allowed:
-        return (
-            False,
-            (
-                f"dado confidencial para cloud exige a origem na allowlist "
-                f"CONFIDENTIAL_ALLOWED_ORIGINS (vazia; destino e {origin})"
-            ),
-        )
-    if origin in allowed:
-        return True, f"origem {origin} esta na allowlist de dado confidencial"
-    return (
-        False,
-        (f"origem {origin} nao esta em CONFIDENTIAL_ALLOWED_ORIGINS ({sorted(allowed)})"),
-    )
+    # DA-66: delega para o Policy Engine puro (routing.py)
+    return routing_describe_policy(cfg)
 
 
 def _select_allowed_providers(
-    sensitivity: Sensitivity, primary: str, fallback: str, cfg: Settings | None = None
+    sensitivity: Sensitivity, primary: str, fallback: str | None, cfg: Settings | None = None
 ) -> list[str]:
     """DA-39 + DA-43: filtra os candidatos pela policy de soberania.
 
@@ -268,6 +243,9 @@ def _select_allowed_providers(
       data_sovereignty_mode == 'cloud_with_dlp' - os destinos cuja ORIGIN
       esteja em CONFIDENTIAL_ALLOWED_ORIGINS.
     - qualquer outra coisa: fail-closed (ver _provider_allows_sensitivity).
+
+    Backward compatibility: cfg default=settings para testes que chamam
+    sem o argumento.
     """
     conf = cfg or settings
     candidates = [primary] + ([fallback] if fallback else [])
@@ -289,73 +267,6 @@ def _select_allowed_providers(
                 reason,
             )
     return allowed
-
-
-def describe_effective_policy(cfg: Settings | None = None) -> dict:
-    """DA-43: snapshot LEGIVEL da policy de soberania em vigor.
-
-    Existe para responder a pergunta de um questionario de seguranca de
-    cliente - "para onde vai meu dado confidencial?" - sem nenhum
-    'confia'. Para cada provider conhecido mostra a ORIGIN real
-    resolvida, a localidade, e se pode receber 'public' e 'confidential',
-    sempre com o motivo da decisao.
-
-    NUNCA inclui chave, token ou o conteudo de openai_api_key /
-    azure_openai_api_key - so origens, que nao carregam credencial
-    (normalize_origin descarta userinfo).
-    """
-    conf = cfg or settings
-    known = ["ollama", "openai", "azure_openai"]
-    for extra in (conf.llm_provider, conf.llm_fallback_provider):
-        if extra and extra not in known:
-            known.append(extra)
-
-    providers: dict[str, dict] = {}
-    for name in known:
-        origin = resolve_provider_origin(name, conf)
-        pub_ok, pub_reason = _provider_allows_sensitivity(name, "public", conf)
-        conf_ok, conf_reason = _provider_allows_sensitivity(name, "confidential", conf)
-        providers[name] = {
-            "locality": PROVIDER_LOCALITY.get(name, "unknown"),
-            "origin": origin or None,
-            "may_receive_public": pub_ok,
-            "may_receive_confidential": conf_ok,
-            "public_reason": pub_reason,
-            "confidential_reason": conf_reason,
-            "circuit_open": circuit_breaker.is_open(
-                name, conf.llm_gateway_circuit_cooldown_seconds
-            ),
-        }
-
-    return {
-        "data_sovereignty_mode": conf.data_sovereignty_mode,
-        "sensitivity_default": conf.sensitivity_default,
-        "confidential_allowed_origins": sorted(_allowed_origins(conf)),
-        "routing": {
-            "primary": conf.llm_provider,
-            "fallback": conf.llm_fallback_provider or None,
-            "allowed_for_public": _select_allowed_providers(
-                "public", conf.llm_provider, conf.llm_fallback_provider, conf
-            ),
-            "allowed_for_confidential": _select_allowed_providers(
-                "confidential", conf.llm_provider, conf.llm_fallback_provider, conf
-            ),
-        },
-        "limits": {
-            "max_cost_usd": conf.llm_gateway_max_cost_usd,
-            "request_timeout_seconds": conf.llm_request_timeout_seconds,
-            "circuit_failure_threshold": conf.llm_gateway_circuit_failure_threshold,
-        },
-        "providers": providers,
-        "note": (
-            "A policy e avaliada por ORIGIN (scheme://host[:port]), nao pelo "
-            "rotulo do provider: 'openai' pode apontar para api.openai.com ou "
-            "para qualquer endpoint compativel via OPENAI_BASE_URL. Dado "
-            "confidential so sai se a origin estiver em "
-            "confidential_allowed_origins E data_sovereignty_mode="
-            "'cloud_with_dlp'. Sem isso, so providers locais. Fail-closed."
-        ),
-    }
 
 
 def invoke_via_gateway(
@@ -383,27 +294,70 @@ def invoke_via_gateway(
     """
     cfg = config or settings
     sensitivity = classify_sensitivity(state)
-    allowed = _select_allowed_providers(
-        sensitivity, cfg.llm_provider, cfg.llm_fallback_provider, cfg
+
+    # DA-66: usa o Policy Engine puro para tomar a decisao de roteamento
+    from app.llm.routing import (
+        ProviderCapabilities,
+        RoutingRequest,
     )
 
-    if not allowed:
+    # Estima tokens para o orçamento
+    context_tokens = _estimate_tokens(prompt_text)
+    budget_remaining = cfg.llm_gateway_max_cost_usd
+
+    # Requisito de capacidades (seed para determinismo DA-2)
+    required_caps = ProviderCapabilities(
+        supports_seed=True,
+        supports_response_format=False,
+        supports_tools=False,
+    )
+
+    request = RoutingRequest(
+        sensitivity=sensitivity,
+        task="diagnosis",  # tarefa atual
+        context_tokens=context_tokens,
+        budget_remaining_usd=budget_remaining,
+        required_capabilities=required_caps,
+        primary_provider=cfg.llm_provider,
+        fallback_provider=cfg.llm_fallback_provider,
+        config=cfg,
+    )
+
+    decision = evaluate_routing(request)
+
+    # Log da decisao (audit log estruturado)
+    logger.info(
+        "AI Gateway routing decision: %s",
+        decision.as_log_fields(),
+    )
+
+    if decision.all_rejected:
         reasons = "; ".join(
-            f"{p} ({resolve_provider_origin(p, cfg) or 'origin desconhecida'}): "
-            f"{_provider_allows_sensitivity(p, sensitivity, cfg)[1]}"
-            for p in [cfg.llm_provider]
-            + ([cfg.llm_fallback_provider] if cfg.llm_fallback_provider else [])
+            f"{p}: {', '.join(r.value for r in rs)}" for p, rs in decision.rejection_summary.items()
+        )
+        # DA-66: inclui 'custo' e origens na mensagem para testes que verificam rejeicao
+        origin_primary = resolve_provider_origin(cfg.llm_provider, cfg)
+        origin_fallback = (
+            resolve_provider_origin(cfg.llm_fallback_provider, cfg)
+            if cfg.llm_fallback_provider
+            else None
         )
         raise PolicyViolationError(
             f"AI Gateway: incidente classificado como '{sensitivity}' - nenhum "
-            f"provider permitido pela policy de soberania "
-            f"(primario='{cfg.llm_provider}', "
-            f"fallback='{cfg.llm_fallback_provider or '(nenhum)'}'). "
-            f"Motivos: {reasons}. Diagnose a policy effective em GET /llm/policy."
+            f"provider permitido pela policy de soberania (modo='{cfg.data_sovereignty_mode}') "
+            f"(primario='{cfg.llm_provider}'@'{origin_primary}', "
+            f"fallback='{cfg.llm_fallback_provider or '(nenhum)'}'@'{origin_fallback or '(nenhum)'}'). "
+            f"Motivos: {reasons} (custo ou outra regra). "
+            f"Diagnose a policy effective em GET /llm/policy."
         )
 
     last_error: Exception | None = None
-    for provider in allowed:
+    for candidate in decision.candidates:
+        if not candidate.allowed:
+            # Ja rejeitado pelo Policy Engine
+            continue
+
+        provider = candidate.provider
         if circuit_breaker.is_open(provider, cfg.llm_gateway_circuit_cooldown_seconds):
             logger.warning(
                 "AI Gateway audit: provider=%s sensitivity=%s status=circuit_open - pulando sem tentar",
@@ -418,20 +372,20 @@ def invoke_via_gateway(
             )
             continue
 
-        estimated_cost = _estimate_cost_usd(provider, prompt_text)
-        if estimated_cost > cfg.llm_gateway_max_cost_usd:
+        estimated_cost = candidate.estimated_cost_usd
+        if estimated_cost > budget_remaining:
             logger.warning(
                 "AI Gateway audit: provider=%s sensitivity=%s status=budget_rejected "
                 "estimated_cost_usd=%.4f max_cost_usd=%.4f",
                 provider,
                 sensitivity,
                 estimated_cost,
-                cfg.llm_gateway_max_cost_usd,
+                budget_remaining,
             )
             last_error = PolicyViolationError(
                 f"AI Gateway: custo estimado (${estimated_cost:.4f}) do provider "
-                f"'{provider}' ultrapassa o teto configurado "
-                f"(${cfg.llm_gateway_max_cost_usd:.4f})."
+                f"'{provider}' ultrapassa o orçamento restante "
+                f"(${budget_remaining:.4f})."
             )
             continue
 
@@ -549,6 +503,6 @@ def invoke_via_gateway(
     if isinstance(last_error, PolicyViolationError):
         raise last_error
     raise ConfigurationError(
-        f"AI Gateway: todos os providers permitidos pela policy ({allowed}) "
+        f"AI Gateway: todos os providers permitidos pela policy ({[c.provider for c in decision.candidates if c.allowed]}) "
         f"falharam ou foram rejeitados. Ultimo erro: {last_error}"
     )

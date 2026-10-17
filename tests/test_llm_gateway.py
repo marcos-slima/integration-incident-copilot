@@ -358,6 +358,60 @@ def test_budget_rejection_skips_call_without_invoking_provider(public_default):
         )
 
 
+def test_budget_rejection_com_tokenizer_real(public_default):
+    """Teste de orçamento usando tokenizer real (tiktoken) para contagem precisa."""
+    cfg = Settings(llm_provider="openai", openai_api_key="fake", llm_gateway_max_cost_usd=0.01)
+
+    def fake_build_and_invoke(llm):
+        raise AssertionError("nao deveria ser chamado - orcamento estourado antes")
+
+    # Estimar tokens com tokenizer real
+    # ~40000 chars ≈ 5000 tokens (tiktoken cl100k_base)
+    # 5000 tokens * 1.5 (completion ratio) * $0.01/1k ≈ $0.075 > $0.01
+    with pytest.raises(PolicyViolationError, match="custo"):
+        invoke_via_gateway(
+            fake_build_and_invoke,
+            state={"description": "x"},
+            prompt_text="x" * 40_000,
+            config=cfg,
+        )
+
+
+def test_budget_rejection_com_orcamento_muito_baixo(public_default):
+    """Teste de orçamento com valor muito baixo para garantir rejeição."""
+    cfg = Settings(llm_provider="openai", openai_api_key="fake", llm_gateway_max_cost_usd=0.00001)
+
+    def fake_build_and_invoke(llm):
+        raise AssertionError("nao deveria ser chamado - orcamento estourado antes")
+
+    # Qualquer texto grande o suficiente deve ser rejeitado
+    with pytest.raises(PolicyViolationError, match="custo"):
+        invoke_via_gateway(
+            fake_build_and_invoke,
+            state={"description": "x"},
+            prompt_text="x" * 10_000,  # ~1250 tokens, custo estimado > orçamento
+            config=cfg,
+        )
+
+
+def test_budget_rejection_com_ollama_zero_cost(public_default):
+    """Teste de orçamento com ollama (custo zero) - nunca deve ser rejeitado por orçamento."""
+    cfg = Settings(llm_provider="ollama", llm_gateway_max_cost_usd=0.00001)
+
+    def fake_build_and_invoke(llm):
+        # Deve ser chamado porque ollama tem custo zero
+        return "ok"
+
+    result, provider = invoke_via_gateway(
+        fake_build_and_invoke,
+        state={"description": "x"},
+        prompt_text="x" * 100_000,  # texto grande, mas custo zero
+        config=cfg,
+    )
+    assert result == "ok"
+    assert provider == "ollama"
+
+
 def test_open_circuit_skips_provider_without_invoking_it(public_default):
     cfg = Settings(
         llm_provider="ollama",

@@ -173,11 +173,20 @@ def classify_sensitivity(state: dict) -> Sensitivity:
 
 
 def _estimate_tokens(text: str) -> int:
-    # Heuristica simples (~4 caracteres por token, ordem de grandeza
-    # razoavel pra texto tecnico em portugues/ingles) - nao e um
-    # tokenizer real, so o suficiente pra um teto de budget. Ver
-    # nao-objetivo no docstring do modulo.
-    return max(1, len(text) // 4)
+    """Estima tokens usando tokenizer real (tiktoken).
+
+    Substitui heuristica simples (len//4) por contagem real de tokens.
+    Usa encoding 'cl100k_base' (padrão GPT-4/GPT-3.5) para consistência.
+
+    Fallback para heurística se tiktoken não estiver disponível."""
+    try:
+        import tiktoken
+
+        enc = tiktoken.get_encoding("cl100k_base")
+        return len(enc.encode(text, allowed_special="all"))
+    except ImportError:
+        # Fallback para heurística se tiktoken não estiver disponível
+        return max(1, len(text) // 4)
 
 
 # Multiplicador de tokens de completion em relacao ao prompt (teto

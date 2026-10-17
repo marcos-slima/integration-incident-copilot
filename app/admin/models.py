@@ -207,6 +207,50 @@ class LlmUsage(Base):
 
 
 # ---------------------------------------------------------------------------
+# llm_budget_ledger (DA-67: estimado × real por diagnóstico)
+# ---------------------------------------------------------------------------
+
+
+class LlmBudgetLedger(Base):
+    """Ledger de orçamento por diagnóstico (DA-67).
+
+    Registra o orçamento estimado vs real por diagnóstico (run_diagnosis),
+    permitindo métricas de desvio e ajuste de heurísticas.
+
+    `estimated_cost_usd`: custo estimado antes da chamada (gateway._estimate_cost_usd)
+    `actual_cost_usd`: custo real observado (metering._cost_usd)
+    `deviation_ratio`: (actual - estimated) / estimated (se estimated > 0)
+    """
+
+    __tablename__ = "llm_budget_ledger"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    incident_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    provider_origin: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    model_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    estimated_cost_usd: Mapped[float] = mapped_column(Float, nullable=False)
+    actual_cost_usd: Mapped[float] = mapped_column(Float, nullable=False)
+    deviation_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    tokens_estimated: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    tokens_actual_in: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    tokens_actual_out: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_now
+    )
+
+    __table_args__ = (
+        Index("ix_llm_budget_ledger_incident", "incident_id"),
+        Index("ix_llm_budget_ledger_origin_created", "provider_origin", "created_at"),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<LlmBudgetLedger incident={self.incident_id} origin={self.provider_origin} "
+            f"estimated={self.estimated_cost_usd:.4f} actual={self.actual_cost_usd:.4f}>"
+        )
+
+
+# ---------------------------------------------------------------------------
 # integration_systems (DA-49, Fase B)
 # ---------------------------------------------------------------------------
 

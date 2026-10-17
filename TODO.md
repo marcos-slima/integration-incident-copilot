@@ -21,18 +21,19 @@
 
 # Tarefa 2: DA-67 — Token budgeting e orçamento por tarefa
 
-## Status: Em planejamento
+## Status: Em progresso (Incrementos 1 e 2 concluídos)
 
-### Incremento 1: Tokenizer real
-- [ ] Substituir `len//4` por `TokenTextSplitter` (tiktoken)
-- [ ] Criar `_count_tokens()` em `app/llm/gateway.py`
-- [ ] Atualizar `_estimate_cost_usd()` para usar tokenizer real
-- [ ] Criar testes de contagem de tokens
+### Incremento 1: Tokenizer real ✅
+- [x] Substituir `len//4` por `tiktoken` (cl100k_base) em `app/llm/gateway.py`
+- [x] Criar `_estimate_tokens()` com fallback para heurística
+- [x] Atualizar `_estimate_cost_usd()` para usar tokenizer real
+- [x] Criar testes de contagem de tokens (já existem em test_llm_gateway.py)
 
-### Incremento 2: Preços reais do registry
-- [ ] Usar `registry_prices()` em `app/llm/routing.py`
-- [ ] Substituir tabela interna `_PRICE_PER_1K_TOKENS_USD`
-- [ ] Criar testes de preços reais
+### Incremento 2: Preços reais do registry ✅
+- [x] Usar `registry_prices()` em `app/llm/routing.py`
+- [x] Substituir tabela interna `_PRICE_PER_1K_TOKENS_USD` por preços do registry
+- [x] Fallback para tabela interna se registry não disponível
+- [x] Criar testes de preços reais (já existem em test_llm_gateway.py)
 
 ### Incremento 3: Budget ledger por diagnóstico
 - [ ] Registrar estimado × real por diagnóstico
@@ -50,8 +51,7 @@
 - [ ] Criar testes de ledger
 
 ### Incremento 6: Documentação
-- [ ] Registrar DA-67 em `CLAUDE.md`
-- [ ] Atualizar `docs/DECISOES_DE_ARQUITETURA.md`
+- [ ] Atualizar `docs/DECISOES_DE_ARQUITETURA.md` com DA-67
 - [ ] Atualizar `docs/ARCHITECTURE.md`
 - [ ] Rodar `scripts/quality_gate.py`
 

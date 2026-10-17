@@ -42,6 +42,10 @@ from app.config import settings
 from app.exceptions import DiagnosisOverloadedError, DiagnosisTimeoutError
 from app.models import DiagnosisResponse, IncidentRequest
 
+# DA-69: checkpointing com PostgresSaver (opt-in via CHECKPOINTING_ENABLED)
+if settings.checkpointing_enabled:
+    from langgraph.checkpoint.postgres import PostgresSaver
+
 _logger = logging.getLogger(__name__)
 from app.services.incident_recorder import record_incident
 
@@ -72,14 +76,18 @@ def _route_to_specialist(state: CopilotState) -> str:
     return "saas_diagnose"
 
 
-def build_graph():
+def build_graph(checkpointer=None):
     """O grafo tem duas formas: linear (default) ou com enriquecimento
     de GraphRAG intercalado, dependendo de `settings.graph_rag_enabled`
     - decidido uma vez na construcao, nao a cada execucao. Com
     GraphRAG desligado (default), o grafo e IDENTICO ao de antes desta
     fase - zero custo/comportamento novo (alem do roteamento multi-
     agente DA-22, que roda sempre, com ou sem GraphRAG). Ver
-    app/rag/graph_store.py para como ativar o GraphRAG de verdade."""
+    app/rag/graph_store.py para como ativar o GraphRAG de verdade.
+
+    checkpointer: opcional. Quando fornecido (PostgresSaver), o grafo
+    pode ser interrompido e retomado a partir do último nó concluído
+    (DA-69). Requer thread_id no config ao invocar o grafo."""
     graph = StateGraph(CopilotState)
     graph.add_node("supervisor", supervisor_node)
     graph.add_node("connector", connector_node)
@@ -130,16 +138,25 @@ def build_graph():
         graph.add_node("ontology_debug", ontology_enrich_node)
         graph.add_edge("report", "ontology_debug")
 
-    return graph.compile()
+    return graph.compile(checkpointer=checkpointer)
 
 
 _compiled_graph = None
+_checkpointer = None
 
 
 def get_graph():
-    global _compiled_graph
+    global _compiled_graph, _checkpointer
     if _compiled_graph is None:
-        _compiled_graph = build_graph()
+        # DA-69: criar checkpointer se checkpointing_enabled
+        if settings.checkpointing_enabled:
+            if not settings.database_url:
+                raise RuntimeError("CHECKPOINTING_ENABLED=true exige DATABASE_URL configurada")
+            # DA-19: reutilizar DATABASE_URL já configurada
+            _checkpointer = PostgresSaver.from_conn_string(settings.database_url)
+            # Setup do esquema (idempotente)
+            _checkpointer.setup()
+        _compiled_graph = build_graph(checkpointer=_checkpointer)
     return _compiled_graph
 
 
@@ -162,7 +179,9 @@ _graph_invoke_semaphore = threading.Semaphore(4)
 
 
 def _invoke_graph_with_timeout(
-    initial_state: CopilotState, timeout_seconds: float | None = None
+    initial_state: CopilotState,
+    timeout_seconds: float | None = None,
+    thread_id: dict | None = None,
 ) -> CopilotState:
     """Roda get_graph().invoke(initial_state) com um teto de tempo
     (settings.diagnosis_timeout_seconds) para o pipeline INTEIRO -
@@ -184,7 +203,9 @@ def _invoke_graph_with_timeout(
             "Tente novamente em alguns segundos."
         )
     try:
-        future: Future[CopilotState] = _graph_invoke_pool.submit(get_graph().invoke, initial_state)
+        # DA-69: passar thread_id no config se checkpointing_enabled
+        invoke_args = (initial_state,) if thread_id is None else (initial_state, thread_id)
+        future: Future[CopilotState] = _graph_invoke_pool.submit(get_graph().invoke, *invoke_args)
     except BaseException:
         _graph_invoke_semaphore.release()
         raise
@@ -245,10 +266,14 @@ def run_diagnosis(
         "incident_id": incident_id,
     }
     started_at = time.monotonic()
+    # DA-69: thread_id para checkpointing (usa incident_id para unicidade)
+    thread_id = (
+        {"configurable": {"thread_id": incident_id}} if settings.checkpointing_enabled else None
+    )
     final_state = (
-        _invoke_graph_with_timeout(initial_state)
+        _invoke_graph_with_timeout(initial_state, thread_id)
         if timeout_seconds is None
-        else _invoke_graph_with_timeout(initial_state, timeout_seconds)
+        else _invoke_graph_with_timeout(initial_state, timeout_seconds, thread_id)
     )
     latency_ms = int((time.monotonic() - started_at) * 1000)
     diagnosis = final_state.get("diagnosis", {})

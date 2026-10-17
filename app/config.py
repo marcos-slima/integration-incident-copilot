@@ -384,6 +384,13 @@ class Settings(BaseSettings):
     # Faz parte da Fase 2/3 do DA-61. Exige ontology_ttl_path válido.
     ontology_enrichment_enabled: bool = False
 
+    # CHECKPOINTING_ENABLED (app/agent/graph.py)
+    # Opt-in para checkpointing LangGraph com PostgresSaver.
+    # Quando ligado, o grafo pode ser interrompido e retomado a partir
+    # do último nó concluído (DA-69). Requer DATABASE_URL configurada.
+    # Default OFF para compatibilidade com execução atual.
+    checkpointing_enabled: bool = False
+
     # DA-61: caminho para error_codes.ttl (SKOS ontology para erros SAP)
     # Default aponta para o arquivo no repo; pode ser sobrescrito para
     # uso em deploy (ex:volume montado). Ontology loader (app/agent/ontology_loader.py)

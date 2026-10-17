@@ -146,7 +146,7 @@ def test_run_diagnosis_propaga_sensibilidade_do_request(monkeypatch):
 
     capturado = {}
 
-    def fake_invoke(initial_state):
+    def fake_invoke(initial_state, thread_id=None):
         capturado.update(initial_state)
         raise RuntimeError("parar aqui")
 

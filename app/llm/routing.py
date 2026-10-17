@@ -206,8 +206,15 @@ def _circuit_is_open(provider: str, cfg: Settings) -> bool:
 
 
 def _estimate_cost_usd(provider: str, context_tokens: int, cfg: Settings) -> float:
-    """Estima custo em USD para a chamada."""
-    # Preco aproximado, USD por 1K tokens
+    """Estima custo em USD para a chamada usando preços reais do registry.
+
+    Usa `registry_prices()` se DATABASE_URL estiver configurada e o provider
+    tiver preços registrados. Fallback para tabela interna se não disponível.
+
+    Preços por 1M tokens (in/out) são convertidos para custo por token."""
+    from app.admin.repository import registry_prices
+
+    # Tabela interna como fallback
     _PRICE_PER_1K_TOKENS_USD: dict[str, float] = {
         "ollama": 0.0,
         "openai": 0.01,
@@ -219,6 +226,18 @@ def _estimate_cost_usd(provider: str, context_tokens: int, cfg: Settings) -> flo
 
     completion_tokens = int(context_tokens * _COMPLETION_TOKEN_RATIO)
     total_tokens = context_tokens + completion_tokens
+
+    # Tenta obter preços reais do registry
+    origin = resolve_provider_origin(provider, cfg)
+    if origin:
+        prices = registry_prices(origin, provider)
+        if prices and prices[0] is not None and prices[1] is not None:
+            # Preços são por 1M tokens, converter para custo total
+            price_in_per_token = prices[0] / 1_000_000.0
+            price_out_per_token = prices[1] / 1_000_000.0
+            return context_tokens * price_in_per_token + completion_tokens * price_out_per_token
+
+    # Fallback para tabela interna (USD por 1K tokens)
     price = _PRICE_PER_1K_TOKENS_USD.get(provider, 0.0)
     return (total_tokens / 1000.0) * price
 

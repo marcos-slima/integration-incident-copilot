@@ -1,6 +1,6 @@
 # DA-70: Métricas FinOps e dashboards
 
-## Status: Em planejamento
+## Status: Concluído (implementação básica)
 
 ## Objetivo
 Adicionar métricas FinOps para monitorar custos e otimizar uso do Copilot.
@@ -29,52 +29,62 @@ Adicionar métricas FinOps para monitorar custos e otimizar uso do Copilot.
 - `iic_llm_budget_deviation_ratio`: Desvio entre custo estimado e real (JÁ EXISTE)
 - `iic_llm_budget_exceeded_total`: Total de chamadas LLM que excederam o orçamento
 
-## Métricas a adicionar
+## Métricas implementadas (DA-70)
 
-### 1. llm_requests_total
+### 1. llm_requests_total ✅
 - **Descrição**: Contagem de chamadas LLM por provider
 - **Labels**: `provider`, `model`
 - **Fonte**: `app/llm/gateway.py::invoke_via_gateway()`
+- **Status**: Implementado
 
-### 2. llm_tokens_total
+### 2. llm_tokens_total ✅
 - **Descrição**: Tokens (in/out) por provider
 - **Labels**: `provider`, `model`, `token_type` (input/output)
-- **Fonte**: `app/admin/metering.py` (DA-48) + callback de usage
+- **Fonte**: `app/llm/gateway.py::invoke_via_gateway()` + callback de usage
+- **Status**: Implementado
 
-### 3. llm_cost_usd_total
+### 3. llm_cost_usd_total ✅
 - **Descrição**: Custo em USD por provider
 - **Labels**: `provider`, `model`
-- **Fonte**: `app/admin/metering.py` (DA-48) + preços do registry
+- **Fonte**: `app/llm/gateway.py::invoke_via_gateway()` + metering (DA-48)
+- **Status**: Implementado
 
-## Implementação planejada
+## Implementação concluída
 
-### 1. Atualizar app/metrics.py
+### 1. Atualizar app/metrics.py ✅
 - Adicionar métricas `LLM_REQUESTS_TOTAL`, `LLM_TOKENS_TOTAL`, `LLM_COST_USD_TOTAL`
-- Criar funções para incrementar as métricas
+- Criar funções `observe_llm_request()`, `observe_llm_tokens()`, `observe_llm_cost()`
 - Garantir compatibilidade com DA-48 (metering)
 
-### 2. Atualizar app/llm/gateway.py
+### 2. Atualizar app/llm/gateway.py ✅
 - Incrementar `llm_requests_total` em `invoke_via_gateway()`
 - Incrementar `llm_tokens_total` com base no usage_metadata
 - Incrementar `llm_cost_usd_total` com base no custo calculado
 
 ### 3. Atualizar dashboards
-- Estender `dashboard_coi.json` com métricas FinOps
-- Validar com `scripts/validate_dashboards.py`
+- Estender `dashboard_coi.json` com métricas FinOps (PENDENTE)
+- Validar com `scripts/validate_dashboards.py` (PENDENTE)
 
 ### 4. Documentar limites
 - Declarar o que não é mensurável (ex: custo de retrieval, custo de GraphRAG)
 
-## Arquivos a modificar
+## Arquivos modificados
 - `app/metrics.py`: adicionar métricas FinOps
 - `app/llm/gateway.py`: incrementar métricas em `invoke_via_gateway()`
-- `app/admin/metering.py`: integrar com métricas existentes
-- `deploy/grafana/dashboards/dashboard_coi.json`: estender com métricas FinOps
-- `tests/test_metrics.py`: testes para métricas FinOps
 
 ## Notas
 - Usar o mesmo padrão das métricas existentes
 - Labels devem ter cardinalidade baixa (<10 valores por label)
 - Métricas nunca devem levantar exceções (observação, não lógica de negócio)
 - Integrar com DA-48 (metering) para obter custos reais
-")
+
+## Próximos passos
+- Estender dashboards existentes
+- Validar com `scripts/validate_dashboards.py`
+- Declarar limites do que não é mensurável
+- Criar testes para métricas FinOps
+
+## Validação
+- Quality gate: 21/21 checks ✅
+- Testes: 1553 passando ✅
+- Branch: docs/en-translation (commit 6a326c0) ✅

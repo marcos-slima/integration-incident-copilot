@@ -768,7 +768,7 @@ def test_run_diagnosis_propaga_connector_source_system_ao_state(monkeypatch):
 
     captured: dict[str, Any] = {}
 
-    def _fake_invoke(initial_state):
+    def _fake_invoke(initial_state, thread_id=None):
         captured.update(initial_state)
         return {
             "diagnosis": {"probable_root_cause": "lock", "model_confidence": 0.8},

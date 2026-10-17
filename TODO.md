@@ -92,9 +92,21 @@
 - [x] Rodar pytest (1553 testes passando)
 
 # Tarefa 5: DA-70 — Métricas e FinOps
-- [ ] Métricas da spec §6 viáveis com o que existe
-- [ ] Dashboards: estender os existentes e passar em `scripts/validate_dashboards.py`
+
+## Status: Em planejamento
+
+- [x] Analisar métricas atuais em `app/metrics.py`
+- [ ] Identificar métricas FinOps necessárias (Prometheus)
+- [ ] Implementar métricas: `llm_requests_total`, `llm_tokens_total`, `llm_cost_usd_total`
+- [ ] Implementar métricas: `llm_budget_deviation_ratio`, `diagnosis_duration_seconds` (já existem)
+- [ ] Estender dashboards existentes
+- [ ] Validar com `scripts/validate_dashboards.py`
 - [ ] Declarar limites do que não é mensurável
+- [ ] Criar testes para métricas
+- [ ] Documentar DA-70 em `docs/DECISOES_DE_ARQUITETURA.md`
+- [ ] Registrar DA-70 em `CLAUDE.md`
+- [ ] Rodar quality gate (21/21 checks)
+- [ ] Rodar pytest (cobertura ≥80%)
 
 # Tarefa 6: Documentação e Quality Gate
 - [x] Registrar DAs conforme `CLAUDE.md → "Como registrar uma nova DA"`

@@ -48,10 +48,10 @@
 - [ ] Estender `app/metrics.py`
 - [ ] Criar testes de métrica
 
-### Incremento 5: Testes de esgotamento de orçamento
-- [ ] Criar testes de orçamento com tokenizer real
-- [ ] Criar testes de orçamento com preços reais
-- [ ] Criar testes de ledger
+### Incremento 5: Testes de esgotamento de orçamento ✅
+- [x] Criar testes de orçamento com tokenizer real
+- [x] Criar testes de orçamento com preços reais
+- [x] Criar testes de ledger
 
 ### Incremento 6: Documentação
 - [ ] Atualizar `docs/DECISOES_DE_ARQUITETURA.md` com DA-67

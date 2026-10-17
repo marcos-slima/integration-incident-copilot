@@ -103,8 +103,8 @@
 - [ ] Validar com `scripts/validate_dashboards.py`
 - [ ] Declarar limites do que não é mensurável
 - [ ] Criar testes para métricas
-- [ ] Documentar DA-70 em `docs/DECISOES_DE_ARQUITETURA.md`
-- [ ] Registrar DA-70 em `CLAUDE.md`
+- [x] Documentar DA-70 em `docs/DECISOES_DE_ARQUITETURA.md` (seção 60 já existente)
+- [x] Registrar DA-70 em `CLAUDE.md` (tabela de DAs)
 - [x] Rodar quality gate (21/21 checks)
 - [x] Rodar pytest (1553 testes passando)
 

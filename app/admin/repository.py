@@ -669,3 +669,151 @@ def record_budget_ledger(
             model_id,
         )
         return False
+
+
+# ---------------------------------------------------------------------------
+# llm_metrics (DA-70: FinOps metrics para dashboards Grafana)
+# ---------------------------------------------------------------------------
+
+
+def record_llm_request(provider: str, model: str) -> bool:
+    """Grava chamada LLM no banco para dashboards Grafana (DA-70).
+
+    Usa upsert para evitar duplicatas em caso de concorrência.
+    Best-effort: sem DATABASE_URL ou erro de DB, devolve False (não bloqueia
+    o diagnóstico).
+
+    Devolve True se gravou com sucesso.
+    """
+    if not settings.database_url:
+        return False
+    try:
+        from sqlalchemy import text
+
+        with _get_sync_session_factory()() as session:
+            session.execute(
+                text(
+                    """
+                    INSERT INTO llm_requests (created_at, provider, model, count)
+                    VALUES (:created_at, :provider, :model, 1)
+                    ON CONFLICT (created_at, provider, model) DO UPDATE
+                    SET count = llm_requests.count + 1
+                    """
+                ),
+                {
+                    "created_at": _now(),
+                    "provider": provider,
+                    "model": model,
+                },
+            )
+            session.commit()
+            return True
+    except Exception:
+        logger.exception(
+            "[llm_metrics] Falha ao gravar llm_requests (%s/%s) — diagnostico nao afetado",
+            provider,
+            model,
+        )
+        return False
+
+
+def record_llm_tokens(provider: str, model: str, input_tokens: int, output_tokens: int) -> bool:
+    """Grava tokens LLM no banco para dashboards Grafana (DA-70).
+
+    Usa upsert para evitar duplicatas em caso de concorrência.
+    Best-effort: sem DATABASE_URL ou erro de DB, devolve False (não bloqueia
+    o diagnóstico).
+
+    Devolve True se gravou com sucesso.
+    """
+    if not settings.database_url:
+        return False
+    try:
+        from sqlalchemy import text
+
+        with _get_sync_session_factory()() as session:
+            # Grava tokens de input
+            session.execute(
+                text(
+                    """
+                    INSERT INTO llm_tokens (created_at, provider, model, token_type, count)
+                    VALUES (:created_at, :provider, :model, 'input', :input_tokens)
+                    ON CONFLICT (created_at, provider, model, 'input') DO UPDATE
+                    SET count = llm_tokens.count + :input_tokens
+                    """
+                ),
+                {
+                    "created_at": _now(),
+                    "provider": provider,
+                    "model": model,
+                    "input_tokens": input_tokens,
+                },
+            )
+            # Grava tokens de output
+            session.execute(
+                text(
+                    """
+                    INSERT INTO llm_tokens (created_at, provider, model, token_type, count)
+                    VALUES (:created_at, :provider, :model, 'output', :output_tokens)
+                    ON CONFLICT (created_at, provider, model, 'output') DO UPDATE
+                    SET count = llm_tokens.count + :output_tokens
+                    """
+                ),
+                {
+                    "created_at": _now(),
+                    "provider": provider,
+                    "model": model,
+                    "output_tokens": output_tokens,
+                },
+            )
+            session.commit()
+            return True
+    except Exception:
+        logger.exception(
+            "[llm_metrics] Falha ao gravar llm_tokens (%s/%s) — diagnostico nao afetado",
+            provider,
+            model,
+        )
+        return False
+
+
+def record_llm_cost(provider: str, model: str, cost_usd: float) -> bool:
+    """Grava custo LLM no banco para dashboards Grafana (DA-70).
+
+    Usa upsert para evitar duplicatas em caso de concorrência.
+    Best-effort: sem DATABASE_URL ou erro de DB, devolve False (não bloqueia
+    o diagnóstico).
+
+    Devolve True se gravou com sucesso.
+    """
+    if not settings.database_url:
+        return False
+    try:
+        from sqlalchemy import text
+
+        with _get_sync_session_factory()() as session:
+            session.execute(
+                text(
+                    """
+                    INSERT INTO llm_cost (created_at, provider, model, cost_usd)
+                    VALUES (:created_at, :provider, :model, :cost_usd)
+                    ON CONFLICT (created_at, provider, model) DO UPDATE
+                    SET cost_usd = llm_cost.cost_usd + :cost_usd
+                    """
+                ),
+                {
+                    "created_at": _now(),
+                    "provider": provider,
+                    "model": model,
+                    "cost_usd": cost_usd,
+                },
+            )
+            session.commit()
+            return True
+    except Exception:
+        logger.exception(
+            "[llm_metrics] Falha ao gravar llm_cost (%s/%s) — diagnostico nao afetado",
+            provider,
+            model,
+        )
+        return False

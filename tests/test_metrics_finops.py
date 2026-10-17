@@ -132,20 +132,21 @@ class TestRecordMetrics:
 
     def test_record_metrics_exception_handling(self) -> None:
         """DA-70: exceções no banco não propagam."""
-        with patch("app.admin.repository.get_sync_session_factory") as mock_factory:
+        with (
+            patch("app.admin.repository.get_sync_session_factory") as mock_factory,
+            patch("app.admin.repository.settings") as mock_settings,
+        ):
             mock_factory.return_value.return_value.__enter__.side_effect = Exception("DB error")
+            mock_settings.database_url = "postgresql://user:pass@localhost/iic"
+            from app.metrics import (
+                record_llm_cost,
+                record_llm_request,
+                record_llm_tokens,
+            )
 
-            with patch("app.admin.repository.settings") as mock_settings:
-                mock_settings.database_url = "postgresql://user:pass@localhost/iic"
-                from app.metrics import (
-                    record_llm_cost,
-                    record_llm_request,
-                    record_llm_tokens,
-                )
-
-                # Não deve levantar exceção
-                record_llm_request(provider="ollama", model="qwen3.6:35b-a3b")
-                record_llm_tokens(
-                    provider="ollama", model="qwen3.6:35b-a3b", input_tokens=10, output_tokens=5
-                )
-                record_llm_cost(provider="ollama", model="qwen3.6:35b-a3b", cost_usd=0.001)
+            # Não deve levantar exceção
+            record_llm_request(provider="ollama", model="qwen3.6:35b-a3b")
+            record_llm_tokens(
+                provider="ollama", model="qwen3.6:35b-a3b", input_tokens=10, output_tokens=5
+            )
+            record_llm_cost(provider="ollama", model="qwen3.6:35b-a3b", cost_usd=0.001)

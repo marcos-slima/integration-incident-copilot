@@ -493,20 +493,68 @@ def invoke_via_gateway(
             circuit_breaker.record_success(provider)
             CIRCUIT_BREAKER_STATE.labels(target=provider).set(0)
             record_usage_observed(metering_cb, successful=True)
+            # DA-67: registrar budget ledger (estimado × real)
+            actual_cost = None
+            if metering_cb and metering_cb.has_usage:
+                from app.admin.repository import record_budget_ledger
+
+                # Tokens reais capturados pelo callback
+                tokens_actual_in = metering_cb.tokens_in
+                tokens_actual_out = metering_cb.tokens_out
+                # Estimativa de tokens (prompt + completion)
+                tokens_estimated = request.context_tokens
+                # Estimativa de custo (já calculada no routing)
+                estimated_cost = candidate.estimated_cost_usd
+                # Custo real (já calculado no record_usage_observed)
+                # Precisamos recuperar o custo real do metering_cb
+                # Para isso, vamos calcular o custo real usando os tokens reais
+                from app.admin.metering import _cost_usd
+                from app.admin.repository import registry_prices
+
+                prices = (
+                    registry_prices(metering_cb.origin, metering_cb.model_name)
+                    if metering_cb.origin
+                    else None
+                )
+                actual_cost = _cost_usd(
+                    metering_cb.provider, tokens_actual_in, tokens_actual_out, prices
+                )
+                # Gravar ledger (best-effort, não bloqueia o diagnóstico)
+                record_budget_ledger(
+                    incident_id=state.get("incident_id"),
+                    origin=metering_cb.origin or provider,
+                    model_id=metering_cb.model_name,
+                    estimated_cost_usd=estimated_cost,
+                    actual_cost_usd=actual_cost,
+                    tokens_estimated=tokens_estimated,
+                    tokens_actual_in=tokens_actual_in,
+                    tokens_actual_out=tokens_actual_out,
+                )
             # Registra fallback quando o provider usado não é o primário
             if provider != cfg.llm_provider and cfg.llm_provider:
                 LLM_FALLBACK_TOTAL.labels(
                     primary_provider=cfg.llm_provider,
                     fallback_provider=provider,
                 ).inc()
-            logger.info(
-                "AI Gateway audit: provider=%s sensitivity=%s status=success "
-                "latency_s=%.2f estimated_cost_usd=%.4f",
-                provider,
-                sensitivity,
-                latency,
-                estimated_cost,
-            )
+            if actual_cost is not None:
+                logger.info(
+                    "AI Gateway audit: provider=%s sensitivity=%s status=success "
+                    "latency_s=%.2f estimated_cost_usd=%.4f actual_cost_usd=%.4f",
+                    provider,
+                    sensitivity,
+                    latency,
+                    estimated_cost,
+                    actual_cost,
+                )
+            else:
+                logger.info(
+                    "AI Gateway audit: provider=%s sensitivity=%s status=success "
+                    "latency_s=%.2f estimated_cost_usd=%.4f actual_cost_usd=unavailable",
+                    provider,
+                    sensitivity,
+                    latency,
+                    estimated_cost,
+                )
             return result, provider
 
     if isinstance(last_error, PolicyViolationError):

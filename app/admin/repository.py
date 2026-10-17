@@ -614,3 +614,58 @@ def update_runtime_config(fields: dict[str, Any]) -> dict[str, Any] | None:
     except Exception:
         logger.exception("[runtime_config] Falha ao atualizar overrides de runtime")
         return None
+
+
+# ---------------------------------------------------------------------------
+# llm_budget_ledger (DA-67: estimado × real por diagnóstico)
+# ---------------------------------------------------------------------------
+
+
+def record_budget_ledger(
+    incident_id: str | None,
+    origin: str,
+    model_id: str,
+    estimated_cost_usd: float,
+    actual_cost_usd: float,
+    tokens_estimated: int,
+    tokens_actual_in: int,
+    tokens_actual_out: int,
+) -> bool:
+    """Grava ledger de orçamento estimado × real por diagnóstico (DA-67).
+
+    Best-effort: sem DATABASE_URL ou erro de DB, devolve False (não bloqueia
+    o diagnóstico).
+
+    Devolve True se gravou com sucesso.
+    """
+    if not settings.database_url:
+        return False
+    try:
+        from app.admin.models import LlmBudgetLedger
+
+        deviation_ratio = None
+        if estimated_cost_usd > 0:
+            deviation_ratio = (actual_cost_usd - estimated_cost_usd) / estimated_cost_usd
+
+        with _get_sync_session_factory()() as session:
+            ledger = LlmBudgetLedger(
+                incident_id=incident_id,
+                provider_origin=origin,
+                model_id=model_id,
+                estimated_cost_usd=estimated_cost_usd,
+                actual_cost_usd=actual_cost_usd,
+                deviation_ratio=deviation_ratio,
+                tokens_estimated=tokens_estimated,
+                tokens_actual_in=tokens_actual_in,
+                tokens_actual_out=tokens_actual_out,
+            )
+            session.add(ledger)
+            session.commit()
+            return True
+    except Exception:
+        logger.exception(
+            "[budget_ledger] Falha ao gravar ledger (%s/%s) — diagnostico nao afetado",
+            origin,
+            model_id,
+        )
+        return False

@@ -138,6 +138,25 @@ if _PROMETHEUS_AVAILABLE:
         labelnames=["provider", "model"],
     )
 
+    # DA-70: Métricas FinOps
+    LLM_REQUESTS_TOTAL = Counter(
+        "iic_llm_requests_total",
+        "Total de chamadas LLM por provider",
+        labelnames=["provider", "model"],
+    )
+
+    LLM_TOKENS_TOTAL = Counter(
+        "iic_llm_tokens_total",
+        "Total de tokens (input + output) por provider",
+        labelnames=["provider", "model", "token_type"],  # token_type: input | output
+    )
+
+    LLM_COST_USD_TOTAL = Counter(
+        "iic_llm_cost_usd_total",
+        "Custo total em USD por provider",
+        labelnames=["provider", "model"],
+    )
+
 else:
     # Stubs para quando prometheus_client não está instalado
     class _NullMetric:
@@ -167,6 +186,9 @@ else:
     RULE_ENGINE_HIT_TOTAL = _null  # type: ignore[assignment]
     LLM_BUDGET_DEVIATION = _null  # type: ignore[assignment]
     LLM_BUDGET_EXCEEDED_TOTAL = _null  # type: ignore[assignment]
+    LLM_REQUESTS_TOTAL = _null  # type: ignore[assignment]
+    LLM_TOKENS_TOTAL = _null  # type: ignore[assignment]
+    LLM_COST_USD_TOTAL = _null  # type: ignore[assignment]
 
 
 # ---------------------------------------------------------------------------
@@ -294,3 +316,56 @@ def observe_budget_ledger(
                 LLM_BUDGET_EXCEEDED_TOTAL.labels(provider=provider, model=model).inc()
     except Exception:
         logger.debug("metricas de budget ledger nao registradas", exc_info=True)
+
+
+def observe_llm_request(
+    *,
+    provider: str,
+    model: str,
+) -> None:
+    """DA-70: metrica de chamadas LLM por provider/model.
+
+    Nunca levanta: metrica e observacao, nao pode derrubar o diagnostico."""
+    try:
+        if _PROMETHEUS_AVAILABLE and LLM_REQUESTS_TOTAL is not None:
+            LLM_REQUESTS_TOTAL.labels(provider=provider, model=model).inc()
+    except Exception:
+        logger.debug("metricas de llm_requests_total nao registradas", exc_info=True)
+
+
+def observe_llm_tokens(
+    *,
+    provider: str,
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+) -> None:
+    """DA-70: metrica de tokens LLM por provider/model.
+
+    Nunca levanta: metrica e observacao, nao pode derrubar o diagnostico."""
+    try:
+        if _PROMETHEUS_AVAILABLE and LLM_TOKENS_TOTAL is not None:
+            LLM_TOKENS_TOTAL.labels(provider=provider, model=model, token_type="input").inc(
+                input_tokens
+            )
+            LLM_TOKENS_TOTAL.labels(provider=provider, model=model, token_type="output").inc(
+                output_tokens
+            )
+    except Exception:
+        logger.debug("metricas de llm_tokens_total nao registradas", exc_info=True)
+
+
+def observe_llm_cost(
+    *,
+    provider: str,
+    model: str,
+    cost_usd: float,
+) -> None:
+    """DA-70: metrica de custo LLM por provider/model.
+
+    Nunca levanta: metrica e observacao, nao pode derrubar o diagnostico."""
+    try:
+        if _PROMETHEUS_AVAILABLE and LLM_COST_USD_TOTAL is not None:
+            LLM_COST_USD_TOTAL.labels(provider=provider, model=model).inc(cost_usd)
+    except Exception:
+        logger.debug("metricas de llm_cost_usd_total nao registradas", exc_info=True)

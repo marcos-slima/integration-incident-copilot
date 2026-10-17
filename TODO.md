@@ -20,12 +20,40 @@
 - [x] Todos os 1525 testes unitários passando
 
 # Tarefa 2: DA-67 — Token budgeting e orçamento por tarefa
-- [ ] Substituir `len//4` por contagem por família quando disponível
-- [ ] Preço: preferir `price_{in,out}_per_1m` do registry sobre heurística
-- [ ] Budget ledger por diagnóstico (`run_diagnosis`)
-- [ ] Registrar estimado × real (metering)
-- [ ] Criar testes de esgotamento de orçamento
+
+## Status: Em planejamento
+
+### Incremento 1: Tokenizer real
+- [ ] Substituir `len//4` por `TokenTextSplitter` (tiktoken)
+- [ ] Criar `_count_tokens()` em `app/llm/gateway.py`
+- [ ] Atualizar `_estimate_cost_usd()` para usar tokenizer real
+- [ ] Criar testes de contagem de tokens
+
+### Incremento 2: Preços reais do registry
+- [ ] Usar `registry_prices()` em `app/llm/routing.py`
+- [ ] Substituir tabela interna `_PRICE_PER_1K_TOKENS_USD`
+- [ ] Criar testes de preços reais
+
+### Incremento 3: Budget ledger por diagnóstico
+- [ ] Registrar estimado × real por diagnóstico
+- [ ] Usar `UsageCaptureCallback` (DA-48 metering)
+- [ ] Criar testes de ledger
+
+### Incremento 4: Métrica Prometheus de desvio
 - [ ] Expor desvio estimado/real como métrica Prometheus
+- [ ] Estender `app/metrics.py`
+- [ ] Criar testes de métrica
+
+### Incremento 5: Testes de esgotamento de orçamento
+- [ ] Criar testes de orçamento com tokenizer real
+- [ ] Criar testes de orçamento com preços reais
+- [ ] Criar testes de ledger
+
+### Incremento 6: Documentação
+- [ ] Registrar DA-67 em `CLAUDE.md`
+- [ ] Atualizar `docs/DECISOES_DE_ARQUITETURA.md`
+- [ ] Atualizar `docs/ARCHITECTURE.md`
+- [ ] Rodar `scripts/quality_gate.py`
 
 # Tarefa 3: DA-68 — Matriz de falhas e failover tipado
 - [ ] Taxonomia de erro fechada (`transient`, `rate_limited/quota`, `unavailable`, `timeout`, `context_limit`, `output_limit`, `budget_exhausted`, `validation_error`, `quality_failure`)

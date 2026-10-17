@@ -35,9 +35,12 @@
 - [x] Fallback para tabela interna se registry não disponível
 - [x] Criar testes de preços reais (já existem em test_llm_gateway.py)
 
-### Incremento 3: Budget ledger por diagnóstico
-- [ ] Registrar estimado × real por diagnóstico
-- [ ] Usar `UsageCaptureCallback` (DA-48 metering)
+### Incremento 3: Budget ledger por diagnóstico ✅
+- [x] Adicionar `LlmBudgetLedger` ORM (app/admin/models.py)
+- [x] Adicionar `record_budget_ledger()` (app/admin/repository.py)
+- [x] Registrar ledger após cada chamada LLM bem-sucedida (app/llm/gateway.py)
+- [x] Calcular desvio_ratio = (actual - estimated) / estimated
+- [x] Best-effort: sem DATABASE_URL ou erro, não bloqueia diagnóstico
 - [ ] Criar testes de ledger
 
 ### Incremento 4: Métrica Prometheus de desvio

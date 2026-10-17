@@ -30,6 +30,7 @@ Design decisions:
 from __future__ import annotations
 
 import logging
+from datetime import UTC
 
 from fastapi import FastAPI
 
@@ -369,3 +370,126 @@ def observe_llm_cost(
             LLM_COST_USD_TOTAL.labels(provider=provider, model=model).inc(cost_usd)
     except Exception:
         logger.debug("metricas de llm_cost_usd_total nao registradas", exc_info=True)
+
+
+def record_llm_request(*, provider: str, model: str) -> None:
+    """DA-70: Gravar chamada LLM no banco para dashboards Grafana.
+
+    Usa upsert para evitar duplicatas em caso de concorrência."""
+    try:
+        from datetime import datetime
+
+        from sqlalchemy import text
+
+        from app.admin.repository import get_sync_session_factory
+
+        session_factory = get_sync_session_factory()
+        with session_factory() as session:
+            # DA-70: upsert na tabela llm_requests
+            session.execute(
+                text(
+                    """
+                    INSERT INTO llm_requests (created_at, provider, model, count)
+                    VALUES (:created_at, :provider, :model, 1)
+                    ON CONFLICT (created_at, provider, model) DO UPDATE
+                    SET count = llm_requests.count + 1
+                    """
+                ),
+                {
+                    "created_at": datetime.now(UTC),
+                    "provider": provider,
+                    "model": model,
+                },
+            )
+            session.commit()
+    except Exception:
+        logger.debug("llm_requests nao gravadas no banco", exc_info=True)
+
+
+def record_llm_tokens(
+    *,
+    provider: str,
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+) -> None:
+    """DA-70: Gravar tokens LLM no banco para dashboards Grafana."""
+    try:
+        from datetime import datetime
+
+        from sqlalchemy import text
+
+        from app.admin.repository import get_sync_session_factory
+
+        session_factory = get_sync_session_factory()
+        with session_factory() as session:
+            # DA-70: upsert na tabela llm_tokens (input)
+            session.execute(
+                text(
+                    """
+                    INSERT INTO llm_tokens (created_at, provider, model, token_type, count)
+                    VALUES (:created_at, :provider, :model, 'input', :input_tokens)
+                    ON CONFLICT (created_at, provider, model, 'input') DO UPDATE
+                    SET count = llm_tokens.count + :input_tokens
+                    """
+                ),
+                {
+                    "created_at": datetime.now(UTC),
+                    "provider": provider,
+                    "model": model,
+                    "input_tokens": input_tokens,
+                },
+            )
+            # DA-70: upsert na tabela llm_tokens (output)
+            session.execute(
+                text(
+                    """
+                    INSERT INTO llm_tokens (created_at, provider, model, token_type, count)
+                    VALUES (:created_at, :provider, :model, 'output', :output_tokens)
+                    ON CONFLICT (created_at, provider, model, 'output') DO UPDATE
+                    SET count = llm_tokens.count + :output_tokens
+                    """
+                ),
+                {
+                    "created_at": datetime.now(UTC),
+                    "provider": provider,
+                    "model": model,
+                    "output_tokens": output_tokens,
+                },
+            )
+            session.commit()
+    except Exception:
+        logger.debug("llm_tokens nao gravadas no banco", exc_info=True)
+
+
+def record_llm_cost(*, provider: str, model: str, cost_usd: float) -> None:
+    """DA-70: Gravar custo LLM no banco para dashboards Grafana."""
+    try:
+        from datetime import datetime
+
+        from sqlalchemy import text
+
+        from app.admin.repository import get_sync_session_factory
+
+        session_factory = get_sync_session_factory()
+        with session_factory() as session:
+            # DA-70: upsert na tabela llm_cost
+            session.execute(
+                text(
+                    """
+                    INSERT INTO llm_cost (created_at, provider, model, cost_usd)
+                    VALUES (:created_at, :provider, :model, :cost_usd)
+                    ON CONFLICT (created_at, provider, model) DO UPDATE
+                    SET cost_usd = llm_cost.cost_usd + :cost_usd
+                    """
+                ),
+                {
+                    "created_at": datetime.now(UTC),
+                    "provider": provider,
+                    "model": model,
+                    "cost_usd": cost_usd,
+                },
+            )
+            session.commit()
+    except Exception:
+        logger.debug("llm_cost nao gravado no banco", exc_info=True)

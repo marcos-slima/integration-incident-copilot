@@ -115,6 +115,7 @@ class IncidentSQLite(SqliteBase):
     escalation_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
     cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
     llm_calls: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    locale: Mapped[str | None] = mapped_column(String(8), nullable=True)  # 021 (DA-74)
     evidence_json: Mapped[Any | None] = mapped_column(SA_JSON, nullable=True)
     sensitivity_level: Mapped[str | None] = mapped_column(String(32), nullable=True)
     pii_detected: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

@@ -66,7 +66,25 @@ class DeliveryResult:
     channel: str  # "email" | "sms"
 
 
-def deliver_email(to: str, body: str) -> DeliveryResult:
+def activation_email_text(token: str, locale: str | None) -> tuple[str, str]:
+    """DA-74: (assunto, corpo) do e-mail de ativacao no idioma do usuario.
+    Sem idioma registrado (linhas antigas) = pt-BR, o texto de antes."""
+    from app.i18n.content import content_text
+
+    return (
+        content_text(locale, "activation.emailSubject"),
+        content_text(locale, "activation.emailBody", token=token),
+    )
+
+
+def activation_sms_text(code: str, locale: str | None) -> str:
+    """DA-74: texto do SMS de ativacao no idioma do usuario."""
+    from app.i18n.content import content_text
+
+    return content_text(locale, "activation.smsBody", code=code)
+
+
+def deliver_email(to: str, body: str, subject: str | None = None) -> DeliveryResult:
     """Envia o token por e-mail quando EMAIL_PROVIDER estiver configurado.
 
     Validacao 2026-10-07 (M-12): `app/notifications/` (Mailpit e Resend)
@@ -81,7 +99,9 @@ def deliver_email(to: str, body: str) -> DeliveryResult:
 
     sender = get_email_sender()
     if sender is not None:
-        result = sender.send(to, "Ativacao de acesso - Integration Incident Copilot", body)
+        if subject is None:
+            subject, _ = activation_email_text("", None)
+        result = sender.send(to, subject, body)
         if result.success:
             logger.info("DA-55: token de e-mail enviado para %s via %s", to, result.provider)
             return DeliveryResult(delivered=True, channel="email")
@@ -211,6 +231,7 @@ async def create_user(
     phone: str,
     password: str,
     created_by: str,
+    locale: str | None = None,
 ) -> tuple[WebUser, ActivationTokens]:
     """Cria usuario pendente de e-mail + emite o token da etapa 1."""
     # import lazy: app.auth importa ESTE modulo no load (login cai aqui);
@@ -227,11 +248,13 @@ async def create_user(
         phone=phone,
         status=STATUS_PENDING_EMAIL,
         created_by=created_by,
+        locale=locale,  # DA-74: idioma das mensagens de ativacao
     )
     session.add(user)
     await session.flush()
     token = sign_email_token(username, EMAIL_TOKEN_TTL_SECONDS, settings.session_secret)
-    result = deliver_email(email, f"Token de ativacao: {token}")
+    subject, body = activation_email_text(token, locale)
+    result = deliver_email(email, body, subject)
     await session.commit()
     tokens = ActivationTokens(
         email_token=token if not result.delivered else None,
@@ -261,7 +284,7 @@ async def confirm_email(session: AsyncSession, *, username: str, token: str) -> 
     user.phone_code_hash = hash_phone_code(code, settings.session_secret)
     user.phone_code_expires_at = _now() + timedelta(seconds=PHONE_CODE_TTL_SECONDS)
     user.phone_code_attempts = 0
-    result = deliver_sms(user.phone, f"Codigo de ativacao: {code}")
+    result = deliver_sms(user.phone, activation_sms_text(code, user.locale))
     await session.commit()
     return ActivationTokens(
         email_token=None,

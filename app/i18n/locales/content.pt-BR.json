@@ -1,0 +1,25 @@
+{
+  "diagnosis": {
+    "capUnknownIdentifier": "[confianca limitada - identificador nao reconhecido pelo sistema] ",
+    "capNoDocument": "[confianca limitada - nenhum documento relevante encontrado] ",
+    "capInvalidSource": "[matched_source '{{source}}' nao esta entre os documentos recuperados - confianca limitada] ",
+    "unstructured": "Nao foi possivel estruturar a resposta.",
+    "checkAgentLogs": "Verifique os logs do agente para mais detalhes."
+  },
+  "report": {
+    "template": "## Diagnostico do Incidente\n\n**Descricao reportada:** {{description}}\n{{connector_line}}\n**Causa raiz provavel:** {{root_cause}}\n\n**Confianca:**\n- `diagnosis_confidence` (pipeline): {{diag_conf}} — use este para automacao\n- `model_confidence` (LLM pos-guardrail): {{model_conf}}\n- `evidence_strength` (retrieval/conector): {{evidence_str}}\n- Provider: {{provider}} | Agente: {{agent}} | Modelo: {{model}} | Prompt: {{prompt}}\n\n**Documento usado como base:** {{matched}}\n\n**Proximos passos:**\n{{next_steps}}\n\n**Primary Evidence** (observado diretamente pelo sistema — alta confianca):\n{{primary}}\n\n**Supporting Facts** (RAG / busca web / relato do usuario — revisao humana recomendada):\n{{supporting}}\n",
+    "noMatchedSource": "nenhum documento especifico identificado",
+    "connectorFallback": "\n**Dados do sistema ({{system}}):** identificador nao reconhecido - nenhum dado do sistema disponivel\n",
+    "connectorData": "\n**Dados do sistema ({{system}}{{simulated}}):** status={{status}}, codigo={{code}}\n",
+    "simulated": " - simulado",
+    "noPrimary": "- (nenhuma evidencia direta do sistema — diagnostico baseado em inferencia)",
+    "noSupporting": "- (nenhum fato de suporte)",
+    "noSteps": "- (nenhum passo sugerido)",
+    "noPrompt": "nenhum"
+  },
+  "activation": {
+    "emailSubject": "Ativacao de acesso - Integration Incident Copilot",
+    "emailBody": "Token de ativacao: {{token}}",
+    "smsBody": "Codigo de ativacao: {{code}}"
+  }
+}

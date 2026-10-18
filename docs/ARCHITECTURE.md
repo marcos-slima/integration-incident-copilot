@@ -209,7 +209,7 @@ guardrail sobrescrevendo a evidencia que o rule engine tinha escrito.
 ```mermaid
 flowchart LR
     subgraph entrada["Entrada: run_diagnosis"]
-        e1["description, logs, payload<br/>interface_type, identifier<br/>connector_source_system<br/>sensitivity_level, pii_detected<br/>llm_model, incident_id, debug"]
+        e1["description, logs, payload<br/>interface_type, identifier<br/>connector_source_system<br/>sensitivity_level, pii_detected<br/>locale, llm_model, incident_id, debug"]
     end
     subgraph nos["Campo escrito por cada no"]
         sup["supervisor"] --> s1["agent_domain"]

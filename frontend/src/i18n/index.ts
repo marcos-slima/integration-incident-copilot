@@ -67,4 +67,11 @@ export function setLocale(lng: Locale) {
   void i18n.changeLanguage(lng);
 }
 
+/** DA-74: idioma pedido ao backend para o CONTEUDO do diagnostico. O
+ * pseudo-locale e so de revisao de tela: o diagnostico vem em `en`. */
+export function diagnosisLocale(lng: string | undefined = i18n.resolvedLanguage): Locale {
+  const l = normalizeLocale(lng);
+  return (SUPPORTED_LOCALES as readonly string[]).includes(l) ? (l as Locale) : 'en';
+}
+
 export default i18n;

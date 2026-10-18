@@ -23,6 +23,7 @@ export interface IncidentRequest {
   sensitivity_level?: 'public' | 'internal' | 'confidential' | 'secret';
   pii_detected?: boolean;
   redaction_applied?: boolean;
+  locale?: 'pt-BR' | 'en'; // DA-74: idioma do conteudo do diagnostico
 }
 
 // espelho de app/models.py::Evidence — proveniência de cada afirmação
@@ -58,6 +59,7 @@ export interface DiagnosisResponse {
   llm_model?: string;
   prompt_version?: string;
   prompt_digest?: string;
+  locale?: 'pt-BR' | 'en'; // DA-74: idioma em que o diagnostico foi produzido
   evidence?: EvidenceItem[];
   incident_id?: string;
   trace_id?: string;
@@ -99,6 +101,11 @@ export interface ProviderPolicy {
   may_receive_confidential: boolean;
   public_reason: string;
   confidential_reason: string;
+  // DA-74: motivo com codigo estavel, traduzido pela UI (sovereigntyReason.*)
+  public_reason_code?: string;
+  public_reason_params?: Record<string, string>;
+  confidential_reason_code?: string;
+  confidential_reason_params?: Record<string, string>;
 }
 
 export interface LlmPolicy {
@@ -131,6 +138,7 @@ export type ConnectorHealthStatus = 'real' | 'mock' | 'misconfigured';
 export interface ConnectorHealth {
   status: ConnectorHealthStatus;
   note: string;
+  setting?: string; // DA-74: variavel de modo real, para o texto traduzido
 }
 
 export interface HealthResponse {

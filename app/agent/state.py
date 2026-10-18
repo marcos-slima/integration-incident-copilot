@@ -72,6 +72,10 @@ class CopilotState(TypedDict, total=False):
     # estao no schema, e classify_sensitivity() le estes dois campos.
     sensitivity_level: str | None
     pii_detected: bool | None
+    # DA-74: idioma do conteudo do diagnostico ("pt-BR" | "en"). Fica no
+    # schema pelo mesmo motivo de sensitivity_level: o StateGraph descarta
+    # chaves fora dele.
+    locale: str
     llm_model: str
     # DA-22: dominio do sub-agente especialista que vai tratar o
     # diagnostico ("sap" | "saas" | "generic"), decidido pelo

@@ -2,13 +2,36 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.i18n import normalize_locale
+from app.i18n.content import CONTENT_LOCALES, DEFAULT_CONTENT_LOCALE
 
 # Limites generosos - rejeitam entrada absurda (ex: 1MB de log colado
 # por engano) com 422 claro, sem impedir uso legitimo de logs longos.
 MAX_DESCRIPTION_LENGTH = 5_000
 MAX_LOGS_LENGTH = 50_000
 MAX_PAYLOAD_LENGTH = 50_000
+
+#: DA-74: idioma do conteudo do diagnostico (texto do LLM, regras, relatorio).
+#: Ausente = "pt-BR", o comportamento de antes (prompt medido em pt-BR).
+DIAGNOSIS_LOCALES = CONTENT_LOCALES
+DEFAULT_DIAGNOSIS_LOCALE = DEFAULT_CONTENT_LOCALE
+
+_LOCALE_DESCRIPTION = (
+    "DA-74: idioma do conteudo do diagnostico ('pt-BR' ou 'en'; aceita a tag "
+    "do navegador, ex: 'en-US' -> 'en', 'pt-PT' -> 'pt-BR'). Ausente = 'pt-BR'."
+)
+
+
+def _coerce_locale(value: object) -> str | None:
+    """Tag BCP 47 -> locale suportado; desconhecido -> ValueError (422)."""
+    if value is None or value == "":
+        return None
+    loc = normalize_locale(str(value))
+    if loc not in DIAGNOSIS_LOCALES:
+        raise ValueError(f"locale nao suportado: {value!r} (use {', '.join(DIAGNOSIS_LOCALES)})")
+    return loc
 
 
 class IncidentRequest(BaseModel):
@@ -60,6 +83,9 @@ class IncidentRequest(BaseModel):
         default=None,
         description="Redacao ja aplicada ao payload/logs antes do envio? None = nao informado.",
     )
+    locale: str | None = Field(default=None, description=_LOCALE_DESCRIPTION)
+
+    _normalize_locale = field_validator("locale", mode="before")(_coerce_locale)
 
 
 # DA-23 (Event Mesh): formato CloudEvents, o mesmo usado pelo SAP
@@ -102,6 +128,9 @@ class IncidentEventData(BaseModel):
     sensitivity_level: Literal["public", "internal", "confidential", "secret"] | None = None
     pii_detected: bool | None = None
     redaction_applied: bool | None = None
+    locale: str | None = Field(default=None, description=_LOCALE_DESCRIPTION)
+
+    _normalize_locale = field_validator("locale", mode="before")(_coerce_locale)
 
 
 class IncidentEventEnvelope(BaseModel):
@@ -279,6 +308,13 @@ class DiagnosisResponse(BaseModel):
             "instrucao de saida e schema estruturado. Dois diagnosticos com o "
             "mesmo digest usaram o mesmo prompt. None quando nenhum prompt "
             "foi usado. Ver DA-53."
+        ),
+    )
+    locale: str = Field(
+        default=DEFAULT_DIAGNOSIS_LOCALE,
+        description=(
+            "DA-74: idioma em que o conteudo deste diagnostico foi produzido "
+            "(causa raiz, proximos passos, relatorio)."
         ),
     )
     evidence: list[Evidence] = Field(

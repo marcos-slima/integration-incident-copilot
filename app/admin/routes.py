@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -651,6 +651,7 @@ async def routing_preview(
                 "allowed": c.allowed,
                 "reasons": [r.value for r in c.rejection_reasons],
                 "detail": list(c.detail),
+                "detail_items": list(c.detail_items),  # DA-74: para a UI traduzir
                 "estimated_cost_usd": round(c.estimated_cost_usd, 6),
                 "latency_ms": c.latency_ms,
                 "score": c.score,
@@ -1050,6 +1051,7 @@ def _incident_out(
         "escalation_reason": incident.escalation_reason,
         "cost_usd": incident.cost_usd,
         "llm_calls": incident.llm_calls,
+        "locale": getattr(incident, "locale", None),  # DA-74 (migration 021)
         "latency_ms": incident.latency_ms,
         "is_mock": incident.is_mock,
         "sensitivity_level": incident.sensitivity_level,
@@ -1120,6 +1122,9 @@ class UserCreate(BaseModel):
     email: str = Field(min_length=3, max_length=256, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     phone: str = Field(min_length=8, max_length=32, pattern=r"^\+?[0-9\s-]{8,32}$")
     password: str = Field(min_length=10, max_length=256)
+    # DA-74: idioma das mensagens de ativacao. Ausente = o da Admin UI de
+    # quem cadastra (cookie iic_locale / Accept-Language).
+    locale: str | None = Field(default=None, max_length=16)
 
 
 class UserPatch(BaseModel):
@@ -1168,7 +1173,7 @@ async def list_users(session: SessionReq) -> list[dict[str, Any]]:
 
 
 @router.post("/users", status_code=status.HTTP_201_CREATED)
-async def create_user(payload: UserCreate, session: SessionReq) -> dict[str, Any]:
+async def create_user(payload: UserCreate, session: SessionReq, request: Request) -> dict[str, Any]:
     """Cria usuario PENDENTE de e-mail. A senha inicial entra como PBKDF2
     (mesmo formato DA-54) — nunca em claro em lugar nenhum.
 
@@ -1176,8 +1181,20 @@ async def create_user(payload: UserCreate, session: SessionReq) -> dict[str, Any
     na resposta de admin (canal X-API-Admin-Key), com WARNING no log.
     Entrega real: `deliver_email` em app/webusers.py — token sai da
     resposta sozinho quando o canal entrega de verdade."""
+    from app.i18n import locale_from_request, normalize_locale
+    from app.i18n.content import CONTENT_LOCALES
     from app.webusers import create_user as domain_create_user
 
+    locale = normalize_locale(payload.locale) if payload.locale else locale_from_request(request)
+    if locale not in CONTENT_LOCALES:
+        if payload.locale:
+            raise api_error(
+                422,
+                "invalid_locale",
+                f"locale nao suportado: {payload.locale}",
+                locale=payload.locale,
+            )
+        locale = None  # pseudo-locale de revisao: mensagens no default
     try:
         user, tokens = await domain_create_user(
             session,
@@ -1186,6 +1203,7 @@ async def create_user(payload: UserCreate, session: SessionReq) -> dict[str, Any
             phone=payload.phone,
             password=payload.password,
             created_by="admin-api",
+            locale=locale,
         )
     except ValueError as exc:
         raise api_error(409, "user_exists", str(exc), username=payload.username) from None
@@ -1201,16 +1219,24 @@ async def create_user(payload: UserCreate, session: SessionReq) -> dict[str, Any
 @router.post("/users/{user_id}/email-token")
 async def reissue_email_token(user_id: str, session: SessionReq) -> dict[str, Any]:
     """Reemite o token da etapa 1 (so' para pendentes de e-mail)."""
-    from app.webusers import EMAIL_TOKEN_TTL_SECONDS, deliver_email, sign_email_token
+    from app.webusers import (
+        EMAIL_TOKEN_TTL_SECONDS,
+        activation_email_text,
+        deliver_email,
+        sign_email_token,
+    )
 
     user = await _get_user_or_404(session, user_id)
     if user.status != "pending_email":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"reemissao de token de e-mail exige status pending_email (atual: {user.status})",
+        raise api_error(
+            409,
+            "reissue_requires_pending_email",
+            f"reemissao de token de e-mail exige status pending_email (atual: {user.status})",
+            status=user.status,
         )
     token = sign_email_token(user.username, EMAIL_TOKEN_TTL_SECONDS, settings.session_secret)
-    result = deliver_email(user.email, f"Token de ativacao: {token}")
+    subject, body = activation_email_text(token, user.locale)
+    result = deliver_email(user.email, body, subject)
     await session.commit()
     return {
         "id": str(user.id),
@@ -1232,6 +1258,7 @@ async def reissue_phone_code(user_id: str, session: SessionReq) -> dict[str, Any
 
     from app.webusers import (
         PHONE_CODE_TTL_SECONDS,
+        activation_sms_text,
         deliver_sms,
         generate_phone_code,
         hash_phone_code,
@@ -1249,7 +1276,7 @@ async def reissue_phone_code(user_id: str, session: SessionReq) -> dict[str, Any
     user.phone_code_hash = hash_phone_code(code, settings.session_secret)
     user.phone_code_expires_at = datetime.now(UTC) + timedelta(seconds=PHONE_CODE_TTL_SECONDS)
     user.phone_code_attempts = 0
-    result = deliver_sms(user.phone, f"Codigo de ativacao: {code}")
+    result = deliver_sms(user.phone, activation_sms_text(code, user.locale))
     await session.commit()
     return {
         "id": str(user.id),

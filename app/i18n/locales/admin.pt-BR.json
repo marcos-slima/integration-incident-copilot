@@ -65,7 +65,9 @@
     "too_many_attempts": "Muitas tentativas de autenticação inválidas; aguarde um minuto.",
     "usage_period_not_found": "Nenhum período de uso aberto para '{{model}}' na origem '{{origin}}'.",
     "user_exists": "O usuário '{{username}}' já existe.",
-    "user_not_found": "Usuário não encontrado."
+    "user_not_found": "Usuário não encontrado.",
+    "reissue_requires_pending_email": "A reemissão do token de e-mail exige status pending_email (atual: {{status}}).",
+    "invalid_locale": "Idioma não suportado: {{locale}}."
   },
   "escalation": {
     "abstained": "Guardrails anularam a fonte: resposta sem lastro",
@@ -227,7 +229,11 @@
     "toggle": "Alternar",
     "transport": "Transporte",
     "unsupported": "não suporta",
-    "variable": "Variável"
+    "variable": "Variável",
+    "locality": {
+      "local": "local",
+      "cloud": "nuvem"
+    }
   },
   "nav": {
     "apiDocs": "API Docs",
@@ -354,5 +360,25 @@
     "siteFilter": "Filtro site",
     "techTerm": "Termo técnico",
     "title": "Fontes de busca web aprovadas (DA-57)"
+  },
+  "reasonDetail": {
+    "destino_fora_da_origem": "base_url aponta para {{origin}}, fora da origem {{registered}}",
+    "credencial_ausente": "origem {{origin}} sem credencial cifrada",
+    "capability_faltando": "capacidades faltando: {{missing}}",
+    "janela_insuficiente": "contexto estimado de {{tokens}} tokens > janela de {{window}}",
+    "dominio_nao_atendido": "domínio '{{domain}}' fora de {{domains}}",
+    "nivel_nao_autorizado": "o nível premium exige escalonamento autorizado",
+    "limite_mensal_atingido": "{{used}} de {{limit}} tokens no período",
+    "circuito_aberto": "circuito aberto para a origem {{origin}}",
+    "orcamento_excedido": "custo estimado de US$ {{cost}} > restante de US$ {{remaining}}"
+  },
+  "sovereigntyReason": {
+    "origin_unresolved": "origem não resolvida para o provider '{{provider}}'",
+    "public_unrestricted": "dado público: a origem {{origin}} não é restringida",
+    "local_origin": "origem local {{origin}}, sob jurisdição do operador",
+    "mode_required": "dado confidencial para nuvem exige data_sovereignty_mode='cloud_with_dlp' (atual: '{{mode}}')",
+    "allowlist_empty": "dado confidencial para nuvem exige a origem em CONFIDENTIAL_ALLOWED_ORIGINS (vazia; destino {{origin}})",
+    "allowlisted": "a origem {{origin}} está na allowlist de dado confidencial",
+    "not_allowlisted": "a origem {{origin}} não está em CONFIDENTIAL_ALLOWED_ORIGINS ({{allowed}})"
   }
 }

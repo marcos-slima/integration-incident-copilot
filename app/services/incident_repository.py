@@ -86,6 +86,9 @@ class Incident(Base):
     # 0.0 com llm_calls=0 = rule engine, sem LLM.
     cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
     llm_calls: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # DA-74 (migration 021): idioma do conteudo do diagnostico. Anulavel:
+    # linhas anteriores foram todas produzidas em pt-BR, mas sem registro.
+    locale: Mapped[str | None] = mapped_column(String(8), nullable=True)
 
     # Evidências estruturadas (JSON — permite queries analíticas no Grafana)
     evidence_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

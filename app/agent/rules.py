@@ -599,7 +599,9 @@ KNOWN_ERROR_RULES: list[ErrorRule] = [
 # ---------------------------------------------------------------------------
 
 
-def match_known_error(text: str, has_connector_data: bool = False) -> dict | None:
+def match_known_error(
+    text: str, has_connector_data: bool = False, locale: str | None = None
+) -> dict | None:
     """Avalia o texto contra todas as regras conhecidas.
 
     Retorna um dict compatível com DiagnosisModel se alguma regra bater,
@@ -612,6 +614,9 @@ def match_known_error(text: str, has_connector_data: bool = False) -> dict | Non
             com evidência objetiva do conector → 0.95; só texto digitado → 0.70.
             Um regex sobre texto puro é mais frágil que um código de erro
             capturado diretamente do sistema de origem.
+        locale: DA-74 - idioma da causa raiz e dos passos. Os padroes casam
+            em qualquer idioma; so o texto devolvido muda. Ausente = pt-BR,
+            o texto da propria regra.
     """
     if not text:
         return None
@@ -629,11 +634,16 @@ def match_known_error(text: str, has_connector_data: bool = False) -> dict | Non
                 evidence_strength,
                 has_connector_data,
             )
+            from app.i18n.content import localize_rule
+
+            root_cause, next_steps = localize_rule(
+                rule.category, rule.probable_root_cause, rule.next_steps, locale
+            )
             return {
                 "matched_source": f"rule_engine:{rule.category}",
-                "probable_root_cause": rule.probable_root_cause,
+                "probable_root_cause": root_cause,
                 "confidence": rule.confidence,
-                "next_steps": rule.next_steps,
+                "next_steps": next_steps,
                 "rule_engine_category": rule.category,
                 "llm_provider_used": "rule_engine",
                 "evidence_strength": evidence_strength,

@@ -40,7 +40,7 @@ from app.agent.state import CopilotState
 from app.agent.supervisor import supervisor_node
 from app.config import settings
 from app.exceptions import DiagnosisOverloadedError, DiagnosisTimeoutError
-from app.models import DiagnosisResponse, IncidentRequest
+from app.models import DEFAULT_DIAGNOSIS_LOCALE, DiagnosisResponse, IncidentRequest
 
 _logger = logging.getLogger(__name__)
 from app.llm.budget import close_task_budget, open_task_budget
@@ -262,6 +262,8 @@ def run_diagnosis(
         # heuristica (app/llm/gateway.py::classify_sensitivity).
         "sensitivity_level": request.sensitivity_level,
         "pii_detected": request.pii_detected,
+        # DA-74: idioma do conteudo; ausente = pt-BR (prompt medido).
+        "locale": request.locale or DEFAULT_DIAGNOSIS_LOCALE,
         "llm_model": llm_model or settings.llm_model,
         "debug": debug,
         "incident_id": incident_id,
@@ -348,6 +350,7 @@ def run_diagnosis(
         else None,
         trace_id=trace_id,
         escalation=escalation,
+        locale=final_state.get("locale") or DEFAULT_DIAGNOSIS_LOCALE,
     )
     # M-14: metricas de negocio (antes nunca incrementadas).
     from app.llm.gateway import classify_sensitivity

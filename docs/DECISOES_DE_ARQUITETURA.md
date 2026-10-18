@@ -34,6 +34,32 @@
 - Escalonamento automático para `premium` e roteamento por qualidade medida ficam fora (exigem decisão e baseline por modelo).
 
 ---
+
+### 68. Interfaces no idioma do navegador (DA-73)
+
+**O problema.** As duas interfaces tinham texto fixo em português: cerca de 175 textos no React (`frontend/src`) e cerca de 365 nos templates e no JS da Admin UI. A página React declarava `<html lang="en">` com conteúdo em pt-BR, a hora era formatada sempre como `pt-BR` e dinheiro com `toFixed`. As mensagens de erro exibidas vinham do `detail` do backend, em português.
+
+**A decisão** (aprovada em 2026-10-18). Idioma resolvido nesta ordem: `?lng=` na URL (revisão) → cookie `iic_locale` (escolha explícita, compartilhada pelas duas UIs) → idioma do navegador pelo idioma base (`pt-PT` → `pt-BR`) → fallback `en`. Locales: `pt-BR` e `en`. O conteúdo gerado pelo LLM fica fora: mudar o idioma do prompt altera o `prompt_digest` (DA-53) e exige nova medição.
+
+**UI web.** `react-i18next` com `i18next-browser-languagedetector` (`frontend/src/i18n/index.ts`), catálogos `frontend/src/i18n/locales/{pt-BR,en}.json`, seletor de idioma (`frontend/src/components/LanguageSelect.tsx`), `<html lang>` sincronizado, e formatação por `Intl` (`frontend/src/i18n/format.ts`). Códigos estáveis do backend (`trust_level`, motivo de escalonamento, `code` de erro) são traduzidos pelo código, nunca pelo texto.
+
+**Admin UI.** Negociação no servidor (`app/i18n/__init__.py::negotiate`, `Accept-Language` com pesos `q`), `t()`/`t_html()` nos templates Jinja e o catálogo do idioma embutido na página como `<script type="application/json">` — dado, não script, então a CSP `script-src 'self'` continua valendo; `<`, `>` e `&` vão escapados para o conteúdo não fechar a tag (`app/i18n/__init__.py::embed_json`). O JS do admin usa o mesmo catálogo e a mesma sintaxe do i18next (`{{x}}`, plural `_zero/_one/_other`). Respostas com `Vary: Accept-Language, Cookie` e `Content-Language`.
+
+**Erros por código.** `app/api_errors.py::CodedHTTPException`: erros de auth e da API admin passam a trazer `code` e `params` além do `detail` (mantido para clientes existentes). As UIs mostram o texto do catálogo para o `code`; sem código conhecido, o `detail`.
+
+**Pseudo-locale.** `?lng=xx` mostra todo texto do catálogo entre `⟦ ⟧`; o que aparece sem marca é texto fixo.
+
+**Garantia automática.** Gate `ui_i18n` (`app/i18n/checks.py`): paridade de chaves e de variáveis entre os locales; toda chave usada existe (estáticas e grupos dinâmicos); nenhum texto visível fora do catálogo (`app/i18n/inventory.py`, também em `scripts/i18n_inventory.py`).
+
+**Validação.** `tests/test_i18n.py` (negociação, interpolação e fallback, escape do catálogo embutido, catálogos reais consistentes, detecção de chave faltando/variável divergente/texto fixo, Admin UI em en e pt-BR pelo `Accept-Language`, cookie vencendo o navegador, pseudo-locale, erros com `code`, todo `code` com texto nos dois idiomas). Os testes de tela que conferem texto em português passam a fixar `Accept-Language: pt-BR`. Capturas Playwright das duas UIs em en, pt-BR e `xx`.
+
+**Limitações (registradas de propósito).**
+- O texto gerado pelo LLM e o relatório (`report_markdown`) seguem em português.
+- Textos livres do backend continuam no idioma em que foram escritos: o `detail` dos motivos no simulador de roteamento, a nota de cada conector no `/health` e os dados do usuário.
+- O inventário é heurístico: texto montado concatenando fragmentos de uma palavra escapa. O catálogo proíbe concatenar frases.
+- O e-mail de ativação (DA-55) não tem idioma por usuário.
+
+---
 cisões de Arquitetura
 
 Registro das decisões de arquitetura (DAs) do Integration Incident Copilot:
@@ -123,6 +149,7 @@ final.
 | 63 | [64](#64-skills-declarativas---yaml-como-fonte-de-verdade-para-capability-e-roteamento-da-63) | Skills declarativas — YAML como fonte de verdade para capability e roteamento (DA-63) |
 | 65 | [65](#65-degradação-graciosa-do-rag-quando-qdrant-cai-da-65) | Degradação graciosa do RAG: Qdrant cai → `_retrieve_hybrid` e `_retrieve_dense_only` retornam `[]` → rule engine ainda responde erros conhecidos; fluxo completo `/diagnose → run_diagnosis` pendente de teste de integração |
 | 71 | [66](#66-sanitização-do-resultado-de-busca-web-devolvido-ao-llm-da-71) | Resultado de busca web sanitizado e delimitado antes de voltar ao LLM (tool do ReAct e `web_search_node`) |
+| 73 | [68](#68-interfaces-no-idioma-do-navegador-da-73) | UI web e Admin UI no idioma do navegador: catálogos pt-BR/en, cookie compartilhado, `Intl`, erros por `code`, gate `ui_i18n` |
 | 72 | [67](#67-roteamento-por-registro-de-modelos-da-72) | Roteamento por registro de modelos: cada modelo habilitado é candidato do Policy Engine, com parâmetros por modelo, score custo × latência e failover pela lista |
 | — | — | DA-64: número não utilizado (pulo intencional) |
 

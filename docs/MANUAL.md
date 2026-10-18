@@ -1584,7 +1584,7 @@ Marcadores (`pyproject.toml`): `integration` (stack viva), `browser`
 automaticamente** quando a infra não está lá; os 9 e2e da DA-52 só rodam com
 `IIC_TEST_DATABASE_URL`.
 
-### 16.2 Os 20 gates determinísticos
+### 16.2 Os 21 gates determinísticos
 
 `app/evaluation/gates.py::GATES` — sem LLM, sem infra, rodam em qualquer CI:
 
@@ -1600,6 +1600,7 @@ uv run python scripts/quality_gate.py --json quality-gate.json
 | Livro-razão das DAs | `implemented_das_documented`, `da_registered`, `das_index_current`, `candidate_das_fresh` |
 | **Integridade da documentação** | `docs_markup_integrity`, `docs_code_references`, `docs_env_vars` |
 | Conectores | `connector_reachable`, `connector_validation_matrix`, `connector_coverage` |
+| Interfaces (i18n, DA-73) | `ui_i18n` |
 
 Os três gates de documentação são o motivo de este manual citar código como
 app/arquivo.py::simbolo entre backticks: `docs_code_references` confere que o símbolo existe

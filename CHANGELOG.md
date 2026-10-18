@@ -65,6 +65,12 @@ Contagens de testes conferidas com `pytest --collect-only` em 2026-10-18.
   `error_id`; o motivo completo, que cita origens internas, fica só no log.
   Todos os erros de `/diagnose` ganham `code`. Testes:
   `test_gateway_refusal_http.py` (4).
+- **DA-73** UIs no idioma do navegador: UI web (`react-i18next`) e Admin UI
+  (Jinja + JS, catálogo embutido sem quebrar a CSP) em pt-BR e en, com seletor
+  de idioma compartilhado (cookie `iic_locale`), datas/números/USD por `Intl`,
+  erros com `code` estável traduzidos pela UI, pseudo-locale `?lng=xx` e gate
+  `ui_i18n`. Corrige o `<html lang="en">` da UI web com conteúdo em português.
+  Testes: `test_i18n.py` (23).
 - **DA-72** Roteamento por registro de modelos: no modo gerenciado cada modelo
   ativo é candidato do Policy Engine, com parâmetros por modelo (transporte,
   janela de contexto, capacidades que só restringem a origem, domínios, nível,

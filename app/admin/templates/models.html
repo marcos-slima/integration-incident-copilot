@@ -16,7 +16,7 @@
 
     <!-- Banner quando DB != .env -->
     <div id="runtime-diff-banner" style="display:none; padding: 0.75rem 1rem; margin-bottom: 1rem; background: #fff3cd; border-radius: 6px; font-size: 0.9rem;">
-      ⚠️ Valores do banco diferem do .env — campos que exigem restart: LLM_REGISTRY_DB, LLM_PROVIDER, LLM_ROUTE, LLM_FALLBACK_PROVIDER. Demais campos (DATA_SOVEREIGNTY_MODE, CONFIDENTIAL_ALLOWED_ORIGINS, REQUIRE_AUTH, RULE_ENGINE_ENABLED, DIAGNOSIS_TIMEOUT_SECONDS, LLM_REQUEST_TIMEOUT_SECONDS) sao aplicados em tempo real.
+      ⚠️ Valores do banco diferem do .env — campos que exigem restart: LLM_REGISTRY_DB, LLM_PROVIDER, LLM_ROUTE, LLM_FALLBACK_PROVIDER. Demais campos (DATA_SOVEREIGNTY_MODE, CONFIDENTIAL_ALLOWED_ORIGINS, REQUIRE_AUTH, RULE_ENGINE_ENABLED, DIAGNOSIS_TIMEOUT_SECONDS, LLM_REQUEST_TIMEOUT_SECONDS e os de orçamento e roteamento) sao aplicados em tempo real.
     </div>
 
     <table id="runtime-config-table" style="width: 100%;">
@@ -69,19 +69,21 @@
             <th style="width: 60px;">%</th>
             <th style="width: 60px;">Padrão</th>
             <th style="width: 60px;">Ativo</th>
-            <th style="width: 100px;">Ações</th>
+            <th style="min-width: 220px;">Roteamento (DA-72)</th>
+            <th style="width: 130px;">Ações</th>
           </tr>
         </thead>
         <tbody id="models-body">
-          <tr><td colspan="10" style="text-align: center; padding: 2rem;">Carregando...</td></tr>
+          <tr><td colspan="11" style="text-align: center; padding: 2rem;">Carregando...</td></tr>
         </tbody>
       </table>
     </div>
   </div>
 
-  <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--text);">Novo Modelo</h3>
+  <h3 id="model-form-title" style="margin-top: 2rem; margin-bottom: 1rem; color: var(--text);">Novo Modelo</h3>
   <div class="card">
-    <form id="newmodel" data-submit="addModel">
+    <form id="newmodel" data-submit="saveModel">
+      <input type="hidden" name="id" value="">
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
         <div class="form-group">
           <label>Origem *</label>
@@ -109,6 +111,60 @@
         </div>
       </div>
 
+      <h4 style="margin: 1rem 0 0.5rem; color: var(--text);">Parâmetros de roteamento (DA-72)</h4>
+      <p style="color: var(--text); font-size: 0.85rem; opacity: 0.8; margin-bottom: 1rem;">
+        Usados pelo agente para escolher o modelo no modo gerenciado (LLM_REGISTRY_DB). Vazio = derivado da origem ou sem restrição.
+        A capacidade da origem é o teto: aqui só dá para restringir.
+      </p>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+        <div class="form-group">
+          <label>Transporte</label>
+          <select name="transport">
+            <option value="">(derivado da origem)</option>
+            <option value="ollama">ollama</option>
+            <option value="openai_compatible">openai_compatible</option>
+            <option value="azure_openai">azure_openai</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Janela de contexto (tokens)</label>
+          <input name="context_window_tokens" type="number" min="256" placeholder="Vazio = não verifica">
+        </div>
+        <div class="form-group">
+          <label>Nível</label>
+          <select name="tier">
+            <option value="">(derivado: local/standard)</option>
+            <option value="local">local</option>
+            <option value="standard">standard</option>
+            <option value="premium">premium (bloqueado)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Prioridade (desempate, menor primeiro)</label>
+          <input name="priority" type="number" min="0" max="10000" placeholder="100">
+        </div>
+        <div class="form-group">
+          <label>tools</label>
+          <select name="supports_tools"><option value="">herdar da origem</option><option value="false">não suporta</option></select>
+        </div>
+        <div class="form-group">
+          <label>response_format</label>
+          <select name="supports_response_format"><option value="">herdar da origem</option><option value="false">não suporta</option></select>
+        </div>
+        <div class="form-group">
+          <label>seed</label>
+          <select name="supports_seed"><option value="">herdar da origem</option><option value="false">não suporta</option></select>
+        </div>
+        <div class="form-group">
+          <label>Domínios atendidos (vazio = todos)</label>
+          <div style="display: flex; gap: 1rem; padding: 0.5rem 0;">
+            <label style="display: flex; gap: 0.3rem; align-items: center;"><input type="checkbox" name="domains" value="sap" style="width: auto;">sap</label>
+            <label style="display: flex; gap: 0.3rem; align-items: center;"><input type="checkbox" name="domains" value="saas" style="width: auto;">saas</label>
+            <label style="display: flex; gap: 0.3rem; align-items: center;"><input type="checkbox" name="domains" value="generic" style="width: auto;">generic</label>
+          </div>
+        </div>
+      </div>
+
       <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; padding: 1rem; background: var(--border); border-radius: 8px;">
         <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
           <input name="is_default" type="checkbox" style="width: auto;">
@@ -116,11 +172,55 @@
         </label>
       </div>
 
-      <button type="submit" class="btn btn-primary">➕ Adicionar modelo</button>
+      <button type="submit" class="btn btn-primary" id="model-submit">➕ Adicionar modelo</button>
+      <button type="button" class="btn" id="model-cancel" data-click="resetModelForm" style="display: none; background: var(--border);">Cancelar edição</button>
     </form>
   </div>
 
-  <p class="alert" id="msg" style="background: #fee2e2; border-color: #fecaca; color: #991b1b; display: none;"></p>
+  <h2 style="margin-top: 3rem;">Simular roteamento</h2>
+  <p style="color: var(--text); margin-bottom: 1.5rem;">
+    Roda a mesma decisão do agente (Policy Engine, DA-66/72) para um diagnóstico novo, sem chamar o LLM.
+  </p>
+  <div class="card">
+    <form id="routing-preview" data-submit="previewRouting">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; align-items: end;">
+        <div class="form-group">
+          <label>Sensibilidade do dado</label>
+          <select name="sensitivity"><option value="confidential">confidential</option><option value="public">public</option></select>
+        </div>
+        <div class="form-group">
+          <label>Domínio</label>
+          <select name="domain"><option value="">(qualquer)</option><option value="sap">sap</option><option value="saas">saas</option><option value="generic">generic</option></select>
+        </div>
+        <div class="form-group">
+          <label>Tokens de contexto</label>
+          <input name="tokens" type="number" min="1" value="4000">
+        </div>
+        <div class="form-group">
+          <button type="submit" class="btn btn-primary">▶ Simular</button>
+        </div>
+      </div>
+    </form>
+    <p id="preview-summary" style="color: var(--text); margin: 1rem 0 0.5rem;"></p>
+    <div style="overflow-x: auto;">
+      <table id="preview-table" style="display: none;">
+        <thead>
+          <tr>
+            <th style="width: 50px;">#</th>
+            <th>Modelo</th>
+            <th>Origem</th>
+            <th style="width: 70px;">Nível</th>
+            <th style="width: 90px;">Custo est.</th>
+            <th style="width: 90px;">Latência</th>
+            <th style="width: 70px;">Score</th>
+            <th>Situação</th>
+          </tr>
+        </thead>
+        <tbody id="preview-body"></tbody>
+      </table>
+    </div>
+  </div>
+
 </main>
 
 {% endblock %}

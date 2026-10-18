@@ -77,8 +77,12 @@ dependencies = [
     # DA-63: app/mcp/skill_registry.py le data/skills/*.yaml em runtime;
     # antes so chegava como dependencia transitiva (huggingface-hub).
     "pyyaml>=6.0",
+    # DA-67: tokenizer aproximado do budget (fallback len//4 sem rede).
     "tiktoken>=0.14.0",
+    # DA-69: PostgresSaver + driver psycopg3 com libpq embutido (a imagem
+    # nao instala libpq; sem o binary o import falha com CHECKPOINTING_ENABLED).
     "langgraph-checkpoint-postgres>=3.2.0",
+    "psycopg[binary]>=3.2",
 ]
 
 [project.optional-dependencies]

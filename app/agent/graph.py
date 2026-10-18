@@ -276,6 +276,7 @@ def run_diagnosis(
     # checkpointer nunca recebia o thread_id e min(limit, dict) quebrava.
     # DA-67: orcamento do diagnostico, fechado mesmo em erro/timeout.
     open_task_budget(incident_id, settings.diagnosis_budget_usd)
+    spent = None
     try:
         final_state = _invoke_graph_with_timeout(
             initial_state, timeout_seconds=timeout_seconds, thread_id=thread_id
@@ -365,6 +366,7 @@ def run_diagnosis(
         response=response,
         final_state=final_state,
         latency_ms=latency_ms,
+        budget=spent,
     )
     return response
 

@@ -77,6 +77,16 @@ class Incident(Base):
     prompt_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
     prompt_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
+    # DA-44: sinal deterministico de escalonamento (migration 019). Anulavel:
+    # linhas anteriores nao tem o dado.
+    should_escalate: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    escalation_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # DA-67: quanto o diagnostico debitou do orcamento (real quando o
+    # metering mediu, estimado caso contrario) e quantas chamadas LLM fez.
+    # 0.0 com llm_calls=0 = rule engine, sem LLM.
+    cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    llm_calls: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     # Evidências estruturadas (JSON — permite queries analíticas no Grafana)
     evidence_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
@@ -108,6 +118,7 @@ class Incident(Base):
         Index("ix_incidents_agent_created", "agent_domain", "created_at"),
         Index("ix_incidents_provider_created", "llm_provider_used", "created_at"),
         Index("ix_incidents_sensitivity", "sensitivity_level", "created_at"),
+        Index("ix_incidents_escalate_created", "should_escalate", "created_at"),
     )
 
     def __repr__(self) -> str:

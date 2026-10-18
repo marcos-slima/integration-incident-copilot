@@ -65,6 +65,17 @@ Contagens de testes conferidas com `pytest --collect-only` em 2026-10-18.
   `error_id`; o motivo completo, que cita origens internas, fica só no log.
   Todos os erros de `/diagnose` ganham `code`. Testes:
   `test_gateway_refusal_http.py` (4).
+- **DA-72** Roteamento por registro de modelos: no modo gerenciado cada modelo
+  ativo é candidato do Policy Engine, com parâmetros por modelo (transporte,
+  janela de contexto, capacidades que só restringem a origem, domínios, nível,
+  prioridade, limite mensal bloqueante), score custo × latência
+  (`LLM_ROUTING_COST_WEIGHT`/`LLM_ROUTING_LATENCY_WEIGHT`), circuito por origem,
+  failover pela lista e latência gravada por chamada. A decisão passa a respeitar
+  os overrides da Admin UI (antes a lista de candidatos vinha sempre do `.env`).
+  `/admin/models`: edição dos parâmetros, orçamento e pesos como overrides, e
+  simulador (`GET /admin/api/routing/preview`). Provenance: `llm_model` registra o
+  modelo que respondeu. Migration 020. Invariante 9 emendada. Testes:
+  `test_registry_routing.py` (23), `test_registry_routing_repository.py` (5).
 - **DA-67 (correção)** o roteamento buscava o preço registrado pelo rótulo do
   provider (`"openai"`) e nunca o encontrava: a estimativa caía na tabela
   interna (~33× o preço de `gpt-4o-mini`) e podia barrar o candidato por

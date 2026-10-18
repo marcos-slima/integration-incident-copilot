@@ -313,12 +313,18 @@ provided.
 
 The admin UI (`/admin`; data via `/admin/api/*` with `X-API-Admin-Key`) exposes:
 
-- **Models** — registry of models/credentials by ORIGIN, with status
+- **Models** — registry of models/credentials by ORIGIN, with status. With
+  `LLM_REGISTRY_DB=true`, every enabled model is a candidate for the agent
+  (DA-72) and the screen sets the parameters the decision uses: transport,
+  context window, capabilities (they only restrict the origin), served domains,
+  tier, priority and monthly limit (blocks at 100%). It also holds the
+  per-diagnosis budget, the per-call cap, the cost × latency weights and the
+  **routing simulator**, which shows each model's rank or rejection reason
+  without calling the LLM
 - **Usage** — metering of **real** tokens (usage_metadata), not estimate
 - **Systems** — catalog of integrated systems and their correlation with
   incidents (DA-49/50)
 - **Incidents** — persisted history of diagnoses with verification
-- **Users** (`/admin/users`) — web UI users and activation (DA-55)
 - **Users** (`/admin/users`) — web UI users and activation (DA-55)
 - **Web search** (`/admin/web-search`) — web search sources by
   `interface_type`, fail-closed (DA-57)

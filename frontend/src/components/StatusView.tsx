@@ -133,9 +133,13 @@ export function StatusView() {
                   <span className="status-name" style={{ width: 210 }}>
                     {CONNECTOR_LABELS[name] ?? name}
                   </span>
-                  <span className="status-note">{info.note}</span>
+                  <span className="status-note">
+                    {info.setting
+                      ? t(`status.connectorNote.${info.status}`, { setting: info.setting })
+                      : info.note}
+                  </span>
                   <span className="status-tag" style={{ color: tagColor(info.status) }}>
-                    {info.status}
+                    {t(`status.connectorStatus.${info.status}`)}
                   </span>
                 </div>
               );
@@ -261,9 +265,13 @@ export function StatusView() {
                 <span
                   className="status-note"
                   style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10 }}
-                  title={p.confidential_reason}
+                  title={
+                    p.confidential_reason_code
+                      ? t(`sovereigntyReason.${p.confidential_reason_code}`, p.confidential_reason_params)
+                      : p.confidential_reason
+                  }
                 >
-                  {p.locality} · {p.origin ?? t('status.noOrigin')}
+                  {t(`status.locality.${p.locality}`)} · {p.origin ?? t('status.noOrigin')}
                 </span>
                 <span className="status-tag" style={{ color: p.may_receive_confidential ? '#10B981' : '#F59E0B' }}>
                   {p.may_receive_confidential ? t('status.confidentialOk') : p.may_receive_public ? t('status.publicOnly') : t('status.blocked')}

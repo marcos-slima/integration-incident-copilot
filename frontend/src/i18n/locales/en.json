@@ -191,7 +191,21 @@
     "publicOnly": "public only",
     "blocked": "blocked",
     "confidentialTo": "Confidential data may go to: {{list}}.",
-    "noProvider": "no provider"
+    "noProvider": "no provider",
+    "connectorNote": {
+      "real": "{{setting}} configured",
+      "mock": "{{setting}} not configured",
+      "misconfigured": "{{setting}} configured, but the 'pyrfc' package/NetWeaver RFC SDK is missing"
+    },
+    "connectorStatus": {
+      "real": "real",
+      "mock": "demo",
+      "misconfigured": "incomplete"
+    },
+    "locality": {
+      "local": "local",
+      "cloud": "cloud"
+    }
   },
   "errors": {
     "budget_exhausted": "Diagnosis budget exhausted: no eligible provider fits the configured limit. Adjust DIAGNOSIS_BUDGET_USD or enable a local provider.",
@@ -202,5 +216,14 @@
     "rateLimited": "Request limit reached. Wait and try again.",
     "generic": "Error {{status}}: {{message}}",
     "ref": " (ref. {{id}})"
+  },
+  "sovereigntyReason": {
+    "origin_unresolved": "origin not resolved for provider '{{provider}}'",
+    "public_unrestricted": "public data: origin {{origin}} is not restricted",
+    "local_origin": "local origin {{origin}}, under the operator's jurisdiction",
+    "mode_required": "confidential data to the cloud requires data_sovereignty_mode='cloud_with_dlp' (current: '{{mode}}')",
+    "allowlist_empty": "confidential data to the cloud requires the origin in CONFIDENTIAL_ALLOWED_ORIGINS (empty; destination {{origin}})",
+    "allowlisted": "origin {{origin}} is on the confidential-data allowlist",
+    "not_allowlisted": "origin {{origin}} is not in CONFIDENTIAL_ALLOWED_ORIGINS ({{allowed}})"
   }
 }

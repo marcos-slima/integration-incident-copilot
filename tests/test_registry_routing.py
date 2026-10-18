@@ -432,3 +432,28 @@ def test_migration_020_chain_and_model_columns():
     for col in ("diagnosis_budget_usd", "llm_routing_cost_weight", "llm_routing_latency_weight"):
         assert col in LlmRuntimeConfig.__table__.columns and f'"{col}"' in mig
     assert LlmCallLatency.__tablename__ == "llm_call_latency" and '"llm_call_latency"' in mig
+
+
+# --- DA-74: motivo com codigo estavel para a UI traduzir -----------------
+
+
+def test_detail_items_carry_reason_code_and_params():
+    d = _decide(
+        _snap(
+            _m("sap-only", LOCAL, domains=("sap",)),
+            _m("big", GROQ, tier="premium", id="3"),
+            _m("gpt-4o-mini", OPENAI, id="4"),
+        ),
+        sensitivity="confidential",
+        domain="saas",
+    )
+    by = _by_model(d)
+    assert by["sap-only"].detail_items == (
+        {"reason": "dominio_nao_atendido", "params": {"domain": "saas", "domains": "sap"}},
+    )
+    sov = by["gpt-4o-mini"].detail_items[0]
+    assert sov["reason"] == "soberania_bloqueada"
+    assert sov["params"]["code"] == "mode_required"
+    # o texto (pt) do audit continua alinhado com os itens
+    assert len(by["big"].detail) == len(by["big"].detail_items)
+    assert by["big"].detail_items[-1]["reason"] == "nivel_nao_autorizado"

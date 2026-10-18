@@ -788,8 +788,9 @@ contornava esse último problema.
 **Validação em Kubernetes real (2026-10-18, k3d/k3s v1.35).** O bundle foi
 aplicado sem cópia via o overlay `deploy/local` (`scripts/k3d-validate.sh`):
 rollout dos 4 Deployments (API, worker, Qdrant, Redis), probes `/health` e
-`/ready`, `401` sem chave, indexação dos 15 documentos dentro do Pod, dois
-`/diagnose` com `200` e o HPA escalando de 1 para 2 réplicas sob carga.
+`/ready`, `401` sem chave, indexação dos 15 documentos dentro do Pod,
+`/diagnose` com `200` pelo rule engine e pelo LLM local (Ollama do host, soberania
+`strict`) e o HPA escalando de 1 para 2 réplicas sob carga.
 Evidência em `docs/EVIDENCIA_K3D_2026-10-18.md`. A validação achou dois bugs
 reais, corrigidos: `/app/data` sem permissão de escrita para o `appuser`
 (o ingest falhava dentro do Pod, também no Kyma) e o script regerando o Secret

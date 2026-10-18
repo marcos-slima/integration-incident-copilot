@@ -2,8 +2,8 @@
 
 Cenário G (Kubernetes genérico, ver `deploy/local/README.md`): o bundle `deploy/kyma/` aplicado sem cópia
 num Kubernetes real, via o overlay `deploy/local/` e `scripts/k3d-validate.sh`.
-Log completo gerado localmente em `reports/k3d-validation-20261018-114432.log`
-(diretório fora do versionamento).
+Logs completos gerados localmente em `reports/k3d-validation-20261018-114432.log` e
+`reports/k3d-validation-20261018-115014.log` (diretório fora do versionamento).
 
 ## Ambiente
 
@@ -25,7 +25,9 @@ Log completo gerado localmente em `reports/k3d-validation-20261018-114432.log`
 | `GET /ready` | `200` |
 | `POST /diagnose` sem `X-API-Key` | `401` |
 | `POST /diagnose` IDoc 51 | `200`, `rule_engine:sap_idoc_status_51` |
-| `POST /diagnose` timeout OData via CPI | `200`, `rule_engine:http_timeout` |
+| `POST /diagnose` timeout OData via CPI (1ª execução) | `200`, `rule_engine:http_timeout` |
+| `POST /diagnose` Salesforce sem erro visível (2ª execução) | `200`, **`llm_provider_used: ollama`**, `agent_domain: saas`, `matched_source: salesforce_case_sap_sync_failure.md`, confiança 0,30 |
+| Índice | 70 pontos em `sap_incident_docs` |
 | HPA | escalou de 1 para 2 réplicas sob carga (`cpu: 398%/70%`) |
 
 ## Bugs encontrados e corrigidos
@@ -44,10 +46,11 @@ Log completo gerado localmente em `reports/k3d-validation-20261018-114432.log`
 
 ## Limites desta validação
 
-- Os dois `/diagnose` foram resolvidos pelo rule engine: **o caminho do LLM
-  local não foi exercitado no cluster**. O script foi ajustado para usar no
-  segundo caso uma descrição que nenhuma regra casa (garantido por
-  `tests/test_local_overlay.py`); a próxima execução cobre o LLM.
+- O caminho do LLM local foi exercitado só na 2ª execução (a 1ª teve os dois casos
+  resolvidos pelo rule engine); o caso usado é garantido fora do rule engine por
+  `tests/test_local_overlay.py`.
+- A confiança do diagnóstico pelo LLM ficou em 0,30: o pipeline funciona no cluster,
+  mas a qualidade do diagnóstico não é o que esta validação mede.
 - Não cobre o que é específico do Kyma: `APIRule`, Istio, OIDC do BTP.
 - Qdrant e Redis sem persistência; sem Postgres (persistência e admin
   desligados).

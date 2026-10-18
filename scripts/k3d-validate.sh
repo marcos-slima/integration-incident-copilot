@@ -87,12 +87,23 @@ for d in integration-incident-copilot integration-incident-copilot-worker; do
     "{\"spec\":{\"template\":{\"spec\":{\"hostAliases\":[{\"ip\":\"$HOST_IP\",\"hostnames\":[\"host.docker.internal\"]}]}}}}"
 done
 
+# A tag e sempre :local - um `apply` sem mudanca de spec nao recria o Pod, e
+# o Pod antigo seguiria com a imagem anterior. Restart forca o Pod novo a
+# usar a imagem recem-importada.
+kubectl -n "$NS" rollout restart deployment/integration-incident-copilot deployment/integration-incident-copilot-worker
+
 step "6. Rollout"
 for d in qdrant redis integration-incident-copilot integration-incident-copilot-worker; do
   kubectl -n "$NS" rollout status "deployment/$d" --timeout=600s \
     || { kubectl -n "$NS" describe deployment "$d"; kubectl -n "$NS" logs "deployment/$d" --tail=80 || true; fail "rollout de $d"; }
 done
 kubectl -n "$NS" get pods,svc,hpa -o wide
+echo "imagem em execucao:"
+kubectl -n "$NS" get pods -l app.kubernetes.io/name=integration-incident-copilot \
+  -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.containerStatuses[0].imageID}{"\n"}{end}'
+docker image inspect "$IMAGE" --format 'imagem local: {{.Id}}'
+kubectl -n "$NS" exec deployment/integration-incident-copilot -- sh -c 'id; ls -ld /app/data'
+
 
 step "7. Indexacao da base de incidentes (sample_docs da imagem)"
 kubectl -n "$NS" exec deployment/integration-incident-copilot -- \

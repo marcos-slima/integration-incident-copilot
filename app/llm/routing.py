@@ -57,6 +57,9 @@ class RoutingRequest:
     primary_provider: str
     fallback_provider: str | None
     config: Settings
+    # Override do nome do modelo (o mesmo `model_name` que o gateway repassa
+    # a get_chat_model). None = o modelo configurado de cada provider.
+    model_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -205,14 +208,46 @@ def _circuit_is_open(provider: str, cfg: Settings) -> bool:
     return cb.is_open(provider, cfg.llm_gateway_circuit_cooldown_seconds)
 
 
-def _estimate_cost_usd(provider: str, context_tokens: int, cfg: Settings) -> float:
+def _model_id_for(provider: str, model_name: str | None, cfg: Settings) -> str | None:
+    """Nome do modelo que o provider vai chamar - o mesmo que get_chat_model
+    usa (app/llm/factory.py): Azure endereca por deployment; os demais por
+    `model_name` (override do caller) ou `llm_model`."""
+    if provider == "azure_openai":
+        return cfg.azure_openai_deployment or None
+    return model_name or cfg.llm_model or None
+
+
+def _registry_prices_for(
+    provider: str, origin: str, model_name: str | None, cfg: Settings
+) -> tuple[float | None, float | None] | None:
+    """Preco registrado do modelo que o provider vai de fato chamar.
+
+    Antes (bug corrigido em 2026-10-18) a consulta usava o ROTULO do
+    provider ("openai") como model_id; nenhum registro casa com isso, e a
+    estimativa caia sempre na tabela interna (para gpt-4o-mini, ~33x o
+    preco real), barrando candidatos por orcamento sem motivo.
+
+    Mesma regra de resolucao do modo gerenciado (app/admin/runtime.py,
+    DA-46): primeiro o modelo exato da origem; no modo gerenciado, sem ele,
+    o default habilitado da origem - que e o modelo que vai responder."""
+    from app.admin.repository import registry_default_prices, registry_prices
+
+    model_id = _model_id_for(provider, model_name, cfg)
+    prices = registry_prices(origin, model_id) if model_id else None
+    if prices is None and cfg.llm_registry_db:
+        prices = registry_default_prices(origin)
+    return prices
+
+
+def _estimate_cost_usd(
+    provider: str, context_tokens: int, cfg: Settings, model_name: str | None = None
+) -> float:
     """Estima custo em USD para a chamada usando preços reais do registry.
 
-    Usa `registry_prices()` se DATABASE_URL estiver configurada e o provider
-    tiver preços registrados. Fallback para tabela interna se não disponível.
+    Usa o preço registrado do modelo efetivo do provider (ver
+    `_registry_prices_for`). Fallback para tabela interna se não houver.
 
     Preços por 1M tokens (in/out) são convertidos para custo por token."""
-    from app.admin.repository import registry_prices
 
     # Tabela interna como fallback
     _PRICE_PER_1K_TOKENS_USD: dict[str, float] = {
@@ -230,7 +265,7 @@ def _estimate_cost_usd(provider: str, context_tokens: int, cfg: Settings) -> flo
     # Tenta obter preços reais do registry
     origin = resolve_provider_origin(provider, cfg)
     if origin:
-        prices = registry_prices(origin, provider)
+        prices = _registry_prices_for(provider, origin, model_name, cfg)
         if prices and prices[0] is not None and prices[1] is not None:
             # Preços são por 1M tokens, converter para custo total
             price_in_per_token = prices[0] / 1_000_000.0
@@ -295,7 +330,9 @@ def evaluate_routing(request: RoutingRequest) -> RoutingDecision:
             )
 
         # 1.2 Orçamento
-        estimated_cost = _estimate_cost_usd(provider, request.context_tokens, cfg)
+        estimated_cost = _estimate_cost_usd(
+            provider, request.context_tokens, cfg, model_name=request.model_name
+        )
         if estimated_cost > request.budget_remaining_usd:
             candidate_rejections.append(RejectionReason.BUDGET_EXCEEDED)
             logger.warning(

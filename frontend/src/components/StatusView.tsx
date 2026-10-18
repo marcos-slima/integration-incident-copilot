@@ -7,9 +7,9 @@
 // derivado do .env atual do backend) ao montar o componente.
 
 import { useEffect, useState } from 'react';
-import { callHealth } from '../api/health';
+import { callHealth, callLlmPolicy } from '../api/health';
 import { ApiError } from '../api/diagnose';
-import type { ConnectorHealthStatus, HealthResponse, InterfaceType } from '../types/models';
+import type { ConnectorHealthStatus, HealthResponse, InterfaceType, LlmPolicy } from '../types/models';
 
 // Nome de exibicao de cada conector - so rotulagem, o estado vem do backend
 const CONNECTOR_LABELS: Record<InterfaceType, string> = {
@@ -63,9 +63,23 @@ export function StatusView() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [policy, setPolicy] = useState<LlmPolicy | null>(null);
+  const [policyError, setPolicyError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
+
+    // DA-43/DA-66: independente do /health - uma falha aqui nao esconde o resto
+    callLlmPolicy()
+      .then((p) => {
+        if (!cancelled) setPolicy(p);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setPolicyError(
+          e instanceof ApiError ? `Erro ${e.status}: ${e.message}` : 'Falha ao consultar /llm/policy.',
+        );
+      });
 
     callHealth()
       .then((res) => {
@@ -217,6 +231,46 @@ export function StatusView() {
           </div>
         </>
       )}
+
+      <div className="status-section">
+        <div className="status-section-label">Soberania do dado (GET /llm/policy)</div>
+        {policyError && <p className="page-sub" style={{ color: '#EF4444' }}>{policyError}</p>}
+        {policy && (
+          <>
+            <div className="status-row">
+              <span className="status-dot status-dot-ok" />
+              <span className="status-name" style={{ width: 150 }}>Modo</span>
+              <span className="status-note">
+                {policy.data_sovereignty_mode} · sensibilidade padrão {policy.sensitivity_default}
+                {' · '}teto por chamada US$ {policy.limits.max_cost_usd.toFixed(2)}
+              </span>
+            </div>
+            {Object.entries(policy.providers).map(([name, p]) => (
+              <div key={name} className="status-row">
+                <span className={`status-dot ${p.may_receive_confidential ? 'status-dot-ok' : p.may_receive_public ? 'status-dot-warn' : 'status-dot-mock'}`} />
+                <span className="status-name" style={{ width: 150 }}>
+                  {name}
+                  {name === policy.routing.primary ? ' (primário)' : ''}
+                  {name === policy.routing.fallback ? ' (fallback)' : ''}
+                </span>
+                <span
+                  className="status-note"
+                  style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10 }}
+                  title={p.confidential_reason}
+                >
+                  {p.locality} · {p.origin ?? 'sem origem configurada'}
+                </span>
+                <span className="status-tag" style={{ color: p.may_receive_confidential ? '#10B981' : '#F59E0B' }}>
+                  {p.may_receive_confidential ? 'confidencial ok' : p.may_receive_public ? 'só público' : 'bloqueado'}
+                </span>
+              </div>
+            ))}
+            <p className="status-note" style={{ marginTop: 8 }}>
+              Dado confidencial pode ir para: {policy.routing.allowed_for_confidential.join(', ') || 'nenhum provedor'}.
+            </p>
+          </>
+        )}
+      </div>
     </div>
   );
 }

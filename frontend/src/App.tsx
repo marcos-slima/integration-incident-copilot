@@ -88,6 +88,7 @@ function App() {
         historyCount={history.length}
         username={session.username}
         onLogout={handleLogout}
+        lastResult={history.at(-1)?.result}
       />
       <main className="main">
         {view === 'diagnose' && (

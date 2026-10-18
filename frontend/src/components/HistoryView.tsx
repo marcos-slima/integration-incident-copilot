@@ -50,6 +50,9 @@ export function HistoryView({ history }: HistoryViewProps) {
             {item.identifier && (
               <span className="hist-id">{item.identifier}</span>
             )}
+            {item.result.escalation?.should_escalate && (
+              <span className="hist-escalate">revisão humana</span>
+            )}
             <span className="hist-time">
               {item.ts.toLocaleTimeString('pt-BR')}
             </span>

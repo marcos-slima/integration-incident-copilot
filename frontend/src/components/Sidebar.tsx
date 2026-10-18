@@ -6,6 +6,8 @@
 //   onChange: (v: string) => void → função que recebe string, sem retorno
 //   onFetch: () => Promise<Data>  → função assíncrona que retorna Data
 
+import type { DiagnosisResponse } from '../types/models';
+
 type ViewId = 'diagnose' | 'history' | 'status';
 
 interface SidebarProps {
@@ -14,6 +16,7 @@ interface SidebarProps {
   historyCount: number;            // badge do histórico
   username?: string;               // DA-54: quem está logado
   onLogout?: () => void;           // DA-54: volta para a tela de login
+  lastResult?: DiagnosisResponse;  // DA-53: quem respondeu o último diagnóstico
 }
 
 interface NavItem {
@@ -23,7 +26,7 @@ interface NavItem {
   icon: React.ReactNode;           // qualquer JSX válido
 }
 
-export function Sidebar({ view, setView, historyCount, username, onLogout }: SidebarProps) {
+export function Sidebar({ view, setView, historyCount, username, onLogout, lastResult }: SidebarProps) {
   const items: NavItem[] = [
     {
       id: 'diagnose',
@@ -99,11 +102,23 @@ export function Sidebar({ view, setView, historyCount, username, onLogout }: Sid
         ))}
       </nav>
 
-      {/* Modelo ativo */}
+      {/* DA-53: o modelo vem da proveniência do último diagnóstico. Antes era
+          um nome fixo ("qwen3.8 · 27B") que não refletia o backend. */}
       <div className="model-info">
-        <div className="model-label">modelo ativo</div>
-        <div className="model-name">qwen3.8</div>
-        <div className="model-meta">27B · 17.7 GB</div>
+        <div className="model-label">último diagnóstico</div>
+        {!lastResult && <div className="model-meta">nenhum nesta sessão</div>}
+        {lastResult && lastResult.llm_provider_used === 'rule_engine' && (
+          <>
+            <div className="model-name">rule engine</div>
+            <div className="model-meta">sem LLM · custo zero</div>
+          </>
+        )}
+        {lastResult && lastResult.llm_provider_used !== 'rule_engine' && (
+          <>
+            <div className="model-name">{lastResult.llm_model ?? lastResult.llm_provider_used ?? '—'}</div>
+            <div className="model-meta">{lastResult.llm_provider_used ?? 'provedor desconhecido'}</div>
+          </>
+        )}
       </div>
 
       {/* DA-54: sessão — quem está logado e saída */}

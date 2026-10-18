@@ -1,37 +1,37 @@
 {% extends "base.html" %}
-{% block title %}Metering · Admin{% endblock %}
+{% block title %}{{ t('nav.usage') }} · Admin{% endblock %}
 {% block content %}
 <main>
-  <h2>Consumo real de tokens (período aberto)</h2>
+  <h2>{{ t('usage.title') }}</h2>
   <p style="color: var(--text); margin-bottom: 1.5rem; line-height: 1.6;">
-    Acompanhe o uso de tokens por modelo com limite mensal e custo em USD.
+    {{ t('usage.intro') }}
   </p>
 
   <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-      <h3 style="margin: 0; color: var(--text);">Consumo por Modelo</h3>
-      <button class="btn btn-primary" data-click="loadUsage">🔄 Recarregar</button>
+      <h3 style="margin: 0; color: var(--text);">{{ t('usage.byModel') }}</h3>
+      <button class="btn btn-primary" data-click="loadUsage">🔄 {{ t('common.reload') }}</button>
     </div>
 
     <div style="overflow-x: auto;">
       <table id="usage">
         <thead>
           <tr>
-            <th style="width: 120px;">Origem</th>
-            <th>Modelo</th>
-            <th style="width: 90px;">Tokens in</th>
-            <th style="width: 90px;">Tokens out</th>
-            <th style="width: 90px;">Total</th>
-            <th style="width: 80px;">Requests</th>
-            <th style="width: 70px;">Falhas</th>
-            <th style="width: 80px;">Custo USD</th>
-            <th style="width: 90px;">Limite/mês</th>
-            <th style="width: 70px;">Consumido</th>
-            <th style="width: 70px;">Ação</th>
+            <th style="width: 120px;">{{ t('common.origin') }}</th>
+            <th>{{ t('common.model') }}</th>
+            <th style="width: 90px;">{{ t('usage.tokensIn') }}</th>
+            <th style="width: 90px;">{{ t('usage.tokensOut') }}</th>
+            <th style="width: 90px;">{{ t('usage.total') }}</th>
+            <th style="width: 80px;">{{ t('usage.requests') }}</th>
+            <th style="width: 70px;">{{ t('usage.failures') }}</th>
+            <th style="width: 80px;">{{ t('usage.costUsd') }}</th>
+            <th style="width: 90px;">{{ t('common.monthlyLimit') }}</th>
+            <th style="width: 70px;">{{ t('usage.consumed') }}</th>
+            <th style="width: 70px;">{{ t('common.action') }}</th>
           </tr>
         </thead>
         <tbody id="usage-body">
-          <tr><td colspan="11" style="text-align: center; padding: 2rem;">Carregando...</td></tr>
+          <tr><td colspan="11" style="text-align: center; padding: 2rem;">{{ t('common.loading') }}</td></tr>
         </tbody>
       </table>
     </div>
@@ -39,8 +39,7 @@
 
   <div class="card">
     <p style="color: var(--text); margin: 0;">
-      <strong>Percentual =</strong> (tokens in+out) / limite mensal cadastrado em <em>Modelos</em>.
-      Sem limite cadastrado, o percentual fica em branco.
+      {{ t_html('usage.percentHelp') }}
     </p>
   </div>
 

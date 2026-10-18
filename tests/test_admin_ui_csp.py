@@ -28,6 +28,10 @@ client = TestClient(app)
 def test_template_sem_script_inline(tpl: Path) -> None:
     html = tpl.read_text(encoding="utf-8")
     for tag in re.findall(r"<script\b[^>]*>", html, flags=re.IGNORECASE):
+        # DA-73: bloco de dados (type="application/json") nao e' executado e a
+        # CSP script-src nao se aplica - e' por onde o catalogo de i18n chega.
+        if 'type="application/json"' in tag:
+            continue
         assert "src=" in tag, f"{tpl.name}: <script> inline seria bloqueado pela CSP: {tag}"
 
 

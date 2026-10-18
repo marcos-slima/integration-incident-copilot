@@ -2883,20 +2883,30 @@ Cada classe define: retry? backoff? abre circuito? failover? escala?
 
 **A solução.** Checkpointing **opt-in** (`CHECKPOINTING_ENABLED=false` por default):
 
-- `build_graph(checkpointer=...)` compila o grafo com o checkpointer; `get_graph()` usa `PostgresSaver.from_conn_string(DATABASE_URL)` + `setup()` quando a flag está ligada (exige `DATABASE_URL`).
+- `build_graph(checkpointer=...)` compila o grafo com o checkpointer; `get_graph()` usa `build_postgres_checkpointer(DATABASE_URL)` quando a flag está ligada (exige `DATABASE_URL`; ver correção abaixo).
 - `thread_id` = `incident_id`, passado por `run_diagnosis` só com a flag ligada.
 - O import de `langgraph.checkpoint.postgres` é condicional: quem não liga a flag não precisa de libpq. Com a flag, o driver vem de `psycopg[binary]` (a imagem não instala libpq).
 - Retomada é a semântica nativa do LangGraph: `invoke(None, {"configurable": {"thread_id": ...}})` continua do último checkpoint, sem reexecutar nós concluídos. Não há retomada de geração parcial.
 
 **Correção aplicada.** `run_diagnosis` passava `thread_id` posicional e, com `timeout_seconds=None`, ele caía no parâmetro `timeout_seconds`: o checkpointer nunca recebia o `thread_id` e `min(limit, dict)` quebrava com a flag ligada. Agora é passado por nome.
 
-**Validação.** `tests/test_checkpointing.py`, com o grafo real e nós fake com contador (sem Qdrant/Ollama/Postgres): retomada após falha num nó intermediário sem reexecutar `supervisor`/`connector`/`retrieve`; controle sem checkpointer (tudo roda de novo); isolamento entre `thread_id`; `thread_id` só com a flag ligada e nunca em `timeout_seconds`; default sem import do `PostgresSaver`.
+**Validação.** `tests/test_checkpointing.py`, com o grafo real e nós fake com contador (sem Qdrant/Ollama/Postgres): retomada após falha num nó intermediário sem reexecutar `supervisor`/`connector`/`retrieve`; controle sem checkpointer (tudo roda de novo); isolamento entre `thread_id`; `thread_id` só com a flag ligada e nunca em `timeout_seconds`; default sem import do Postgres; `get_graph` usa o builder com redação; normalização da URL; checkpoint sem e-mail/CPF (com controle provando o vazamento sem a redação); retomada lê estado redigido com os tipos originais. `tests/test_checkpointing_postgres.py` repete retomada + ausência de PII contra Postgres real.
+
+**PII no checkpoint (fechado).** O estado do grafo guarda `description`/`logs`/`payload`/`connector_data` crus, porque o conector e o RAG precisam do texto original e a redação (DA-30) só acontece ao montar o prompt. Em vez de redigir a entrada (o que mudaria o diagnóstico), `app/agent/checkpointing.py::RedactingCheckpointMixin` redige **só o que o checkpointer grava**: cada valor de canal passa por `redact_preserving_types` em `put`/`put_writes` (e variantes async).
+
+- A redação é no saver, não no serializer: o `PostgresSaver` grava `str`/`int`/`bool`/`None` **inline** no jsonb do checkpoint, sem passar pelo serde. Um serializer com redação deixaria `description` em claro no banco.
+- A estrutura de controle (`channel_versions`, ids) nunca é tocada: as versões têm sequências longas de dígitos que a regra de número de IDoc reescreveria, corrompendo o checkpoint (o estado retomado vinha vazio).
+- `redact_preserving_types` preserva o tipo de dataclasses e modelos Pydantic (diferente de `redact_pii_deep`, que os converte em dict): na retomada, `ConnectorResult.is_mock` continua acessível.
+
+**Construção do PostgresSaver (corrigido).** `get_graph()` chamava `PostgresSaver.from_conn_string(...)` e depois `.setup()` no resultado, mas `from_conn_string` é um context manager: com a flag ligada o app falhava ao montar o grafo. Além disso, `DATABASE_URL` usa o dialeto SQLAlchemy (`postgresql+asyncpg://`), que a libpq não aceita. `build_postgres_checkpointer` normaliza a URL (`libpq_url`), abre uma conexão de vida longa e usa o saver com redação.
 
 **Limitações (registradas de propósito).**
-- **PII em claro no checkpoint (gap aberto):** o estado inicial guarda `description`/`logs` crus; a redação (DA-30) só acontece ao montar o prompt. Com a flag ligada, e-mail/CPF ficam no checkpoint. Documentado por um teste `xfail(strict=True)` que passará a falhar, avisando, quando a redação for aplicada antes da persistência. **Não ligar a flag com dado real até fechar este gap.**
-- Testado só com `MemorySaver`; o `PostgresSaver` real não tem teste automatizado.
+- Um diagnóstico **retomado** lê o estado redigido (e-mail/CPF já substituídos): é o preço de nunca gravar PII. A redação cobre o que a DA-30 reconhece (e-mail, CPF, CNPJ, número de IDoc, tokens, senhas); nomes próprios e endereços não.
+- `tests/test_checkpointing_postgres.py` (marcado `integration`) valida retomada e ausência de PII nas tabelas do checkpointer contra Postgres real; os testes unitários usam `RedactingMemorySaver`.
+- Conexão única compartilhada pelas threads do pool do grafo (o `PostgresSaver` serializa com lock), sem reconexão automática.
 - Não existe endpoint/API de retomada: a retomada só é possível chamando o grafo com o mesmo `thread_id`. `run_diagnosis` sempre gera um `incident_id` novo.
-- Fernet de `evidence_json` (DA-60) protege a tabela `incidents`, não as tabelas do checkpointer.
+- Fernet de `evidence_json` (DA-60) protege a tabela `incidents`, não as tabelas do checkpointer; nelas o texto fica redigido, não cifrado.
+- O LangGraph avisa ao desserializar `ConnectorResult` (tipo não registrado no allowlist do msgpack); com o modo estrito de desserialização do LangGraph ligado, seria bloqueado.
 
 ---
 

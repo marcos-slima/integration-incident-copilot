@@ -111,3 +111,17 @@ def test_dockerfile_makes_data_dir_writable_for_appuser():
     mkdir = text.index("install -d -o appuser -g appuser /app/data")
     first_copy = text.index("COPY --chown=appuser:appuser data/")
     assert mkdir < first_copy
+
+
+def test_smoke_llm_case_is_not_resolved_by_rule_engine():
+    """O 2o /diagnose do smoke test precisa exercitar o LLM local; se uma
+    regra casar, o caminho do LLM no cluster fica sem prova (aconteceu com o
+    caso de timeout OData, resolvido por rule_engine:http_timeout)."""
+    import re
+
+    from app.agent.rules import match_known_error
+
+    text = (ROOT / "scripts" / "k3d-validate.sh").read_text(encoding="utf-8")
+    m = re.search(r'"description":"(Pedido criado no Salesforce[^"]+)"', text)
+    assert m, "caso LLM do smoke test nao encontrado no script"
+    assert not match_known_error(m.group(1), has_connector_data=False)

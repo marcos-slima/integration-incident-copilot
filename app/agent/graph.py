@@ -47,6 +47,7 @@ if settings.checkpointing_enabled:
     from langgraph.checkpoint.postgres import PostgresSaver
 
 _logger = logging.getLogger(__name__)
+from app.llm.budget import close_task_budget, open_task_budget
 from app.services.incident_recorder import record_incident
 
 if settings.langfuse_configured:
@@ -270,11 +271,19 @@ def run_diagnosis(
     thread_id = (
         {"configurable": {"thread_id": incident_id}} if settings.checkpointing_enabled else None
     )
-    final_state = (
-        _invoke_graph_with_timeout(initial_state, thread_id)
-        if timeout_seconds is None
-        else _invoke_graph_with_timeout(initial_state, timeout_seconds, thread_id)
-    )
+    # DA-69 (correcao): thread_id por NOME. Antes era posicional e, com
+    # timeout_seconds=None, caia no parametro timeout_seconds - o
+    # checkpointer nunca recebia o thread_id e min(limit, dict) quebrava.
+    # DA-67: orcamento do diagnostico, fechado mesmo em erro/timeout.
+    open_task_budget(incident_id, settings.diagnosis_budget_usd)
+    try:
+        final_state = _invoke_graph_with_timeout(
+            initial_state, timeout_seconds=timeout_seconds, thread_id=thread_id
+        )
+    finally:
+        spent = close_task_budget(incident_id)
+        if spent is not None:
+            _logger.info("[budget] %s", spent.as_log_fields())
     latency_ms = int((time.monotonic() - started_at) * 1000)
     diagnosis = final_state.get("diagnosis", {})
 

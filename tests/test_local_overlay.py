@@ -102,3 +102,12 @@ def test_validation_script_is_executable_and_checks_apirule_removal():
     text = script.read_text(encoding="utf-8")
     assert "kubectl apply -k" in text and "deploy/local" in text
     assert "APIRule nao foi removido" in text
+
+
+def test_dockerfile_makes_data_dir_writable_for_appuser():
+    """Regressao (validacao k3d): o ingest grava estado e manifesto em
+    /app/data; criado pelo COPY, o diretorio ficava com dono root."""
+    text = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    mkdir = text.index("install -d -o appuser -g appuser /app/data")
+    first_copy = text.index("COPY --chown=appuser:appuser data/")
+    assert mkdir < first_copy

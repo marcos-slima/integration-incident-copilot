@@ -2814,40 +2814,27 @@ A decisão é logada em audit log estruturado e exposta via `GET /llm/policy` (D
 
 ### 57. Token budgeting e orçamento por tarefa (DA-67)
 
-**O problema.** O AI Gateway v1 (DA-26) usa uma heurística simples (`len(text) // 4`) para estimar tokens e custo. Isso é impreciso e não usa preços reais do registry. A DA-67 estabelece como substituir essa heurística por contagem por família (tokenizer real) e preços reais.
+**O problema.** O AI Gateway v1 (DA-26) estimava tokens com `len(text) // 4` e comparava o custo de **cada chamada** com um teto fixo (`llm_gateway_max_cost_usd`). Um diagnóstico com várias chamadas LLM (ReAct, retry, failover) nunca acumulava consumo: o "orçamento" era por chamada, não por tarefa.
 
-**O caso de uso.** Um operador quer saber o custo real de uma chamada LLM, não uma estimativa heurística. A resposta deve usar:
-- Tokenizer real (tiktoken) para contar tokens
-- Preços reais do registry (`price_in_per_1m`, `price_out_per_1m`)
-- Budget ledger por diagnóstico (estimado × real)
+**A solução.**
 
-**A solução.** Substituir a heurística por:
+1. **Tokenizer aproximado** (`app/llm/gateway.py::_estimate_tokens`): `tiktoken` com `cl100k_base`, carregado de forma lazy e em cache. Qualquer falha de carga (tiktoken ausente, BPE sem rede em container/Kyma) cai na heurística `len//4`, é lembrada (`_encoding_failed`, sem nova tentativa a cada chamada) e logada uma vez. Nunca propaga exceção.
+2. **Preços do registry** (`app/llm/routing.py::_estimate_cost_usd`): `registry_prices()` quando há `DATABASE_URL`; senão, a tabela interna.
+3. **Orçamento por diagnóstico** (`app/llm/budget.py`): ledger em memória por `incident_id`, aberto em `run_diagnosis` com `DIAGNOSIS_BUDGET_USD` (default 1.00) e fechado no `finally`, mesmo em erro ou timeout.
+   - Teto efetivo de cada chamada = `min(llm_gateway_max_cost_usd, restante / (1 + LLM_BUDGET_RESERVE_RATIO))`. A reserva (default 0.25) cobre o erro do tokenizer aproximado e saída maior que a prevista.
+   - Após sucesso, o gateway debita o custo **real** (metering DA-48) ou, sem ele, o estimado. Chamada que falhou não é debitada.
+   - **Degradação:** o Policy Engine (DA-66) rejeita com `orcamento_excedido` os candidatos que não cabem; um candidato mais barato que ainda caiba (ex.: Ollama local) segue elegível.
+   - **Esgotamento:** se o orçamento do diagnóstico barra todos os candidatos, o gateway levanta `BudgetExhaustedError`, classificada como `FailureClass.BUDGET_EXHAUSTED` (DA-68: sem retry, sem failover). Se quem barra é o teto por chamada, segue `PolicyViolationError` (comportamento DA-26).
+4. **Ledger persistente** (`record_budget_ledger`, migration `018_create_llm_budget_ledger.py`): estimado × real por chamada, best-effort.
 
-1. **Tokenizer real**: usar `langchain_text_splitters.TokenTextSplitter` ou `tiktoken` para contar tokens exatos
-2. **Preços reais**: usar `app/admin/repository.py::registry_prices()` para obter preços do registry
-3. **Budget ledger**: registrar estimado × real por diagnóstico (DA-48 metering já captura real)
-4. **Métrica Prometheus**: expor desvio estimado/real como métrica
-
-**Implementação.**
-- `app/llm/gateway.py`: substituir `_estimate_tokens()` por tokenizer real
-- `app/llm/routing.py`: usar `registry_prices()` em vez de tabela interna
-- `app/admin/metering.py`: já tem `record_usage_observed()` para real
-- `app/metrics.py`: adicionar métrica de desvio estimado/real
-
-**Validação.**
-- `tests/test_llm_gateway.py`: testes de orçamento com tokenizer real
-- `tests/test_admin_metering.py`: testes de metering com preços reais
-- Quality gate: `llm_baseline` valida que estimativa é mais precisa
+**Validação.** `tests/test_budget_ledger.py` (aritmética e reserva, acúmulo e esgotamento, degradação para candidato mais barato, teto por chamada continua valendo, chamada com falha não é debitada, mapeamento para `BUDGET_EXHAUSTED`, abertura e fechamento em `run_diagnosis` mesmo com erro); `tests/test_tokenizer_offline.py` (fallback para `ConnectionError`/`OSError`/`ImportError`, sem retentativa, um único aviso).
 
 **Limitações (registradas de propósito).**
-- Tokenizer real requer `tiktoken` (já está nas dependências)
-- Preços do registry requerem `DATABASE_URL` configurada
-- Budget ledger já existe (DA-48), falta apenas expor desvio
-
-**Próximos passos.**
-- DA-68: Matriz de falhas e failover tipado
-- DA-69: Checkpointing e execução resumível
-- DA-70: Métricas FinOps e dashboards
+- `cl100k_base` é o tokenizer da OpenAI: para Qwen/Ollama é uma **aproximação**. A contagem real vem de `prompt_eval_count` no metering (DA-48), usada no débito quando disponível.
+- O ledger por diagnóstico é **em memória, por processo**. O diagnóstico roda inteiro numa réplica, então basta na prática; não há orçamento agregado entre réplicas.
+- Após um timeout do watchdog (`diagnosis_timeout_seconds`), o orçamento já foi fechado; chamadas que a thread ainda em execução fizer valem só pelo teto por chamada.
+- Escalonamento humano (DA-44) ao esgotar o orçamento não foi ligado: o erro tipado sobe para o caller.
+- A tabela de preços interna é aproximada; não é cobrança real.
 
 ---
 
@@ -2892,33 +2879,24 @@ Cada classe define: retry? backoff? abre circuito? failover? escala?
 
 ### 59. Checkpointing e execução resumível (DA-69)
 
-**O problema.** O grafo LangGraph (`app/agent/graph.py`) não tem checkpointing. Se o processo for interrompido, o diagnóstico é perdido. A DA-69 estabelece como adicionar checkpointing com LangGraph.
+**O problema.** O grafo LangGraph (`app/agent/graph.py`) não tinha checkpointing: uma falha no meio do pipeline perdia o trabalho já feito (conector, RAG).
 
-**O caso de uso.** Um operador quer saber se o Copilot pode retomar um diagnóstico após uma interrupção (reinício de pod, crash, etc.). A resposta deve ser clara: sim, com checkpointing opt-in via `checkpointer=PostgresSaver`.
+**A solução.** Checkpointing **opt-in** (`CHECKPOINTING_ENABLED=false` por default):
 
-**A solução.** Adicionar checkpointing ao grafo LangGraph:
+- `build_graph(checkpointer=...)` compila o grafo com o checkpointer; `get_graph()` usa `PostgresSaver.from_conn_string(DATABASE_URL)` + `setup()` quando a flag está ligada (exige `DATABASE_URL`).
+- `thread_id` = `incident_id`, passado por `run_diagnosis` só com a flag ligada.
+- O import de `langgraph.checkpoint.postgres` é condicional: quem não liga a flag não precisa de libpq. Com a flag, o driver vem de `psycopg[binary]` (a imagem não instala libpq).
+- Retomada é a semântica nativa do LangGraph: `invoke(None, {"configurable": {"thread_id": ...}})` continua do último checkpoint, sem reexecutar nós concluídos. Não há retomada de geração parcial.
 
-- Usar `checkpointer=PostgresSaver` (DA-19)
-- `thread_id` = id do incidente
-- Retomada a partir do último nó concluído
-- Validar compatibilidade com `diagnosis_timeout_seconds`, Fernet de `evidence_json`, redação de PII
-- Idempotência de efeitos colaterais
+**Correção aplicada.** `run_diagnosis` passava `thread_id` posicional e, com `timeout_seconds=None`, ele caía no parâmetro `timeout_seconds`: o checkpointer nunca recebia o `thread_id` e `min(limit, dict)` quebrava com a flag ligada. Agora é passado por nome.
 
-**Implementação.**
-- `app/agent/graph.py`: adicionar `checkpointer=PostgresSaver`
-- `app/agent/state.py`: validar compatibilidade com Fernet/PII
-- `tests/test_checkpointing.py`: teste que interrompe e retoma
-
-**Validação.**
-- `tests/test_checkpointing.py`: teste que interrompe e retoma
-- Quality gate: `docs_code_references` valida que checkpointing está documentado
+**Validação.** `tests/test_checkpointing.py`, com o grafo real e nós fake com contador (sem Qdrant/Ollama/Postgres): retomada após falha num nó intermediário sem reexecutar `supervisor`/`connector`/`retrieve`; controle sem checkpointer (tudo roda de novo); isolamento entre `thread_id`; `thread_id` só com a flag ligada e nunca em `timeout_seconds`; default sem import do `PostgresSaver`.
 
 **Limitações (registradas de propósito).**
-- Checkpointing requer `DATABASE_URL` configurada
-- Opt-in via flag (default OFF para backward compatibility)
-
-**Próximos passos.**
-- DA-70: Métricas FinOps e dashboards
+- **PII em claro no checkpoint (gap aberto):** o estado inicial guarda `description`/`logs` crus; a redação (DA-30) só acontece ao montar o prompt. Com a flag ligada, e-mail/CPF ficam no checkpoint. Documentado por um teste `xfail(strict=True)` que passará a falhar, avisando, quando a redação for aplicada antes da persistência. **Não ligar a flag com dado real até fechar este gap.**
+- Testado só com `MemorySaver`; o `PostgresSaver` real não tem teste automatizado.
+- Não existe endpoint/API de retomada: a retomada só é possível chamando o grafo com o mesmo `thread_id`. `run_diagnosis` sempre gera um `incident_id` novo.
+- Fernet de `evidence_json` (DA-60) protege a tabela `incidents`, não as tabelas do checkpointer.
 
 ---
 

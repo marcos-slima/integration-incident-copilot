@@ -215,7 +215,6 @@ continuam em aberto:
 - **Kyma:** os manifests de `deploy/kyma/` nunca foram aplicados num cluster real.
 - **Conectores:** seis dos dez não foram validados contra instância real (tabela acima).
 - **Queda do banco vetorial:** com o Qdrant fora do ar, o `/diagnose` responde 500 mesmo quando uma regra resolveria.
-- **Brecha de prompt injection:** o resultado da busca web devolvido ao agente ReAct ainda não é sanitizado.
 
 Cada um está documentado em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 

@@ -53,7 +53,16 @@ if _raw_url:
 # `llm_models`/`llm_credentials`/`llm_usage`) — precisam estar no
 # metadata para o `alembic revision --autogenerate` enxerga-las.
 # Importar models SEM app/db.py (que tenta engine async):
-from app.admin.models import IntegrationSystem, LlmCredential, LlmModel, LlmUsage  # noqa: F401
+from app.admin.models import (  # noqa: F401
+    IntegrationSystem,
+    LlmBudgetLedger,
+    LlmCost,
+    LlmCredential,
+    LlmModel,
+    LlmRequests,
+    LlmTokens,
+    LlmUsage,
+)
 from app.contracts.baseline import SystemContract  # noqa: F401
 from app.db import Base
 from app.services.incident_repository import Incident  # noqa: F401

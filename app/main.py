@@ -23,6 +23,7 @@ from app.admin.routes import router as admin_router  # DA-46/47/48
 from app.admin.security import ensure_admin_key_configured
 from app.admin.ui import ui_router as admin_ui_router
 from app.agent.graph import run_diagnosis
+from app.api_errors import CodedHTTPException, coded_http_exception_handler
 from app.auth import ensure_session_secret_configured, verify_session_cookie
 from app.auth import router as auth_router
 from app.config import settings
@@ -299,6 +300,8 @@ app = FastAPI(
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# DA-73: erros com `code` estavel (app/api_errors.py) - as UIs traduzem pelo code
+app.add_exception_handler(CodedHTTPException, coded_http_exception_handler)
 # Avaliacao externa (medio prazo, item 1): sem este middleware,
 # "default_limits" do Limiter (app/rate_limit.py) so valia para rotas
 # com "@limiter.limit(...)" explicito - /a2a, /mcp e /health ficavam

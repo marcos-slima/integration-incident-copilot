@@ -25,6 +25,7 @@ from app.admin.crypto import decrypt_evidence
 from app.admin.models import WebUser
 from app.admin.repository import AdminRepository
 from app.admin.security import verify_admin_key
+from app.api_errors import api_error
 from app.config import settings
 from app.db import get_db_session
 from app.llm.origins import canonical_origin
@@ -47,12 +48,12 @@ def _origin_or_422(raw: str) -> str:
     """M-11: origem sempre na forma canonica (app/llm/origins.py)."""
     origin = canonical_origin(raw)
     if not origin:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"'{raw}' nao e uma origem: use a URL ou o host do provider "
-                "(ex.: api.groq.com, https://<recurso>.openai.azure.com, http://127.0.0.1:11434)"
-            ),
+        raise api_error(
+            422,
+            "invalid_origin",
+            f"'{raw}' nao e uma origem: use a URL ou o host do provider "
+            "(ex.: api.groq.com, https://<recurso>.openai.azure.com, http://127.0.0.1:11434)",
+            value=raw,
         )
     return origin
 
@@ -186,10 +187,7 @@ _VALID_PROVIDERS = frozenset({"ollama", "openai", "azure_openai", ""})
 
 def _require_session(session: SessionDep) -> AsyncSession:
     if session is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Persistencia nao configurada",
-        )
+        raise api_error(503, "db_not_configured", "Persistencia nao configurada")
     return session
 
 
@@ -332,28 +330,30 @@ async def patch_runtime_config(
     Campos nao enviados ficam inalterados. Retorna o estado apos a atualizacao."""
     updates = {k: v for k, v in payload.model_dump(exclude_unset=True).items()}
     if not updates:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Envie pelo menos um campo: " + ", ".join(RuntimeConfigPatch.model_fields),
+        raise api_error(
+            422,
+            "empty_update",
+            "Envie pelo menos um campo: " + ", ".join(RuntimeConfigPatch.model_fields),
         )
 
     # GAP-8: validar provider antes de salvar — evita erro genérico em runtime
     if "llm_provider" in updates and updates["llm_provider"] not in _VALID_PROVIDERS:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=(
-                f"llm_provider invalido: '{updates['llm_provider']}'. "
-                "Valores possiveis: ollama, openai, azure_openai (ou vazio)."
-            ),
+        raise api_error(
+            422,
+            "invalid_provider",
+            f"llm_provider invalido: '{updates['llm_provider']}'. "
+            "Valores possiveis: ollama, openai, azure_openai (ou vazio).",
+            value=updates["llm_provider"],
         )
 
     from app.admin.repository import update_runtime_config as _update
 
     result = _update(updates)
     if result is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Persistencia nao configurada — impossivel salvar overrides de runtime",
+        raise api_error(
+            503,
+            "db_not_configured",
+            "Persistencia nao configurada — impossivel salvar overrides de runtime",
         )
     return result
 
@@ -563,9 +563,12 @@ async def create_model(
         if m.provider_origin == payload.provider_origin and m.model_id == payload.model_id
     ]
     if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Modelo '{payload.model_id}' ja registrado na origem '{payload.provider_origin}'",
+        raise api_error(
+            409,
+            "model_exists",
+            f"Modelo '{payload.model_id}' ja registrado na origem '{payload.provider_origin}'",
+            model=payload.model_id,
+            origin=payload.provider_origin,
         )
     model = await repo.create_model(**payload.model_dump())
     return _model_out(model, None)
@@ -579,7 +582,7 @@ async def get_model(
     repo = AdminRepository(session)
     model = await repo.get_model(model_id)
     if model is None:
-        raise HTTPException(status_code=404, detail="Modelo nao encontrado")
+        raise api_error(404, "model_not_found", "Modelo nao encontrado")
     usage = await repo.get_open_usage(model.provider_origin, model.model_id)
     return _model_out(model, usage)
 
@@ -593,7 +596,7 @@ async def patch_model(
     repo = AdminRepository(session)
     model = await repo.update_model(model_id, payload.model_dump(exclude_unset=True))
     if model is None:
-        raise HTTPException(status_code=404, detail="Modelo nao encontrado")
+        raise api_error(404, "model_not_found", "Modelo nao encontrado")
     usage = await repo.get_open_usage(model.provider_origin, model.model_id)
     return _model_out(model, usage)
 
@@ -606,7 +609,7 @@ async def delete_model(
     repo = AdminRepository(session)
     deleted = await repo.delete_model(model_id)
     if not deleted:
-        raise HTTPException(status_code=404, detail="Modelo nao encontrado")
+        raise api_error(404, "model_not_found", "Modelo nao encontrado")
     return {"status": "deleted", "id": model_id}
 
 
@@ -694,12 +697,11 @@ async def set_credential(
     from app.admin.crypto import master_key_configured
 
     if not master_key_configured():
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=(
-                "LLM_CREDENTIALS_MASTER_KEY nao configurada — impossivel cifrar "
-                "a credencial (DA-47). Configure a master key no .env."
-            ),
+        raise api_error(
+            503,
+            "master_key_missing",
+            "LLM_CREDENTIALS_MASTER_KEY nao configurada — impossivel cifrar "
+            "a credencial (DA-47). Configure a master key no .env.",
         )
     provider_origin = _origin_or_422(provider_origin)
     repo = AdminRepository(session)
@@ -720,7 +722,7 @@ async def delete_credential(
     repo = AdminRepository(session)
     deleted = await repo.delete_credential(provider_origin)
     if not deleted:
-        raise HTTPException(status_code=404, detail="Credencial nao encontrada")
+        raise api_error(404, "credential_not_found", "Credencial nao encontrada")
     return {"status": "deleted", "provider_origin": provider_origin}
 
 
@@ -745,11 +747,12 @@ async def reset_usage(
     repo = AdminRepository(session)
     new_period = await repo.reset_usage_period(provider_origin, model_id)
     if new_period is None:
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                f"Nenhum periodo aberto de uso para '{model_id}' na origem '{provider_origin}'"
-            ),
+        raise api_error(
+            404,
+            "usage_period_not_found",
+            f"Nenhum periodo aberto de uso para '{model_id}' na origem '{provider_origin}'",
+            model=model_id,
+            origin=provider_origin,
         )
     return {"status": "reset", "provider_origin": provider_origin, "model_id": model_id}
 
@@ -794,9 +797,7 @@ def _validate_system_values(
     if system_status is not None and system_status not in SYSTEM_STATUSES:
         bad.append(f"status invalido: {system_status!r} (aceita: {', '.join(SYSTEM_STATUSES)})")
     if bad:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="; ".join(bad)
-        )
+        raise api_error(422, "invalid_system_fields", "; ".join(bad), details="; ".join(bad))
 
 
 @router.get("/systems")
@@ -813,9 +814,11 @@ async def create_system(
     _validate_system_values(payload.connector_type, payload.environment, payload.status)
     repo = AdminRepository(session)
     if await repo.get_system(key=payload.system_key) is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"system_key '{payload.system_key}' ja registrado",
+        raise api_error(
+            409,
+            "system_exists",
+            f"system_key '{payload.system_key}' ja registrado",
+            key=payload.system_key,
         )
     system = await repo.create_system(**payload.model_dump())
     return _system_out(system)
@@ -829,7 +832,7 @@ async def get_system(
     repo = AdminRepository(session)
     system = await repo.get_system(system_id)
     if system is None:
-        raise HTTPException(status_code=404, detail="Sistema nao encontrado")
+        raise api_error(404, "system_not_found", "Sistema nao encontrado")
     return _system_out(system)
 
 
@@ -848,7 +851,7 @@ async def patch_system(
     repo = AdminRepository(session)
     system = await repo.update_system(system_id, updates)
     if system is None:
-        raise HTTPException(status_code=404, detail="Sistema nao encontrado")
+        raise api_error(404, "system_not_found", "Sistema nao encontrado")
     return _system_out(system)
 
 
@@ -860,7 +863,7 @@ async def delete_system(
     repo = AdminRepository(session)
     deleted = await repo.delete_system(system_id)
     if not deleted:
-        raise HTTPException(status_code=404, detail="Sistema nao encontrado")
+        raise api_error(404, "system_not_found", "Sistema nao encontrado")
     return {"status": "deleted", "id": system_id}
 
 
@@ -913,9 +916,11 @@ async def create_web_search_source(
     _validate_source_interface_type(payload.interface_type)
     repo = AdminRepository(session)
     if await repo.get_web_search_source(interface_type=payload.interface_type) is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"interface_type '{payload.interface_type}' ja tem fonte cadastrada",
+        raise api_error(
+            409,
+            "source_exists",
+            f"interface_type '{payload.interface_type}' ja tem fonte cadastrada",
+            interface=payload.interface_type,
         )
     try:
         source = await repo.create_web_search_source(**payload.model_dump())
@@ -925,9 +930,11 @@ async def create_web_search_source(
         # interface_type ao mesmo tempo passam os dois. Quem decide e' a
         # constraint UNIQUE — sem este catch a segunda viraria 500.
         await session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"interface_type '{payload.interface_type}' ja tem fonte cadastrada",
+        raise api_error(
+            409,
+            "source_exists",
+            f"interface_type '{payload.interface_type}' ja tem fonte cadastrada",
+            interface=payload.interface_type,
         ) from None
     return _source_out(source)
 
@@ -937,7 +944,7 @@ async def get_web_search_source(source_id: str, session: SessionReq) -> dict[str
     repo = AdminRepository(session)
     source = await repo.get_web_search_source(source_id)
     if source is None:
-        raise HTTPException(status_code=404, detail="Fonte de busca nao encontrada")
+        raise api_error(404, "source_not_found", "Fonte de busca nao encontrada")
     return _source_out(source)
 
 
@@ -953,15 +960,17 @@ async def patch_web_search_source(
     updates = payload.model_dump(exclude_unset=True)
     for key, value in updates.items():
         if key in {"site_filter", "tech_term"} and not (value or "").strip():
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=f"{key} nao pode ficar vazio: sem ele a linha e' ignorada "
+            raise api_error(
+                422,
+                "source_field_empty",
+                f"{key} nao pode ficar vazio: sem ele a linha e' ignorada "
                 "pela resolucao fail-closed",
+                field=key,
             )
     repo = AdminRepository(session)
     source = await repo.update_web_search_source(source_id, updates)
     if source is None:
-        raise HTTPException(status_code=404, detail="Fonte de busca nao encontrada")
+        raise api_error(404, "source_not_found", "Fonte de busca nao encontrada")
     await session.commit()
     return _source_out(source)
 
@@ -970,7 +979,7 @@ async def patch_web_search_source(
 async def delete_web_search_source(source_id: str, session: SessionReq) -> dict[str, Any]:
     repo = AdminRepository(session)
     if not await repo.delete_web_search_source(source_id):
-        raise HTTPException(status_code=404, detail="Fonte de busca nao encontrada")
+        raise api_error(404, "source_not_found", "Fonte de busca nao encontrada")
     await session.commit()
     return {"status": "deleted", "id": source_id}
 
@@ -998,7 +1007,7 @@ async def list_system_incidents(
     admin_repo = AdminRepository(session)
     system = await admin_repo.get_system(system_id)
     if system is None:
-        raise HTTPException(status_code=404, detail="Sistema nao encontrado")
+        raise api_error(404, "system_not_found", "Sistema nao encontrado")
 
     index = build_system_index(await admin_repo.list_systems())
     incidents_repo = IncidentRepository(session)
@@ -1093,7 +1102,7 @@ async def get_incident(incident_id: str, session: SessionReq) -> dict[str, Any]:
     index = build_system_index(await AdminRepository(session).list_systems())
     incident = await IncidentRepository(session).get_by_id(incident_id)
     if incident is None:
-        raise HTTPException(status_code=404, detail="Incidente nao encontrado")
+        raise api_error(404, "incident_not_found", "Incidente nao encontrado")
     return _incident_out(
         incident,
         correlate(incident.interface_type, incident.connector_source_system, index),
@@ -1143,10 +1152,10 @@ async def _get_user_or_404(session: AsyncSession, user_id: str) -> Any:
     try:
         uid = UUID(user_id)
     except ValueError:
-        raise HTTPException(status_code=404, detail="Usuario nao encontrado") from None
+        raise api_error(404, "user_not_found", "Usuario nao encontrado") from None
     user = await session.get(WebUser, uid)
     if user is None:
-        raise HTTPException(status_code=404, detail="Usuario nao encontrado")
+        raise api_error(404, "user_not_found", "Usuario nao encontrado")
     return user
 
 
@@ -1179,7 +1188,7 @@ async def create_user(payload: UserCreate, session: SessionReq) -> dict[str, Any
             created_by="admin-api",
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from None
+        raise api_error(409, "user_exists", str(exc), username=payload.username) from None
     out = _user_out(user)
     out["activation"] = {
         "email_token": tokens.email_token,  # None quando entregue de verdade
@@ -1230,9 +1239,11 @@ async def reissue_phone_code(user_id: str, session: SessionReq) -> dict[str, Any
 
     user = await _get_user_or_404(session, user_id)
     if user.status != "pending_phone":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"reemissao de codigo exige status pending_phone (atual: {user.status})",
+        raise api_error(
+            409,
+            "reissue_requires_pending_phone",
+            f"reemissao de codigo exige status pending_phone (atual: {user.status})",
+            status=user.status,
         )
     code = generate_phone_code()
     user.phone_code_hash = hash_phone_code(code, settings.session_secret)
@@ -1263,14 +1274,12 @@ async def patch_user(
     user = await _get_user_or_404(session, user_id)
     if payload.status is not None:
         if payload.status not in ("active", "disabled"):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="status aceita: active, disabled",
-            )
+            raise api_error(422, "invalid_user_status", "status aceita: active, disabled")
         if user.status.startswith("pending") and payload.status != "disabled":
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="usuario pendente so pode ser desativado ou ter as etapas reemitidas",
+            raise api_error(
+                422,
+                "pending_user_change",
+                "usuario pendente so pode ser desativado ou ter as etapas reemitidas",
             )
         user.status = payload.status
         if payload.status == "disabled":

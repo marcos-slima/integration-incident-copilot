@@ -2,31 +2,36 @@
 checkpointer (inclusive valores `str` que o PostgresSaver grava inline no
 jsonb, sem passar pelo serializer).
 
-Marcado `integration`: roda com `uv run pytest tests/ -v` e pula sozinho
-sem DATABASE_URL ou com o Postgres fora do ar. Usa um thread_id unico por
+Marker `postgres_smoke`, NAO `integration` (mesmo padrao do
+neo4j_smoke): o conftest pula `integration` quando Qdrant/Ollama estao
+fora, e este teste so precisa de Postgres. Usa IIC_TEST_DATABASE_URL
+(convencao do repo: o conftest zera DATABASE_URL para os testes) e pula
+sozinho sem ela ou com o Postgres fora do ar:
+`IIC_TEST_DATABASE_URL=postgresql://iic:<senha>@127.0.0.1:5432/iic uv run pytest -m postgres_smoke -v`. Usa um thread_id unico por
 execucao e apaga as proprias linhas no fim.
 """
 
+import os
 import uuid
 
 import pytest
 
 from app.agent import graph
 from app.agent.checkpointing import build_postgres_checkpointer, libpq_url
-from app.config import settings
 
-pytestmark = pytest.mark.integration
+pytestmark = pytest.mark.postgres_smoke
 
 EMAIL = "maria.souza@cliente.com.br"
 CPF = "987.654.321-00"
+DB_URL = os.environ.get("IIC_TEST_DATABASE_URL", "")
 
 
 @pytest.fixture
 def saver():
-    if not settings.database_url:
-        pytest.skip("DATABASE_URL nao configurada")
+    if not DB_URL:
+        pytest.skip("IIC_TEST_DATABASE_URL ausente")
     try:
-        s = build_postgres_checkpointer(settings.database_url)
+        s = build_postgres_checkpointer(DB_URL)
     except Exception as exc:  # noqa: BLE001 - qualquer falha de conexao = skip
         pytest.skip(f"Postgres indisponivel: {exc}")
     yield s
@@ -36,7 +41,7 @@ def saver():
 def _dump_thread(thread_id: str) -> str:
     from psycopg import connect
 
-    with connect(libpq_url(settings.database_url)) as conn:
+    with connect(libpq_url(DB_URL)) as conn:
         parts = []
         for table in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
             rows = conn.execute(
@@ -50,7 +55,7 @@ def _dump_thread(thread_id: str) -> str:
 def _cleanup(thread_id: str) -> None:
     from psycopg import connect
 
-    with connect(libpq_url(settings.database_url), autocommit=True) as conn:
+    with connect(libpq_url(DB_URL), autocommit=True) as conn:
         for table in ("checkpoint_writes", "checkpoint_blobs", "checkpoints"):
             conn.execute(f"DELETE FROM {table} WHERE thread_id = %s", (thread_id,))
 

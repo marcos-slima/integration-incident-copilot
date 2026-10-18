@@ -2902,7 +2902,7 @@ Cada classe define: retry? backoff? abre circuito? failover? escala?
 
 **Limitações (registradas de propósito).**
 - Um diagnóstico **retomado** lê o estado redigido (e-mail/CPF já substituídos): é o preço de nunca gravar PII. A redação cobre o que a DA-30 reconhece (e-mail, CPF, CNPJ, número de IDoc, tokens, senhas); nomes próprios e endereços não.
-- `tests/test_checkpointing_postgres.py` (marcado `integration`) valida retomada e ausência de PII nas tabelas do checkpointer contra Postgres real; os testes unitários usam `RedactingMemorySaver`.
+- `tests/test_checkpointing_postgres.py` (marker `postgres_smoke`; usa `IIC_TEST_DATABASE_URL` e pula sem ela) valida retomada e ausência de PII nas tabelas do checkpointer contra Postgres real; os testes unitários usam `RedactingMemorySaver`.
 - Conexão única compartilhada pelas threads do pool do grafo (o `PostgresSaver` serializa com lock), sem reconexão automática.
 - Não existe endpoint/API de retomada: a retomada só é possível chamando o grafo com o mesmo `thread_id`. `run_diagnosis` sempre gera um `incident_id` novo.
 - Fernet de `evidence_json` (DA-60) protege a tabela `incidents`, não as tabelas do checkpointer; nelas o texto fica redigido, não cifrado.

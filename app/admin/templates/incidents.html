@@ -1,65 +1,63 @@
 {% extends "base.html" %}
-{% block title %}Incidentes · Admin{% endblock %}
+{% block title %}{{ t('nav.incidents') }} · Admin{% endblock %}
 {% block content %}
 <main>
-  <h2>Incidentes diagnosticados (DA-50)</h2>
+  <h2>{{ t('incidents.title') }}</h2>
   <p style="color: var(--text); margin-bottom: 1.5rem; line-height: 1.6;">
-    Cada linha traz o sistema integrado correlacionado. Na ausência de
-    <code>system_key</code>, resolve pelo <code>interface_type</code>. Quando há ambiguidade,
-    a linha é marcada como <strong>ambígua</strong>.
+    {{ t_html('incidents.intro') }}
   </p>
 
   <div class="card">
-    <h3 style="margin-top: 0; margin-bottom: 1rem; color: var(--text);">Filtros</h3>
+    <h3 style="margin-top: 0; margin-bottom: 1rem; color: var(--text);">{{ t('incidents.filters') }}</h3>
     <div class="filters">
-      <input id="f-system" placeholder="system_key (ex: cap_prod)">
-      <input id="f-interface" placeholder="interface_type (ex: cap)">
+      <input id="f-system" placeholder="{{ t('incidents.fSystem') }}">
+      <input id="f-interface" placeholder="{{ t('incidents.fInterface') }}">
       <select id="f-verified">
-        <option value="">veredito: todos</option>
-        <option value="false">veredito: sem veredito</option>
-        <option value="true">veredito: com veredito</option>
+        <option value="">{{ t('incidents.verdictAll') }}</option>
+        <option value="false">{{ t('incidents.verdictNone') }}</option>
+        <option value="true">{{ t('incidents.verdictSome') }}</option>
       </select>
-      <button class="btn btn-primary" data-click="loadIncidents">🔍 Filtrar</button>
-      <button class="btn btn-secondary" data-click="clearFilters">🗑️ Limpar</button>
+      <button class="btn btn-primary" data-click="loadIncidents">🔍 {{ t('incidents.filter') }}</button>
+      <button class="btn btn-secondary" data-click="clearFilters">🗑️ {{ t('incidents.clear') }}</button>
     </div>
   </div>
 
   <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-      <h3 style="margin: 0; color: var(--text);">Incidentes</h3>
-      <span style="font-size: 0.9rem; color: var(--text); opacity: 0.7;" id="count">0 incidentes</span>
+      <h3 style="margin: 0; color: var(--text);">{{ t('nav.incidents') }}</h3>
+      <span style="font-size: 0.9rem; color: var(--text); opacity: 0.7;" id="count">{{ t('incidents.count_other', count=0) }}</span>
     </div>
 
     <div style="overflow-x: auto;">
       <table id="incidents">
         <thead>
           <tr>
-            <th style="width: 140px;">Criado</th>
-            <th style="width: 100px;">ID</th>
-            <th style="width: 100px;">Interface</th>
-            <th style="width: 140px;">Origem</th>
-            <th>Sistema correlacionado</th>
-            <th style="min-width: 150px;">Causa raiz provável</th>
-            <th style="width: 80px;">Conf.</th>
-            <th style="width: 80px;">Evidência</th>
-            <th style="width: 100px;">Provider</th>
-            <th style="width: 70px;">Lat.</th>
-            <th style="width: 90px;">Sinal</th>
-            <th style="width: 100px;">Verificação</th>
-            <th style="width: 80px;">Ações</th>
+            <th style="width: 140px;">{{ t('incidents.created') }}</th>
+            <th style="width: 100px;">{{ t('incidents.id') }}</th>
+            <th style="width: 100px;">{{ t('common.interface') }}</th>
+            <th style="width: 140px;">{{ t('common.origin') }}</th>
+            <th>{{ t('incidents.correlated') }}</th>
+            <th style="min-width: 150px;">{{ t('incidents.rootCause') }}</th>
+            <th style="width: 80px;">{{ t('incidents.conf') }}</th>
+            <th style="width: 80px;">{{ t('incidents.evidence') }}</th>
+            <th style="width: 100px;">{{ t('incidents.provider') }}</th>
+            <th style="width: 70px;">{{ t('incidents.latency') }}</th>
+            <th style="width: 90px;">{{ t('incidents.signal') }}</th>
+            <th style="width: 100px;">{{ t('incidents.verification') }}</th>
+            <th style="width: 80px;">{{ t('common.actions') }}</th>
           </tr>
         </thead>
         <tbody id="incidents-body">
-          <tr><td colspan="13" style="text-align: center; padding: 2rem;">Carregando...</td></tr>
+          <tr><td colspan="13" style="text-align: center; padding: 2rem;">{{ t('common.loading') }}</td></tr>
         </tbody>
       </table>
     </div>
   </div>
 
-  <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--text);">Detalhe do Incidente</h3>
+  <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--text);">{{ t('incidents.detailTitle') }}</h3>
   <div class="card">
     <div id="detail">
-      <p style="color: var(--text); opacity: 0.7; margin: 0;">Clique em "detalhe" em qualquer linha para ver informações completas</p>
+      <p style="color: var(--text); opacity: 0.7; margin: 0;">{{ t('incidents.detailHint') }}</p>
     </div>
   </div>
 

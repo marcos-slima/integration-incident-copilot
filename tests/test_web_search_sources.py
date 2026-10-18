@@ -45,6 +45,9 @@ from app.services.web_search_sources import (
     resolve_approved_source,
 )
 
+# DA-73: a Admin UI segue o idioma do navegador; estes testes conferem o texto pt-BR.
+_PT_BR = {"Accept-Language": "pt-BR"}
+
 client = TestClient(app)
 
 ADMIN_KEY = "admin-web-search-test-key"
@@ -455,7 +458,7 @@ def test_exige_chave_admin():
 
 
 def test_ui_web_search_ok():
-    r = client.get("/admin/web-search")
+    r = client.get("/admin/web-search", headers=_PT_BR)  # DA-73: textos conferidos em pt-BR
     assert r.status_code == 200
     assert "Fontes de busca web" in r.text
 

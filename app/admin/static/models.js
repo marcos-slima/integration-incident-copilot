@@ -7,11 +7,11 @@
 function loadRuntimeConfig() {
   const btn = actionButton('loadRuntimeConfig');
   const originalText = btn.textContent;
-  btn.textContent = 'Carregando...';
+  btn.textContent = t('common.loading');
   btn.disabled = true;
 
   adminFetch('/admin/api/runtime-config').then(r => {
-    if (r.status === 401) throw new Error('Chave admin inválida — insira acima');
+    if (r.status === 401) throw new Error(t('common.invalidKey'));
     return r.json();
   }).then(cfg => {
     const tb = document.getElementById('runtime-config-body');
@@ -45,17 +45,17 @@ function loadRuntimeConfig() {
       const tr = document.createElement('tr');
 
       if (f.type === 'toggle') {
-        const displayVal = val ? '<span class="status-badge status-active">Sim</span>' : '<span class="status-badge status-degraded">Não</span>';
+        const displayVal = val ? `<span class="status-badge status-active">${escapeHtml(t('common.yes'))}</span>` : `<span class="status-badge status-degraded">${escapeHtml(t('common.no'))}</span>`;
         tr.innerHTML = `
           <td style="font-family: monospace; font-size: 0.9rem;">${f.label}</td>
           <td id="rc-${f.key}">${displayVal}</td>
           <td>
-            <button data-click="toggleRuntimeConfig" data-args="${escapeAttr(JSON.stringify([f.key, !val]))}" class="btn" style="padding: 0.4rem 0.8rem; background: var(--border);">🔄 Alternar</button>
+            <button data-click="toggleRuntimeConfig" data-args="${escapeAttr(JSON.stringify([f.key, !val]))}" class="btn" style="padding: 0.4rem 0.8rem; background: var(--border);">🔄 ${escapeHtml(t('models.toggle'))}</button>
           </td>`;
       } else if (f.type === 'select') {
-        const displayVal = val ? escapeHtml(val) : '<em style="opacity:0.5">(vazio)</em>';
+        const displayVal = val ? escapeHtml(val) : `<em style="opacity:0.5">${escapeHtml(t('common.empty'))}</em>`;
         const options = (f.options || []).map(opt =>
-          `<option value="${escapeAttr(opt)}" ${val === opt ? 'selected' : ''}>${opt || '(vazio)'}</option>`
+          `<option value="${escapeAttr(opt)}" ${val === opt ? 'selected' : ''}>${escapeHtml(opt || t('common.empty'))}</option>`
         ).join('');
         tr.innerHTML = `
           <td style="font-family: monospace; font-size: 0.9rem;">${f.label}</td>
@@ -71,12 +71,12 @@ function loadRuntimeConfig() {
           saveRuntimeConfig(f.key, this.value);
         });
       } else {
-        const displayVal = val ?? '<em style="opacity:0.5">(vazio)</em>';
+        const displayVal = val == null ? `<em style="opacity:0.5">${escapeHtml(t('common.empty'))}</em>` : escapeHtml(val);
         tr.innerHTML = `
           <td style="font-family: monospace; font-size: 0.9rem;">${f.label}</td>
           <td id="rc-${f.key}" style="font-family: monospace;">${displayVal}</td>
           <td>
-            <button data-click="editRuntimeConfig" data-args="${escapeAttr(JSON.stringify([f.key, val]))}" class="btn" style="padding: 0.4rem 0.8rem; background: var(--border);">✏️ Editar</button>
+            <button data-click="editRuntimeConfig" data-args="${escapeAttr(JSON.stringify([f.key, val]))}" class="btn" style="padding: 0.4rem 0.8rem; background: var(--border);">✏️ ${escapeHtml(t('common.edit'))}</button>
           </td>`;
       }
 
@@ -117,19 +117,19 @@ function showRuntimeDiffBanner(cfg) {
 // GAP-2: pré-check antes de ativar registry
 function checkActivateRegistry() {
   adminFetch('/admin/api/runtime-config/check-activate').then(r => {
-    if (r.status === 401) throw new Error('Chave admin inválida — insira acima');
+    if (r.status === 401) throw new Error(t('common.invalidKey'));
     return r.json();
   }).then(data => {
     const warnings = data.warnings || [];
     if (warnings.length > 0) {
       const msg = document.getElementById('msg');
-      msg.innerHTML = '<strong>Atenção antes de ativar LLM_REGISTRY_DB:</strong><br>' + warnings.map(w => '• ' + escapeHtml(w)).join('<br>');
+      msg.innerHTML = `<strong>${escapeHtml(t('models.activateWarning'))}</strong><br>` + warnings.map(w => '• ' + escapeHtml(w)).join('<br>');
       msg.style.display = 'block';
     } else {
-      alert('Tudo certo! ' + data.enabled_models_count + ' modelo(s) habilitado(s) para ' + data.provider);
+      alert(t('models.activateOk', {count: data.enabled_models_count, provider: data.provider}));
     }
   }).catch(e => {
-    document.getElementById('msg').textContent = 'Erro: ' + e.message;
+    document.getElementById('msg').textContent = t('common.error', {message: e.message});
   });
 }
 
@@ -137,15 +137,15 @@ function saveRuntimeConfig(key, value) {
   // Converter vazio string → null para campos de texto
   const sendValue = value === '' ? null : value;
   adminFetch('/admin/api/runtime-config', {method:'PATCH', body: JSON.stringify({[key]: sendValue})})
-    .then(r => r.ok ? loadRuntimeConfig() : r.json().then(j => { throw new Error(j.detail); }))
-    .catch(e => document.getElementById('msg').textContent = 'Erro: ' + e.message);
+    .then(r => r.ok ? loadRuntimeConfig() : r.json().then(j => { throw new Error(apiErrorText(j, r.status)); }))
+    .catch(e => document.getElementById('msg').textContent = t('common.error', {message: e.message}));
 }
 
 function toggleRuntimeConfig(key, target) {
-  if (!confirm(target ? `Ligar ${key}?` : `Desligar ${key}?`)) return;
+  if (!confirm(target ? t('models.confirmOn', {key: key}) : t('models.confirmOff', {key: key}))) return;
   adminFetch('/admin/api/runtime-config', {method:'PATCH', body: JSON.stringify({[key]: target})})
-    .then(r => r.ok ? loadRuntimeConfig() : r.json().then(j => { throw new Error(j.detail); }))
-    .catch(e => document.getElementById('msg').textContent = 'Erro: ' + e.message);
+    .then(r => r.ok ? loadRuntimeConfig() : r.json().then(j => { throw new Error(apiErrorText(j, r.status)); }))
+    .catch(e => document.getElementById('msg').textContent = t('common.error', {message: e.message}));
 }
 
 // Campos numéricos do runtime-config: o PATCH valida número (Pydantic).
@@ -157,27 +157,27 @@ const NUMERIC_RUNTIME_KEYS = new Set([
 
 function editRuntimeConfig(key, currentVal) {
   const label = key.toUpperCase();
-  const newVal = prompt(`Novo valor para ${label} (atual: ${currentVal ?? '(vazio)'})`);
+  const newVal = prompt(t('models.promptValue', {key: label, current: currentVal ?? t('common.empty')}));
   if (newVal === null) return; // cancelado
   let value = newVal.trim() || null;
   if (value !== null && NUMERIC_RUNTIME_KEYS.has(key)) {
     value = Number(value.replace(',', '.'));
-    if (!Number.isFinite(value)) { document.getElementById('msg').textContent = 'Valor numérico inválido'; return; }
+    if (!Number.isFinite(value)) { document.getElementById('msg').textContent = t('common.invalidNumber'); return; }
   }
   adminFetch('/admin/api/runtime-config', {method:'PATCH', body: JSON.stringify({[key]: value})})
-    .then(r => r.ok ? loadRuntimeConfig() : r.json().then(j => { throw new Error(j.detail); }))
-    .catch(e => document.getElementById('msg').textContent = 'Erro: ' + e.message);
+    .then(r => r.ok ? loadRuntimeConfig() : r.json().then(j => { throw new Error(apiErrorText(j, r.status)); }))
+    .catch(e => document.getElementById('msg').textContent = t('common.error', {message: e.message}));
 }
 
 // GAP-A: Exportar configuração efetiva
 function exportEffectiveConfig() {
   const btn = actionButton('exportEffectiveConfig');
   const originalText = btn.textContent;
-  btn.textContent = 'Exportando...';
+  btn.textContent = t('models.exporting');
   btn.disabled = true;
 
   adminFetch('/admin/api/effective-config').then(r => {
-    if (r.status === 401) throw new Error('Chave admin inválida — insira acima');
+    if (r.status === 401) throw new Error(t('common.invalidKey'));
     return r.json();
   }).then(cfg => {
     const preview = document.getElementById('effective-config-preview');
@@ -187,15 +187,15 @@ function exportEffectiveConfig() {
 
     // Copiar para a área de transferência
     navigator.clipboard.writeText(jsonStr).then(() => {
-      alert('Configuração efetiva copiada para a área de transferência!');
+      alert(t('models.copied'));
     }).catch(() => {
       // Fallback: selecionar e copiar manualmente
       preview.select();
       document.execCommand('copy');
-      alert('Configuração efetiva copiada para a área de transferência!');
+      alert(t('models.copied'));
     });
   }).catch(e => {
-    document.getElementById('msg').textContent = 'Erro: ' + e.message;
+    document.getElementById('msg').textContent = t('common.error', {message: e.message});
   }).finally(() => {
     btn.textContent = originalText;
     btn.disabled = false;
@@ -209,25 +209,25 @@ function exportEffectiveConfig() {
 function loadModels() {
   const btn = actionButton('loadModels');
   const originalText = btn.textContent;
-  btn.textContent = 'Carregando...';
+  btn.textContent = t('common.loading');
   btn.disabled = true;
 
   adminFetch('/admin/api/models').then(r => {
-    if (r.status === 401) throw new Error('Chave admin inválida — insira acima');
-    if (r.status === 503) throw new Error('DB não configurado (DATABASE_URL ausente)');
+    if (r.status === 401) throw new Error(t('common.invalidKey'));
+    if (r.status === 503) throw new Error(t('common.dbMissing'));
     return r.json();
   }).then(rows => {
     const tb = document.getElementById('models-body');
     tb.innerHTML = '';
     if (!rows.length) {
-      tb.innerHTML = '<tr><td colspan="11" style="text-align: center; padding: 2rem; color: var(--text); opacity: 0.7;">Nenhum modelo registrado</td></tr>';
+      tb.innerHTML = '<tr><td colspan="11" style="text-align: center; padding: 2rem; color: var(--text); opacity: 0.7;">' + escapeHtml(t('models.empty')) + '</td></tr>';
       btn.textContent = originalText;
       btn.disabled = false;
       return;
     }
     MODELS_BY_ID = Object.fromEntries(rows.map(m => [m.id, m]));
     for (const m of rows) {
-      const pct = m.usage.percent == null ? '—' : m.usage.percent + '%';
+      const pct = m.usage.percent == null ? '—' : fmtNumber(m.usage.percent, 1) + '%';
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td style="font-family: monospace; font-size: 0.9rem;">${escapeHtml(m.provider_origin)}</td>
@@ -238,10 +238,10 @@ function loadModels() {
         <td style="font-family: monospace; font-size: 0.9rem;">${m.monthly_limit_tokens ?? '—'}</td>
         <td style="font-family: monospace; font-size: 0.9rem;">${pct}</td>
         <td>${m.is_default ? '<span style="color: var(--success);">✓</span>' : '—'}</td>
-        <td>${m.enabled ? '<span class="status-badge status-active">Sim</span>' : '<span class="status-badge status-degraded">Não</span>'}</td>
+        <td>${m.enabled ? `<span class="status-badge status-active">${escapeHtml(t('common.yes'))}</span>` : `<span class="status-badge status-degraded">${escapeHtml(t('common.no'))}</span>`}</td>
         <td style="font-size: 0.85rem;">${routingSummary(m)}</td>
         <td>
-          <button data-click="editModel" data-args="${escapeAttr(JSON.stringify([m.id]))}" class="btn" style="padding: 0.4rem 0.8rem; background: var(--border);" title="Editar">✏️</button>
+          <button data-click="editModel" data-args="${escapeAttr(JSON.stringify([m.id]))}" class="btn" style="padding: 0.4rem 0.8rem; background: var(--border);" title="${escapeAttr(t('common.edit'))}">✏️</button>
           <button data-click="setCredential" data-args="${escapeAttr(JSON.stringify([m.provider_origin]))}" class="btn" style="padding: 0.4rem 0.8rem; background: var(--border);">🔐</button>
           <button data-click="toggleModel" data-args="${escapeAttr(JSON.stringify([m.id, !m.enabled]))}" class="btn" style="padding: 0.4rem 0.8rem; background: var(--border);">🔄</button>
           <button data-click="delModel" data-args="${escapeAttr(JSON.stringify([m.id]))}" class="btn btn-danger" style="padding: 0.4rem 0.8rem;">🗑️</button>
@@ -260,22 +260,22 @@ function loadModels() {
 }
 
 function setCredential(origin) {
-  const key = prompt('Chave de API para ' + origin + ' (grava CIFRADA, DA-47):');
+  const key = prompt(t('models.promptKey', {origin: origin}));
   if (!key) return;
   adminFetch('/admin/api/credentials/' + encodeURIComponent(origin), {method:'PUT', body: JSON.stringify({key})})
     .then(r => r.json())
     .then(() => loadModels())
-    .catch(e => document.getElementById('msg').textContent = 'Erro na chave: ' + e.message);
+    .catch(e => document.getElementById('msg').textContent = t('models.keyError', {message: e.message}));
 }
 
 function toggleModel(id, target) {
-  if (!confirm(target ? 'Ativar este modelo?' : 'Desativar este modelo?')) return;
+  if (!confirm(target ? t('models.confirmEnable') : t('models.confirmDisable'))) return;
   adminFetch('/admin/api/models/' + id, {method:'PATCH', body: JSON.stringify({enabled: target})})
     .then(() => loadModels()).catch(e => document.getElementById('msg').textContent = e.message);
 }
 
 function delModel(id) {
-  if (!confirm('Remover este modelo permanentemente?')) return;
+  if (!confirm(t('models.confirmDelete'))) return;
   adminFetch('/admin/api/models/' + id, {method:'DELETE'})
     .then(() => loadModels()).catch(e => document.getElementById('msg').textContent = e.message);
 }
@@ -288,12 +288,12 @@ let MODELS_BY_ID = {};
 
 function routingSummary(m) {
   const parts = [];
-  parts.push(escapeHtml(m.transport || 'transporte derivado'));
-  parts.push(m.context_window_tokens ? escapeHtml(Math.round(m.context_window_tokens / 1000) + 'k ctx') : 'ctx livre');
+  parts.push(escapeHtml(m.transport || t('models.sumTransport')));
+  parts.push(escapeHtml(m.context_window_tokens ? t('models.sumCtx', {k: fmtNumber(Math.round(m.context_window_tokens / 1000), 0)}) : t('models.sumCtxFree')));
   const noCaps = ['tools', 'response_format', 'seed'].filter(c => m['supports_' + c] === false);
-  if (noCaps.length) parts.push('sem ' + escapeHtml(noCaps.join('/')));
-  parts.push(m.domains && m.domains.length ? escapeHtml(m.domains.join(',')) : 'todos os domínios');
-  parts.push(escapeHtml(m.tier || 'nível derivado'));
+  if (noCaps.length) parts.push(escapeHtml(t('models.sumNoCaps', {caps: noCaps.join('/')})));
+  parts.push(escapeHtml(m.domains && m.domains.length ? m.domains.join(',') : t('models.sumAllDomains')));
+  parts.push(escapeHtml(m.tier || t('models.sumTier')));
   parts.push('p' + escapeHtml(m.priority ?? 100));
   return parts.join(' · ');
 }
@@ -331,13 +331,13 @@ function saveModel(e) {
   const editing = !!id;
   const btn = form.querySelector('#model-submit');
   const originalText = btn.textContent;
-  btn.textContent = editing ? 'Salvando...' : 'Adicionando...';
+  btn.textContent = editing ? t('common.saving') : t('common.adding');
   btn.disabled = true;
 
   const req = editing
     ? adminFetch('/admin/api/models/' + encodeURIComponent(id), {method: 'PATCH', body: JSON.stringify(_modelBody(form, true))})
     : adminFetch('/admin/api/models', {method: 'POST', body: JSON.stringify(_modelBody(form, false))});
-  req.then(r => r.ok ? null : r.json().then(j => { throw new Error(typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail)); }))
+  req.then(r => r.ok ? null : r.json().then(j => { throw new Error(apiErrorText(j, r.status)); }))
     .then(() => { resetModelForm(); loadModels(); })
     .catch(err => { const msg = document.getElementById('msg'); msg.textContent = err.message; msg.style.display = 'block'; })
     .finally(() => { btn.textContent = originalText; btn.disabled = false; });
@@ -364,8 +364,8 @@ function editModel(id) {
   }
   form.querySelectorAll('[name=domains]').forEach(cb => { cb.checked = (m.domains || []).includes(cb.value); });
   form.querySelector('[name=is_default]').checked = !!m.is_default;
-  document.getElementById('model-form-title').textContent = 'Editar modelo — ' + m.model_id;
-  document.getElementById('model-submit').textContent = '💾 Salvar alterações';
+  document.getElementById('model-form-title').textContent = t('models.editTitle', {model: m.model_id});
+  document.getElementById('model-submit').textContent = '💾 ' + t('models.saveChanges');
   document.getElementById('model-cancel').style.display = 'inline-block';
   form.scrollIntoView({behavior: 'smooth'});
 }
@@ -376,62 +376,54 @@ function resetModelForm() {
   form.querySelector('[name=id]').value = '';
   form.querySelector('[name=provider_origin]').disabled = false;
   form.querySelector('[name=model_id]').disabled = false;
-  document.getElementById('model-form-title').textContent = 'Novo Modelo';
-  document.getElementById('model-submit').textContent = '➕ Adicionar modelo';
+  document.getElementById('model-form-title').textContent = t('models.newTitle');
+  document.getElementById('model-submit').textContent = '➕ ' + t('models.add');
   document.getElementById('model-cancel').style.display = 'none';
 }
 
-const REASON_LABELS = {
-  origin_nao_resolvida: 'origem não resolvida',
-  soberania_bloqueada: 'soberania',
-  capability_faltando: 'capacidade',
-  circuito_aberto: 'circuito aberto',
-  orcamento_excedido: 'orçamento',
-  janela_insuficiente: 'janela de contexto',
-  dominio_nao_atendido: 'domínio',
-  nivel_nao_autorizado: 'nível',
-  limite_mensal_atingido: 'limite mensal',
-  credencial_ausente: 'credencial',
-  destino_fora_da_origem: 'destino fora da origem',
-};
+// Motivos de rejeicao do Policy Engine (RejectionReason, codigos estaveis)
+function reasonLabel(code) {
+  return typeof _i18nLookup('reasons.' + code) === 'string' ? t('reasons.' + code) : code;
+}
 
 function previewRouting(e) {
   const f = new FormData(this);
   const params = new URLSearchParams({sensitivity: f.get('sensitivity'), tokens: f.get('tokens') || '4000'});
   if (f.get('domain')) params.set('domain', f.get('domain'));
   adminFetch('/admin/api/routing/preview?' + params.toString()).then(r => {
-    if (r.status === 401) throw new Error('Chave admin inválida — insira acima');
-    if (!r.ok) return r.json().then(j => { throw new Error(typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail)); });
+    if (r.status === 401) throw new Error(t('common.invalidKey'));
+    if (!r.ok) return r.json().then(j => { throw new Error(apiErrorText(j, r.status)); });
     return r.json();
   }).then(d => {
-    const mode = d.mode === 'registry' ? 'registro de modelos (LLM_REGISTRY_DB)' : '.env (primário + fallback)';
-    const chosen = d.all_rejected ? '<strong style="color: var(--error);">nenhum modelo elegível — o diagnóstico falharia (503)</strong>'
-      : `escolhido: <strong>${escapeHtml(d.candidates[0].model_id || d.selected_provider)}</strong>`;
+    const mode = d.mode === 'registry' ? t('models.simModeRegistry') : t('models.simModeEnv');
+    const chosen = d.all_rejected
+      ? `<strong style="color: var(--error);">${escapeHtml(t('models.simNone'))}</strong>`
+      : escapeHtml(t('models.simChosen', {model: ''})) + `<strong>${escapeHtml(d.candidates[0].model_id || d.selected_provider)}</strong>`;
     document.getElementById('preview-summary').innerHTML =
-      `Modo: ${escapeHtml(mode)} · orçamento disponível US$ ${escapeHtml(d.budget_remaining_usd)} · pesos custo ${escapeHtml(d.weights.cost)} / latência ${escapeHtml(d.weights.latency)} · ${chosen}`;
+      escapeHtml(t('models.simSummary', {mode: mode, budget: fmtUSD(d.budget_remaining_usd, 4), cost: fmtNumber(d.weights.cost), latency: fmtNumber(d.weights.latency)})) + ' · ' + chosen;
     const tb = document.getElementById('preview-body');
     tb.innerHTML = '';
     for (const c of d.candidates) {
       const tr = document.createElement('tr');
       const status = c.allowed
-        ? '<span class="status-badge status-active">elegível</span>'
-        : c.reasons.map(r => `<span class="status-badge status-offline" style="margin: 0 0.2rem 0.2rem 0;">${escapeHtml(REASON_LABELS[r] || r)}</span>`).join('')
+        ? `<span class="status-badge status-active">${escapeHtml(t('models.eligible'))}</span>`
+        : c.reasons.map(r => `<span class="status-badge status-offline" style="margin: 0 0.2rem 0.2rem 0;" title="${escapeAttr(r)}">${escapeHtml(reasonLabel(r))}</span>`).join('')
           + `<div style="font-size: 0.8rem; opacity: 0.8;">${escapeHtml(c.detail.join(' · '))}</div>`;
       tr.innerHTML = `
         <td>${c.rank ?? '—'}</td>
         <td style="font-weight: 500;">${escapeHtml(c.model_id || c.provider)}</td>
         <td style="font-family: monospace; font-size: 0.85rem;">${escapeHtml(c.origin)} <span style="opacity: 0.6;">(${escapeHtml(c.locality)})</span></td>
         <td>${escapeHtml(c.tier || '—')}</td>
-        <td style="font-family: monospace;">${escapeHtml(Number(c.estimated_cost_usd).toFixed(4))}</td>
-        <td style="font-family: monospace;">${c.latency_ms == null ? '—' : escapeHtml(Math.round(c.latency_ms) + ' ms')}</td>
-        <td style="font-family: monospace;">${c.score == null ? '—' : escapeHtml(c.score)}</td>
+        <td style="font-family: monospace;">${escapeHtml(fmtUSD(Number(c.estimated_cost_usd), 4))}</td>
+        <td style="font-family: monospace;">${c.latency_ms == null ? '—' : escapeHtml(fmtNumber(c.latency_ms, 0) + ' ms')}</td>
+        <td style="font-family: monospace;">${c.score == null ? '—' : escapeHtml(fmtNumber(c.score, 3))}</td>
         <td>${status}</td>`;
       tb.appendChild(tr);
     }
     document.getElementById('preview-table').style.display = 'table';
   }).catch(err => {
     const s = document.getElementById('preview-summary');
-    s.textContent = 'Erro: ' + err.message;
+    s.textContent = t('common.error', {message: err.message});
   });
   return false;
 }

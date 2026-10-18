@@ -537,7 +537,7 @@ def test_rotas_de_incidentes_sem_banco_503(_no_db):
 
 
 def test_ui_incidents_ok():
-    r = client.get("/admin/incidents")
+    r = client.get("/admin/incidents", headers={"Accept-Language": "pt-BR"})  # DA-73
     assert r.status_code == 200
     assert "Incidentes diagnosticados" in r.text
     # a nav traz a tela nova e o link morto de /diagnose foi trocado por /docs

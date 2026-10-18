@@ -15,6 +15,7 @@ Pesos em config, nunca hardcoded.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 from dataclasses import dataclass
 from enum import Enum
@@ -23,6 +24,7 @@ from typing import Literal
 from app.config import Settings, settings
 from app.llm.capabilities import ProviderCapabilities, capabilities_for_origin
 from app.llm.origins import is_loopback_origin, normalize_origin, resolve_provider_origin
+from app.llm.registry_routing import RegistrySnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +41,13 @@ class RejectionReason(Enum):
     CAPABILITY_MISSING = "capability_faltando"
     CIRCUIT_OPEN = "circuito_aberto"
     BUDGET_EXCEEDED = "orcamento_excedido"
+    # DA-72: roteamento por registro de modelos
+    CONTEXT_WINDOW = "janela_insuficiente"
+    DOMAIN_MISMATCH = "dominio_nao_atendido"
+    TIER_NOT_AUTHORIZED = "nivel_nao_autorizado"
+    MONTHLY_LIMIT = "limite_mensal_atingido"
+    CREDENTIAL_MISSING = "credencial_ausente"
+    DESTINATION_MISMATCH = "destino_fora_da_origem"
 
     # Scoring de preferencias (nunca rejeita, so desclassifica)
     HIGH_COST = "custo_elevado"
@@ -60,6 +69,10 @@ class RoutingRequest:
     # Override do nome do modelo (o mesmo `model_name` que o gateway repassa
     # a get_chat_model). None = o modelo configurado de cada provider.
     model_name: str | None = None
+    # DA-72: dominio do sub-agente (supervisor) e o registro lido pelo
+    # gateway. Com `registry`, os candidatos sao os modelos habilitados.
+    domain: str | None = None
+    registry: RegistrySnapshot | None = None
 
 
 @dataclass(frozen=True)
@@ -73,6 +86,14 @@ class Candidate:
     rejection_reasons: list[RejectionReason]
     estimated_cost_usd: float
     latency_ms: float | None  # None = sem dados historicos
+    # DA-72: preenchidos so no roteamento por registro
+    model_id: str | None = None
+    registry_id: str | None = None
+    tier: str | None = None
+    priority: int | None = None
+    is_default: bool = False
+    score: float | None = None
+    detail: tuple[str, ...] = ()  # motivo legivel por rejeicao (preview/audit)
 
 
 @dataclass(frozen=True)
@@ -96,6 +117,14 @@ class RoutingDecision:
             "selected_provider": self.selected_provider,
             "all_rejected": self.all_rejected,
             "candidate_count": len(self.candidates),
+            "selected_model": next(
+                (
+                    c.model_id
+                    for c in self.candidates
+                    if c.provider == self.selected_provider and c.allowed
+                ),
+                None,
+            ),
             "rejection_summary": {
                 p: [r.value for r in rs] for p, rs in self.rejection_summary.items()
             },
@@ -109,8 +138,8 @@ def _get_scoring_weights(cfg: Settings) -> dict[str, float]:
     # - 0.7 = 70% peso para custo
     # - 0.3 = 30% peso para latencia
     return {
-        "cost_weight": cfg.llm_routing_cost_weight or 0.7,
-        "latency_weight": cfg.llm_routing_latency_weight or 0.3,
+        "cost_weight": cfg.llm_routing_cost_weight,
+        "latency_weight": cfg.llm_routing_latency_weight,
     }
 
 
@@ -302,6 +331,9 @@ def evaluate_routing(request: RoutingRequest) -> RoutingDecision:
 
     Retorna RoutingDecision com candidatos ordenados e rejeitados com motivo.
     """
+    if request.registry is not None:
+        return _evaluate_registry(request)
+
     cfg = request.config
     sensitivity = request.sensitivity
 
@@ -401,6 +433,203 @@ def evaluate_routing(request: RoutingRequest) -> RoutingDecision:
         all_rejected=all_rejected,
         rejection_summary={p: list(rs) for p, rs in rejection_summary.items()},
     )
+
+
+# ---------------------------------------------------------------------------
+# DA-72: roteamento por registro de modelos
+# ---------------------------------------------------------------------------
+
+_INTERNAL_PRICE_PER_1K = {"ollama": 0.0, "openai": 0.01, "azure_openai": 0.01}
+_COMPLETION_RATIO = 0.5
+
+
+def _registry_cost(model, label: str, context_tokens: int) -> float:
+    completion = int(context_tokens * _COMPLETION_RATIO)
+    if model.price_in_per_1m is not None and model.price_out_per_1m is not None:
+        return (
+            context_tokens * model.price_in_per_1m + completion * model.price_out_per_1m
+        ) / 1_000_000.0
+    return (context_tokens + completion) / 1000.0 * _INTERNAL_PRICE_PER_1K.get(label, 0.0)
+
+
+def _effective_capabilities(origin: str, model) -> ProviderCapabilities:
+    """Invariante 9 (emendada pela DA-72): a ORIGEM e' o teto; o modelo so
+    restringe. True no registro nunca amplia o que a origem nao aceita."""
+    base = capabilities_for_origin(origin)
+
+    def _cap(origin_value: bool, model_value: bool | None) -> bool:
+        return origin_value and (model_value is not False)
+
+    return ProviderCapabilities(
+        supports_seed=_cap(base.supports_seed, model.supports_seed),
+        supports_response_format=_cap(
+            base.supports_response_format, model.supports_response_format
+        ),
+        supports_tools=_cap(base.supports_tools, model.supports_tools),
+    )
+
+
+def _normalized(values: dict[int, float]) -> dict[int, float]:
+    if not values:
+        return {}
+    lo, hi = min(values.values()), max(values.values())
+    if hi == lo:
+        return {k: 0.0 for k in values}
+    return {k: (v - lo) / (hi - lo) for k, v in values.items()}
+
+
+def _evaluate_registry(request: RoutingRequest) -> RoutingDecision:
+    """Cada modelo habilitado e' um candidato. Fase 1 (rejeita com motivo
+    enumerado), fase 2 (score custo x latencia, depois prioridade, depois
+    default da origem). Nenhum I/O: o snapshot ja vem lido."""
+    from app.llm.registry_routing import (
+        candidate_settings,
+        destination_matches_origin,
+        effective_tier,
+        effective_transport,
+    )
+
+    cfg = request.config
+    snapshot = request.registry
+    total_tokens = request.context_tokens + int(request.context_tokens * _COMPLETION_RATIO)
+
+    candidates: list[Candidate] = []
+    rejection_summary: dict[str, list[RejectionReason]] = {}
+
+    for model in snapshot.models:
+        label, cand_cfg = candidate_settings(model, cfg)
+        transport = effective_transport(model, cfg)
+        origin = resolve_provider_origin(label, cand_cfg)
+        locality: Locality = "local" if is_loopback_origin(origin) else "cloud"
+        tier = effective_tier(model)
+        reasons: list[RejectionReason] = []
+        detail: list[str] = []
+
+        if not destination_matches_origin(model, origin):
+            reasons.append(RejectionReason.DESTINATION_MISMATCH)
+            detail.append(f"base_url aponta para {origin}, fora da origem {model.provider_origin}")
+
+        ok, why = _provider_allows_sensitivity(label, request.sensitivity, cand_cfg)
+        if not ok:
+            reasons.append(RejectionReason.SOVEREIGNTY_BLOCKED)
+            detail.append(why)
+
+        if transport != "ollama" and model.provider_origin not in snapshot.credentialed_origins:
+            reasons.append(RejectionReason.CREDENTIAL_MISSING)
+            detail.append(f"origem {model.provider_origin} sem credencial cifrada (DA-47)")
+
+        caps_ok, caps_why = _caps_satisfy(
+            _effective_capabilities(origin, model), request.required_capabilities
+        )
+        if not caps_ok:
+            reasons.append(RejectionReason.CAPABILITY_MISSING)
+            detail.append(caps_why)
+
+        if model.context_window_tokens and total_tokens > model.context_window_tokens:
+            reasons.append(RejectionReason.CONTEXT_WINDOW)
+            detail.append(
+                f"contexto estimado {total_tokens} > janela {model.context_window_tokens}"
+            )
+
+        if model.domains and request.domain and request.domain not in model.domains:
+            reasons.append(RejectionReason.DOMAIN_MISMATCH)
+            detail.append(f"dominio '{request.domain}' fora de {list(model.domains)}")
+
+        if tier == "premium":
+            # Tier 3 da DA-44: cadastrado e bloqueado ate decisao propria.
+            reasons.append(RejectionReason.TIER_NOT_AUTHORIZED)
+            detail.append("nivel premium exige escalonamento autorizado (fora da DA-72)")
+
+        used = snapshot.usage_tokens.get((model.provider_origin, model.model_id), 0)
+        if model.monthly_limit_tokens and used >= model.monthly_limit_tokens:
+            reasons.append(RejectionReason.MONTHLY_LIMIT)
+            detail.append(f"{used} de {model.monthly_limit_tokens} tokens no periodo")
+
+        if _circuit_is_open(origin, cfg):
+            reasons.append(RejectionReason.CIRCUIT_OPEN)
+            detail.append(f"circuito aberto para a origem {origin}")
+
+        cost = _registry_cost(model, label, request.context_tokens)
+        if cost > request.budget_remaining_usd:
+            reasons.append(RejectionReason.BUDGET_EXCEEDED)
+            detail.append(
+                f"custo estimado ${cost:.4f} > restante ${request.budget_remaining_usd:.4f}"
+            )
+
+        key = f"{model.provider_origin}/{model.model_id}"
+        if reasons:
+            rejection_summary[key] = reasons
+        candidates.append(
+            Candidate(
+                provider=label,
+                origin=origin,
+                locality=locality,
+                allowed=not reasons,
+                rejection_reasons=reasons,
+                estimated_cost_usd=cost,
+                latency_ms=snapshot.latency_ms.get((model.provider_origin, model.model_id)),
+                model_id=model.model_id,
+                registry_id=model.id,
+                tier=tier,
+                priority=model.priority,
+                is_default=model.is_default,
+                detail=tuple(detail),
+            )
+        )
+
+    # Fase 2: score so entre os elegiveis
+    eligible = [i for i, c in enumerate(candidates) if c.allowed]
+    weights = _get_scoring_weights(cfg)
+    cost_n = _normalized({i: candidates[i].estimated_cost_usd for i in eligible})
+    lat_n = _normalized(
+        {i: candidates[i].latency_ms for i in eligible if candidates[i].latency_ms is not None}
+    )
+    scored: list[Candidate] = []
+    for i, c in enumerate(candidates):
+        if not c.allowed:
+            scored.append(c)
+            continue
+        score = weights["cost_weight"] * cost_n.get(i, 0.0) + weights["latency_weight"] * lat_n.get(
+            i, 0.0
+        )
+        scored.append(dataclasses.replace(c, score=round(score, 6)))
+
+    allowed = sorted(
+        (c for c in scored if c.allowed),
+        key=lambda c: (c.score, c.priority, not c.is_default, c.estimated_cost_usd, c.model_id),
+    )
+    rejected = [c for c in scored if not c.allowed]
+    ordered = allowed + rejected
+
+    selected = allowed[0] if allowed else None
+    return RoutingDecision(
+        request=request,
+        candidates=ordered,
+        selected_provider=selected.provider if selected else None,
+        selected_reason=(
+            f"modelo={selected.model_id} score={selected.score} "
+            f"custo_estimado=${selected.estimated_cost_usd:.4f}"
+            if selected
+            else None
+        ),
+        all_rejected=selected is None,
+        rejection_summary=rejection_summary,
+    )
+
+
+def _caps_satisfy(caps: ProviderCapabilities, required: ProviderCapabilities) -> tuple[bool, str]:
+    missing = [
+        name
+        for name, need, have in (
+            ("seed", required.supports_seed, caps.supports_seed),
+            ("response_format", required.supports_response_format, caps.supports_response_format),
+            ("tools", required.supports_tools, caps.supports_tools),
+        )
+        if need and not have
+    ]
+    if missing:
+        return False, f"capacidades faltando: {', '.join(missing)}"
+    return True, "todas as capacidades exigidas estao presentes"
 
 
 def describe_effective_policy(cfg: Settings | None = None) -> dict:

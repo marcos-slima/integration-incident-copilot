@@ -275,7 +275,10 @@ def run_diagnosis(
     # timeout_seconds=None, caia no parametro timeout_seconds - o
     # checkpointer nunca recebia o thread_id e min(limit, dict) quebrava.
     # DA-67: orcamento do diagnostico, fechado mesmo em erro/timeout.
-    open_task_budget(incident_id, settings.diagnosis_budget_usd)
+    # DA-72: DIAGNOSIS_BUDGET_USD editavel na Admin UI (override de runtime)
+    from app.llm.registry_routing import effective_settings
+
+    open_task_budget(incident_id, effective_settings(settings).diagnosis_budget_usd)
     spent = None
     try:
         final_state = _invoke_graph_with_timeout(
@@ -326,7 +329,8 @@ def run_diagnosis(
         # O modelo e' lido do state e nao do `diagnosis`: `llm_model` e'
         # definido no state inicial e nao muda durante o grafo, e fica
         # gravado mesmo quando o rule engine encerra.
-        llm_model=final_state.get("llm_model"),
+        # DA-72: o modelo efetivo (registro) quando houve LLM; senao o do state.
+        llm_model=diagnosis.get("llm_model") or final_state.get("llm_model"),
         # DA-25: mesma montagem deterministica usada no report_markdown
         # (ver report_node) - chamada de novo aqui sobre final_state
         # (nao guardada no state) porque e uma funcao pura e barata, e

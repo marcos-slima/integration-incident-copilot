@@ -1282,6 +1282,14 @@ def _run_diagnosis_agent(state: CopilotState, persona: str) -> dict:
 
     diagnosis = _apply_confidence_guardrails(diagnosis, state)
     diagnosis["llm_provider_used"] = llm_provider_used
+    # DA-72/DA-53: o modelo que respondeu. No roteamento por registro ele
+    # pode nao ser o `llm_model` do state; sem selecao (gateway substituido
+    # em teste), fica o do state.
+    from app.llm.gateway import consume_last_selection
+
+    selection = consume_last_selection()
+    if selection is not None and selection.model_id:
+        diagnosis["llm_model"] = selection.model_id
     # DA-53: proveniencia do prompt, gravada AQUI e nao no `run_diagnosis`.
     # O return antecipado do rule engine (acima) nao passa por esta linha, e
     # isso e' o correto: um diagnostico que saiu sem chamar o LLM nao foi
@@ -1455,7 +1463,7 @@ def report_node(state: CopilotState) -> CopilotState:
 - `diagnosis_confidence` (pipeline): {diag_conf:.0%} — use este para automacao
 - `model_confidence` (LLM pos-guardrail): {model_conf:.0%}
 - `evidence_strength` (retrieval/conector): {evidence_str:.0%}
-- Provider: {diagnosis.get("llm_provider_used", "N/A")} | Agente: {state.get("agent_domain", "N/A")} | Modelo: {state.get("llm_model", "N/A")} | Prompt: {diagnosis.get("prompt_version", "nenhum")}
+- Provider: {diagnosis.get("llm_provider_used", "N/A")} | Agente: {state.get("agent_domain", "N/A")} | Modelo: {diagnosis.get("llm_model") or state.get("llm_model", "N/A")} | Prompt: {diagnosis.get("prompt_version", "nenhum")}
 
 **Documento usado como base:** {matched}
 

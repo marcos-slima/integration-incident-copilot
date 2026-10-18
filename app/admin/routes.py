@@ -13,7 +13,7 @@ nenhuma rota admin finge sucesso sem banco por tras).
 from __future__ import annotations
 
 import logging
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
@@ -76,6 +76,22 @@ class ModelCreate(BaseModel):
     enabled: bool = True
     is_default: bool = False
     notes: str | None = None
+    # DA-72: parametros de roteamento (nulo = derivado/herdado)
+    transport: Literal["ollama", "openai_compatible", "azure_openai"] | None = None
+    context_window_tokens: int | None = Field(default=None, ge=256)
+    supports_tools: bool | None = None
+    supports_response_format: bool | None = None
+    supports_seed: bool | None = None
+    domains: list[Literal["sap", "saas", "generic"]] | None = None
+    tier: Literal["local", "standard", "premium"] | None = None
+    priority: int = Field(default=100, ge=0, le=10_000)
+
+    @field_validator("domains")
+    @classmethod
+    def _domains(cls, value: list[str] | None) -> list[str] | None:
+        # lista vazia = "nenhum dominio" seria um modelo inalcancavel;
+        # o operador quer dizer "todos" -> nulo.
+        return sorted(set(value)) or None if value is not None else None
 
 
 class ModelPatch(BaseModel):
@@ -86,6 +102,20 @@ class ModelPatch(BaseModel):
     enabled: bool | None = None
     is_default: bool | None = None
     notes: str | None = None
+    # DA-72 (null explicito no PATCH volta ao derivado/herdado)
+    transport: Literal["ollama", "openai_compatible", "azure_openai"] | None = None
+    context_window_tokens: int | None = Field(default=None, ge=256)
+    supports_tools: bool | None = None
+    supports_response_format: bool | None = None
+    supports_seed: bool | None = None
+    domains: list[Literal["sap", "saas", "generic"]] | None = None
+    tier: Literal["local", "standard", "premium"] | None = None
+    priority: int | None = Field(default=None, ge=0, le=10_000)
+
+    @field_validator("domains")
+    @classmethod
+    def _domains(cls, value: list[str] | None) -> list[str] | None:
+        return sorted(set(value)) or None if value is not None else None
 
 
 class CredentialIn(BaseModel):
@@ -142,6 +172,12 @@ class RuntimeConfigPatch(BaseModel):
     rule_engine_enabled: bool | None = None
     diagnosis_timeout_seconds: float | None = None
     llm_request_timeout_seconds: float | None = None
+    # DA-72: orcamento (DA-67) e pesos do score de roteamento
+    diagnosis_budget_usd: float | None = Field(default=None, gt=0)
+    llm_budget_reserve_ratio: float | None = Field(default=None, ge=0, le=1)
+    llm_gateway_max_cost_usd: float | None = Field(default=None, gt=0)
+    llm_routing_cost_weight: float | None = Field(default=None, ge=0)
+    llm_routing_latency_weight: float | None = Field(default=None, ge=0)
 
 
 # Validacao de provider — Literal do .env (invariante: so esses tres sao possiveis)
@@ -176,6 +212,15 @@ def _model_out(model: Any, usage: Any | None) -> dict[str, Any]:
         "enabled": model.enabled,
         "is_default": model.is_default,
         "notes": model.notes,
+        # DA-72: parametros de roteamento
+        "transport": model.transport,
+        "context_window_tokens": model.context_window_tokens,
+        "supports_tools": model.supports_tools,
+        "supports_response_format": model.supports_response_format,
+        "supports_seed": model.supports_seed,
+        "domains": model.domains,
+        "tier": model.tier,
+        "priority": model.priority,
         "created_at": model.created_at.isoformat() if model.created_at else None,
         "usage": {
             "tokens_in": tokens_in,
@@ -253,84 +298,28 @@ async def registry_status(
 # ---------------------------------------------------------------------------
 
 
+def _env_runtime_values() -> dict[str, Any]:
+    """Valores do .env para cada chave editavel (banner DB != .env)."""
+    from app.admin.repository import RUNTIME_CONFIG_KEYS
+
+    return {key: getattr(settings, key, None) for key in RUNTIME_CONFIG_KEYS}
+
+
 @router.get("/runtime-config")
 async def get_runtime_config(session: SessionDep) -> dict[str, Any]:
     """Overrides de runtime armazenados no banco.
 
-    Retorna valores do banco quando disponivel; senao, retorna None para
-    cada campo (sinaliza que o .env e' a fonte de verdade).
-
-    Tambem retorna `env_values` com os valores atuais do .env para
-    comparacao visual na UI (banner quando DB != .env)."""
+    Com linha no banco, devolve os valores dela e `env_values` (os do .env)
+    para a UI comparar. Sem banco ou sem linha (migration nao aplicada),
+    devolve os valores do .env e `env_values=None` (nao ha diferenca
+    possivel). DA-72 acrescentou orcamento e pesos de roteamento."""
     from app.admin.repository import get_runtime_config as _get
-    from app.config import settings
-
-    db = await session.get_bind() if hasattr(session, "get_bind") else None
-    if db is None:
-        # SessionDep sem banco real → melhor-effort sync path
-        result = _get()
-        if result is not None:
-            result["env_values"] = {
-                "llm_registry_db": settings.llm_registry_db,
-                "llm_provider": settings.llm_provider,
-                "llm_route": settings.llm_route,
-                "llm_fallback_provider": settings.llm_fallback_provider,
-                "llm_credentials_master_key": settings.llm_credentials_master_key,
-                "data_sovereignty_mode": settings.data_sovereignty_mode,
-                "confidential_allowed_origins": settings.confidential_allowed_origins,
-                "require_auth": settings.require_auth,
-                "rule_engine_enabled": settings.rule_engine_enabled,
-                "diagnosis_timeout_seconds": settings.diagnosis_timeout_seconds,
-                "llm_request_timeout_seconds": settings.llm_request_timeout_seconds,
-            }
-            return result
-        # Sem banco: retorna defaults que refletem o .env atual
-        return {
-            "llm_registry_db": settings.llm_registry_db,
-            "llm_provider": settings.llm_provider,
-            "llm_route": settings.llm_route,
-            "llm_fallback_provider": settings.llm_fallback_provider,
-            "llm_credentials_master_key": settings.llm_credentials_master_key,
-            "data_sovereignty_mode": settings.data_sovereignty_mode,
-            "confidential_allowed_origins": settings.confidential_allowed_origins,
-            "require_auth": settings.require_auth,
-            "rule_engine_enabled": settings.rule_engine_enabled,
-            "diagnosis_timeout_seconds": settings.diagnosis_timeout_seconds,
-            "llm_request_timeout_seconds": settings.llm_request_timeout_seconds,
-            "env_values": None,  # sem banco = nao ha diferenca possivel
-        }
 
     result = _get()
     if result is not None:
-        result["env_values"] = {
-            "llm_registry_db": settings.llm_registry_db,
-            "llm_provider": settings.llm_provider,
-            "llm_route": settings.llm_route,
-            "llm_fallback_provider": settings.llm_fallback_provider,
-            "llm_credentials_master_key": settings.llm_credentials_master_key,
-            "data_sovereignty_mode": settings.data_sovereignty_mode,
-            "confidential_allowed_origins": settings.confidential_allowed_origins,
-            "require_auth": settings.require_auth,
-            "rule_engine_enabled": settings.rule_engine_enabled,
-            "diagnosis_timeout_seconds": settings.diagnosis_timeout_seconds,
-            "llm_request_timeout_seconds": settings.llm_request_timeout_seconds,
-        }
+        result["env_values"] = _env_runtime_values()
         return result
-    # Sem linha no banco (migration nao aplicada): retorna .env
-    return {
-        "llm_registry_db": settings.llm_registry_db,
-        "llm_provider": settings.llm_provider,
-        "llm_route": settings.llm_route,
-        "llm_fallback_provider": settings.llm_fallback_provider,
-        "llm_credentials_master_key": settings.llm_credentials_master_key,
-        "data_sovereignty_mode": settings.data_sovereignty_mode,
-        "confidential_allowed_origins": settings.confidential_allowed_origins,
-        "require_auth": settings.require_auth,
-        "rule_engine_enabled": settings.rule_engine_enabled,
-        "diagnosis_timeout_seconds": settings.diagnosis_timeout_seconds,
-        "llm_request_timeout_seconds": settings.llm_request_timeout_seconds,
-        "env_values": None,  # sem linha = nao ha diferenca possivel
-    }
+    return {**_env_runtime_values(), "env_values": None}
 
 
 @router.patch("/runtime-config")
@@ -345,7 +334,7 @@ async def patch_runtime_config(
     if not updates:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Envie pelo menos um campo: llm_registry_db, llm_provider, llm_route, llm_fallback_provider, llm_credentials_master_key, data_sovereignty_mode, confidential_allowed_origins, require_auth, rule_engine_enabled, diagnosis_timeout_seconds ou llm_request_timeout_seconds",
+            detail="Envie pelo menos um campo: " + ", ".join(RuntimeConfigPatch.model_fields),
         )
 
     # GAP-8: validar provider antes de salvar — evita erro genérico em runtime
@@ -619,6 +608,55 @@ async def delete_model(
     if not deleted:
         raise HTTPException(status_code=404, detail="Modelo nao encontrado")
     return {"status": "deleted", "id": model_id}
+
+
+@router.get("/routing/preview")
+async def routing_preview(
+    session: SessionDep,
+    sensitivity: Literal["public", "confidential"] = "confidential",
+    domain: Literal["sap", "saas", "generic"] | None = None,
+    tokens: int = Query(default=4000, ge=1, le=2_000_000),
+) -> dict[str, Any]:
+    """DA-72: simula a decisao do Policy Engine para um diagnostico novo, sem
+    chamar o LLM. Mesma funcao que o gateway usa (app/llm/gateway.py::
+    preview_routing). Nao decifra credencial nenhuma."""
+    from app.llm.gateway import preview_routing
+
+    decision, cfg = preview_routing(sensitivity, domain, tokens)
+    weights = {
+        "cost": cfg.llm_routing_cost_weight,
+        "latency": cfg.llm_routing_latency_weight,
+    }
+    return {
+        "mode": "registry" if decision.request.registry is not None else "env",
+        "sensitivity": sensitivity,
+        "domain": domain,
+        "context_tokens": tokens,
+        "budget_remaining_usd": round(decision.request.budget_remaining_usd, 6),
+        "weights": weights,
+        "selected_provider": decision.selected_provider,
+        "selected_reason": decision.selected_reason,
+        "all_rejected": decision.all_rejected,
+        "candidates": [
+            {
+                "rank": i + 1 if c.allowed else None,
+                "provider": c.provider,
+                "model_id": c.model_id,
+                "origin": c.origin,
+                "locality": c.locality,
+                "tier": c.tier,
+                "allowed": c.allowed,
+                "reasons": [r.value for r in c.rejection_reasons],
+                "detail": list(c.detail),
+                "estimated_cost_usd": round(c.estimated_cost_usd, 6),
+                "latency_ms": c.latency_ms,
+                "score": c.score,
+                "priority": c.priority,
+                "is_default": c.is_default,
+            }
+            for i, c in enumerate(decision.candidates)
+        ],
+    }
 
 
 # ---------------------------------------------------------------------------

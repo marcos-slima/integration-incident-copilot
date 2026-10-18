@@ -22,6 +22,7 @@ Incident Copilot. Installation and initial configuration are in
 9. [Image build and `python-qpid-proton`](#9-image-build-and-python-qpid-proton)
 10. [GraphRAG: Neo4j inaccessible](#10-graphrag-neo4j-inaccessible)
 11. [Environment in containers (`scripts/start-docker.sh`)](#11-environment-in-containers-scriptsstart-dockersh)
+12. [Language: screen or diagnosis in the wrong language](#12-language-screen-or-diagnosis-in-the-wrong-language)
 
 ---
 
@@ -186,6 +187,20 @@ Postgres, Grafana and API.
 | `PermissionError: '.env'` in the container | The container reads the `.env` as uid 1000. With `chmod 600` and another owner, it cannot read; use `chmod 644` or adjust the owner. |
 | Ingestion tries the Ollama without it installed | Set `EMBEDDING_BACKEND=fastembed` in the `.env`. |
 | Container tries `127.0.0.1` for the database | In container mode, the compose injects `postgres:5432`. For an external database, use `CONTAINER_DATABASE_URL`, not `DATABASE_URL`. |
+
+## 12. Language: screen or diagnosis in the wrong language
+
+DA-73 (screens) and DA-74 (content).
+
+| Symptom | Cause and fix |
+|---|---|
+| The screen opens in English, but the browser is in Portuguese | The `iic_locale` cookie wins over the browser. Switch in the selector or delete the cookie. `?lng=pt-BR` forces the language in the URL. |
+| English screen, Portuguese diagnosis | Diagnosis run before switching languages (the one on screen does not change; run it again), or an API client without the `locale` field (without it, content comes in `pt-BR`). |
+| `/diagnose` returns 422 with `locale nao suportado` | Content exists in `pt-BR` and `en`. Browser tags such as `en-US` and `pt-PT` are accepted; other languages are not. |
+| Text between `⟦ ⟧` on screen | Review pseudo-locale (`?lng=xx`). Switch the language in the selector. |
+| `prompt_digest_measured` gate warns about the `en` prompt | Expected until the English prompt is measured with promptfoo; it does not fail. |
+| `content_i18n` gate fails after a new rule | The new category needs `rules.<category>` (cause and steps) in `app/i18n/locales/content.en.json`. |
+| Activation e-mail in the wrong language | It goes out in the Admin UI language of whoever created the user (or the `locale` sent on creation). Users created before migration 021 get pt-BR. |
 
 ## Did not solve?
 

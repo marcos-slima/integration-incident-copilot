@@ -15,6 +15,37 @@ function verifiedCell(i) {
   return '<span class="status-badge" style="background: var(--border); color: var(--text);">Verificado</span>';
 }
 
+// DA-44: sinal de escalonamento gravado desde a migration 019
+const ESCALATION_REASONS = {
+  grounded: 'Evidência suficiente na base curada',
+  no_context: 'Sem contexto: nenhum dado de conector nem documento recuperado',
+  abstained: 'Guardrails anularam a fonte: resposta sem lastro',
+  floor_tier_weak: 'Só manuais genéricos, com evidência fraca',
+  curated_tier_weak: 'Documento curado sem sustentação do reranker',
+};
+
+function escalationCell(i) {
+  if (i.should_escalate == null) return '<span style="opacity: 0.6;">—</span>';
+  const title = escapeAttr(ESCALATION_REASONS[i.escalation_reason] || i.escalation_reason || '');
+  if (i.should_escalate) return `<span class="status-badge status-degraded" title="${title}">⚠ Revisar</span>`;
+  return `<span class="status-badge status-active" title="${title}">OK</span>`;
+}
+
+function costText(i) {
+  if (i.cost_usd == null) return '—';
+  if (i.llm_calls === 0) return 'US$ 0 (sem LLM)';
+  return `US$ ${Number(i.cost_usd).toFixed(4)} · ${i.llm_calls} chamada(s)`;
+}
+
+// Evidence gravada = app/models.py::Evidence (source_type, source_id, locator,
+// excerpt, trust_level). Antes lia e.source/e.description, que nao existem,
+// e caia no JSON.stringify da linha inteira.
+function evidenceLine(e) {
+  const where = `${e.source_type || '?'}:${e.source_id || '?'}${e.locator ? ' · ' + e.locator : ''}`;
+  const excerpt = (e.excerpt || '').replace(/\s+/g, ' ').slice(0, 240);
+  return `- [${e.trust_level || '?'}] ${where}${excerpt ? '\n  ' + excerpt : ''}`;
+}
+
 function loadIncidents() {
   const params = new URLSearchParams();
   const sys = document.getElementById('f-system').value.trim();
@@ -35,7 +66,7 @@ function loadIncidents() {
     const count = document.getElementById('count');
 
     if (!rows.length) {
-      tb.innerHTML = '<tr><td colspan="12" style="text-align: center; padding: 2rem; color: var(--text); opacity: 0.7;">Nenhum incidente para o filtro atual</td></tr>';
+      tb.innerHTML = '<tr><td colspan="13" style="text-align: center; padding: 2rem; color: var(--text); opacity: 0.7;">Nenhum incidente para o filtro atual</td></tr>';
       count.textContent = '0 incidentes';
       return;
     }
@@ -54,6 +85,7 @@ function loadIncidents() {
         <td>${i.evidence_strength == null ? '—' : escapeHtml(i.evidence_strength)}</td>
         <td style="font-family: monospace; font-size: 0.9rem;">${escapeHtml(i.llm_provider_used || '—')}</td>
         <td style="font-family: monospace; font-size: 0.9rem;">${escapeHtml(i.latency_ms == null ? '—' : i.latency_ms + ' ms')}</td>
+        <td>${escalationCell(i)}</td>
         <td>${verifiedCell(i)}</td>
         <td><button data-click="loadDetail" data-args="${escapeAttr(JSON.stringify([i.id]))}" class="btn btn-primary" style="padding: 0.4rem 0.8rem;">📋</button></td>`;
       tb.appendChild(tr);
@@ -71,7 +103,10 @@ function loadDetail(id) {
     return r.json();
   }).then(i => {
     const el = document.getElementById('detail');
-    const ev = (i.evidence || []).map(e => `- [${e.trust_level || '?'}] ${e.source || e.description || JSON.stringify(e)}`).join('\n');
+    const ev = (i.evidence || []).map(evidenceLine).join('\n');
+    const prov = i.llm_provider_used === 'rule_engine'
+      ? 'Regra determinística · sem LLM'
+      : [i.llm_provider_used || '?', i.llm_model, i.prompt_version && ('prompt ' + i.prompt_version)].filter(Boolean).join(' · ');
     el.innerHTML = `
       <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
         <span style="font-size: 1.2rem; font-weight: 700;">${escapeHtml(i.id)}</span>
@@ -95,6 +130,19 @@ function loadDetail(id) {
         </div>
       </div>
 
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+        <div class="card" style="padding: 1rem;">
+          <strong style="color: var(--text); margin-bottom: 0.5rem; display: block;">Proveniência:</strong>
+          <p style="margin: 0; color: var(--text);">${escapeHtml(prov)}${i.agent_domain ? ' · domínio ' + escapeHtml(i.agent_domain) : ''}</p>
+          <p style="margin: 0.25rem 0 0; font-family: monospace; font-size: 0.8rem; opacity: 0.7;" title="prompt_digest">${escapeHtml(i.prompt_digest || '')}</p>
+        </div>
+        <div class="card" style="padding: 1rem;">
+          <strong style="color: var(--text); margin-bottom: 0.5rem; display: block;">Escalonamento e custo:</strong>
+          <p style="margin: 0; color: var(--text);">${escalationCell(i)} ${escapeHtml(ESCALATION_REASONS[i.escalation_reason] || i.escalation_reason || '')}</p>
+          <p style="margin: 0.25rem 0 0; color: var(--text);">${escapeHtml(costText(i))}</p>
+        </div>
+      </div>
+
       <div class="card" style="padding: 1rem; margin-top: 1rem;">
         <strong style="color: var(--text); margin-bottom: 0.5rem; display: block;">Códigos de erro:</strong>
         <p style="margin: 0; color: var(--text); font-family: monospace;">${escapeHtml((i.error_codes || []).join(', ') || '—')}</p>
@@ -102,7 +150,7 @@ function loadDetail(id) {
 
       <div class="card" style="padding: 1rem; margin-top: 1rem;">
         <strong style="color: var(--text); margin-bottom: 0.5rem; display: block;">Evidências (${(i.evidence || []).length}):</strong>
-        <pre style="margin: 0;">${escapeHtml(ev || '(nenhuma)')}</pre>
+        <pre style="margin: 0; white-space: pre-wrap;">${escapeHtml(ev || '(nenhuma)')}</pre>
       </div>
     `;
   }).catch(e => {

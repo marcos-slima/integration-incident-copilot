@@ -62,6 +62,13 @@ from app.admin.metering import attach_metering, record_usage_observed  # DA-48
 from app.circuit_breaker import CircuitBreaker
 from app.config import Settings, settings
 from app.exceptions import ConfigurationError
+
+# DA-45: as duas funcoes passaram a morar em app/llm/origins.py porque o
+# factory tambem precisa delas e nao pode importar este modulo (o gateway
+# importa o factory - importaria de volta, ciclo). Re-exportadas aqui para
+# que `from app.llm.gateway import normalize_origin` (testes de DA-43)
+# siga funcionando sem alteracao.
+from app.llm.budget import BudgetExhaustedError, get_task_budget
 from app.llm.factory import (
     get_chat_model,
     resolve_registry_config,
@@ -72,16 +79,11 @@ from app.llm.failures import (
     classify_failure,
     get_failure_policy,
 )
-
-# DA-45: as duas funcoes passaram a morar em app/llm/origins.py porque o
-# factory tambem precisa delas e nao pode importar este modulo (o gateway
-# importa o factory - importaria de volta, ciclo). Re-exportadas aqui para
-# que `from app.llm.gateway import normalize_origin` (testes de DA-43)
-# siga funcionando sem alteracao.
 from app.llm.origins import is_loopback_origin, normalize_origin, resolve_provider_origin
 
 # DA-66: Policy Engine puro para roteamento
 from app.llm.routing import (
+    RejectionReason,
     _provider_allows_sensitivity,
     evaluate_routing,
 )
@@ -343,7 +345,17 @@ def invoke_via_gateway(
 
     # Estima tokens para o orçamento
     context_tokens = _estimate_tokens(prompt_text)
+    # DA-67: o teto efetivo e o MENOR entre o teto por chamada e o que
+    # ainda cabe no orcamento do diagnostico (descontada a reserva).
+    # Sem orcamento aberto (chamada fora de run_diagnosis), vale so o
+    # teto por chamada - comportamento anterior.
+    task_budget = get_task_budget(state.get("incident_id"))
     budget_remaining = cfg.llm_gateway_max_cost_usd
+    if task_budget is not None:
+        budget_remaining = min(
+            budget_remaining, task_budget.affordable_usd(cfg.llm_budget_reserve_ratio)
+        )
+        logger.info("AI Gateway budget: %s", task_budget.as_log_fields())
 
     # Requisito de capacidades (seed para determinismo DA-2)
     required_caps = ProviderCapabilities(
@@ -375,6 +387,24 @@ def invoke_via_gateway(
         reasons = "; ".join(
             f"{p}: {', '.join(r.value for r in rs)}" for p, rs in decision.rejection_summary.items()
         )
+        # DA-67: se o orcamento do diagnostico e o que barra TODOS os
+        # candidatos, a falha e budget_exhausted (DA-68: sem retry, sem
+        # failover) - nao uma violacao de soberania.
+        # So e budget_exhausted quando o limite que barra e o do
+        # DIAGNOSTICO (menor que o teto por chamada); se o teto por chamada
+        # e o menor, segue sendo PolicyViolationError (comportamento DA-26).
+        task_budget_binds = (
+            task_budget is not None and budget_remaining < cfg.llm_gateway_max_cost_usd
+        )
+        if task_budget_binds and all(
+            RejectionReason.BUDGET_EXCEEDED in rs for rs in decision.rejection_summary.values()
+        ):
+            raise BudgetExhaustedError(
+                f"AI Gateway: budget do diagnostico esgotado - restante "
+                f"${task_budget.remaining_usd:.4f} de ${task_budget.total_usd:.4f} "
+                f"(reserva {cfg.llm_budget_reserve_ratio:.0%}) nao cobre nenhum candidato. "
+                f"Motivos: {reasons}"
+            )
         # DA-66: inclui 'custo' e origens na mensagem para testes que verificam rejeicao
         origin_primary = resolve_provider_origin(cfg.llm_provider, cfg)
         origin_fallback = (
@@ -603,6 +633,10 @@ def invoke_via_gateway(
                     tokens_actual_in=tokens_actual_in,
                     tokens_actual_out=tokens_actual_out,
                 )
+            # DA-67: debita do orcamento do diagnostico o custo REAL
+            # (metering) ou, sem ele, o estimado.
+            if task_budget is not None:
+                task_budget.charge(actual_cost if actual_cost is not None else estimated_cost)
             # Registra fallback quando o provider usado não é o primário
             if provider != cfg.llm_provider and cfg.llm_provider:
                 LLM_FALLBACK_TOTAL.labels(

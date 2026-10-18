@@ -122,7 +122,9 @@ def test_m26_resposta_traz_o_sinal_de_escalonamento(monkeypatch):
         "report_markdown": "",
     }
     monkeypatch.setattr(
-        graph, "_invoke_graph_with_timeout", lambda state, thread_id=None: {**state, **final}
+        graph,
+        "_invoke_graph_with_timeout",
+        lambda state, timeout_seconds=None, thread_id=None: {**state, **final},
     )
     monkeypatch.setattr(graph, "record_incident", lambda **kw: None)
     resp = graph.run_diagnosis(IncidentRequest(description="algo estranho aconteceu"))

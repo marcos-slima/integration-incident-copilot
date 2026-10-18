@@ -103,6 +103,17 @@ class Settings(BaseSettings):
     # nao para orcamento fino de producao.
     llm_gateway_max_cost_usd: float = 0.50
 
+    # DA-67: orcamento por DIAGNOSTICO (soma de todas as chamadas LLM do
+    # mesmo incidente - ReAct, retry, failover), aberto em run_diagnosis.
+    # O teto por chamada acima continua valendo; o efetivo e o menor dos
+    # dois. Mesma tabela de preco aproximada do teto por chamada.
+    diagnosis_budget_usd: float = 1.00
+    # DA-67: reserva sobre o custo ESTIMADO antes de aceitar um candidato
+    # (custo_estimado * (1 + ratio) <= restante). Cobre o erro do
+    # tokenizer aproximado (cl100k_base para modelos nao-OpenAI) e saida
+    # maior que a prevista. 0.25 = 25%.
+    llm_budget_reserve_ratio: float = 0.25
+
     # Avaliacao externa (curto prazo, item 4): timeout explicito por
     # chamada LLM - antes disso, nenhum provider (ChatOllama/ChatOpenAI/
     # AzureChatOpenAI, ver app/llm/factory.py::get_chat_model) tinha

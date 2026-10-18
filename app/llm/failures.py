@@ -136,6 +136,12 @@ def classify_failure(exc: BaseException) -> FailureClass:
     # Erros de transporte (conexão, timeout, etc.)
     # NOTA: TimeoutError deve ser verificado ANTES de ConnectionError
     # porque TimeoutError é uma subclasse de ConnectionError em Python 3.11+
+    # DA-67: orcamento do diagnostico esgotado (levantado pelo gateway)
+    from app.llm.budget import BudgetExhaustedError
+
+    if isinstance(exc, BudgetExhaustedError):
+        return FailureClass.BUDGET_EXHAUSTED
+
     if isinstance(exc, TimeoutError):
         return FailureClass.TIMEOUT
 

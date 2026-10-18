@@ -212,7 +212,7 @@ O projeto está em desenvolvimento ativo. Em outubro de 2026 passou por uma
 auditoria completa, seguida de correções verificadas, e estes limites
 continuam em aberto:
 
-- **Kyma:** os manifests de `deploy/kyma/` nunca foram aplicados num cluster real.
+- **Kyma gerenciado:** os manifests de `deploy/kyma/` foram validados num Kubernetes real (k3d, overlay `deploy/local`, ver `docs/EVIDENCIA_K3D_2026-10-18.md`); falta o que é específico do Kyma: `APIRule`, Istio e OIDC do BTP.
 - **Conectores:** seis dos dez não foram validados contra instância real (tabela acima).
 - **Queda do banco vetorial:** com o Qdrant fora do ar, o `/diagnose` responde 500 mesmo quando uma regra resolveria.
 

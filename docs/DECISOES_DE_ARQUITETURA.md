@@ -785,17 +785,19 @@ de dev a cada start (agora `CMD` chama `.venv/bin/uvicorn` direto) —
 `docker-compose.yml` não precisa mais do `command:` override que
 contornava esse último problema.
 
-**Não-objetivos explícitos:** nenhum manifest foi validado contra um
-cluster Kyma real (sem cluster acessível neste ambiente de desenvolvimento
-— mesma honestidade já aplicada ao Neo4j/DA-21 e ao MCP/DA-19); o schema
-do CRD `APIRule` deve ser conferido contra o cluster alvo antes de aplicar;
-Qdrant e Neo4j continuam pré-requisitos externos, não implantados por este bundle.
+**Validação em Kubernetes real (2026-10-18, k3d/k3s v1.35).** O bundle foi
+aplicado sem cópia via o overlay `deploy/local` (`scripts/k3d-validate.sh`):
+rollout dos 4 Deployments (API, worker, Qdrant, Redis), probes `/health` e
+`/ready`, `401` sem chave, indexação dos 15 documentos dentro do Pod, dois
+`/diagnose` com `200` e o HPA escalando de 1 para 2 réplicas sob carga.
+Evidência em `docs/EVIDENCIA_K3D_2026-10-18.md`. A validação achou dois bugs
+reais, corrigidos: `/app/data` sem permissão de escrita para o `appuser`
+(o ingest falhava dentro do Pod, também no Kyma) e o script regerando o Secret
+a cada execução (Redis com senha antiga).
 
-**Nota (2026-10-17):** a imagem Docker **foi construída de fato** no Cenário C
-do deploy (DEPLOYMENT.md, seção C.6): contexto 1,87 MB, imagem 6,73 GB,
-validação ponta a ponta (`up -d` → `/health` → `/ready` → `/diagnose`). A
-DA-24 foi escrita antes dessa validação, daí a inconsistência. A correção
-desta nota deve ser removida quando o deploy em k3d/K3s for validado.
+**Ainda não validado:** o que é específico do Kyma gerenciado — `APIRule`
+(schema do CRD a conferir no cluster alvo), Istio e OIDC do BTP. Neo4j segue
+pré-requisito externo, não implantado por este bundle.
 
 **Validação:** `tests/test_kyma_manifests.py` (11 testes) — todo YAML
 sintaticamente válido, namespace consistente entre recursos, probes

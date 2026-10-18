@@ -356,7 +356,39 @@ def check_prompt_digest(root: Path = REPO_ROOT) -> list[Finding]:
     # do payload canonico do digest, entao divergir a versao ja divergiu o
     # digest e o check acima ja reprovou. Um segundo check aqui seria um
     # branch que nunca pode disparar.
-    return _ok(check)
+    return _check_locale_prompts(check, baseline) or _ok(check)
+
+
+def _check_locale_prompts(check: str, baseline: dict) -> list[Finding]:
+    """DA-74: cada idioma com instrucao propria tem digest proprio.
+
+    Medido (em `locales.<idioma>.prompt_digest` do baseline) e divergente =
+    FAIL, como o default. Nunca medido = WARN: o idioma funciona, mas nenhum
+    numero de qualidade descreve aquele prompt - e o gate diz isso em vez de
+    deixar o placar do pt-BR valer para ele em silencio."""
+    from app.agent.prompts import compute_digest, prompt_locales
+    from app.i18n.content import DEFAULT_CONTENT_LOCALE
+
+    findings: list[Finding] = []
+    measured_locales = baseline.get("locales") or {}
+    for loc in prompt_locales():
+        if loc == DEFAULT_CONTENT_LOCALE:
+            continue
+        production = compute_digest(loc)
+        measured = (measured_locales.get(loc) or {}).get("prompt_digest")
+        if not measured:
+            findings += _warn(
+                check,
+                f"prompt '{loc}' (digest {production[:16]}) nao foi medido pelo promptfoo; "
+                "os numeros de qualidade valem so para o pt-BR",
+            )
+        elif measured != production:
+            findings += _fail(
+                check,
+                f"prompt '{loc}' diverge do medido: producao={production[:16]} "
+                f"medido={str(measured)[:16]} - reexecute o promptfoo com esse idioma",
+            )
+    return findings
 
 
 def check_promptfoo_configs(root: Path = REPO_ROOT) -> list[Finding]:
@@ -1615,6 +1647,25 @@ def check_connector_coverage(root: Path = REPO_ROOT) -> list[Finding]:
     ]
 
 
+def check_content_i18n(root: Path = REPO_ROOT) -> list[Finding]:
+    """DA-74: o conteudo do diagnostico existe em todo idioma suportado -
+    catalogos de conteudo com as mesmas chaves e variaveis, toda regra do
+    rule engine traduzida e todo idioma com instrucao de idioma no prompt
+    (app/i18n/checks.py::content_i18n_problems)."""
+    check = "content_i18n"
+    try:
+        from app.i18n.checks import content_i18n_problems
+
+        problems = content_i18n_problems(root)
+    except Exception as exc:  # noqa: BLE001 - o gate nao pode quebrar o build
+        return _fail(check, f"nao foi possivel verificar o conteudo: {exc}")
+    if problems:
+        shown = "; ".join(problems[:8])
+        more = f" (+{len(problems) - 8})" if len(problems) > 8 else ""
+        return _fail(check, f"{len(problems)} problema(s): {shown}{more}")
+    return _ok(check)
+
+
 def check_ui_i18n(root: Path = REPO_ROOT) -> list[Finding]:
     """DA-73: as duas UIs prontas para i18n - catalogos pt-BR/en com as mesmas
     chaves e variaveis, toda chave usada existe, nenhum texto visivel fora do
@@ -1655,6 +1706,7 @@ GATES = {
     "docs_env_vars": check_docs_env_vars,
     "connector_reachable": check_connector_reachable,
     "ui_i18n": check_ui_i18n,
+    "content_i18n": check_content_i18n,
 }
 
 _THRESHOLD_AWARE = frozenset({"rag_dataset_schema", "reranker_invariant"})

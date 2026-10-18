@@ -105,3 +105,68 @@ def ui_i18n_problems(root: Path) -> list[str]:
         problems += used_key_problems(root, catalogs, surface)
     problems += [f"texto fora do catalogo: {f}" for f in scan_repo(root)]
     return problems
+
+
+# ---------------------------------------------------------------------------
+# DA-74: conteudo do diagnostico (gate `content_i18n`)
+# ---------------------------------------------------------------------------
+
+CONTENT_DIR = Path("app/i18n/locales")
+
+
+def _content(root: Path, locale: str) -> dict:
+    return json.loads((root / CONTENT_DIR / f"content.{locale}.json").read_text(encoding="utf-8"))
+
+
+def rule_categories(root: Path) -> set[str]:
+    """Categorias que o rule engine pode devolver: TTL + regras em codigo."""
+    from app.agent.ontology_loader import load_error_rules
+    from app.agent.rules import KNOWN_ERROR_RULES
+
+    ttl = root / "app/ontology/error_codes.ttl"
+    return {r.category for r in load_error_rules(ttl)} | {r.category for r in KNOWN_ERROR_RULES}
+
+
+def content_i18n_problems(root: Path) -> list[str]:
+    """1. Paridade de chaves/variaveis entre os catalogos de conteudo (fora
+    `rules`, que so existe nos idiomas diferentes do default).
+    2. Toda categoria do rule engine tem causa raiz e passos em cada idioma
+    nao-default.
+    3. Todo idioma de conteudo tem prompt (instrucao de idioma) e existe nas
+    interfaces."""
+    from app.agent.prompts import prompt_locales
+    from app.i18n import SUPPORTED_LOCALES
+    from app.i18n.content import CONTENT_LOCALES, DEFAULT_CONTENT_LOCALE
+
+    problems: list[str] = []
+    try:
+        catalogs = {loc: _content(root, loc) for loc in CONTENT_LOCALES}
+    except (OSError, ValueError) as exc:
+        return [f"content: catalogo ilegivel ({exc})"]
+
+    flat = {
+        loc: {k: v for k, v in flatten(cat).items() if not k.startswith("rules.")}
+        for loc, cat in catalogs.items()
+    }
+    problems += parity_problems(flat, "content")
+
+    categories = rule_categories(root)
+    for loc, cat in catalogs.items():
+        if loc == DEFAULT_CONTENT_LOCALE:
+            continue
+        rules = cat.get("rules") or {}
+        for category in sorted(categories):
+            entry = rules.get(category)
+            if not isinstance(entry, dict) or not entry.get("root_cause"):
+                problems.append(f"content: regra '{category}' sem causa raiz em {loc}")
+            elif not entry.get("next_steps"):
+                problems.append(f"content: regra '{category}' sem proximos passos em {loc}")
+        for extra in sorted(set(rules) - categories):
+            problems.append(f"content: regra '{extra}' em {loc} nao existe no rule engine")
+
+    missing_prompt = set(CONTENT_LOCALES) - set(prompt_locales())
+    for loc in sorted(missing_prompt):
+        problems.append(f"content: idioma '{loc}' sem instrucao de idioma no prompt")
+    for loc in sorted(set(CONTENT_LOCALES) - set(SUPPORTED_LOCALES)):
+        problems.append(f"content: idioma '{loc}' nao existe nas interfaces (SUPPORTED_LOCALES)")
+    return problems

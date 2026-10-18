@@ -2842,6 +2842,7 @@ A decisão é logada em audit log estruturado e exposta via `GET /llm/policy` (D
    - **Degradação:** o Policy Engine (DA-66) rejeita com `orcamento_excedido` os candidatos que não cabem; um candidato mais barato que ainda caiba (ex.: Ollama local) segue elegível.
    - **Esgotamento:** se o orçamento do diagnóstico barra todos os candidatos, o gateway levanta `BudgetExhaustedError`, classificada como `FailureClass.BUDGET_EXHAUSTED` (DA-68: sem retry, sem failover). Se quem barra é o teto por chamada, segue `PolicyViolationError` (comportamento DA-26).
 4. **Ledger persistente** (`record_budget_ledger`, migration `018_create_llm_budget_ledger.py`): estimado × real por chamada, best-effort.
+5. **Borda HTTP e registro do incidente** (2026-10-18): `BudgetExhaustedError` vira 503 com `code: budget_exhausted` e `error_id` (`app/main.py`), em vez do 500 genérico; `PolicyViolationError` vira 503 `policy_violation`. O motivo completo vai só para o log. O total debitado e o número de chamadas são gravados no incidente (`cost_usd`, `llm_calls`, migration `019_incidents_escalation_and_cost.py`) e aparecem na Admin UI. Testes: `tests/test_gateway_refusal_http.py`, `tests/test_incident_escalation_cost.py`.
 
 **Validação.** `tests/test_budget_ledger.py` (aritmética e reserva, acúmulo e esgotamento, degradação para candidato mais barato, teto por chamada continua valendo, chamada com falha não é debitada, mapeamento para `BUDGET_EXHAUSTED`, abertura e fechamento em `run_diagnosis` mesmo com erro); `tests/test_tokenizer_offline.py` (fallback para `ConnectionError`/`OSError`/`ImportError`, sem retentativa, um único aviso).
 
@@ -2849,7 +2850,7 @@ A decisão é logada em audit log estruturado e exposta via `GET /llm/policy` (D
 - `cl100k_base` é o tokenizer da OpenAI: para Qwen/Ollama é uma **aproximação**. A contagem real vem de `prompt_eval_count` no metering (DA-48), usada no débito quando disponível.
 - O ledger por diagnóstico é **em memória, por processo**. O diagnóstico roda inteiro numa réplica, então basta na prática; não há orçamento agregado entre réplicas.
 - Após um timeout do watchdog (`diagnosis_timeout_seconds`), o orçamento já foi fechado; chamadas que a thread ainda em execução fizer valem só pelo teto por chamada.
-- Escalonamento humano (DA-44) ao esgotar o orçamento não foi ligado: o erro tipado sobe para o caller.
+- Escalonamento humano (DA-44) ao esgotar o orçamento não foi ligado: o erro tipado sobe para o caller (na API, 503 `budget_exhausted`).
 - A tabela de preços interna é aproximada; não é cobrança real.
 
 ---

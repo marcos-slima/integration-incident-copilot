@@ -53,6 +53,21 @@ Contagens de testes conferidas com `pytest --collect-only` em 2026-10-18.
   `docs/TUTORIAL_K3D_KUBERNETES_LOCAL.md`.
 - **Dependências** `tiktoken`, `langgraph-checkpoint-postgres`,
   `psycopg[binary]` declaradas; migrations 017/018 na convenção numérica.
+- **UI** a camada de apresentação passa a mostrar o que o backend já devolvia.
+  React: sinal de escalonamento (DA-44), evidências com `trust_level` e aviso
+  para `simulated`/`web_untrusted` (DA-25/DA-71), proveniência (DA-53),
+  soberania via `GET /llm/policy` (DA-43/DA-66) e mensagens por `code`, com
+  `error_id`. Admin UI: proveniência, sinal e custo no detalhe do incidente;
+  coluna "Sinal" na lista; evidência renderizada pelos campos reais (antes
+  caía em JSON cru).
+- **API** `BudgetExhaustedError` e `PolicyViolationError` deixam de virar 500
+  "erro interno": 503 com `code` (`budget_exhausted`, `policy_violation`) e
+  `error_id`; o motivo completo, que cita origens internas, fica só no log.
+  Todos os erros de `/diagnose` ganham `code`. Testes:
+  `test_gateway_refusal_http.py` (4).
+- **Migration 019** `incidents.should_escalate`, `escalation_reason`,
+  `cost_usd` e `llm_calls` (custo debitado do orçamento do diagnóstico).
+  Testes: `test_incident_escalation_cost.py` (6).
 - **Validação** suíte unitária na máquina de desenvolvimento: 1608 passando,
   cobertura 81,13% (antes das entregas de DA-71, avaliação e k3d); quality
   gate sem falha.

@@ -92,10 +92,24 @@ done
 # usar a imagem recem-importada.
 kubectl -n "$NS" rollout restart deployment/integration-incident-copilot deployment/integration-incident-copilot-worker
 
+diagnose() {
+  # Pods que NAO estao prontos: e neles que esta a causa (o `logs deployment/x`
+  # escolhe um Pod qualquer, em geral o antigo e saudavel).
+  kubectl -n "$NS" get pods -o wide
+  kubectl -n "$NS" get hpa || true
+  for p in $(kubectl -n "$NS" get pods -l "app.kubernetes.io/name=$1" \
+      -o jsonpath='{range .items[?(@.status.containerStatuses[0].ready==false)]}{.metadata.name}{" "}{end}'); do
+    echo "--- pod nao pronto: $p"
+    kubectl -n "$NS" describe pod "$p" | sed -n '/^Containers:/,/^Volumes:/p;/^Events:/,$p'
+    kubectl -n "$NS" logs "$p" --tail=120 || true
+    kubectl -n "$NS" logs "$p" --previous --tail=60 2>/dev/null || true
+  done
+}
+
 step "6. Rollout"
 for d in qdrant redis integration-incident-copilot integration-incident-copilot-worker; do
   kubectl -n "$NS" rollout status "deployment/$d" --timeout=600s \
-    || { kubectl -n "$NS" describe deployment "$d"; kubectl -n "$NS" logs "deployment/$d" --tail=80 || true; fail "rollout de $d"; }
+    || { diagnose "$d"; fail "rollout de $d"; }
 done
 kubectl -n "$NS" get pods,svc,hpa -o wide
 echo "imagem em execucao:"

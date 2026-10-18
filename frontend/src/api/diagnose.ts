@@ -2,6 +2,7 @@
 // Isola o fetch() do resto da aplicação —
 // se a URL ou o formato mudar, só este arquivo precisa mudar.
 
+import i18n from '../i18n';
 import type { ApiErrorCode, DiagnosisResponse, IncidentRequest } from '../types/models';
 
 // Em desenvolvimento, o Vite proxy redireciona /diagnose para localhost:8000
@@ -38,21 +39,21 @@ export async function apiErrorFrom(res: Response): Promise<ApiError> {
 }
 
 // Mensagem para o usuario, por `code` quando existe e por status no resto.
+// DA-73: textos no catalogo; o `detail` do backend so entra como dado.
 export function describeApiError(e: ApiError): string {
-  const ref = e.errorId ? ` (ref. ${e.errorId})` : '';
+  const ref = e.errorId ? i18n.t('errors.ref', { id: e.errorId }) : '';
   switch (e.code) {
     case 'budget_exhausted':
-      return `Orçamento do diagnóstico esgotado: nenhum provedor elegível cabe no limite configurado. Ajuste DIAGNOSIS_BUDGET_USD ou habilite um provedor local.${ref}`;
     case 'policy_violation':
-      return `A política de soberania não permite nenhum provedor para a sensibilidade deste incidente. Veja "Soberania do dado" em Status.${ref}`;
+      return i18n.t(`errors.${e.code}`) + ref;
     case 'overloaded':
-      return 'Capacidade de diagnóstico esgotada no momento. Tente de novo em alguns segundos.';
+      return i18n.t('errors.overloaded');
     case 'timeout':
-      return `O diagnóstico excedeu o tempo limite. ${e.message}`;
+      return i18n.t('errors.timeout', { detail: e.message });
   }
-  if (e.status === 422) return `Dados inválidos: ${e.message}`;
-  if (e.status === 429) return 'Limite de requisições atingido. Aguarde e tente de novo.';
-  return `Erro ${e.status}: ${e.message}${ref}`;
+  if (e.status === 422) return i18n.t('errors.validation', { message: e.message });
+  if (e.status === 429) return i18n.t('errors.rateLimited');
+  return i18n.t('errors.generic', { status: e.status, message: e.message }) + ref;
 }
 
 export async function callDiagnose(

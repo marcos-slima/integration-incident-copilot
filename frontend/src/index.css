@@ -428,3 +428,13 @@ textarea.field-input{resize:vertical;line-height:1.6}
   background:#0F2040;border:1px solid #1E3A5F;padding:1px 6px;border-radius:4px
 }
 .hist-escalate{font-size:10px;color:#F59E0B;background:#F59E0B1A;padding:1px 7px;border-radius:10px}
+
+/* DA-73: seletor de idioma */
+.lang-select{display:flex;align-items:center;gap:6px;font-size:11px;color:#94A3B8}
+.lang-select select{
+  background:#0A1628;color:#F8FAFC;border:1px solid #1E3A5F;border-radius:5px;
+  font-size:11px;padding:3px 6px;font-family:'Inter',sans-serif
+}
+.lang-select.compact .lang-select-label{display:none}
+.sidebar-lang{padding:8px 16px}
+.login-card .lang-select{margin-top:14px;justify-content:center}

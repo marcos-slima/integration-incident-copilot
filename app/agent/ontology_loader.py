@@ -85,15 +85,17 @@ def _extract_patterns(g: Graph, concept: URIRef) -> list[str]:
 
 
 def _extract_next_steps(g: Graph, concept: URIRef) -> list[str]:
-    """Extrai next_steps do campo skos:note (formato: "next_steps: ação1, ação2")."""
+    """Extrai next_steps do campo skos:note (formato: "next_steps: ação1; ação2").
+
+    DA-74: o separador e' `;`. Com `,` um passo como "Validar credenciais
+    (token, API key, Basic Auth)" virava tres passos quebrados."""
     notes = list(g.objects(concept, SKOS.note))
     steps = []
     for note in notes:
         note_str = str(note)
         if note_str.startswith("next_steps:"):
             raw = note_str.replace("next_steps:", "").strip()
-            for s in raw.split(","):
-                steps.append(s.strip())
+            steps.extend(s.strip() for s in raw.split(";") if s.strip())
     return steps
 
 
@@ -140,14 +142,40 @@ def _extract_confidence(g: Graph, concept: URIRef) -> float:
     return 0.90
 
 
+#: Ultimo recurso quando nem o TTL nem a regra em codigo tem causa raiz.
+GENERIC_ROOT_CAUSE = "Erro conhecido detectado via taxonomia SKOS."
+
+
 def _extract_probable_root_cause(g: Graph, concept: URIRef) -> str:
-    """Read probableRootCause from concept, default empty."""
+    """Read probableRootCause from concept; vazio quando ausente.
+
+    DA-74: antes o ausente virava GENERIC_ROOT_CAUSE aqui - e como a regra
+    do TTL tem precedencia sobre a regra em codigo de mesma categoria, a
+    causa curada de `rules.py` (ex.: IDoc status 51) nunca chegava ao
+    usuario. O preenchimento agora e' feito em `_fill_from_hardcoded`."""
     causes = list(
         g.objects(concept, URIRef("http://example.org/iic/error_codes#probableRootCause"))
     )
     if causes:
         return str(Literal(causes[0]))
-    return "Erro conhecido detectado via taxonomia SKOS."
+    return ""
+
+
+def _fill_from_hardcoded(rules: list[ErrorRule]) -> list[ErrorRule]:
+    """Causa raiz e passos ausentes no TTL vem da regra em codigo de mesma
+    categoria (`rules.py::KNOWN_ERROR_RULES`); sem ela, GENERIC_ROOT_CAUSE."""
+    try:
+        from app.agent.rules import KNOWN_ERROR_RULES
+    except ImportError:  # pragma: no cover - modulo do proprio pacote
+        KNOWN_ERROR_RULES = []
+    by_category = {r.category: r for r in KNOWN_ERROR_RULES}
+    for rule in rules:
+        hard = by_category.get(rule.category)
+        if not rule.probable_root_cause:
+            rule.probable_root_cause = hard.probable_root_cause if hard else GENERIC_ROOT_CAUSE
+        if not rule.next_steps and hard:
+            rule.next_steps = list(hard.next_steps)
+    return rules
 
 
 def load_error_rules(ontology_path: Path | None = None) -> list[ErrorRule]:
@@ -205,7 +233,7 @@ def load_error_rules(ontology_path: Path | None = None) -> list[ErrorRule]:
         rules.append(rule)
 
     _logger.info("loaded %d error rules from ontology", len(rules))
-    return rules
+    return _fill_from_hardcoded(rules)
 
 
 def load_error_rules_combined() -> list[ErrorRule]:

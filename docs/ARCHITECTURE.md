@@ -280,7 +280,7 @@ flowchart LR
     pr -->|"tool do ReAct, so com fonte aprovada"| q
     q --> ddg
     ddg --> wb
-    wb -.->|"volta ao LLM como observacao<br/>SEM sanitize_untrusted_input"| pr
+    wb -.->|"volta ao LLM sanitizado<br/>e delimitado (DA-71)"| pr
     ev2 --> enc --> db
     pr --> lf
 ```
@@ -289,21 +289,22 @@ flowchart LR
 
 | Controle | Codigo | Observacao |
 |---|---|---|
-| Neutralizacao de *prompt injection* e redacao de PII na entrada | `app/agent/nodes.py::sanitize_untrusted_input` | aplicado a descricao, logs, payload, dado de conector, trecho do RAG e historico do grafo; **nao** ao retorno da ferramenta de busca web (achado 1 abaixo) |
+| Neutralizacao de *prompt injection* e redacao de PII na entrada | `app/agent/nodes.py::sanitize_untrusted_input` | aplicado a descricao, logs, payload, dado de conector, trecho do RAG, historico do grafo e, desde a DA-71, ao retorno da busca web (`format_untrusted_web_hits`) |
 | Classificacao de sensibilidade | `app/llm/gateway.py::classify_sensitivity` | conector real ou `pii_detected` tornam o dado confidencial; o default e confidencial (B-04) |
 | Politica de destino | `app/llm/routing.py::_provider_allows_sensitivity` | decidida pela **origem real**, nao pelo rotulo do provider (DA-43, DA-66) |
 | Consulta de busca web | `app/agent/nodes.py::_sanitize_web_search_query` | redige URLs, IDocs, GUIDs, tokens e trunca |
 | Capacidades MCP | `app/mcp/policy.py` | ferramenta sem entrada no registro e negada (DA-27) |
 | Cifragem em repouso | `app/admin/crypto.py::encrypt_evidence` | redige antes de cifrar (DA-60) |
 
-> **Achados da validacao de 2026-10-07 (abertos).**
+> **Achados da validacao de 2026-10-07.**
 >
-> 1. O texto que a ferramenta de busca web do agente ReAct devolve
->    (`app/agent/nodes.py::_make_web_search_tool`) volta ao LLM como
->    observacao **sem** passar por `sanitize_untrusted_input`. Isso deixa
->    aberta a injecao indireta por pagina web. A seta tracejada do diagrama
->    marca o ponto.
-> 2. `app/agent/nodes.py::web_search_node` existe, mas **nao esta no grafo**:
+> 1. **Fechado (DA-71).** O texto que a ferramenta de busca web do agente
+>    ReAct devolve (`app/agent/nodes.py::_make_web_search_tool`) voltava ao
+>    LLM sem `sanitize_untrusted_input`. Agora passa por
+>    `format_untrusted_web_hits`: sanitizado, limitado, URL reduzida e
+>    bloco delimitado como dado nao confiavel. A neutralizacao e por
+>    padroes - reduz o risco de injecao indireta, nao o elimina.
+> 2. (Aberto.) `app/agent/nodes.py::web_search_node` existe, mas **nao esta no grafo**:
 >    nenhum no escreve `web_search_results`. O trecho do prompt que sanitiza
 >    "resultado de busca web" le um campo que fica sempre vazio. A unica busca
 >    web real e a ferramenta do ReAct do item 1.

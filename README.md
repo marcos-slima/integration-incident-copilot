@@ -228,7 +228,7 @@ The table below maps each capability to its implementation status and evidence.
 | seed=42 | VER | `app/llm/factory.py:152` | Sent only when destination accepts |
 | AI Gateway: sensitivity, breaker, budget, audit | VER | `app/llm/gateway.py:9-26, 126-158`; `GET /llm/policy` | Default confidential (`config.py:159`) |
 | PII redaction by patterns | VER | `app/redaction.py` (email, CPF, CNPJ, IDoc 16 digits, bearer, passwords) | No NER/classifier |
-| Sanitization against prompt injection | PARC | `nodes.py:501-691` | Gap: ReAct agent web tool results return raw (`nodes.py:1043-1048`) |
+| Sanitization against prompt injection | VER | `nodes.py::sanitize_untrusted_input`, `format_untrusted_web_hits` | Includes web-search results returned to the ReAct agent (DA-71); pattern-based, reduces risk without eliminating it |
 | Web search only with approved source (fail-closed) | VER | `nodes.py:1000-1030`, DA-57 | |
 | 10 connectors under one contract | VER | `app/connectors/` | |
 | Validation in real system | PARC | ServiceNow, Salesforce, CAP: yes; RFC: logon; 6 without validation | `docs/ARCHITECTURE.md:644-652`; gate `connector_validation_matrix` |
@@ -258,7 +258,6 @@ followed by verified fixes, and these limits remain open:
 - **Kyma:** the manifests in `deploy/kyma/` have never been applied to a real cluster.
 - **Connectors:** six of the ten have not been validated against a real instance (table above).
 - **Vector store outage:** with Qdrant down, `_retrieve_hybrid` and `_retrieve_dense_only` catch the exception and return an empty list (DA-65). Known errors covered by rules are still diagnosed deterministically. Verified manually; end-to-end test pending.
-- **Prompt-injection gap:** web-search results returned to the ReAct agent are not yet sanitized. The `web_search_tool` tool is invoked by the ReAct agent, but its results are not sanitized before being passed to the LLM, which could allow an attacker to inject malicious instructions via web search results.
 
 Each of these is documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 

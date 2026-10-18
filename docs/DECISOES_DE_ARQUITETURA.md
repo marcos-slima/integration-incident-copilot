@@ -86,6 +86,7 @@ final.
 | 70 | [60](#60-métricas-e-finops-da-70) | Métricas e FinOps: Prometheus (`llm_requests_total`, `llm_tokens_total`, `llm_cost_usd_total`, `llm_budget_deviation_ratio`, `diagnosis_duration_seconds`) |
 | 63 | [64](#64-skills-declarativas---yaml-como-fonte-de-verdade-para-capability-e-roteamento-da-63) | Skills declarativas — YAML como fonte de verdade para capability e roteamento (DA-63) |
 | 65 | [65](#65-degradação-graciosa-do-rag-quando-qdrant-cai-da-65) | Degradação graciosa do RAG: Qdrant cai → `_retrieve_hybrid` e `_retrieve_dense_only` retornam `[]` → rule engine ainda responde erros conhecidos; fluxo completo `/diagnose → run_diagnosis` pendente de teste de integração |
+| 71 | [66](#66-sanitização-do-resultado-de-busca-web-devolvido-ao-llm-da-71) | Resultado de busca web sanitizado e delimitado antes de voltar ao LLM (tool do ReAct e `web_search_node`) |
 | — | — | DA-64: número não utilizado (pulo intencional) |
 
 > **Ordenação da prosa:** as seções §42–§47 (DA-42, DA-38, DA-39, DA-40,
@@ -3094,3 +3095,22 @@ A função `load_skills()` em `app/mcp/skill_registry.py` carrega todas as skill
 
 **Próximos passos.**
 - (nenhum, DA-65 está completa)
+
+---
+
+### 66. Sanitização do resultado de busca web devolvido ao LLM (DA-71)
+
+**O problema.** O resultado da busca web era a única entrada não confiável que voltava ao LLM sem `sanitize_untrusted_input`. O tool do agente ReAct (`_make_web_search_tool`) devolvia título, URL e resumo crus do DuckDuckGo como observação. Uma página indexada com "ignore as instruções anteriores…" entrava no raciocínio do agente. A consulta de saída já era sanitizada (egress); a volta não. O limite estava declarado no README.
+
+**A solução.** `app/agent/nodes.py::format_untrusted_web_hits`, usada pelo tool do ReAct **e** pelo `web_search_node` (que alimenta prompt, evidência `web_untrusted` e relatório):
+
+- título e resumo passam por `sanitize_untrusted_input` (neutralização de injection em inglês, português e espanhol, normalização Unicode e caracteres invisíveis, redação de PII), com limite de tamanho por campo (200/800) e total (1800);
+- URL reduzida a esquema + host + caminho, só `http`/`https` (query e fragmento podem carregar texto do atacante; `javascript:`/`data:` somem);
+- o bloco vai entre delimitadores (`<<<DADOS_WEB_NAO_CONFIAVEIS>>>` … `<<<FIM_DADOS_WEB>>>`) com aviso de que é dado, não instrução; o delimitador é removido do conteúdo antes, para que o texto externo não consiga "fechar" o bloco;
+- mensagens de erro da busca também são sanitizadas.
+
+**Validação.** `tests/test_web_search_injection.py` (16 testes): injeção no resumo e no título (EN/PT/ES e com caractere de largura zero), PII, delimitador forjado, URL maliciosa, limites de tamanho, observação do tool do ReAct, erro da busca e texto gravado pelo `web_search_node`.
+
+**Limitações (registradas de propósito).**
+- Neutralização por padrões: reduz o risco, não o elimina. Paráfrases que não casem com `_INJECTION_PATTERNS` passam; o delimitador e o aviso são a segunda camada, não garantia.
+- O agente segue sem ferramenta de escrita (DA-27): uma injeção bem-sucedida afeta a qualidade do diagnóstico, não executa ação.

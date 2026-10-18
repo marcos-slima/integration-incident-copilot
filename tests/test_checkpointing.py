@@ -1,6 +1,7 @@
 """DA-69: checkpointing e execucao resumivel.
 
-Usa o grafo REAL (`build_graph`) com MemorySaver e os nos substituidos por
+Usa o grafo REAL (`build_graph`) com MemorySaver (com e sem o
+RedactingMemorySaver) e os nos substituidos por
 fakes com contador - sem Qdrant, Ollama ou Postgres. O que se testa e o
 contrato da DA-69: retomada pelo mesmo `thread_id` sem reexecutar nos ja
 concluidos, isolamento entre threads, default desligado e o que o estado
@@ -9,6 +10,7 @@ persistido carrega.
 O PostgresSaver real NAO e exercitado aqui (limite declarado na DA-69).
 """
 
+import dataclasses
 import importlib
 import sys
 from collections import Counter
@@ -16,7 +18,8 @@ from collections import Counter
 import pytest
 from langgraph.checkpoint.memory import MemorySaver
 
-from app.agent import graph
+from app.agent import checkpointing, graph
+from app.agent.checkpointing import RedactingMemorySaver
 
 NODES = (
     "supervisor_node",
@@ -151,38 +154,176 @@ def test_run_diagnosis_passes_thread_id_only_when_enabled(monkeypatch):
 
 
 def test_default_off_does_not_import_postgres_saver(monkeypatch):
-    """Com CHECKPOINTING_ENABLED=false (default) o modulo nao importa o
-    PostgresSaver - quem nao usa nao precisa de libpq/psycopg."""
+    """Com CHECKPOINTING_ENABLED=false (default) nada do Postgres e
+    importado - quem nao usa nao precisa de libpq/psycopg."""
     from app.config import Settings
 
     assert Settings(_env_file=None).checkpointing_enabled is False
     monkeypatch.setattr(graph.settings, "checkpointing_enabled", False)
+    monkeypatch.setattr(graph, "_compiled_graph", None)
     sys.modules.pop("langgraph.checkpoint.postgres", None)
     importlib.reload(graph)
     try:
+        graph.get_graph()
         assert "langgraph.checkpoint.postgres" not in sys.modules
-        assert not hasattr(graph, "PostgresSaver")
+        assert graph._checkpointer is None
     finally:
         importlib.reload(graph)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "GAP DA-69: o estado inicial guarda description/logs crus; a redacao "
-        "de PII (DA-30) so acontece ao montar o prompt. Com checkpointing "
-        "ligado, e-mail/CPF ficam em claro no checkpoint. Quando a redacao "
-        "for aplicada antes da persistencia este teste passa e o xfail "
-        "estrito avisa para remover a marca."
-    ),
+def test_get_graph_uses_redacting_postgres_builder_when_enabled(monkeypatch):
+    sentinel = RedactingMemorySaver()
+    urls = []
+
+    def fake_builder(url):
+        urls.append(url)
+        return sentinel
+
+    monkeypatch.setattr(checkpointing, "build_postgres_checkpointer", fake_builder)
+    monkeypatch.setattr(graph.settings, "checkpointing_enabled", True)
+    monkeypatch.setattr(graph.settings, "database_url", "postgresql+asyncpg://u:p@db:5432/iic")
+    monkeypatch.setattr(graph, "_compiled_graph", None)
+    monkeypatch.setattr(graph, "_checkpointer", None)
+
+    graph.get_graph()
+
+    assert urls == ["postgresql+asyncpg://u:p@db:5432/iic"]
+    assert graph._checkpointer is sentinel
+    monkeypatch.setattr(graph, "_compiled_graph", None)
+    monkeypatch.setattr(graph, "_checkpointer", None)
+
+
+def test_get_graph_requires_database_url(monkeypatch):
+    monkeypatch.setattr(graph.settings, "checkpointing_enabled", True)
+    monkeypatch.setattr(graph.settings, "database_url", "")
+    monkeypatch.setattr(graph, "_compiled_graph", None)
+    with pytest.raises(RuntimeError, match="DATABASE_URL"):
+        graph.get_graph()
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("postgresql+asyncpg://u:p@h:5432/d", "postgresql://u:p@h:5432/d"),
+        ("postgresql+psycopg2://u:p@h/d", "postgresql://u:p@h/d"),
+        ("postgres://u@h/d", "postgresql://u@h/d"),
+        ("postgresql://u@h/d", "postgresql://u@h/d"),
+    ],
 )
+def test_libpq_url(raw, expected):
+    assert checkpointing.libpq_url(raw) == expected
+
+
+# ---------------------------------------------------------------------
+# PII: o checkpoint nunca grava em claro (DA-30 aplicada na persistencia)
+# ---------------------------------------------------------------------
+
+EMAIL = "joao.silva@empresa.com.br"
+CPF = "123.456.789-09"
+
+
+def _raw_checkpoint_bytes(saver) -> bytes:
+    """Tudo que o MemorySaver guardou, ja serializado (o que iria ao banco)."""
+    blob = repr(saver.storage).encode() + repr(saver.writes).encode()
+    if hasattr(saver, "blobs"):
+        blob += repr(saver.blobs).encode()
+    return blob
+
+
 def test_checkpoint_does_not_store_pii_in_clear(fakes):
     fakes()
-    g = graph.build_graph(checkpointer=MemorySaver())
-    g.invoke(
-        _state(description="Falha para joao.silva@empresa.com.br CPF 123.456.789-09"),
+    saver = RedactingMemorySaver()
+    g = graph.build_graph(checkpointer=saver)
+    final = g.invoke(
+        _state(description=f"Falha para {EMAIL} CPF {CPF}", logs=f"user={EMAIL}"),
         _cfg("t-pii"),
     )
+
+    # Em memoria, durante a execucao, o fluxo ve o texto original.
+    assert EMAIL in final["description"]
+
+    raw = _raw_checkpoint_bytes(saver)
+    assert EMAIL.encode() not in raw
+    assert CPF.encode() not in raw
     persisted = repr(g.get_state(_cfg("t-pii")).values)
-    assert "joao.silva@empresa.com.br" not in persisted
-    assert "123.456.789-09" not in persisted
+    assert EMAIL not in persisted and CPF not in persisted
+
+
+def test_default_serializer_would_leak_pii(fakes):
+    """Controle: sem a redacao o PII vai para o checkpoint -
+    prova que o teste acima mede a redacao, nao uma coincidencia."""
+    fakes()
+    saver = MemorySaver()
+    g = graph.build_graph(checkpointer=saver)
+    g.invoke(_state(description=f"Falha para {EMAIL}"), _cfg("t-leak"))
+    assert EMAIL in repr(g.get_state(_cfg("t-leak")).values)
+
+
+def test_resume_reads_redacted_state_with_original_types(fakes, monkeypatch):
+    """Retomada le o estado redigido e com os tipos originais
+    (ConnectorResult continua dataclass, nao dict)."""
+    from app.connectors.base import ConnectorResult
+
+    f = fakes(fail_on="sap_diagnosis_node")
+    connector = ConnectorResult(
+        source_system="OData",
+        status="error",
+        error_code="401",
+        message=f"token invalido para {EMAIL}",
+        raw="{}",
+        is_mock=False,
+        is_fallback=False,
+    )
+    monkeypatch.setattr(
+        graph, "connector_node", f.node("connector_node", {"connector_data": connector})
+    )
+    seen = {}
+
+    def diagnose(state):
+        f.calls["sap_diagnosis_node"] += 1
+        if f.calls["sap_diagnosis_node"] == 1:
+            raise RuntimeError("falha simulada")
+        seen["connector"] = state["connector_data"]
+        seen["description"] = state["description"]
+        return {"diagnosis": {"probable_root_cause": "token"}}
+
+    monkeypatch.setattr(graph, "sap_diagnosis_node", diagnose)
+    g = graph.build_graph(checkpointer=RedactingMemorySaver())
+
+    with pytest.raises(RuntimeError):
+        g.invoke(_state(description=f"erro para {EMAIL}"), _cfg("t-types"))
+    g.invoke(None, _cfg("t-types"))
+
+    assert isinstance(seen["connector"], ConnectorResult)
+    assert seen["connector"].is_mock is False
+    assert EMAIL not in seen["connector"].message
+    assert EMAIL not in seen["description"]
+    assert f.calls["connector_node"] == 1
+
+
+def test_redact_preserving_types_keeps_structure():
+    from pydantic import BaseModel
+
+    class M(BaseModel):
+        texto: str
+        n: int
+
+    @dataclasses.dataclass(frozen=True)
+    class D:
+        a: str
+        b: tuple
+
+    value = {
+        "s": f"mail {EMAIL}",
+        "l": [CPF, 1],
+        "t": (EMAIL,),
+        "d": D(a=EMAIL, b=(CPF,)),
+        "m": M(texto=EMAIL, n=3),
+        "n": None,
+    }
+    out = checkpointing.redact_preserving_types(value)
+    assert EMAIL not in out["s"] and CPF not in out["l"][0] and out["l"][1] == 1
+    assert isinstance(out["t"], tuple) and EMAIL not in out["t"][0]
+    assert isinstance(out["d"], D) and EMAIL not in out["d"].a and CPF not in out["d"].b[0]
+    assert isinstance(out["m"], M) and EMAIL not in out["m"].texto and out["m"].n == 3
+    assert out["n"] is None

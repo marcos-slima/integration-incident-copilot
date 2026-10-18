@@ -225,8 +225,8 @@ class LlmBudgetLedger(Base):
     __tablename__ = "llm_budget_ledger"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    incident_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
-    provider_origin: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    incident_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    provider_origin: Mapped[str] = mapped_column(String(128), nullable=False)
     model_id: Mapped[str] = mapped_column(String(128), nullable=False)
     estimated_cost_usd: Mapped[float] = mapped_column(Float, nullable=False)
     actual_cost_usd: Mapped[float] = mapped_column(Float, nullable=False)
@@ -241,6 +241,7 @@ class LlmBudgetLedger(Base):
     __table_args__ = (
         Index("ix_llm_budget_ledger_incident", "incident_id"),
         Index("ix_llm_budget_ledger_origin_created", "provider_origin", "created_at"),
+        Index("ix_llm_budget_ledger_provider_origin", "provider_origin"),
     )
 
     def __repr__(self) -> str:
@@ -518,6 +519,11 @@ class LlmRequests(Base):
     model: Mapped[str] = mapped_column(String(100), nullable=False, primary_key=True)
     count: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)
 
+    __table_args__ = (
+        Index("ix_llm_requests_created_at", "created_at"),
+        Index("ix_llm_requests_provider", "provider"),
+    )
+
 
 class LlmTokens(Base):
     """Tokens LLM (input/output) por provider/model (DA-70).
@@ -538,6 +544,11 @@ class LlmTokens(Base):
     )  # 'input' | 'output'
     count: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)
 
+    __table_args__ = (
+        Index("ix_llm_tokens_created_at", "created_at"),
+        Index("ix_llm_tokens_provider", "provider"),
+    )
+
 
 class LlmCost(Base):
     """Custo LLM em USD por provider/model (DA-70).
@@ -554,3 +565,8 @@ class LlmCost(Base):
     provider: Mapped[str] = mapped_column(String(50), nullable=False, primary_key=True)
     model: Mapped[str] = mapped_column(String(100), nullable=False, primary_key=True)
     cost_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    __table_args__ = (
+        Index("ix_llm_cost_created_at", "created_at"),
+        Index("ix_llm_cost_provider", "provider"),
+    )

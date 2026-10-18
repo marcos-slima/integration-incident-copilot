@@ -1,6 +1,6 @@
 """017_create_llm_metrics_tables
 
-Revision ID: 5f2da5d73203
+Revision ID: 017
 Revises: 016
 Create Date: 2026-10-17 19:27:36.259761
 
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "5f2da5d73203"
+revision: str = "017"
 down_revision: str | Sequence[str] | None = "016"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

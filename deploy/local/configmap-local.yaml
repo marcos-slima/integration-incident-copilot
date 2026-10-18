@@ -1,0 +1,18 @@
+# Sobrescreve so o que difere do Kyma. host.docker.internal e resolvido
+# para o IP do host pelo scripts/k3d-validate.sh (hostAliases) e a policy
+# o trata como loopback (app/llm/origins.py::is_loopback_origin): o dado
+# nao sai da maquina do operador.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: integration-incident-copilot-config
+  namespace: integration-incident-copilot
+data:
+  LLM_PROVIDER: "ollama"
+  LLM_FALLBACK_PROVIDER: ""
+  LLM_MODEL: "qwen3.6:35b-a3b"
+  OLLAMA_HOST: "http://host.docker.internal:11434"
+  DATA_SOVEREIGNTY_MODE: "strict"
+  CONFIDENTIAL_ALLOWED_ORIGINS: ""
+  WEB_SEARCH_ENABLED: "false"
+  SESSION_COOKIE_SECURE: "false"

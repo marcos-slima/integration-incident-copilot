@@ -191,7 +191,21 @@
     "publicOnly": "só público",
     "blocked": "bloqueado",
     "confidentialTo": "Dado confidencial pode ir para: {{list}}.",
-    "noProvider": "nenhum provedor"
+    "noProvider": "nenhum provedor",
+    "connectorNote": {
+      "real": "{{setting}} configurado",
+      "mock": "{{setting}} não configurado",
+      "misconfigured": "{{setting}} configurado, mas falta o pacote 'pyrfc'/SDK NetWeaver RFC"
+    },
+    "connectorStatus": {
+      "real": "real",
+      "mock": "demo",
+      "misconfigured": "incompleto"
+    },
+    "locality": {
+      "local": "local",
+      "cloud": "nuvem"
+    }
   },
   "errors": {
     "budget_exhausted": "Orçamento do diagnóstico esgotado: nenhum provedor elegível cabe no limite configurado. Ajuste DIAGNOSIS_BUDGET_USD ou habilite um provedor local.",
@@ -202,5 +216,14 @@
     "rateLimited": "Limite de requisições atingido. Aguarde e tente de novo.",
     "generic": "Erro {{status}}: {{message}}",
     "ref": " (ref. {{id}})"
+  },
+  "sovereigntyReason": {
+    "origin_unresolved": "origem não resolvida para o provider '{{provider}}'",
+    "public_unrestricted": "dado público: a origem {{origin}} não é restringida",
+    "local_origin": "origem local {{origin}}, sob jurisdição do operador",
+    "mode_required": "dado confidencial para nuvem exige data_sovereignty_mode='cloud_with_dlp' (atual: '{{mode}}')",
+    "allowlist_empty": "dado confidencial para nuvem exige a origem em CONFIDENTIAL_ALLOWED_ORIGINS (vazia; destino {{origin}})",
+    "allowlisted": "a origem {{origin}} está na allowlist de dado confidencial",
+    "not_allowlisted": "a origem {{origin}} não está em CONFIDENTIAL_ALLOWED_ORIGINS ({{allowed}})"
   }
 }

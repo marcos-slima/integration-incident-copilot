@@ -94,6 +94,8 @@ class Candidate:
     is_default: bool = False
     score: float | None = None
     detail: tuple[str, ...] = ()  # motivo legivel por rejeicao (preview/audit)
+    # DA-74: o mesmo motivo como (codigo, parametros), para a UI traduzir.
+    detail_items: tuple[dict, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -143,14 +145,43 @@ def _get_scoring_weights(cfg: Settings) -> dict[str, float]:
     }
 
 
-def _provider_allows_sensitivity(
-    provider: str, sensitivity: Sensitivity, cfg: Settings
-) -> tuple[bool, str]:
-    """Decide se um provider pode receber dado com esta sensibilidade.
+#: DA-74: texto (pt-BR) de cada decisao de soberania. O texto e' o mesmo de
+#: antes - audit log, `/llm/policy` -, e o par (codigo, parametros) vai junto
+#: para as interfaces traduzirem (`sovereigntyReason.<codigo>` nos catalogos).
+_SOVEREIGNTY_TEXT: dict[str, str] = {
+    "origin_unresolved": "origin nao resolvida para o provider '{provider}'",
+    "public_unrestricted": "dado public: origem {origin} nao e restringida",
+    "local_origin": "origem local {origin} sob jurisdicao do operador",
+    "mode_required": (
+        "dado confidencial para cloud exige data_sovereignty_mode="
+        "'cloud_with_dlp' (atual: '{mode}')"
+    ),
+    "allowlist_empty": (
+        "dado confidencial para cloud exige a origem na allowlist "
+        "CONFIDENTIAL_ALLOWED_ORIGINS (vazia; destino e {origin})"
+    ),
+    "allowlisted": "origem {origin} esta na allowlist de dado confidencial",
+    "not_allowlisted": "origem {origin} nao esta em CONFIDENTIAL_ALLOWED_ORIGINS ({allowed})",
+}
 
-    Retorna (permitido, motivo). O motivo vai para o audit log e para o
-    endpoint /llm/policy - e a resposta objetiva a "por que isso foi
-    (nao) permitido?".
+
+@dataclass(frozen=True)
+class SovereigntyDecision:
+    """Decisao de soberania com codigo estavel (DA-74)."""
+
+    allowed: bool
+    code: str
+    params: dict[str, str]
+
+    @property
+    def reason(self) -> str:
+        return _SOVEREIGNTY_TEXT[self.code].format(**self.params)
+
+
+def sovereignty_decision(
+    provider: str, sensitivity: Sensitivity, cfg: Settings
+) -> SovereigntyDecision:
+    """Decide se um provider pode receber dado com esta sensibilidade.
 
     Fail-closed em todas as branches desconhecidas: so
     'cloud_with_dlp' EXPLICITO libera cloud. Um Settings invalido
@@ -159,36 +190,26 @@ def _provider_allows_sensitivity(
     """
     origin = resolve_provider_origin(provider, cfg)
     if not origin:
-        return False, f"origin nao resolvida para o provider '{provider}'"
+        return SovereigntyDecision(False, "origin_unresolved", {"provider": provider})
 
     is_local = is_loopback_origin(origin)
 
     if sensitivity == "public":
-        return True, f"dado public: origem {origin} nao e restringida"
+        return SovereigntyDecision(True, "public_unrestricted", {"origin": origin})
 
     # daqui para frente: confidential
     if is_local:
-        return True, f"origem local {origin} sob jurisdicao do operador"
+        return SovereigntyDecision(True, "local_origin", {"origin": origin})
 
     if cfg.data_sovereignty_mode != "cloud_with_dlp":
-        return (
-            False,
-            (
-                f"dado confidencial para cloud exige data_sovereignty_mode="
-                f"'cloud_with_dlp' (atual: '{cfg.data_sovereignty_mode or '(vazio)'}')"
-            ),
+        return SovereigntyDecision(
+            False, "mode_required", {"mode": cfg.data_sovereignty_mode or "(vazio)"}
         )
 
     # Parseia CONFIDENTIAL_ALLOWED_ORIGINS
     raw = (cfg.confidential_allowed_origins or "").strip()
     if not raw:
-        return (
-            False,
-            (
-                f"dado confidencial para cloud exige a origem na allowlist "
-                f"CONFIDENTIAL_ALLOWED_ORIGINS (vazia; destino e {origin})"
-            ),
-        )
+        return SovereigntyDecision(False, "allowlist_empty", {"origin": origin})
 
     allowed: set[str] = set()
     for item in raw.split(","):
@@ -197,11 +218,20 @@ def _provider_allows_sensitivity(
             allowed.add(origin_allowed)
 
     if origin in allowed:
-        return True, f"origem {origin} esta na allowlist de dado confidencial"
-    return (
-        False,
-        (f"origem {origin} nao esta em CONFIDENTIAL_ALLOWED_ORIGINS ({sorted(allowed)})"),
+        return SovereigntyDecision(True, "allowlisted", {"origin": origin})
+    return SovereigntyDecision(
+        False, "not_allowlisted", {"origin": origin, "allowed": str(sorted(allowed))}
     )
+
+
+def _provider_allows_sensitivity(
+    provider: str, sensitivity: Sensitivity, cfg: Settings
+) -> tuple[bool, str]:
+    """(permitido, motivo). O motivo vai para o audit log e para o
+    endpoint /llm/policy - e a resposta objetiva a "por que isso foi
+    (nao) permitido?". Codigo estavel em `sovereignty_decision`."""
+    decision = sovereignty_decision(provider, sensitivity, cfg)
+    return decision.allowed, decision.reason
 
 
 def _select_allowed_providers(
@@ -504,56 +534,93 @@ def _evaluate_registry(request: RoutingRequest) -> RoutingDecision:
         tier = effective_tier(model)
         reasons: list[RejectionReason] = []
         detail: list[str] = []
+        items: list[dict] = []
+
+        def reject(
+            reason: RejectionReason,
+            text: str,
+            _acc: tuple[list, list, list] = (reasons, detail, items),
+            **params: object,
+        ) -> None:
+            _acc[0].append(reason)
+            _acc[1].append(text)
+            _acc[2].append({"reason": reason.value, "params": params})
 
         if not destination_matches_origin(model, origin):
-            reasons.append(RejectionReason.DESTINATION_MISMATCH)
-            detail.append(f"base_url aponta para {origin}, fora da origem {model.provider_origin}")
+            reject(
+                RejectionReason.DESTINATION_MISMATCH,
+                f"base_url aponta para {origin}, fora da origem {model.provider_origin}",
+                origin=origin,
+                registered=model.provider_origin,
+            )
 
-        ok, why = _provider_allows_sensitivity(label, request.sensitivity, cand_cfg)
-        if not ok:
-            reasons.append(RejectionReason.SOVEREIGNTY_BLOCKED)
-            detail.append(why)
+        sov = sovereignty_decision(label, request.sensitivity, cand_cfg)
+        if not sov.allowed:
+            reject(RejectionReason.SOVEREIGNTY_BLOCKED, sov.reason, code=sov.code, **sov.params)
 
         if transport != "ollama" and model.provider_origin not in snapshot.credentialed_origins:
-            reasons.append(RejectionReason.CREDENTIAL_MISSING)
-            detail.append(f"origem {model.provider_origin} sem credencial cifrada (DA-47)")
+            reject(
+                RejectionReason.CREDENTIAL_MISSING,
+                f"origem {model.provider_origin} sem credencial cifrada (DA-47)",
+                origin=model.provider_origin,
+            )
 
-        caps_ok, caps_why = _caps_satisfy(
+        missing_caps = _missing_capabilities(
             _effective_capabilities(origin, model), request.required_capabilities
         )
-        if not caps_ok:
-            reasons.append(RejectionReason.CAPABILITY_MISSING)
-            detail.append(caps_why)
+        if missing_caps:
+            reject(
+                RejectionReason.CAPABILITY_MISSING,
+                f"capacidades faltando: {', '.join(missing_caps)}",
+                missing=", ".join(missing_caps),
+            )
 
         if model.context_window_tokens and total_tokens > model.context_window_tokens:
-            reasons.append(RejectionReason.CONTEXT_WINDOW)
-            detail.append(
-                f"contexto estimado {total_tokens} > janela {model.context_window_tokens}"
+            reject(
+                RejectionReason.CONTEXT_WINDOW,
+                f"contexto estimado {total_tokens} > janela {model.context_window_tokens}",
+                tokens=total_tokens,
+                window=model.context_window_tokens,
             )
 
         if model.domains and request.domain and request.domain not in model.domains:
-            reasons.append(RejectionReason.DOMAIN_MISMATCH)
-            detail.append(f"dominio '{request.domain}' fora de {list(model.domains)}")
+            reject(
+                RejectionReason.DOMAIN_MISMATCH,
+                f"dominio '{request.domain}' fora de {list(model.domains)}",
+                domain=request.domain,
+                domains=", ".join(model.domains),
+            )
 
         if tier == "premium":
             # Tier 3 da DA-44: cadastrado e bloqueado ate decisao propria.
-            reasons.append(RejectionReason.TIER_NOT_AUTHORIZED)
-            detail.append("nivel premium exige escalonamento autorizado (fora da DA-72)")
+            reject(
+                RejectionReason.TIER_NOT_AUTHORIZED,
+                "nivel premium exige escalonamento autorizado (fora da DA-72)",
+            )
 
         used = snapshot.usage_tokens.get((model.provider_origin, model.model_id), 0)
         if model.monthly_limit_tokens and used >= model.monthly_limit_tokens:
-            reasons.append(RejectionReason.MONTHLY_LIMIT)
-            detail.append(f"{used} de {model.monthly_limit_tokens} tokens no periodo")
+            reject(
+                RejectionReason.MONTHLY_LIMIT,
+                f"{used} de {model.monthly_limit_tokens} tokens no periodo",
+                used=used,
+                limit=model.monthly_limit_tokens,
+            )
 
         if _circuit_is_open(origin, cfg):
-            reasons.append(RejectionReason.CIRCUIT_OPEN)
-            detail.append(f"circuito aberto para a origem {origin}")
+            reject(
+                RejectionReason.CIRCUIT_OPEN,
+                f"circuito aberto para a origem {origin}",
+                origin=origin,
+            )
 
         cost = _registry_cost(model, label, request.context_tokens)
         if cost > request.budget_remaining_usd:
-            reasons.append(RejectionReason.BUDGET_EXCEEDED)
-            detail.append(
-                f"custo estimado ${cost:.4f} > restante ${request.budget_remaining_usd:.4f}"
+            reject(
+                RejectionReason.BUDGET_EXCEEDED,
+                f"custo estimado ${cost:.4f} > restante ${request.budget_remaining_usd:.4f}",
+                cost=round(cost, 6),
+                remaining=round(request.budget_remaining_usd, 6),
             )
 
         key = f"{model.provider_origin}/{model.model_id}"
@@ -574,6 +641,7 @@ def _evaluate_registry(request: RoutingRequest) -> RoutingDecision:
                 priority=model.priority,
                 is_default=model.is_default,
                 detail=tuple(detail),
+                detail_items=tuple(items),
             )
         )
 
@@ -617,8 +685,8 @@ def _evaluate_registry(request: RoutingRequest) -> RoutingDecision:
     )
 
 
-def _caps_satisfy(caps: ProviderCapabilities, required: ProviderCapabilities) -> tuple[bool, str]:
-    missing = [
+def _missing_capabilities(caps: ProviderCapabilities, required: ProviderCapabilities) -> list[str]:
+    return [
         name
         for name, need, have in (
             ("seed", required.supports_seed, caps.supports_seed),
@@ -627,6 +695,10 @@ def _caps_satisfy(caps: ProviderCapabilities, required: ProviderCapabilities) ->
         )
         if need and not have
     ]
+
+
+def _caps_satisfy(caps: ProviderCapabilities, required: ProviderCapabilities) -> tuple[bool, str]:
+    missing = _missing_capabilities(caps, required)
     if missing:
         return False, f"capacidades faltando: {', '.join(missing)}"
     return True, "todas as capacidades exigidas estao presentes"
@@ -654,15 +726,20 @@ def describe_effective_policy(cfg: Settings | None = None) -> dict:
     providers: dict[str, dict] = {}
     for name in known:
         origin = resolve_provider_origin(name, conf)
-        pub_ok, pub_reason = _provider_allows_sensitivity(name, "public", conf)
-        conf_ok, conf_reason = _provider_allows_sensitivity(name, "confidential", conf)
+        pub = sovereignty_decision(name, "public", conf)
+        cnf = sovereignty_decision(name, "confidential", conf)
         providers[name] = {
             "locality": "local" if is_loopback_origin(origin) else "cloud",
             "origin": origin or None,
-            "may_receive_public": pub_ok,
-            "may_receive_confidential": conf_ok,
-            "public_reason": pub_reason,
-            "confidential_reason": conf_reason,
+            "may_receive_public": pub.allowed,
+            "may_receive_confidential": cnf.allowed,
+            "public_reason": pub.reason,
+            "confidential_reason": cnf.reason,
+            # DA-74: o mesmo motivo com codigo estavel, para a UI traduzir.
+            "public_reason_code": pub.code,
+            "public_reason_params": pub.params,
+            "confidential_reason_code": cnf.code,
+            "confidential_reason_params": cnf.params,
         }
 
     # Determina quais providers seriam roteados para dados confidenciais ou publicos

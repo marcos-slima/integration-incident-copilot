@@ -386,6 +386,18 @@ function reasonLabel(code) {
   return typeof _i18nLookup('reasons.' + code) === 'string' ? t('reasons.' + code) : code;
 }
 
+// DA-74: o motivo de cada rejeicao vem como (codigo, parametros) e e'
+// montado no idioma da tela; sem detail_items (backend antigo), o texto cru.
+function detailText(c) {
+  if (!Array.isArray(c.detail_items)) return (c.detail || []).join(' · ');
+  return c.detail_items.map(item => {
+    const p = item.params || {};
+    if (item.reason === 'soberania_bloqueada' && p.code) return t('sovereigntyReason.' + p.code, p);
+    const key = 'reasonDetail.' + item.reason;
+    return typeof _i18nLookup(key) === 'string' ? t(key, p) : reasonLabel(item.reason);
+  }).join(' · ');
+}
+
 function previewRouting(e) {
   const f = new FormData(this);
   const params = new URLSearchParams({sensitivity: f.get('sensitivity'), tokens: f.get('tokens') || '4000'});
@@ -408,11 +420,11 @@ function previewRouting(e) {
       const status = c.allowed
         ? `<span class="status-badge status-active">${escapeHtml(t('models.eligible'))}</span>`
         : c.reasons.map(r => `<span class="status-badge status-offline" style="margin: 0 0.2rem 0.2rem 0;" title="${escapeAttr(r)}">${escapeHtml(reasonLabel(r))}</span>`).join('')
-          + `<div style="font-size: 0.8rem; opacity: 0.8;">${escapeHtml(c.detail.join(' · '))}</div>`;
+          + `<div style="font-size: 0.8rem; opacity: 0.8;">${escapeHtml(detailText(c))}</div>`;
       tr.innerHTML = `
         <td>${c.rank ?? '—'}</td>
         <td style="font-weight: 500;">${escapeHtml(c.model_id || c.provider)}</td>
-        <td style="font-family: monospace; font-size: 0.85rem;">${escapeHtml(c.origin)} <span style="opacity: 0.6;">(${escapeHtml(c.locality)})</span></td>
+        <td style="font-family: monospace; font-size: 0.85rem;">${escapeHtml(c.origin)} <span style="opacity: 0.6;">(${escapeHtml(t('models.locality.' + c.locality))})</span></td>
         <td>${escapeHtml(c.tier || '—')}</td>
         <td style="font-family: monospace;">${escapeHtml(fmtUSD(Number(c.estimated_cost_usd), 4))}</td>
         <td style="font-family: monospace;">${c.latency_ms == null ? '—' : escapeHtml(fmtNumber(c.latency_ms, 0) + ' ms')}</td>

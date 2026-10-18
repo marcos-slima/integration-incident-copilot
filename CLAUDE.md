@@ -9,7 +9,7 @@ Contexto de trabalho para o Claude Code CLI. Leia antes de qualquer edição.
 Assistente de IA para diagnóstico de incidentes de integração empresarial.
 Multi-vendor por design: SAP (OData, RFC, CPI, BTP) é um conector entre
 vários — ServiceNow, Salesforce, Workday, Ariba, CAP, APIManagement.
-Portfólio da trilha SAP Architect → AI Architect (Marcos Lima).
+Produto de Marcos Lima (SAP Architect → AI Architect).
 
 ---
 

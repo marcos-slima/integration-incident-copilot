@@ -1912,7 +1912,7 @@ atualizado.
 ## Apêndice E — O que este projeto não garante
 
 Limites aceitos e registrados. Lê-los é parte de usar o sistema com honestidade
-— e é o que separa um portfólio técnico de uma peça de marketing.
+— e é o que separa um produto técnico de uma peça de marketing.
 
 1. **Implementado não é validado.** RFC (logon), ServiceNow, Salesforce e CAP
    foram exercitados contra instância real; OData, Workday, Ariba,

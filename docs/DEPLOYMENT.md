@@ -747,7 +747,7 @@ Não é escrever um `Dockerfile` (já existe) — é:
 
 ## Cenário I — On-premise / datacenter do cliente
 
-Para um portfólio SAP, este costuma ser o cenário de destino. É o que **menos** existia
+Para clientes SAP, este costuma ser o cenário de destino. É o que **menos** existia
 neste repositório — e o que mais precisa de decisão explícita antes da primeira
 instalação, porque o gargalo é hardware e rede, não software.
 

@@ -22,6 +22,7 @@ Incident Copilot. Instalação e configuração inicial estão em
 9. [Build da imagem e `python-qpid-proton`](#9-build-da-imagem-e-python-qpid-proton)
 10. [GraphRAG: Neo4j inacessível](#10-graphrag-neo4j-inacessivel)
 11. [Ambiente em containers (`scripts/start-docker.sh`)](#11-ambiente-em-containers-scriptsstart-dockersh)
+12. [Kubernetes local (`scripts/k3d-validate.sh`)](#12-kubernetes-local-scriptsk3d-validatesh)
 
 ---
 
@@ -186,6 +187,19 @@ Postgres, Grafana e API.
 | `PermissionError: '.env'` no container | O container lê o `.env` como uid 1000. Com `chmod 600` e outro dono, ele não consegue ler; use `chmod 644` ou ajuste o dono. |
 | Ingestão tenta o Ollama sem ele instalado | Defina `EMBEDDING_BACKEND=fastembed` no `.env`. |
 | Container tenta `127.0.0.1` para o banco | No modo container, o compose injeta `postgres:5432`. Para um banco externo, use `CONTAINER_DATABASE_URL`, não `DATABASE_URL`. |
+
+## 12. Kubernetes local (`scripts/k3d-validate.sh`)
+
+Validado em 2026-10-18 (k3d v5.9.0, k3s v1.35). Passo a passo completo em
+[`TUTORIAL_K3D_KUBERNETES_LOCAL.md`](TUTORIAL_K3D_KUBERNETES_LOCAL.md).
+
+| Sintoma | Causa e correção |
+|---|---|
+| `'k3d' nao encontrado no PATH` | Instale o k3d (`curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh \| bash`) e o `kubectl`. |
+| Ingest no Pod falha com `PermissionError` em `/app/data` | Imagem anterior à correção do `Dockerfile` (`/app/data` com dono root). Reconstrua: rode o script sem `--skip-build`. |
+| Pod novo com `/ready` 503 e worker em `CrashLoopBackOff`, Pod antigo saudável | Senha do Redis divergente entre Secret e Redis em execução. `kubectl -n integration-incident-copilot rollout restart deployment/redis`. |
+| `/ready` 503 com `ollama` degradado | Ollama ouvindo só em `127.0.0.1`. Configure `OLLAMA_HOST=0.0.0.0` no serviço do Ollama. |
+| Rollout parado em "old replicas are pending termination" | O Pod novo não fica pronto. O script lista eventos e logs dos Pods não prontos; leia o corpo do `/ready`. |
 
 ## Não resolveu?
 

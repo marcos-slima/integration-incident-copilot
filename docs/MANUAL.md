@@ -1704,15 +1704,33 @@ consciente ao modelo canônico, registrada no próprio arquivo. O gate
 baseline de qualidade medido: os únicos números do projeto vêm de modelos
 locais. O aviso existe para a lacuna ficar visível, não para ser silenciado.
 
-**Limite honesto:** os manifests demonstram artefatos declarativos. Não há
-evidência de execução em cluster, e por isso isto **não** é apresentado como
-implantação validada. A **DA-31** (registrar o copiloto no SAP AI Agent Hub via
-MCP + A2A) está **bloqueada** exatamente por isso: exige um tenant Kyma
-provisionado. As duas superfícies locais (MCP e A2A) já existem; o que falta é
+**Limite honesto:** os manifests foram aplicados num Kubernetes real (k3d,
+§17.3), mas não num Kyma gerenciado: `APIRule`, Istio e OIDC do BTP seguem sem
+validação. A **DA-31** (registrar o copiloto no SAP AI Agent Hub via MCP + A2A)
+está **bloqueada** por isso: exige um tenant Kyma provisionado. As duas superfícies locais (MCP e A2A) já existem; o que falta é
 só o cadastro externo.
 
 `tests/test_kyma_manifests.py` valida os manifests, e o gate `index_manifest`
 amarra o `configmap` ao manifesto de índice.
+
+### 17.3 Kubernetes local (k3d)
+
+`deploy/local/` aplica o **mesmo** bundle de `deploy/kyma/` num k3s local, sem
+cópia: remove o `APIRule`, inclui Qdrant e Redis, usa o Ollama do host com
+soberania `strict`. `scripts/k3d-validate.sh` cria o cluster, aplica, indexa
+dentro do Pod e roda o smoke test, gravando a evidência em `reports/`.
+
+```bash
+scripts/k3d-validate.sh            # 1ª vez
+scripts/k3d-validate.sh --skip-build
+scripts/k3d-validate.sh --delete
+```
+
+A validação de 2026-10-18 achou dois bugs que o Compose não mostrava: `/app/data`
+sem escrita para o `appuser` (o ingest falhava dentro do Pod) e o Secret regerado
+a cada execução (senha do Redis divergente). O passo a passo, a leitura da
+evidência e os sintomas estão em
+[`TUTORIAL_K3D_KUBERNETES_LOCAL.md`](TUTORIAL_K3D_KUBERNETES_LOCAL.md).
 
 ### Veja executar — a stack inteira, e a saída de dentro do container
 
@@ -1730,6 +1748,7 @@ com os segredos mascarados por `::_mask`. A configuração do `launch.json`
 primeiro comando a rodar quando o sintoma é "mas eu configurei".
 
 **Aprofundar:** [`DEPLOY.md`](DEPLOY.md) (caminho Compose) ·
+[`TUTORIAL_K3D_KUBERNETES_LOCAL.md`](TUTORIAL_K3D_KUBERNETES_LOCAL.md) (Kubernetes local) ·
 DEPLOYMENT.md (cenários completos) ·
 DA_AULA_18_CONTAINERS.md ·
 DA_AULA_19_KYMA.md ·
@@ -1813,7 +1832,7 @@ este manual"); os entre colchetes são documentos do repositório.
 | 14 · Drift de contrato | [`DECISOES_DE_ARQUITETURA.md`](DECISOES_DE_ARQUITETURA.md) | DA-52 |
 | 15 · Observabilidade | DA_AULA_6_MONITORING.md, DA_AULA_16_OPERATIONAL.md, DA_AULA_20_MONITORING.md | DA-30/35/48 |
 | 16 · Testes e gates | [`QUALITY_GATES.md`](QUALITY_GATES.md), DA_AULA_15_TESTS.md, DA_AULA_22_TESTING.md | DA-29/51/58 |
-| 17 · Deploy | DA_AULA_18_CONTAINERS.md, DA_AULA_19_KYMA.md, DA_AULA_XX_DEPLOY.md | DA-24, DA-31 (bloqueada) |
+| 17 · Deploy | DA_AULA_18_CONTAINERS.md, DA_AULA_19_KYMA.md, DA_AULA_25_K3D.md, DA_AULA_XX_DEPLOY.md, [`TUTORIAL_K3D_KUBERNETES_LOCAL.md`](TUTORIAL_K3D_KUBERNETES_LOCAL.md) | DA-24, DA-31 (bloqueada) |
 | UI (transversal) | DA_AULA_23_UI.md, DA_AULA_17_FRONTEND.md | DA-54/55 |
 | Debug (transversal) | DA_AULA_23_DEBUG.md, [`TUTORIAL_ARQUITETURA_DEBUG.md`](TUTORIAL_ARQUITETURA_DEBUG.md) | — |
 

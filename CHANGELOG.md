@@ -23,19 +23,39 @@ mensagens de commit.
   intervalos `arquivo.py:10-20`.
 - `REFERENCE_LIBRARY_FALLBACK_ENABLED` (M-24), `false` no deploy Kyma.
 
-### Correções pós-DA-66/67/69/70 (sessão atual)
-- **A1** Commit DA-24 (correção sobre imagem construída no Cenário C)
-- **A2** Dependências `tiktoken>=0.14.0` e `langgraph-checkpoint-postgres>=3.2.0` declaradas no pyproject.toml
-- **A3** Criar `tests/test_llm_routing.py` com 18 testes passando (DA-66)
-- **A4** Criar `tests/test_budget_ledger.py` com 8 testes passando (DA-67)
-- **A5** Criar `tests/test_checkpointing.py` com 8 testes passando (DA-69)
-- **A6** Migration `017_create_llm_metrics_tables.py` renomeada e revision="017"
-- **A7** Caminho dos dashboards corrigido no CLAUDE.md (linha 304)
-- **A8** Migration `018_create_llm_budget_ledger.py` criada para tabela `llm_budget_ledger`
-- **A9** Models `LlmBudgetLedger`, `LlmRequests`, `LlmTokens`, `LlmCost` com índices corretos
-- **A10** T1 — Bug do tokenizer offline corrigido com cache e fallback para qualquer exceção
-- **A11** Testes T1 criados (`tests/test_tokenizer_offline.py`) com 5 testes passando
-- **Validação** `uv sync --frozen`, pytest (1593 passando), quality gate (21/21)
+### Correções pós-DA-66/67/69/70 e posicionamento (2026-10-17/18, branch `docs/en-translation`)
+Contagens de testes conferidas com `pytest --collect-only` em 2026-10-18.
+
+- **DA-67** Orçamento por diagnóstico (`app/llm/budget.py`): reserva sobre o
+  custo estimado, débito do custo real, `BudgetExhaustedError` →
+  `FailureClass.BUDGET_EXHAUSTED`; `DIAGNOSIS_BUDGET_USD` e
+  `LLM_BUDGET_RESERVE_RATIO`. Tokenizer com fallback `len//4` para qualquer
+  falha de carga, sem retentativa. Testes: `test_budget_ledger.py` (15),
+  `test_tokenizer_offline.py` (8).
+- **DA-69** Checkpoint sem PII em claro (`app/agent/checkpointing.py`, redação
+  no `put`/`put_writes`, inclusive valores inline no jsonb); `PostgresSaver`
+  montado corretamente (`from_conn_string` era context manager; URL SQLAlchemy
+  normalizada); `thread_id` passado por nome. Testes: `test_checkpointing.py`
+  (15), `test_checkpointing_postgres.py` (1, marker `postgres_smoke`, validado
+  contra Postgres real).
+- **DA-66** `test_llm_routing.py` (18).
+- **DA-71** Resultado da busca web sanitizado e delimitado antes de voltar ao
+  LLM (`format_untrusted_web_hits`). Testes: `test_web_search_injection.py` (16).
+- **DA-29** `reranker_invariant` por significância (McNemar pareado), não por
+  vencedor pontual; benchmark refeito com n=90; mmarco mantido.
+- **Avaliação** Dataset RAG de 28 para 110 casos (90 no escopo, 20 fora):
+  Hit@1 95,6% (86/90), Hit@3 97,8%, MRR 0,967, 19/20 fora de escopo rejeitados.
+- **DA-24** Bundle validado em Kubernetes real (k3d): overlay `deploy/local/`,
+  `scripts/k3d-validate.sh`, `test_local_overlay.py` (10). Bugs corrigidos:
+  `/app/data` sem escrita para `appuser` (`Dockerfile`), Secret regerado a cada
+  execução, Pod não recriado com tag fixa. Evidência:
+  `docs/EVIDENCIA_K3D_2026-10-18.md`; tutorial:
+  `docs/TUTORIAL_K3D_KUBERNETES_LOCAL.md`.
+- **Dependências** `tiktoken`, `langgraph-checkpoint-postgres`,
+  `psycopg[binary]` declaradas; migrations 017/018 na convenção numérica.
+- **Validação** suíte unitária na máquina de desenvolvimento: 1608 passando,
+  cobertura 81,13% (antes das entregas de DA-71, avaliação e k3d); quality
+  gate sem falha.
 
 > As entradas abaixo são históricas: descrevem o projeto na data delas
 > (ex.: a busca web hoje é configurada em `web_search_sources`, DA-57, e não

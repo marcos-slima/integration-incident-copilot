@@ -1076,6 +1076,15 @@ environment); Qdrant and Neo4j (GraphRAG, which continues opt-in) are not
 deployed by this bundle—they are external prerequisites, documented
 in `deploy/kyma/README.md`.
 
+> **Update (2026-10-18).** The record above dates from when DA-24 was
+> written. Since then the image has been built (Compose scenario) and the
+> bundle has been applied to real Kubernetes (k3d) through the `deploy/local/`
+> overlay, with rollout, probes, in-Pod ingest, `/diagnose` via the rule engine
+> and the local LLM, and the HPA scaling. Evidence:
+> `docs/EVIDENCIA_K3D_2026-10-18.md`; reproduction:
+> `docs/TUTORIAL_K3D_KUBERNETES_LOCAL.md`. Still unvalidated: what is specific
+> to managed Kyma — `APIRule`, Istio and BTP OIDC.
+
 **Validation:** `tests/test_kyma_manifests.py` (11 tests) ensures that
 all YAML in the bundle is syntactically valid and internally consistent
 —same namespace in all namespaced resources, health probes without

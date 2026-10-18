@@ -10,6 +10,34 @@ formalmente contra alternativas — inclusive alternativas
 majoritariamente em português, enquanto `ms-marco-MiniLM-L-6-v2` foi
 treinado só em inglês (dataset MS MARCO).
 
+> **Re-execução de 2026-10-18 com 90 consultas in-scope (dataset ampliado).**
+> Mesma metodologia (corpus inteiro reranqueado por consulta, CPU, sem GPU),
+> resultados em `data/eval/reranker_benchmark_results_2026-10-18_n90.json`:
+>
+> | Modelo | Hit@1 | MRR@5 | nDCG@5 | Latência média | vs. L-6 (McNemar exato) | IC 95% da diferença de Hit@1 |
+> |---|---|---|---|---|---|---|
+> | ms-marco-L6 (baseline) | 87/90 (0,967) | 0,983 | 0,988 | 1 375 ms | — | — |
+> | ms-marco-L12 | 87/90 (0,967) | 0,983 | 0,988 | 2 743 ms | p = 1,0 (0 × 0) | [0,000, 0,000] |
+> | **mmarco-mMiniLMv2** (produção) | 88/90 (0,978) | 0,989 | 0,992 | 2 032 ms | p = 1,0 (1 × 0) | [+0,000, +0,033] |
+> | bge-reranker-base | 89/90 (0,989) | 0,993 | 0,994 | 7 374 ms | p = 0,625 (3 × 1) | [−0,022, +0,067] |
+>
+> Leitura: com 5× mais consultas, **nenhum candidato é estatisticamente
+> melhor que o baseline**, e todos ficam perto do teto (o corpus tem só 15
+> documentos bem distintos, então o benchmark discrimina pouco). O
+> bge-reranker-base tem o maior Hit@1 pontual, mas a diferença para o
+> mmarco é de uma consulta e custa ~3,6× a latência.
+>
+> **Decisão pendente (não aplicada):** o gate `reranker_invariant` exige
+> que produção seja o maior Hit@1 medido, com margem ≥ 0,05 sobre o melhor
+> ms-marco. Com estes números ele reprovaria nas duas regras, embora
+> nenhuma diferença seja significativa. Por isso o arquivo lido pelo gate
+> (`data/eval/reranker_benchmark_results.json`) continua sendo o de n=18, e
+> esta re-medição fica em arquivo próprio até uma decisão: (a) manter o
+> mmarco e mudar o gate para "produção não pode ser significativamente pior
+> que o melhor medido"; ou (b) trocar para bge-reranker-base (invariante 1,
+> exige DA nova). Um corpus maior que 15 documentos é o que tornaria o
+> benchmark discriminante.
+
 > **Re-execução de 2026-10-07 (validação, M-20).** O resultado original
 > (abaixo) usou 13 consultas e apresentou "+7pp Hit@1" para uma diferença de
 > **uma consulta**. Com o dataset atual (18 consultas in-scope) o quadro é:

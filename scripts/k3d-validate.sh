@@ -62,16 +62,25 @@ k3d image import "$IMAGE" -c "$CLUSTER"
 
 step "3. Namespace e Secret (valores aleatorios, nunca gravados em disco)"
 kubectl apply -f "$ROOT/deploy/kyma/namespace.yaml"
-rnd() { python3 -c 'import secrets; print(secrets.token_hex(24))'; }
-REDIS_PASSWORD="$(rnd)"
-API_KEY_VALUE="$(rnd)"
-kubectl -n "$NS" create secret generic integration-incident-copilot-secrets \
-  --from-literal=API_KEY="$API_KEY_VALUE" \
-  --from-literal=A2A_API_KEY="$(rnd)" \
-  --from-literal=EVENT_MESH_API_KEY="$(rnd)" \
-  --from-literal=REDIS_PASSWORD="$REDIS_PASSWORD" \
-  --from-literal=REDIS_URL="redis://:$REDIS_PASSWORD@redis:6379/0" \
-  --dry-run=client -o yaml | kubectl apply -f -
+# O Secret e criado UMA vez por cluster. Regerar a cada execucao trocava a
+# REDIS_PASSWORD so para os Pods novos: o Redis em execucao seguia com a
+# senha antiga, o /ready dos Pods novos dava 503 e o worker entrava em
+# CrashLoopBackOff. Para trocar as chaves: --delete e recriar o cluster.
+SECRET=integration-incident-copilot-secrets
+if ! kubectl -n "$NS" get secret "$SECRET" >/dev/null 2>&1; then
+  rnd() { python3 -c 'import secrets; print(secrets.token_hex(24))'; }
+  REDIS_PASSWORD="$(rnd)"
+  kubectl -n "$NS" create secret generic "$SECRET" \
+    --from-literal=API_KEY="$(rnd)" \
+    --from-literal=A2A_API_KEY="$(rnd)" \
+    --from-literal=EVENT_MESH_API_KEY="$(rnd)" \
+    --from-literal=REDIS_PASSWORD="$REDIS_PASSWORD" \
+    --from-literal=REDIS_URL="redis://:$REDIS_PASSWORD@redis:6379/0"
+  echo "Secret criado"
+else
+  echo "Secret existente reutilizado"
+fi
+API_KEY_VALUE="$(kubectl -n "$NS" get secret "$SECRET" -o jsonpath='{.data.API_KEY}' | base64 -d)"
 
 step "4. kubectl apply -k deploy/local (base = deploy/kyma)"
 kubectl kustomize "$ROOT/deploy/local" > "$ROOT/reports/k3d-rendered-$TS.yaml"

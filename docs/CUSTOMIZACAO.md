@@ -282,6 +282,29 @@ Em produção, fixe `API_KEY`, `A2A_API_KEY`, `EVENT_MESH_API_KEY` e
 `ADMIN_API_KEY` e use `REQUIRE_AUTH=true`; chaves vazias são geradas no boot e
 mudam a cada reinício (cenário D de [`DEPLOYMENT.md`](DEPLOYMENT.md)).
 
+### Idioma das interfaces (DA-73)
+
+A UI web e a Admin UI seguem o idioma do navegador (`pt-BR` ou `en`; outro
+idioma cai em `en`). O seletor de idioma grava o cookie `iic_locale`, que vale
+para as duas. O conteúdo gerado pelo LLM (causa raiz, relatório) continua no
+idioma do prompt.
+
+Para **adicionar um idioma** (ex.: `es`):
+
+1. Copie `frontend/src/i18n/locales/en.json` para `es.json` e
+   `app/i18n/locales/admin.en.json` para `admin.es.json`, e traduza os valores
+   (as chaves e as variáveis `{{x}}` ficam iguais).
+2. Inclua `es` em `SUPPORTED_LOCALES` e `LOCALE_LABELS` de
+   `frontend/src/i18n/index.ts` e de `app/i18n/__init__.py`, e em
+   `normalizeLocale`/`normalize_locale` (idioma base `es` → `es`).
+3. Inclua `es` em `LOCALES` de `app/i18n/checks.py`, para o gate `ui_i18n`
+   conferir a paridade do catálogo novo.
+4. `cd frontend && npm run build`, e confira com `?lng=es`.
+
+Para revisar texto que tenha escapado do catálogo, abra qualquer tela com
+`?lng=xx`: todo texto do catálogo aparece entre `⟦ ⟧`; o que ficar sem a marca
+é texto fixo.
+
 ---
 
 ## 11. Limiares de confiança e escalonamento

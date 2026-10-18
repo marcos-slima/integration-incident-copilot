@@ -171,6 +171,13 @@ orçamento do diagnóstico esgotado (`budget_exhausted`, DA-67) ou nenhum
 provedor permitido pela política de soberania (`policy_violation`). Erros
 inesperados mostram a referência (`error_id`) que localiza o log no servidor.
 
+**Idioma** — a interface abre no idioma do navegador (português do Brasil ou
+inglês; outros idiomas abrem em inglês). O seletor na barra lateral e na tela
+de login troca o idioma, e a escolha vale também para a Admin UI (cookie
+`iic_locale`). Datas, números e valores em USD seguem o idioma escolhido. O
+texto gerado pelo diagnóstico (causa raiz, próximos passos, relatório)
+continua no idioma do prompt.
+
 **Histórico** — diagnósticos da sessão atual, com confiança, causa raiz e a
 marca "revisão humana" quando o sinal pediu.
 

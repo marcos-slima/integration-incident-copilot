@@ -157,10 +157,29 @@ with the 10 connectors, optional identifier), with file attachment
 `payload`) and advanced fields `logs`/`payload` — no credential in the user's
 hand; the HttpOnly session cookie flows alone.
 
-**History** — diagnoses of the current session, with confidence and root cause.
+Besides the root cause and next steps, the result shows:
 
-**Stack status** — state of connectors (real vs. demo/mock) and
-infrastructure (LLM provider, GraphRAG, Langfuse and RQ queue).
+- **Escalation signal** (DA-44): "Sufficient evidence" or "Human review
+  recommended", with the reason. Informative: no paid model is called because
+  of it.
+- **Evidence**, each item with its `trust_level` (table in "Evidence and trust
+  levels"). `simulated` data (demo connector) and `web_untrusted` (web search,
+  DA-71) get a warning.
+- **Provenance** (DA-53): "Deterministic rule · no LLM · zero cost" or
+  provider, model, prompt version and digest.
+
+AI Gateway refusals show their cause, not "internal error": diagnosis budget
+exhausted (`budget_exhausted`, DA-67) or no provider allowed by the
+sovereignty policy (`policy_violation`). Unexpected errors show the reference
+(`error_id`) that locates the server log.
+
+**History** — diagnoses of the current session, with confidence, root cause
+and a "human review" mark when the signal asked for it.
+
+**Stack status** — state of connectors (real vs. demo/mock), infrastructure
+(LLM provider, GraphRAG, Langfuse and RQ queue) and **data sovereignty**
+(`GET /llm/policy`): mode, each provider's origin and whether it may receive
+public or confidential data.
 
 ### REST API
 
@@ -577,6 +596,22 @@ item with a `trust_level`:
 
 A diagnosis with only `user_reported` evidence is saying "I am
 working with what you told me, nothing else".
+
+### API errors: `code` and `error_id`
+
+`/diagnose` errors carry `detail` and a stable `code`:
+
+| HTTP | `code` | Meaning | Retry? |
+|---|---|---|---|
+| 503 | `budget_exhausted` | The diagnosis budget (`DIAGNOSIS_BUDGET_USD`, DA-67) does not cover any eligible provider | Not by itself: raise the budget or enable a cheaper provider |
+| 503 | `policy_violation` | No provider allowed by the sovereignty policy for the incident's sensitivity (`GET /llm/policy`) | No: adjust the policy or the local provider |
+| 503 | `overloaded` | Capacity exhausted | Yes, after `Retry-After` |
+| 504 | `timeout` | The pipeline exceeded `DIAGNOSIS_TIMEOUT_SECONDS` | Yes |
+| 500 | `internal_error` | Unexpected failure | Report the `error_id` |
+
+`budget_exhausted`, `policy_violation` and `internal_error` carry `error_id`:
+the same id is in the API log, with the full reason (which names internal
+origins and is therefore kept out of the response).
 
 ### Reference document
 

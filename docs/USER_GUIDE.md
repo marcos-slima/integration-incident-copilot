@@ -155,10 +155,29 @@ origem com os 10 conectores, identificador opcional), com anexo de arquivo
 `payload`) e campos avançados `logs`/`payload` — credencial nenhuma na mão
 do usuário; o cookie de sessão HttpOnly flui sozinho.
 
-**Histórico** — diagnósticos da sessão atual, com confiança e causa raiz.
+O resultado mostra, além da causa raiz e dos próximos passos:
 
-**Status da stack** — estado dos conectores (real vs. demo/mock) e da
-infraestrutura (provider LLM, GraphRAG, Langfuse e fila RQ).
+- **Sinal de escalonamento** (DA-44): "Evidência suficiente" ou "Revisão
+  humana recomendada", com o motivo. É informativo: nenhum modelo pago é
+  acionado por causa dele.
+- **Evidências**, cada uma com o `trust_level` (tabela em "Evidência e níveis
+  de confiança"). Dado `simulated` (conector em demonstração) e
+  `web_untrusted` (busca web, DA-71) ganham um aviso.
+- **Proveniência** (DA-53): "Regra determinística · sem LLM · custo zero" ou
+  provedor, modelo, versão e digest do prompt.
+
+Recusas do AI Gateway aparecem com a causa, não como "erro interno":
+orçamento do diagnóstico esgotado (`budget_exhausted`, DA-67) ou nenhum
+provedor permitido pela política de soberania (`policy_violation`). Erros
+inesperados mostram a referência (`error_id`) que localiza o log no servidor.
+
+**Histórico** — diagnósticos da sessão atual, com confiança, causa raiz e a
+marca "revisão humana" quando o sinal pediu.
+
+**Status da stack** — estado dos conectores (real vs. demo/mock), da
+infraestrutura (provider LLM, GraphRAG, Langfuse e fila RQ) e a **soberania do
+dado** (`GET /llm/policy`): modo, origem de cada provedor e se ele pode receber
+dado público ou confidencial.
 
 ### API REST
 
@@ -576,6 +595,22 @@ item com um `trust_level`:
 
 Um diagnóstico com evidência só `user_reported` está dizendo "estou
 trabalhando com o que você me contou, nada mais".
+
+### Erros da API: `code` e `error_id`
+
+Os erros de `/diagnose` trazem `detail` e um `code` estável:
+
+| HTTP | `code` | Significado | Reenviar? |
+|---|---|---|---|
+| 503 | `budget_exhausted` | Orçamento do diagnóstico (`DIAGNOSIS_BUDGET_USD`, DA-67) não cobre nenhum provedor elegível | Não muda sozinho: ajuste o orçamento ou habilite um provedor mais barato |
+| 503 | `policy_violation` | Nenhum provedor permitido pela política de soberania para a sensibilidade do incidente (`GET /llm/policy`) | Não: ajuste a política ou o provedor local |
+| 503 | `overloaded` | Capacidade esgotada | Sim, após `Retry-After` |
+| 504 | `timeout` | O pipeline excedeu `DIAGNOSIS_TIMEOUT_SECONDS` | Sim |
+| 500 | `internal_error` | Falha inesperada | Reporte o `error_id` |
+
+`budget_exhausted`, `policy_violation` e `internal_error` trazem `error_id`:
+o mesmo id está no log da API, junto do motivo completo (que cita origens
+internas e por isso não vai na resposta).
 
 ### Documento de referência
 

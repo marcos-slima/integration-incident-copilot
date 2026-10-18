@@ -101,6 +101,9 @@ curl -s -X POST http://localhost:8000/diagnose -H "X-API-Key: $API_KEY" \
 
 É o comportamento esperado: a base de exemplo trata de integração, não de
 impressão. O LLM é chamado, mas a resposta sai marcada como sem fundamento.
+Na UI web (`http://localhost:8000`), o mesmo caso aparece com o aviso
+"Revisão humana recomendada", as evidências com o nível de confiança e a
+proveniência; em Status, o cartão "Soberania do dado" mostra a etapa 4.
 
 ---
 

@@ -387,3 +387,44 @@ textarea.field-input{resize:vertical;line-height:1.6}
   font-size:12px;cursor:pointer;font-family:'Inter',sans-serif;text-decoration:underline
 }
 .login-alt:hover{color:#7DD3FC}
+
+/* DA-44: sinal de escalonamento */
+.escalation{
+  display:flex;flex-direction:column;gap:3px;
+  padding:10px 12px;border-radius:6px;margin-bottom:18px;font-size:12px
+}
+.escalation-ok{background:#10B98112;border:1px solid #10B98140}
+.escalation-ok .escalation-title{color:#10B981}
+.escalation-warn{background:#F59E0B14;border:1px solid #F59E0B55}
+.escalation-warn .escalation-title{color:#F59E0B}
+.escalation-title{font-weight:600}
+.escalation-text{color:#F8FAFC;line-height:1.6}
+.escalation-note{color:#94A3B8;font-size:11px}
+
+/* DA-25/DA-71: evidencias com nivel de confianca */
+.evidence-section{margin-bottom:20px}
+.evidence-warn{font-size:12px;color:#F59E0B;margin-bottom:8px}
+.evidence-list{list-style:none;display:flex;flex-direction:column;gap:6px}
+.evidence-item{padding:8px 12px;border-radius:6px;background:#0F2040;border:1px solid #1E3A5F}
+.evidence-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.evidence-source{font-family:'JetBrains Mono',monospace;font-size:10px;color:#94A3B8;word-break:break-all}
+.evidence-score{font-size:10px;color:#475569;margin-left:auto}
+.evidence-excerpt{font-size:12px;line-height:1.6;color:#CBD5E1;margin-top:5px;white-space:pre-wrap;word-break:break-word}
+.trust-chip{font-size:10px;font-weight:500;padding:2px 8px;border-radius:10px;white-space:nowrap}
+.trust-ok{background:#10B98122;color:#10B981}
+.trust-doc{background:#0EA5E922;color:#0EA5E9}
+.trust-warn{background:#F59E0B22;color:#F59E0B}
+.trust-neutral{background:#47556933;color:#94A3B8}
+
+/* DA-53: proveniencia */
+.provenance{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  font-size:11px;margin-bottom:20px
+}
+.provenance-label{color:#94A3B8}
+.provenance-text{color:#F8FAFC}
+.provenance-digest{
+  font-family:'JetBrains Mono',monospace;font-size:10px;color:#475569;
+  background:#0F2040;border:1px solid #1E3A5F;padding:1px 6px;border-radius:4px
+}
+.hist-escalate{font-size:10px;color:#F59E0B;background:#F59E0B1A;padding:1px 7px;border-radius:10px}

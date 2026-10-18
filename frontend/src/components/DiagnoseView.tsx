@@ -8,7 +8,7 @@
 
 import { useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { callDiagnose, ApiError } from '../api/diagnose';
+import { callDiagnose, ApiError, describeApiError } from '../api/diagnose';
 import type {
   DiagnosisResponse,
   HistoryItem,
@@ -16,6 +16,7 @@ import type {
   InterfaceType,
 } from '../types/models';
 import { Badge } from './Badge';
+import { EscalationBanner, EvidenceList, Provenance } from './DiagnosisDetails';
 
 // Props do componente
 interface DiagnoseViewProps {
@@ -115,8 +116,10 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
           setError('Sessão expirada (401) — entre novamente.');
           onSessionExpired();
         } else {
-          // Erro HTTP do backend (422, 429, 500)
-          setError(`Erro ${e.status}: ${e.message}`);
+          // Erro HTTP do backend: mensagem por `code` (budget_exhausted,
+          // policy_violation, overloaded, timeout) ou por status, com o
+          // error_id para achar o log
+          setError(describeApiError(e));
         }
       } else {
         // Erro de rede (servidor offline, timeout)
@@ -362,6 +365,8 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
             <Badge value={result.diagnosis_confidence} />
           </div>
           <div className="result-body">
+            <EscalationBanner signal={result.escalation} />
+
             <div className="section-label">Causa raiz provável</div>
             <p className="root-cause">{result.probable_root_cause}</p>
 
@@ -381,6 +386,9 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
                 <span className="ref-name">{result.matched_source}</span>
               </div>
             )}
+
+            <EvidenceList evidence={result.evidence} />
+            <Provenance result={result} />
 
             {result.report_markdown && (
               <div className="report-section">

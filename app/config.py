@@ -207,7 +207,7 @@ class Settings(BaseSettings):
     # redistribuicao). Como fallback do RAG (DA-17), trechos dela entram no
     # prompt, no relatorio e na resposta da API - numa demo publica isso e
     # redistribuir conteudo protegido. False desliga a consulta a collection;
-    # o deploy Kyma (demo/portfolio) usa false. Ligue so com conteudo proprio
+    # o deploy Kyma (demonstracao publica) usa false. Ligue so com conteudo proprio
     # ou licenciado.
     reference_library_fallback_enabled: bool = True
 

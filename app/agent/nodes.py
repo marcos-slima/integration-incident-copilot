@@ -38,6 +38,7 @@ from app.agent import prompts
 from app.agent.rules import match_known_error
 from app.agent.state import CopilotState, DiagnosisModel
 from app.connectors import get_connector
+from app.i18n.content import content_text
 from app.llm.factory import TRANSPORT_FAILURE_EXCEPTIONS
 from app.llm.gateway import invoke_via_gateway
 from app.rag.graph_store import (
@@ -925,6 +926,7 @@ def _apply_confidence_guardrails(diagnosis: dict, state: CopilotState) -> dict:
     para model_confidence aqui. O caller (run_diagnosis em graph.py) recebe
     o dict com ambos os campos preenchidos.
     """
+    locale = state.get("locale")  # DA-74: idioma dos avisos acrescentados
     # Normaliza a confianca reportada pelo LLM para [0.0, 1.0]
     raw_model_confidence = float(
         diagnosis.pop("confidence", diagnosis.get("model_confidence", 0.0))
@@ -957,20 +959,18 @@ def _apply_confidence_guardrails(diagnosis: dict, state: CopilotState) -> dict:
         capped = min(model_confidence, 0.4)
         if capped < model_confidence:
             model_confidence = capped
-            diagnosis["probable_root_cause"] = (
-                f"[confianca limitada - identificador nao reconhecido pelo sistema] "
-                f"{diagnosis.get('probable_root_cause', '')}"
-            )
+            diagnosis["probable_root_cause"] = content_text(
+                locale, "diagnosis.capUnknownIdentifier"
+            ) + str(diagnosis.get("probable_root_cause", ""))
 
     if not state.get("retrieved_context") and not data and not is_rule_engine:
         capped = min(model_confidence, 0.3)
         if capped < model_confidence:
             model_confidence = capped
             diagnosis["matched_source"] = None
-            diagnosis["probable_root_cause"] = (
-                f"[confianca limitada - nenhum documento relevante encontrado] "
-                f"{diagnosis.get('probable_root_cause', '')}"
-            )
+            diagnosis["probable_root_cause"] = content_text(
+                locale, "diagnosis.capNoDocument"
+            ) + str(diagnosis.get("probable_root_cause", ""))
 
     # Valida matched_source contra as fontes realmente recuperadas
     # Impede que o LLM invente ou alucine um nome de documento.
@@ -983,11 +983,9 @@ def _apply_confidence_guardrails(diagnosis: dict, state: CopilotState) -> dict:
     if claimed_source and claimed_source not in valid_sources and not is_rule_engine:
         diagnosis["matched_source"] = None
         model_confidence = min(model_confidence, 0.3)
-        diagnosis["probable_root_cause"] = (
-            f"[matched_source '{claimed_source}' nao esta entre os documentos recuperados - "
-            f"confianca limitada] "
-            f"{diagnosis.get('probable_root_cause', '')}"
-        )
+        diagnosis["probable_root_cause"] = content_text(
+            locale, "diagnosis.capInvalidSource", source=claimed_source
+        ) + str(diagnosis.get("probable_root_cause", ""))
 
     diagnosis["model_confidence"] = round(model_confidence, 3)
 
@@ -1145,7 +1143,9 @@ def _run_diagnosis_agent(state: CopilotState, persona: str) -> dict:
             _connector_msg = f" {_cd.message}"
         _rule_text = (state.get("description") or "") + _connector_msg
         _has_connector = bool(_cd and not _cd.is_mock and not _cd.is_fallback)
-        _rule_match = match_known_error(_rule_text, has_connector_data=_has_connector)
+        _rule_match = match_known_error(
+            _rule_text, has_connector_data=_has_connector, locale=state.get("locale")
+        )
         if _rule_match:
             _rule_match = _apply_confidence_guardrails(_rule_match, state)
             return _rule_match
@@ -1169,8 +1169,11 @@ def _run_diagnosis_agent(state: CopilotState, persona: str) -> dict:
     # prompt (enforcement de codigo, nao de prompt).
     web_tool = _make_web_search_tool(state)
     react_tools = [web_tool] if _web_search_allowed(state) else []
-    # Instrucao adicional para forcar JSON na resposta final do agente ReAct
-    json_instruction = prompts.JSON_INSTRUCTION
+    # Instrucao adicional para forcar JSON na resposta final do agente ReAct.
+    # DA-74: + instrucao de idioma (vazia para pt-BR, o prompt medido).
+    json_instruction = prompts.JSON_INSTRUCTION + prompts.output_language_instruction(
+        state.get("locale")
+    )
 
     def _build_and_invoke(llm):
         # Avaliacao externa (curto prazo, item 5): "structured output de
@@ -1269,16 +1272,16 @@ def _run_diagnosis_agent(state: CopilotState, persona: str) -> dict:
             try:
                 diagnosis = DiagnosisModel(**json.loads(json_match.group(0))).model_dump()
             except (json.JSONDecodeError, ValueError, KeyError):
-                diagnosis = _fallback_diagnosis(raw)
+                diagnosis = _fallback_diagnosis(raw, state.get("locale"))
         else:
             code_match = re_module.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re_module.DOTALL)
             if code_match:
                 try:
                     diagnosis = json.loads(code_match.group(1))
                 except json.JSONDecodeError:
-                    diagnosis = _fallback_diagnosis(raw)
+                    diagnosis = _fallback_diagnosis(raw, state.get("locale"))
             else:
-                diagnosis = _fallback_diagnosis(raw)
+                diagnosis = _fallback_diagnosis(raw, state.get("locale"))
 
     diagnosis = _apply_confidence_guardrails(diagnosis, state)
     diagnosis["llm_provider_used"] = llm_provider_used
@@ -1296,7 +1299,7 @@ def _run_diagnosis_agent(state: CopilotState, persona: str) -> dict:
     # produzido por prompt nenhum. Registrar o digest nesse caminho seria
     # afirmar uma origem falsa -- e foi exatamente por isso que a coluna
     # `incidents.prompt_digest` e' anulavel em vez de ter default.
-    diagnosis.update(prompts.get_spec().provenance())
+    diagnosis.update(prompts.get_spec(state.get("locale")).provenance())
     return diagnosis
 
 
@@ -1336,13 +1339,13 @@ def generic_diagnosis_node(state: CopilotState) -> CopilotState:
     return {"diagnosis": _run_diagnosis_agent(state, _GENERIC_INTEGRATION_PERSONA)}
 
 
-def _fallback_diagnosis(raw: str) -> dict:
+def _fallback_diagnosis(raw: str, locale: str | None = None) -> dict:
     """Fallback quando o agente ReAct nao retornou JSON estruturado."""
     return {
-        "probable_root_cause": raw[:500] if raw else "Nao foi possivel estruturar a resposta.",
+        "probable_root_cause": raw[:500] if raw else content_text(locale, "diagnosis.unstructured"),
         "confidence": 0.2,
         "matched_source": None,
-        "next_steps": ["Verifique os logs do agente para mais detalhes."],
+        "next_steps": [content_text(locale, "diagnosis.checkAgentLogs")],
     }
 
 
@@ -1404,21 +1407,22 @@ def report_node(state: CopilotState) -> CopilotState:
     diagnosis = state.get("diagnosis", {})
     _record_quality_metrics(state, diagnosis)
 
+    locale = state.get("locale")  # DA-74
     next_steps_md = "\n".join(f"- {step}" for step in diagnosis.get("next_steps", []))
-    matched = diagnosis.get("matched_source") or "nenhum documento especifico identificado"
+    matched = diagnosis.get("matched_source") or content_text(locale, "report.noMatchedSource")
 
     connector_line = ""
     data = state.get("connector_data")
     if data and data.is_fallback:
-        connector_line = (
-            f"\n**Dados do sistema ({data.source_system}):** "
-            f"identificador nao reconhecido - nenhum dado do sistema disponivel\n"
-        )
+        connector_line = content_text(locale, "report.connectorFallback", system=data.source_system)
     elif data:
-        connector_line = (
-            f"\n**Dados do sistema ({data.source_system}"
-            f"{' - simulado' if data.is_mock else ''}):** "
-            f"status={data.status}, codigo={data.error_code}\n"
+        connector_line = content_text(
+            locale,
+            "report.connectorData",
+            system=data.source_system,
+            simulated=content_text(locale, "report.simulated") if data.is_mock else "",
+            status=data.status,
+            code=data.error_code,
         )
 
     # P1.5: exibe ambas as metricas de confianca para o analista
@@ -1445,35 +1449,32 @@ def report_node(state: CopilotState) -> CopilotState:
     primary_md = (
         "\n".join(_evidence_line(e) for e in primary)
         if primary
-        else "- (nenhuma evidencia direta do sistema — diagnostico baseado em inferencia)"
+        else content_text(locale, "report.noPrimary")
     )
     supporting_md = (
         "\n".join(_evidence_line(e) for e in supporting)
         if supporting
-        else "- (nenhum fato de suporte)"
+        else content_text(locale, "report.noSupporting")
     )
 
-    report = f"""## Diagnostico do Incidente
-
-**Descricao reportada:** {state["description"]}
-{connector_line}
-**Causa raiz provavel:** {diagnosis.get("probable_root_cause", "N/A")}
-
-**Confianca:**
-- `diagnosis_confidence` (pipeline): {diag_conf:.0%} — use este para automacao
-- `model_confidence` (LLM pos-guardrail): {model_conf:.0%}
-- `evidence_strength` (retrieval/conector): {evidence_str:.0%}
-- Provider: {diagnosis.get("llm_provider_used", "N/A")} | Agente: {state.get("agent_domain", "N/A")} | Modelo: {diagnosis.get("llm_model") or state.get("llm_model", "N/A")} | Prompt: {diagnosis.get("prompt_version", "nenhum")}
-
-**Documento usado como base:** {matched}
-
-**Proximos passos:**
-{next_steps_md if next_steps_md else "- (nenhum passo sugerido)"}
-
-**Primary Evidence** (observado diretamente pelo sistema — alta confianca):
-{primary_md}
-
-**Supporting Facts** (RAG / busca web / relato do usuario — revisao humana recomendada):
-{supporting_md}
-"""
+    # DA-74: o texto do relatorio vem do catalogo de conteudo; o pt-BR
+    # reproduz byte a byte o f-string de antes.
+    report = content_text(
+        locale,
+        "report.template",
+        description=state["description"],
+        connector_line=connector_line,
+        root_cause=diagnosis.get("probable_root_cause", "N/A"),
+        diag_conf=f"{diag_conf:.0%}",
+        model_conf=f"{model_conf:.0%}",
+        evidence_str=f"{evidence_str:.0%}",
+        provider=diagnosis.get("llm_provider_used", "N/A"),
+        agent=state.get("agent_domain", "N/A"),
+        model=diagnosis.get("llm_model") or state.get("llm_model", "N/A"),
+        prompt=diagnosis.get("prompt_version", content_text(locale, "report.noPrompt")),
+        matched=matched,
+        next_steps=next_steps_md if next_steps_md else content_text(locale, "report.noSteps"),
+        primary=primary_md,
+        supporting=supporting_md,
+    )
     return {"report_markdown": report}

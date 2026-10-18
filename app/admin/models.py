@@ -399,6 +399,10 @@ class WebUser(Base):
     phone_code_attempts: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
+    # DA-74 (migration 021): idioma dos e-mails/SMS de ativacao - o da Admin
+    # UI de quem cadastrou, ou o `locale` do payload. Nulo (linhas antigas) =
+    # pt-BR, o texto de antes da DA-74.
+    locale: Mapped[str | None] = mapped_column(String(8), nullable=True)
     created_by: Mapped[str] = mapped_column(String(64), nullable=False, default="bootstrap")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_now

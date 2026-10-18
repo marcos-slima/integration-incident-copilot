@@ -240,7 +240,7 @@ class TestRotasPublicas:
 
         monkeypatch.setattr(
             "app.webusers.deliver_email",
-            lambda to, body: type("obj", (object,), {"delivered": False})(),
+            lambda to, body, subject=None: type("obj", (object,), {"delivered": False})(),
         )
         _, tokens = asyncio.get_event_loop().run_until_complete(
             create_user(
@@ -278,7 +278,7 @@ class TestRotasAdmin:
         monkeypatch.setattr(settings, "admin_api_key", "chave-admin-teste")
         monkeypatch.setattr(
             "app.webusers.deliver_email",
-            lambda to, body: type("obj", (object,), {"delivered": False})(),
+            lambda to, body, subject=None: type("obj", (object,), {"delivered": False})(),
         )
         limiter.reset()
         return client

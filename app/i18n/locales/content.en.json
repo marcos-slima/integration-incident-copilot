@@ -1,0 +1,282 @@
+{
+  "diagnosis": {
+    "capUnknownIdentifier": "[limited confidence - identifier not recognized by the system] ",
+    "capNoDocument": "[limited confidence - no relevant document found] ",
+    "capInvalidSource": "[matched_source '{{source}}' is not among the retrieved documents - limited confidence] ",
+    "unstructured": "The response could not be structured.",
+    "checkAgentLogs": "Check the agent logs for more details."
+  },
+  "report": {
+    "template": "## Incident Diagnosis\n\n**Reported description:** {{description}}\n{{connector_line}}\n**Probable root cause:** {{root_cause}}\n\n**Confidence:**\n- `diagnosis_confidence` (pipeline): {{diag_conf}} — use this one for automation\n- `model_confidence` (LLM after guardrails): {{model_conf}}\n- `evidence_strength` (retrieval/connector): {{evidence_str}}\n- Provider: {{provider}} | Agent: {{agent}} | Model: {{model}} | Prompt: {{prompt}}\n\n**Document used as basis:** {{matched}}\n\n**Next steps:**\n{{next_steps}}\n\n**Primary Evidence** (observed directly by the system — high confidence):\n{{primary}}\n\n**Supporting Facts** (RAG / web search / user report — human review recommended):\n{{supporting}}\n",
+    "noMatchedSource": "no specific document identified",
+    "connectorFallback": "\n**System data ({{system}}):** identifier not recognized - no system data available\n",
+    "connectorData": "\n**System data ({{system}}{{simulated}}):** status={{status}}, code={{code}}\n",
+    "simulated": " - simulated",
+    "noPrimary": "- (no direct evidence from the system — diagnosis based on inference)",
+    "noSupporting": "- (no supporting facts)",
+    "noSteps": "- (no steps suggested)",
+    "noPrompt": "none"
+  },
+  "activation": {
+    "emailSubject": "Access activation - Integration Incident Copilot",
+    "emailBody": "Activation token: {{token}}",
+    "smsBody": "Activation code: {{code}}"
+  },
+  "rules": {
+    "auth_oauth_expired": {
+      "root_cause": "OAuth2 token expired or invalid. The source system could not authenticate against the target API.",
+      "next_steps": [
+        "Renew the OAuth2 token through the grant flow",
+        "Check the expiration in the JWT payload",
+        "Re-authenticate the user or use the refresh token",
+        "Confirm the scopes and client credentials"
+      ]
+    },
+    "oauthtokenrefreshfailed": {
+      "root_cause": "OAuth2 token renewal failed: the refresh token expired or was revoked, or the authorization server rejected the client credentials (client_id/client_secret).",
+      "next_steps": [
+        "Check that the refresh token has not expired",
+        "Request a new access token with the refresh_token grant type",
+        "Verify client_id and client_secret",
+        "Re-authenticate the user if the refresh fails"
+      ]
+    },
+    "rfccommunicationfailure": {
+      "root_cause": "RFC communication failure (RFC_COMMUNICATION_FAILURE): the target system is not reachable over the network, or the RFC destination points to the wrong host/system number.",
+      "next_steps": [
+        "Check SAP network connectivity (SM51)",
+        "Validate host and system number in destination SM59",
+        "Confirm user and password in the destination",
+        "Test the SAProuter or firewall connection if applicable"
+      ]
+    },
+    "network_connection_refused": {
+      "root_cause": "Connection refused or host unreachable. The target system is not accepting connections on the configured port/address.",
+      "next_steps": [
+        "Check that the service port is open and listening",
+        "Check the iptables/firewalld firewall",
+        "Confirm the service is running on the target",
+        "Review the service logs for bind errors"
+      ]
+    },
+    "http_timeout": {
+      "root_cause": "Connection or read timeout. The target system did not respond within the configured time limit.",
+      "next_steps": [
+        "Increase the timeout in the client or proxy",
+        "Check SAP network latency",
+        "Confirm the backend is not overloaded",
+        "Review the logs for long-running queries or locks"
+      ]
+    },
+    "auth_unauthorized": {
+      "root_cause": "Request rejected with 401: the target did not accept the credential. Possible causes: expired token, wrong client_id/secret or user, missing scope/role, locked technical user.",
+      "next_steps": [
+        "Validate the credentials (token, API key, Basic Auth)",
+        "Check the token scope or permissions",
+        "Confirm the client credentials are correct",
+        "Re-authenticate the user if needed"
+      ]
+    },
+    "auth_forbidden": {
+      "root_cause": "Authorization error (403 Forbidden). The technical user or role lacks the permissions required for the operation.",
+      "next_steps": [
+        "Check the permissions of the user or service account",
+        "Confirm the role or group has access to the resource",
+        "Review the ACL or RBAC policies",
+        "Escalate to an administrator if needed"
+      ]
+    },
+    "sapdataelementnotfound": {
+      "root_cause": "Field or data element missing in the target structure: the mapping or payload references a field that does not exist (or was removed) in the expected dictionary/schema.",
+      "next_steps": [
+        "Validate the field name in the dictionary (SE11)",
+        "Confirm the field exists in the table's dictionary",
+        "Review the mapping or ABAP code for the correct field",
+        "Adjust the schema or request if the field was removed"
+      ]
+    },
+    "mdivalidationfailed": {
+      "root_cause": "Payload validation failed: required fields are missing or values fall outside the schema expected by SAP Master Data Integration (MDI) or the target service.",
+      "next_steps": [
+        "Validate the payload against the XML/XSD schema",
+        "Confirm no required fields are missing",
+        "Review the MDI validation rules",
+        "Adjust the data or the schema as needed"
+      ]
+    },
+    "rate_limit_exceeded": {
+      "root_cause": "Request limit exceeded (HTTP 429 / rate limit). The call volume exceeded the quota configured on the target API.",
+      "next_steps": [
+        "Apply exponential backoff before retrying",
+        "Check the rate limits in the X-RateLimit-Limit header",
+        "Wait for the cooldown period given in the Retry-After header",
+        "Reduce the call frequency"
+      ]
+    },
+    "jsonparsingerror": {
+      "root_cause": "Invalid JSON: the payload could not be parsed (wrong syntax, unexpected encoding or unescaped characters).",
+      "next_steps": [
+        "Validate the JSON with a validator (e.g. jsonlint)",
+        "Check the encoding (UTF-8 without BOM)",
+        "Confirm special characters are escaped",
+        "Adjust the payload to the JSON specification"
+      ]
+    },
+    "xmlparsingerror": {
+      "root_cause": "Malformed XML: the payload could not be parsed (unbalanced tags, inconsistent encoding or schema/namespace violation).",
+      "next_steps": [
+        "Validate the XML against the XSD schema",
+        "Confirm well-formedness (balanced tags, correct encoding)",
+        "Check the encoding (UTF-8, ISO-8859-1)",
+        "Review the DTD or namespace if applicable"
+      ]
+    },
+    "sap_material_lock": {
+      "root_cause": "Material locked by another running process (M8082). Concurrent access conflict on the material record.",
+      "next_steps": [
+        "Wait 15 minutes and retry the reprocessing",
+        "Check transaction SM12 (SAP Lock Monitor) to identify the locking process",
+        "Confirm whether a batch job is running on the same material",
+        "If the lock is old (> 1h), check with the SAP administrator whether it can be released"
+      ]
+    },
+    "sap_pricing_condition_missing": {
+      "root_cause": "Pricing condition record missing (VK041). The material/customer/sales organization combination has no valid pricing condition.",
+      "next_steps": [
+        "Check table T001W for the pricing configuration",
+        "Review transaction VK04 to create/maintain the condition",
+        "Confirm the condition's validity dates",
+        "Check the current discount and promotion conditions"
+      ]
+    },
+    "sap_idoc_status_51": {
+      "root_cause": "IDoc in status 51 (Application Document Not Posted). The IDoc reached the target system but failed during posting (application error).",
+      "next_steps": [
+        "Use transaction BD87 to reprocess the IDoc",
+        "Check the error logs in WE19 for details",
+        "Confirm the processing program is active",
+        "Review the partner profile configuration in NAST"
+      ]
+    },
+    "sap_idoc_status_26": {
+      "root_cause": "IDoc in status 26 (Error During Syntax Check). The IDoc failed the syntax check — required fields missing or invalid.",
+      "next_steps": [
+        "Check the structure of segment E1MARAM in the IDoc",
+        "Confirm the schema is up to date in WE60",
+        "Use transaction BD87 for reprocessing",
+        "Validate the partner profile and port configuration"
+      ]
+    },
+    "http_503_unavailable": {
+      "root_cause": "Target service unavailable (HTTP 503). The backend is down, under maintenance or overloaded.",
+      "next_steps": [
+        "Wait 60 seconds and retry the reprocessing",
+        "Check the SAP backend status (SM51, SM66)",
+        "Confirm the OData/RFC service is active",
+        "Review the system logs for resource-exhausted errors"
+      ]
+    },
+    "cpi_mapping_error": {
+      "root_cause": "Error in the iFlow mapping or script (XSLT/Groovy). The input payload does not match the expected schema, or the script has a bug.",
+      "next_steps": [
+        "Open the CPI cockpit to see the mapping error",
+        "Review the mapping diagram or Groovy script",
+        "Validate the input XML against the XSD schema",
+        "Confirm the iFlow is deployed"
+      ]
+    },
+    "ssl_certificate_expired": {
+      "root_cause": "SSL/TLS certificate expired or invalid. The secure connection cannot be established because the server or client certificate has expired.",
+      "next_steps": [
+        "Renew the SSL/TLS certificate in the SAP keystore (STRUST)",
+        "Import the root CA certificate into the trust store",
+        "Review the certificate validity dates (SMICM)",
+        "Confirm the hostname matches the certificate"
+      ]
+    },
+    "rfc_destination_error": {
+      "root_cause": "RFC destination not found or RFC logon failure. The RFC destination is misconfigured or the target ABAP system is unreachable.",
+      "next_steps": [
+        "Check transaction SM59 to configure the RFC destination",
+        "Confirm user, password and logon language in the destination",
+        "Review host and system number in the destination",
+        "Test the connection with the 'Test Connection' button"
+      ]
+    },
+    "duplicate_document": {
+      "root_cause": "Attempt to create a duplicate document. The record already exists in the target system (uniqueness constraint violation).",
+      "next_steps": [
+        "Check the document number and posting date",
+        "Review transaction FB03 for existing documents",
+        "Confirm whether the document was duplicated by reprocessing",
+        "Adjust the original document or cancel the duplicate"
+      ]
+    },
+    "sap_idoc_multiple_objects": {
+      "root_cause": "IDOC_ERROR_MULTIPLE_OBJECTS: the IDoc references several business objects where only one is expected (e.g. several materials in an IDoc that accepts a single item).",
+      "next_steps": [
+        "Check the IDoc in WE02/WE05 for multiple objects",
+        "Confirm whether more than one document has the same identifier",
+        "Review the interface mapping logic",
+        "Check that the partner profile is configured correctly"
+      ]
+    },
+    "sap_idoc_port_partner": {
+      "root_cause": "IDoc partner or port configuration error (status 68 or port not found). The target system does not recognize the communication partner or the configured port.",
+      "next_steps": [
+        "Check the ports configured in transaction WE20",
+        "Confirm the partner number and partner type in the IDoc",
+        "Review the message type and port assignment",
+        "Test with a simple test IDoc"
+      ]
+    },
+    "sap_badi_exception": {
+      "root_cause": "Exception raised in a BAdI (Business Add-In) implementation. A custom SAP extension raised an unhandled exception.",
+      "next_steps": [
+        "View the stack trace in transactions SE37/SE18 for the exception details",
+        "Confirm the BAdI implementation is active",
+        "Review the implementation code for logic errors",
+        "Check transaction SE18 to set the filter value",
+        "Use transaction ST22 to analyze the dump"
+      ]
+    },
+    "sap_bapi_failure": {
+      "root_cause": "The BAPI returned an error message (TYPE='E' or 'A' in the RETURN table). The ABAP business operation failed — invalid data or unmet precondition.",
+      "next_steps": [
+        "Check the error message in table BAPIRET2",
+        "Confirm the input parameters are correct",
+        "Review the SAP application logs for details",
+        "Validate the business rules before calling the BAPI"
+      ]
+    },
+    "sap_serial_number_duplicate": {
+      "root_cause": "Duplicate serial number — the serial is already assigned to another material/equipment in SAP (table SER01/OBJK).",
+      "next_steps": [
+        "Check the serial number in transaction IW31/IW32",
+        "Confirm the material allows serial numbers (MATMAS)",
+        "Review transaction IR01 for serial entry",
+        "Adjust the serial number or use an available one",
+        "Use transaction IQ03 to display the serial"
+      ]
+    },
+    "sap_sd_credit_block": {
+      "root_cause": "Sales order blocked by credit check (SD Credit Management). The customer exceeded the credit limit configured in SAP.",
+      "next_steps": [
+        "Check transaction VKM1 for credit blocks",
+        "Confirm the credit limits in the customer master (FD02)",
+        "Review the credit analysis on the sales order",
+        "Approve the credit release or adjust the order",
+        "View the details in transaction FD32"
+      ]
+    },
+    "sap_mdg_mdi_lock": {
+      "root_cause": "Replication error or lock in SAP Master Data Governance (MDG) / Master Data Integration (MDI). Master data harmonization is blocked, or replication to the spoke system failed.",
+      "next_steps": [
+        "Check transaction MDG_MDM_UI for MDG locks",
+        "Confirm whether a replicate job is running",
+        "Review the MDI logs for error details",
+        "Adjust the governance configuration or wait for the release"
+      ]
+    }
+  }
+}

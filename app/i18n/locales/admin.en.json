@@ -65,7 +65,9 @@
     "too_many_attempts": "Too many invalid authentication attempts; wait a minute.",
     "usage_period_not_found": "No open usage period for '{{model}}' at origin '{{origin}}'.",
     "user_exists": "User '{{username}}' already exists.",
-    "user_not_found": "User not found."
+    "user_not_found": "User not found.",
+    "reissue_requires_pending_email": "Reissuing the e-mail token requires status pending_email (current: {{status}}).",
+    "invalid_locale": "Unsupported language: {{locale}}."
   },
   "escalation": {
     "abstained": "Guardrails discarded the source: unsupported answer",
@@ -227,7 +229,11 @@
     "toggle": "Toggle",
     "transport": "Transport",
     "unsupported": "not supported",
-    "variable": "Variable"
+    "variable": "Variable",
+    "locality": {
+      "local": "local",
+      "cloud": "cloud"
+    }
   },
   "nav": {
     "apiDocs": "API Docs",
@@ -354,5 +360,25 @@
     "siteFilter": "Site filter",
     "techTerm": "Technical term",
     "title": "Approved web search sources (DA-57)"
+  },
+  "reasonDetail": {
+    "destino_fora_da_origem": "base_url points to {{origin}}, outside origin {{registered}}",
+    "credencial_ausente": "origin {{origin}} has no encrypted credential",
+    "capability_faltando": "missing capabilities: {{missing}}",
+    "janela_insuficiente": "estimated context of {{tokens}} tokens > window of {{window}}",
+    "dominio_nao_atendido": "domain '{{domain}}' not in {{domains}}",
+    "nivel_nao_autorizado": "the premium tier requires authorized escalation",
+    "limite_mensal_atingido": "{{used}} of {{limit}} tokens in the period",
+    "circuito_aberto": "circuit open for origin {{origin}}",
+    "orcamento_excedido": "estimated cost of US$ {{cost}} > remaining US$ {{remaining}}"
+  },
+  "sovereigntyReason": {
+    "origin_unresolved": "origin not resolved for provider '{{provider}}'",
+    "public_unrestricted": "public data: origin {{origin}} is not restricted",
+    "local_origin": "local origin {{origin}}, under the operator's jurisdiction",
+    "mode_required": "confidential data to the cloud requires data_sovereignty_mode='cloud_with_dlp' (current: '{{mode}}')",
+    "allowlist_empty": "confidential data to the cloud requires the origin in CONFIDENTIAL_ALLOWED_ORIGINS (empty; destination {{origin}})",
+    "allowlisted": "origin {{origin}} is on the confidential-data allowlist",
+    "not_allowlisted": "origin {{origin}} is not in CONFIDENTIAL_ALLOWED_ORIGINS ({{allowed}})"
   }
 }

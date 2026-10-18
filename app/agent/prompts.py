@@ -52,6 +52,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.agent.state import DiagnosisModel
+from app.i18n.content import CONTENT_LOCALES, DEFAULT_CONTENT_LOCALE
 
 # ---------------------------------------------------------------------------
 # Artefato
@@ -151,6 +152,30 @@ GENERIC_INTEGRATION_PERSONA = (
     "problemas de mapeamento) e recomende acoes pragmaticas de troubleshooting."
 )
 
+# ---------------------------------------------------------------------------
+# Idioma da resposta (DA-74)
+# ---------------------------------------------------------------------------
+
+#: Instrucao de idioma acrescentada ao fim do prompt quando o conteudo e'
+#: pedido em outro idioma. O `pt-BR` nao tem instrucao: e' o prompt medido,
+#: e o digest dele continua exatamente o de antes da DA-74. Cada idioma
+#: daqui gera um digest proprio (ver `_canonical_payload`), medido ou nao
+#: (gate `prompt_digest_measured`).
+OUTPUT_LANGUAGE_INSTRUCTIONS: dict[str, str] = {
+    "en": (
+        "\n\nOutput language: write the values of probable_root_cause and "
+        "next_steps in English. Keep the JSON keys, the file name in "
+        "matched_source and technical identifiers (transaction codes, error "
+        "codes, field and object names) exactly as they appear."
+    ),
+}
+
+
+def output_language_instruction(locale: str | None) -> str:
+    """Sufixo de idioma do prompt; vazio para o default (pt-BR)."""
+    return OUTPUT_LANGUAGE_INSTRUCTIONS.get(locale or DEFAULT_CONTENT_LOCALE, "")
+
+
 #: Persona por `agent_domain`. O `supervisor.py` decide o dominio; aqui so
 #: fica a traducao para texto.
 PERSONAS: dict[str, str] = {
@@ -209,12 +234,25 @@ class PromptSpec:
     slots: tuple[str, ...]
     schema_fields: tuple[str, ...]
 
+    locale: str = DEFAULT_CONTENT_LOCALE
+
     def provenance(self) -> dict[str, str]:
         """O que vai para a resposta, o evento e a tabela `incidents`."""
         return {"prompt_version": self.version, "prompt_digest": self.digest}
 
 
-def _canonical_payload() -> dict[str, Any]:
+def _canonical_payload(locale: str = DEFAULT_CONTENT_LOCALE) -> dict[str, Any]:
+    """Payload do digest. Para o default (pt-BR) e' identico ao de antes da
+    DA-74 - nenhuma chave nova -, entao o digest medido continua valido.
+    Outro idioma acrescenta o locale e a instrucao de idioma."""
+    payload = _base_payload()
+    if locale != DEFAULT_CONTENT_LOCALE:
+        payload["locale"] = locale
+        payload["output_language_instruction"] = OUTPUT_LANGUAGE_INSTRUCTIONS[locale]
+    return payload
+
+
+def _base_payload() -> dict[str, Any]:
     return {
         "name": "diagnosis",
         "version": PROMPT_VERSION,
@@ -227,7 +265,7 @@ def _canonical_payload() -> dict[str, Any]:
     }
 
 
-def compute_digest() -> str:
+def compute_digest(locale: str = DEFAULT_CONTENT_LOCALE) -> str:
     """SHA-256 do payload canonico. Estavel entre processos e versoes de Python.
 
     `sort_keys=True` + `separators` fixos: o digest nao pode depender da
@@ -235,27 +273,40 @@ def compute_digest() -> str:
     cuidado do `sorted(blob)` do fingerprint de contrato na DA-52).
     """
     blob = json.dumps(
-        _canonical_payload(), sort_keys=True, ensure_ascii=False, separators=(",", ":")
+        _canonical_payload(locale), sort_keys=True, ensure_ascii=False, separators=(",", ":")
     )
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
-_SPEC: PromptSpec | None = None
+_SPECS: dict[str, PromptSpec] = {}
 
 
-def get_spec() -> PromptSpec:
-    """Spec memoizada. O digest e' estavel no processo; recalcular a cada
-    incidente seria trabalho jogado fora dentro de um hot path."""
-    global _SPEC
-    if _SPEC is None:
-        _SPEC = PromptSpec(
+def prompt_locales() -> tuple[str, ...]:
+    """Idiomas com prompt: o default e os que tem instrucao de idioma."""
+    return tuple(
+        loc
+        for loc in CONTENT_LOCALES
+        if loc == DEFAULT_CONTENT_LOCALE or loc in OUTPUT_LANGUAGE_INSTRUCTIONS
+    )
+
+
+def get_spec(locale: str | None = None) -> PromptSpec:
+    """Spec memoizada por idioma. O digest e' estavel no processo;
+    recalcular a cada incidente seria trabalho jogado fora num hot path.
+    Idioma sem prompt proprio usa o default."""
+    loc = locale if locale in prompt_locales() else DEFAULT_CONTENT_LOCALE
+    spec = _SPECS.get(loc)
+    if spec is None:
+        spec = PromptSpec(
             name="diagnosis",
             version=PROMPT_VERSION,
-            digest=compute_digest(),
+            digest=compute_digest(loc),
             slots=VARIABLE_SLOTS,
             schema_fields=tuple(DiagnosisModel.model_fields),
+            locale=loc,
         )
-    return _SPEC
+        _SPECS[loc] = spec
+    return spec
 
 
 def prompt_version() -> str:

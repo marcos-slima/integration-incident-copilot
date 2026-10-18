@@ -108,6 +108,7 @@ def build_incident_row(
         "escalation_reason": (response.escalation or {}).get("escalation"),
         "cost_usd": round(budget.spent_usd, 6) if budget is not None else None,
         "llm_calls": budget.calls if budget is not None else None,
+        "locale": response.locale,  # DA-74 (migration 021)
         # DA-60: redigido e cifrado (app/admin/crypto.py::encrypt_evidence)
         "evidence_json": encrypt_evidence(
             [e.model_dump(mode="json") for e in response.evidence] or None

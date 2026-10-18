@@ -18,6 +18,7 @@ import type {
 } from '../types/models';
 import { Badge } from './Badge';
 import { EscalationBanner, EvidenceList, Provenance } from './DiagnosisDetails';
+import { diagnosisLocale } from '../i18n';
 
 // Props do componente
 interface DiagnoseViewProps {
@@ -102,7 +103,7 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
 
     try {
       // Monta o payload — só inclui campos preenchidos
-      const body: IncidentRequest = { description: desc.trim() };
+      const body: IncidentRequest = { description: desc.trim(), locale: diagnosisLocale() };
       if (sys)           body.interface_type = sys as InterfaceType;
       if (ident.trim())  body.identifier     = ident.trim();
       if (logs.trim())   body.logs           = logs.trim();

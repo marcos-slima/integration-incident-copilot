@@ -79,6 +79,7 @@ def diagnose_incident(
     payload: str | None = None,
     interface_type: str | None = None,
     identifier: str | None = None,
+    locale: str | None = None,
 ) -> dict:
     """Diagnostica um incidente de integracao SAP/multi-vendor: correlaciona
     dados de conector (OData/CPI, RFC/IDoc, ServiceNow, Salesforce, Workday,
@@ -90,7 +91,8 @@ def diagnose_incident(
     salesforce, workday, ariba, successfactors, po, cap, apim. identifier e
     o nome do iFlow, RFC destination, numero de IDoc/incidente/case/evento/
     PO/funcionario, conforme o interface_type. A lista completa, com o modo
-    (real/mock) de cada um, vem de `list_connectors`.
+    (real/mock) de cada um, vem de `list_connectors`. locale ('pt-BR' ou
+    'en', padrao 'pt-BR') e o idioma do conteudo do diagnostico (DA-74).
     """
     # DA-27: Capability Registry + Agent Execution Policy - fail-closed,
     # ver app/mcp/policy.py. Hoje sempre permite (tool read-only, scope
@@ -103,6 +105,7 @@ def diagnose_incident(
         payload=payload,
         interface_type=interface_type,
         identifier=identifier,
+        locale=locale,
     )
     # M-27: timeout_seconds/max_retries da ToolPolicy existiam e nunca eram
     # aplicados. Timeout vira o teto do grafo (nunca acima de

@@ -1,4 +1,40 @@
-# Decisões de Arquitetura
+# De
+### 67. Roteamento por registro de modelos (DA-72)
+
+**O problema.** A DA-66 define que o agente escolhe o destino por elegibilidade (soberania, capacidade, janela de contexto, circuito, orçamento) e depois por preferência (custo × latência). O código fazia menos: os candidatos eram só `LLM_PROVIDER` e `LLM_FALLBACK_PROVIDER`; os modelos cadastrados em `/admin/models` diziam apenas **qual modelo** cada provider chamava (DA-46); capacidade vinha de tabela fixa; janela de contexto e latência não existiam; o limite mensal só era exibido; e o preço registrado não chegava à estimativa (corrigido antes, ver DA-67 item 5). Cadastrar um modelo não mudava a decisão do agente.
+
+**A decisão** (aprovada em 2026-10-18). No modo gerenciado (`LLM_REGISTRY_DB=true`), **cada modelo habilitado do registro é um candidato**. O Policy Engine avalia todos com as mesmas regras e devolve uma lista ordenada; o failover (DA-68) percorre essa lista. Fora do modo gerenciado nada muda.
+
+**Parâmetros por modelo** (migration `020_registry_routing.py`, `llm_models`; nulo = derivado ou herdado):
+
+| Coluna | Uso |
+|---|---|
+| `transport` (`ollama` · `openai_compatible` · `azure_openai`) | Cliente da chamada; nulo = derivado da origem |
+| `context_window_tokens` | Rejeita se contexto estimado + completion (×1,5) não couber |
+| `supports_tools` / `supports_response_format` / `supports_seed` | Só restringem a capacidade da origem |
+| `domains` (`sap`, `saas`, `generic`) | Rejeita se o domínio do supervisor não estiver na lista; nulo = todos |
+| `tier` (`local` · `standard` · `premium`) | `premium` é cadastrado e bloqueado (tier 3 da DA-44 exige decisão própria); nulo = `local` se loopback, senão `standard` |
+| `priority` | Desempate depois do score (menor primeiro) |
+| `monthly_limit_tokens` (já existia) | Passa a **bloquear** ao atingir 100% do período aberto |
+
+**Regras do engine** (`app/llm/routing.py::evaluate_routing`, ramo de registro). Fase 1 rejeita com motivo enumerado: `destino_fora_da_origem` (o `base_url` aponta para outro host que não a origem cadastrada), `soberania_bloqueada` (DA-43, avaliada sobre o destino final), `credencial_ausente` (origem cloud sem credencial cifrada, DA-47), `capability_faltando` (capacidade efetiva = origem ∩ modelo), `janela_insuficiente`, `dominio_nao_atendido`, `nivel_nao_autorizado`, `limite_mensal_atingido`, `circuito_aberto` (por **origem**) e `orcamento_excedido` (preço registrado do modelo). Fase 2 ordena os elegíveis por `w_custo·custo_norm + w_lat·latência_norm` (normalizados entre os elegíveis; `LLM_ROUTING_COST_WEIGHT`=0,7 e `LLM_ROUTING_LATENCY_WEIGHT`=0,3), depois `priority`, depois o default da origem. Sem latência medida o termo é zero: modelo novo não é penalizado.
+
+**Gateway.** `app/llm/gateway.py::invoke_via_gateway` aplica os overrides da Admin UI (`app/llm/registry_routing.py::effective_settings`, antes ignorados na decisão), lê o registro (`app/llm/registry_routing.py::load_registry_snapshot`; ilegível = nenhum candidato, fail-closed), decifra a credencial **só do modelo escolhido**, grava a latência de cada chamada bem-sucedida (`llm_call_latency`, mediana de 7 dias) e registra o modelo que respondeu (`app/llm/gateway.py::consume_last_selection`), que vai para `DiagnosisResponse.llm_model` e para `incidents` (DA-53).
+
+**Superfícies.** `/admin/models`: parâmetros por modelo no cadastro e na edição; orçamento e pesos (`DIAGNOSIS_BUDGET_USD`, `LLM_BUDGET_RESERVE_RATIO`, `LLM_GATEWAY_MAX_COST_USD`, pesos) como overrides de runtime; e o simulador `GET /admin/api/routing/preview`, que roda a mesma decisão sem chamar o LLM.
+
+**Invariantes.** A 3 (gateway é a única entrada) e a 8 (modelo nunca entra na tabela de rotas: o candidato vem de `llm_models`, dado do operador) se mantêm. A 9 foi **emendada**: a capacidade continua por origem, que é o teto; o modelo só restringe.
+
+**Validação.** `tests/test_registry_routing.py` (um teste por critério de aceite: todos os habilitados aparecem com posição ou motivo; `confidential` em `strict` só local; janela; domínio; limite mensal; failover pela lista com o modelo efetivo registrado; modo `.env` sem ler o registro — mais invariante 9, credencial, destino, premium, score, prioridade, preview e validação da API); `tests/test_registry_routing_repository.py` (leituras do registro, consumo aberto, credenciais, mediana de latência e chaves de runtime contra SQLite). `tests/test_llm_gateway.py::test_registry_com_destino_remoto_e_barrado_para_confidential` passou a exercitar o mecanismo novo (GOV-01).
+
+**Limitações (registradas de propósito).**
+- No modo gerenciado o `model_name` do caller (`llm_model` do state) não restringe os candidatos: quem escolhe é o engine.
+- Latência é medida por réplica e gravada no banco; sem `DATABASE_URL` o score usa só custo.
+- O circuito do modo `.env` continua por rótulo de provider (comportamento da DA-66 preservado).
+- Escalonamento automático para `premium` e roteamento por qualidade medida ficam fora (exigem decisão e baseline por modelo).
+
+---
+cisões de Arquitetura
 
 Registro das decisões de arquitetura (DAs) do Integration Incident Copilot:
 o problema real encontrado, a solução adotada, como foi validada e as
@@ -87,6 +123,7 @@ final.
 | 63 | [64](#64-skills-declarativas---yaml-como-fonte-de-verdade-para-capability-e-roteamento-da-63) | Skills declarativas — YAML como fonte de verdade para capability e roteamento (DA-63) |
 | 65 | [65](#65-degradação-graciosa-do-rag-quando-qdrant-cai-da-65) | Degradação graciosa do RAG: Qdrant cai → `_retrieve_hybrid` e `_retrieve_dense_only` retornam `[]` → rule engine ainda responde erros conhecidos; fluxo completo `/diagnose → run_diagnosis` pendente de teste de integração |
 | 71 | [66](#66-sanitização-do-resultado-de-busca-web-devolvido-ao-llm-da-71) | Resultado de busca web sanitizado e delimitado antes de voltar ao LLM (tool do ReAct e `web_search_node`) |
+| 72 | [67](#67-roteamento-por-registro-de-modelos-da-72) | Roteamento por registro de modelos: cada modelo habilitado é candidato do Policy Engine, com parâmetros por modelo, score custo × latência e failover pela lista |
 | — | — | DA-64: número não utilizado (pulo intencional) |
 
 > **Ordenação da prosa:** as seções §42–§47 (DA-42, DA-38, DA-39, DA-40,
@@ -2816,9 +2853,8 @@ A decisão é logada em audit log estruturado e exposta via `GET /llm/policy` (D
 - Quality gate: `da_registered` e `docs_code_references` validam a DA
 
 **Limitações (registradas de propósito).**
-- Os candidatos são só o provider primário e o de fallback (`LLM_PROVIDER`, `LLM_FALLBACK_PROVIDER`); os modelos cadastrados em `/admin/models` definem **qual modelo** cada provider chama (DA-46), não entram na escolha. Proposta de correção: DA-72 (candidata).
-- A ordenação é só por custo estimado. Latência não é medida por chamada (`Candidate.latency_ms` é sempre `None`) e os pesos custo×latência de `_get_scoring_weights` não existem em `Settings` nem são chamados.
-- Janela de contexto não é verificada.
+- Os candidatos são só o provider primário e o de fallback (`LLM_PROVIDER`, `LLM_FALLBACK_PROVIDER`); os modelos cadastrados em `/admin/models` definem **qual modelo** cada provider chama (DA-46), não entram na escolha. **Resolvido pela DA-72** no modo gerenciado; o modo `.env` mantém este comportamento.
+- No modo `.env` a ordenação é só por custo estimado e a janela de contexto não é verificada. No modo gerenciado, a DA-72 mede latência, aplica os pesos (`LLM_ROUTING_*_WEIGHT`) e verifica a janela.
 - Orçamento é estimado por heurística (substituído por contagem por família na DA-67)
 - Circuit breaker compartilhado entre réplicas requer Redis (DA-41)
 

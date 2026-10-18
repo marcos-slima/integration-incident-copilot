@@ -303,6 +303,7 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
 | DA-69 | Checkpointing opt-in (`CHECKPOINTING_ENABLED`, default OFF): `PostgresSaver` com redação de PII no `put`/`put_writes` (`RedactingCheckpointMixin`; valores inline no jsonb incluídos), URL SQLAlchemy normalizada para libpq, `thread_id` = `incident_id` passado por nome, retomada nativa do LangGraph sem reexecutar nós concluídos; retomada lê estado redigido | `app/agent/checkpointing.py`, `app/agent/graph.py`, `tests/test_checkpointing.py`, `tests/test_checkpointing_postgres.py` |
 | DA-70 | Métricas e FinOps: métricas Prometheus (`llm_requests_total`, `llm_tokens_total`, `llm_cost_usd_total`, `llm_budget_deviation_ratio`, `diagnosis_duration_seconds`), dashboards estendidos, validar com `scripts/validate_dashboards.py` | `app/metrics.py`, `app/admin/metering.py`, `deploy/grafana/dashboards/` |
 | DA-71 | Resultado de busca web sanitizado (`sanitize_untrusted_input`), limitado, URL reduzida e bloco delimitado como dado não confiável antes de voltar ao LLM — tool do ReAct e `web_search_node` | `app/agent/nodes.py::format_untrusted_web_hits`, `tests/test_web_search_injection.py` |
+| DA-72 | Roteamento por registro de modelos: no modo gerenciado cada modelo habilitado de `llm_models` é candidato do Policy Engine; parâmetros por modelo (transporte, janela, capacidades que só restringem a origem, domínios, nível, prioridade, limite mensal bloqueante), score custo × latência com pesos em configuração, circuito por origem, failover pela lista, simulador em `/admin/models` (migration 020) | `app/llm/routing.py`, `app/llm/registry_routing.py`, `app/llm/gateway.py`, `app/admin/` (models, repository, routes, `static/models.js`), `alembic/versions/020_registry_routing.py` |
 
 **DAs candidatas (sem implementação ainda):**
 - **DA-31 — SAP AI Agent Hub registration (MCP + A2A)** · bloqueada: exige tenant Kyma.
@@ -320,20 +321,6 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
   - **Critério de entrada.** Tenant Kyma disponível → registrar o AgentCard e o endpoint
     MCP no hub → então esta decisão ganha seção própria em
     `docs/DECISOES_DE_ARQUITETURA.md`, linha no índice e no livro-razão, e sai desta lista.
-
-- **DA-72 — Roteamento por registro de modelos** · aguardando aprovação.
-  - **O que é.** No modo gerenciado (`LLM_REGISTRY_DB=true`), cada modelo habilitado em
-    `llm_models` vira candidato do Policy Engine (DA-66), com parâmetros por modelo:
-    transporte, janela de contexto, capacidades (só restringem a origem), domínios,
-    nível, prioridade e limite mensal bloqueante. Score custo × latência com pesos em
-    configuração, latência medida pelo metering, failover (DA-68) pela lista ordenada e
-    simulador de roteamento em `/admin/models`.
-  - **Por que ainda não foi entregue.** Muda o desenho do roteamento e emenda a
-    invariante 9; depende de aprovação explícita.
-  - **O que já existe.** Policy Engine (DA-66), registro (DA-46), preço do modelo
-    efetivo na estimativa de custo (correção DA-67 de 2026-10-18).
-  - **Critério de entrada.** Aprovação → migration 020, engine, gateway, UI → seção
-    própria em `docs/DECISOES_DE_ARQUITETURA.md` e saída desta lista.
 
 > A DA-32 (AMQP 1.0 via Solace Cloud) **já foi entregue** (`app/events/amqp_consumer.py`,
 > commit `67b78e8`). Ela ficou nesta lista até a DA-51 criar o gate
@@ -357,7 +344,7 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
 6. `classify_domain()` em `supervisor.py` é 100% determinístico (sem LLM)
 7. `generic_diagnosis_node` existe para `agent_domain="generic"` — não reutilizar `saas_diagnosis_node`
 8. **Modelo NUNCA entra na tabela de rotas** — `llm_model` é texto livre; `llm/routes.py` declara só ONDE o dado sai e O QUE o destino aceita (DA-45). Há teste que falha se um nome de modelo entrar como chave de rota
-9. **Capacidade é por ORIGIN, não por rótulo** — `openai` apontando para Gemini e para api.openai.com não são o mesmo destino. Mesma razão de DA-43 (DA-45)
+9. **Capacidade é por ORIGIN, não por rótulo** — `openai` apontando para Gemini e para api.openai.com não são o mesmo destino. Mesma razão de DA-43 (DA-45). **Emenda DA-72:** a origem é o teto; um modelo do registro pode só **restringir** (`supports_tools=false` etc.), nunca ampliar
 10. `llm_send_seed=None` (default) = DA-2 ativa (seed=42). `None` NÃO pode ser lido como "não enviar" — destino desconhecido recebe seed; só origens registradas como incompatíveis não recebem
 11. Rota `require_loopback` e `require_loopback=False` são mutuamente exclusivos — `local_lab` apontando para a internet, e `enterprise_azure` apontando para loopback, falham no boot
 12. **Correlação incidente↔sistema é fail-closed** — `app/admin/correlation.py` só resolve por `connector_type` quando há UM único candidato; com 2+ devolve `ambiguous` com a lista. Nenhuma superfície (UI, API, dashboard) escolhe um sistema por conta própria (DA-50)

@@ -311,7 +311,14 @@ informado.
 
 A UI admin (`/admin`; dados via `/admin/api/*` com `X-API-Admin-Key`) expõe:
 
-- **Models** — registro de modelos/credenciais por ORIGEM, com status
+- **Models** — registro de modelos/credenciais por ORIGEM, com status. Com
+  `LLM_REGISTRY_DB=true`, cada modelo ativo é candidato do agente (DA-72) e a
+  tela define os parâmetros que a decisão usa: transporte, janela de contexto,
+  capacidades (só restringem a origem), domínios atendidos, nível, prioridade e
+  limite mensal (bloqueia ao chegar a 100%). Também ficam ali o orçamento por
+  diagnóstico, o teto por chamada e os pesos custo × latência, e o
+  **simulador de roteamento**, que mostra para cada modelo a posição na lista
+  ou o motivo da rejeição, sem chamar o LLM
 - **Usage** — metering de tokens **reais** (usage_metadata), não estimativa
 - **Systems** — catálogo de sistemas integrados e sua correlação com
   incidentes (DA-49/50)

@@ -53,10 +53,16 @@ PATH="$PWD/.venv/bin:$PATH" uv run python scripts/quality_gate.py
 `openai` é só um rótulo: a política olha a **origem real** (a URL). Um
 `OPENAI_BASE_URL=http://localhost:8000` é tratado como local (DA-45).
 
-**Registro gerenciado (opcional, DA-46/47).** Com `LLM_REGISTRY_DB=true` e
-`DATABASE_URL`, modelos e credenciais vêm da tela `/admin` (credenciais cifradas
-com `LLM_CREDENTIALS_MASTER_KEY`), e não do `.env`. Registro vazio é erro
-(fail-closed), nunca volta ao `.env` em silêncio.
+**Registro gerenciado (opcional, DA-46/47/72).** Com `LLM_REGISTRY_DB=true` e
+`DATABASE_URL`, modelos e credenciais vêm da tela `/admin/models` (credenciais
+cifradas com `LLM_CREDENTIALS_MASTER_KEY`), e não do `.env`. Cada modelo ativo
+é um candidato: o agente escolhe entre todos pelas regras de soberania,
+capacidade, janela de contexto, domínio, nível, limite mensal, circuito e
+orçamento, e ordena os elegíveis por custo × latência (pesos
+`LLM_ROUTING_COST_WEIGHT`/`LLM_ROUTING_LATENCY_WEIGHT`), prioridade e padrão da
+origem. Se o primeiro falhar por transporte, tenta o próximo. Registro vazio ou
+ilegível é erro (fail-closed), nunca volta ao `.env` em silêncio. Antes de
+ativar, use **Simular roteamento** na tela para ver a decisão.
 
 **Conferir:** `GET /llm/policy` mostra, para cada provedor, a origem resolvida e
 se ela pode receber dado `public` e `confidential`.
@@ -66,7 +72,9 @@ se ela pode receber dado `public` e `confidential`.
   `deployed_model_evaluated` avisa quando o modelo implantado não tem baseline.
   Meça com o promptfoo (seção 7) antes de comparar resultados.
 - Modelos diferentes aceitam parâmetros diferentes (seed, `response_format`,
-  tools); a tabela fica em `app/llm/capabilities.py`, por origem.
+  tools); a tabela fica em `app/llm/capabilities.py`, por origem. No registro,
+  marque "não suporta" no modelo que tiver menos que a origem (a origem é o
+  teto; o modelo só restringe).
 
 ---
 
@@ -104,6 +112,10 @@ tokens e senhas — não nomes próprios nem endereços.
 | `LLM_BUDGET_RESERVE_RATIO` | 0,25 | Reserva sobre o custo estimado antes de aceitar um candidato |
 | `LLM_REQUEST_TIMEOUT_SECONDS` | 90 | Por chamada ao LLM |
 | `DIAGNOSIS_TIMEOUT_SECONDS` | 180 | Pipeline inteiro |
+| `LLM_ROUTING_COST_WEIGHT` / `LLM_ROUTING_LATENCY_WEIGHT` | 0,7 / 0,3 | Pesos do score no registro gerenciado (DA-72) |
+
+Com banco configurado, orçamento, teto por chamada e pesos também são editáveis
+em `/admin/models` (overrides de runtime; o valor do banco vence o `.env`).
 
 Quando o orçamento do diagnóstico não cobre nenhum candidato, a chamada para
 com `BudgetExhaustedError` (sem retry nem failover, DA-67/68). Se houver um

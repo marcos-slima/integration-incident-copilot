@@ -23,6 +23,20 @@ mensagens de commit.
   intervalos `arquivo.py:10-20`.
 - `REFERENCE_LIBRARY_FALLBACK_ENABLED` (M-24), `false` no deploy Kyma.
 
+### Correções pós-DA-66/67/69/70 (sessão atual)
+- **A1** Commit DA-24 (correção sobre imagem construída no Cenário C)
+- **A2** Dependências `tiktoken>=0.14.0` e `langgraph-checkpoint-postgres>=3.2.0` declaradas no pyproject.toml
+- **A3** Criar `tests/test_llm_routing.py` com 18 testes passando (DA-66)
+- **A4** Criar `tests/test_budget_ledger.py` com 8 testes passando (DA-67)
+- **A5** Criar `tests/test_checkpointing.py` com 8 testes passando (DA-69)
+- **A6** Migration `017_create_llm_metrics_tables.py` renomeada e revision="017"
+- **A7** Caminho dos dashboards corrigido no CLAUDE.md (linha 304)
+- **A8** Migration `018_create_llm_budget_ledger.py` criada para tabela `llm_budget_ledger`
+- **A9** Models `LlmBudgetLedger`, `LlmRequests`, `LlmTokens`, `LlmCost` com índices corretos
+- **A10** T1 — Bug do tokenizer offline corrigido com cache e fallback para qualquer exceção
+- **A11** Testes T1 criados (`tests/test_tokenizer_offline.py`) com 5 testes passando
+- **Validação** `uv sync --frozen`, pytest (1593 passando), quality gate (21/21)
+
 > As entradas abaixo são históricas: descrevem o projeto na data delas
 > (ex.: a busca web hoje é configurada em `web_search_sources`, DA-57, e não
 > tem fallback genérico).

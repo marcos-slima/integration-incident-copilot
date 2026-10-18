@@ -1,0 +1,61 @@
+# Cenario G (docs/DEPLOYMENT.md): o MESMO bundle do Kyma (../kyma) num
+# Kubernetes local (k3d/k3s), sem nenhuma copia dos manifests.
+# O que muda em relacao ao Kyma, e por que:
+#   - APIRule removido: e CRD do modulo api-gateway do Kyma; num cluster
+#     comum o acesso e por `kubectl port-forward` (scripts/k3d-validate.sh).
+#   - Qdrant e Redis incluidos (o bundle Kyma declara que nao os implanta).
+#   - LLM local (Ollama no host) e soberania `strict`: nada sai da maquina.
+#   - Imagem local importada no k3d (imagePullPolicy: Never).
+#   - Replicas/HPA menores (1 no).
+# Uso: scripts/k3d-validate.sh (cria cluster, importa imagem, aplica, testa).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: integration-incident-copilot
+resources:
+  - ../kyma
+  - qdrant-deployment.yaml
+  - qdrant-service.yaml
+  - redis-deployment.yaml
+  - redis-service.yaml
+patches:
+  - patch: |-
+      $patch: delete
+      apiVersion: gateway.kyma-project.io/v1beta1
+      kind: APIRule
+      metadata:
+        name: integration-incident-copilot
+        namespace: integration-incident-copilot
+  - path: configmap-local.yaml
+  - target:
+      kind: Deployment
+      name: integration-incident-copilot
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: replace
+        path: /spec/template/spec/containers/0/image
+        value: integration-incident-copilot:local
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Never
+  - target:
+      kind: Deployment
+      name: integration-incident-copilot-worker
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/image
+        value: integration-incident-copilot:local
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Never
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: integration-incident-copilot
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 2

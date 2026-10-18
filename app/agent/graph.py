@@ -42,10 +42,6 @@ from app.config import settings
 from app.exceptions import DiagnosisOverloadedError, DiagnosisTimeoutError
 from app.models import DiagnosisResponse, IncidentRequest
 
-# DA-69: checkpointing com PostgresSaver (opt-in via CHECKPOINTING_ENABLED)
-if settings.checkpointing_enabled:
-    from langgraph.checkpoint.postgres import PostgresSaver
-
 _logger = logging.getLogger(__name__)
 from app.llm.budget import close_task_budget, open_task_budget
 from app.services.incident_recorder import record_incident
@@ -153,10 +149,14 @@ def get_graph():
         if settings.checkpointing_enabled:
             if not settings.database_url:
                 raise RuntimeError("CHECKPOINTING_ENABLED=true exige DATABASE_URL configurada")
-            # DA-19: reutilizar DATABASE_URL já configurada
-            _checkpointer = PostgresSaver.from_conn_string(settings.database_url)
-            # Setup do esquema (idempotente)
-            _checkpointer.setup()
+            # DA-69: import tardio (so quem liga a flag precisa de psycopg).
+            # build_postgres_checkpointer normaliza a URL SQLAlchemy para
+            # libpq, abre uma conexao de vida longa (from_conn_string e
+            # context manager) e usa o RedactingSerializer - o checkpoint
+            # nunca grava PII em claro.
+            from app.agent.checkpointing import build_postgres_checkpointer
+
+            _checkpointer = build_postgres_checkpointer(settings.database_url)
         _compiled_graph = build_graph(checkpointer=_checkpointer)
     return _compiled_graph
 

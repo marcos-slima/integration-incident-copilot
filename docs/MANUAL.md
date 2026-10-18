@@ -49,6 +49,11 @@ Três modos de leitura:
   envelhece e símbolo não.
 - Blocos marcados **Veja executar** são a parte prática. Pressupõem o Capítulo 0 feito.
 - `[DA-N]` remete a `DECISOES_DE_ARQUITETURA.md`.
+- **Material local, não publicado.** Nomes de arquivo em texto simples, sem link
+  (as aulas `DA_AULA_*.md`, a trilha de estudos e o processo de desenvolvimento),
+  são material de estudo do mantenedor e **não estão neste repositório**. Tudo o
+  que é necessário para instalar, avaliar, operar e customizar está nos documentos
+  com link — o ponto de partida é [`README.md`](README.md).
 
 ### Mapa dos capítulos
 
@@ -1749,7 +1754,7 @@ primeiro comando a rodar quando o sintoma é "mas eu configurei".
 
 **Aprofundar:** [`DEPLOY.md`](DEPLOY.md) (caminho Compose) ·
 [`TUTORIAL_K3D_KUBERNETES_LOCAL.md`](TUTORIAL_K3D_KUBERNETES_LOCAL.md) (Kubernetes local) ·
-DEPLOYMENT.md (cenários completos) ·
+[`DEPLOYMENT.md`](DEPLOYMENT.md) (cenários completos) ·
 DA_AULA_18_CONTAINERS.md ·
 DA_AULA_19_KYMA.md ·
 DA_AULA_XX_DEPLOY.md.

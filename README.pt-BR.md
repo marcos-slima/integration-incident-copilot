@@ -222,7 +222,10 @@ Cada um está documentado em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 | Se você quer… | Leia |
 |---|---|
+| Avaliar o produto em ~30 minutos | [Roteiro de avaliação](docs/ROTEIRO_DE_AVALIACAO.md) |
 | Rodar pela primeira vez | [Primeiros passos](docs/GETTING_STARTED.md) → [Guia de uso](docs/USER_GUIDE.md) |
+| Implantar (local, container, Kubernetes, Kyma, on-premise) | [Implantação](docs/DEPLOYMENT.md) → [Tutorial k3d](docs/TUTORIAL_K3D_KUBERNETES_LOCAL.md) |
+| Adaptar às suas necessidades | [Customização](docs/CUSTOMIZACAO.md) |
 | Ver como funciona, com diagramas | [Arquitetura](docs/ARCHITECTURE.md) |
 | Entender *por que* foi feito assim | [Decisões de arquitetura](docs/DECISOES_DE_ARQUITETURA.md) (50 decisões registradas) |
 | Acompanhar cenários reais de ponta a ponta | [Casos de uso](docs/CASOS_DE_USO.md) |

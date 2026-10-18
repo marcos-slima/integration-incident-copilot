@@ -274,7 +274,10 @@ Each of these is documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 | If you want to… | Read |
 |---|---|
+| Evaluate the product in ~30 minutes | [Evaluation walkthrough](docs/ROTEIRO_DE_AVALIACAO.md) (Portuguese only) |
 | Run it for the first time | [Getting started](docs/GETTING_STARTED.md) → [User guide](docs/USER_GUIDE.md) |
+| Deploy (local, container, Kubernetes, Kyma, on-premise) | [Deployment](docs/DEPLOYMENT.md) → [k3d tutorial](docs/TUTORIAL_K3D_KUBERNETES_LOCAL.md) (Portuguese only) |
+| Adapt it to your needs | [Customization](docs/CUSTOMIZACAO.md) (Portuguese only) |
 | See how it works, with diagrams | [Architecture](docs/ARCHITECTURE.md) (Portuguese only) |
 | Understand *why* it was built this way | [Architecture decisions](docs/DECISOES_DE_ARQUITETURA.md) (Portuguese only) |
 | Follow real scenarios end to end | [Use cases](docs/CASOS_DE_USO.md) (Portuguese only) |

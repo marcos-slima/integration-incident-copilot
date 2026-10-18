@@ -184,21 +184,40 @@ def classify_sensitivity(state: dict) -> Sensitivity:
     return "public" if rank == 0 else "confidential"
 
 
+# Cache do encoding para evitar download repetido (DA-67).
+# Carregamento lazy: so carrega na primeira chamada. Se a carga falhar
+# (tiktoken ausente, BPE sem rede), `_encoding_failed` impede nova
+# tentativa a cada chamada - um download com timeout por chamada
+# somaria latencia ao diagnostico - e o aviso e logado uma unica vez.
+_encoding_cache = None
+_encoding_failed = False
+
+
 def _estimate_tokens(text: str) -> int:
-    """Estima tokens usando tokenizer real (tiktoken).
+    """Estima tokens para o budget (DA-67).
 
-    Substitui heuristica simples (len//4) por contagem real de tokens.
-    Usa encoding 'cl100k_base' (padrão GPT-4/GPT-3.5) para consistência.
+    Aproximacao via `cl100k_base` (tokenizer da OpenAI). Para modelos
+    Qwen/Ollama nao e a contagem real; o real vem de `prompt_eval_count`
+    no metering (DA-48).
 
-    Fallback para heurística se tiktoken não estiver disponível."""
-    try:
-        import tiktoken
+    Fallback para a heuristica len//4 se o tiktoken nao estiver
+    disponivel ou o BPE nao puder ser carregado (container sem rede).
+    Nunca propaga excecao."""
+    global _encoding_cache, _encoding_failed
+    if _encoding_cache is None and not _encoding_failed:
+        try:
+            import tiktoken
 
-        enc = tiktoken.get_encoding("cl100k_base")
-        return len(enc.encode(text, allowed_special="all"))
-    except ImportError:
-        # Fallback para heurística se tiktoken não estiver disponível
-        return max(1, len(text) // 4)
+            _encoding_cache = tiktoken.get_encoding("cl100k_base")
+        except Exception:  # noqa: BLE001 - fallback deliberado: tokenizer nunca derruba o diagnostico
+            _encoding_failed = True
+            logger.warning("tiktoken indisponivel - estimativa de tokens usa heuristica len//4")
+    if _encoding_cache is not None:
+        try:
+            return len(_encoding_cache.encode(text, allowed_special="all"))
+        except Exception:
+            logger.debug("tiktoken encode falhou - usando heuristica len//4", exc_info=True)
+    return max(1, len(text) // 4)
 
 
 # Multiplicador de tokens de completion em relacao ao prompt (teto

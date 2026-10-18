@@ -1,66 +1,4 @@
-# De
-### 67. Roteamento por registro de modelos (DA-72)
-
-**O problema.** A DA-66 define que o agente escolhe o destino por elegibilidade (soberania, capacidade, janela de contexto, circuito, orçamento) e depois por preferência (custo × latência). O código fazia menos: os candidatos eram só `LLM_PROVIDER` e `LLM_FALLBACK_PROVIDER`; os modelos cadastrados em `/admin/models` diziam apenas **qual modelo** cada provider chamava (DA-46); capacidade vinha de tabela fixa; janela de contexto e latência não existiam; o limite mensal só era exibido; e o preço registrado não chegava à estimativa (corrigido antes, ver DA-67 item 5). Cadastrar um modelo não mudava a decisão do agente.
-
-**A decisão** (aprovada em 2026-10-18). No modo gerenciado (`LLM_REGISTRY_DB=true`), **cada modelo habilitado do registro é um candidato**. O Policy Engine avalia todos com as mesmas regras e devolve uma lista ordenada; o failover (DA-68) percorre essa lista. Fora do modo gerenciado nada muda.
-
-**Parâmetros por modelo** (migration `020_registry_routing.py`, `llm_models`; nulo = derivado ou herdado):
-
-| Coluna | Uso |
-|---|---|
-| `transport` (`ollama` · `openai_compatible` · `azure_openai`) | Cliente da chamada; nulo = derivado da origem |
-| `context_window_tokens` | Rejeita se contexto estimado + completion (×1,5) não couber |
-| `supports_tools` / `supports_response_format` / `supports_seed` | Só restringem a capacidade da origem |
-| `domains` (`sap`, `saas`, `generic`) | Rejeita se o domínio do supervisor não estiver na lista; nulo = todos |
-| `tier` (`local` · `standard` · `premium`) | `premium` é cadastrado e bloqueado (tier 3 da DA-44 exige decisão própria); nulo = `local` se loopback, senão `standard` |
-| `priority` | Desempate depois do score (menor primeiro) |
-| `monthly_limit_tokens` (já existia) | Passa a **bloquear** ao atingir 100% do período aberto |
-
-**Regras do engine** (`app/llm/routing.py::evaluate_routing`, ramo de registro). Fase 1 rejeita com motivo enumerado: `destino_fora_da_origem` (o `base_url` aponta para outro host que não a origem cadastrada), `soberania_bloqueada` (DA-43, avaliada sobre o destino final), `credencial_ausente` (origem cloud sem credencial cifrada, DA-47), `capability_faltando` (capacidade efetiva = origem ∩ modelo), `janela_insuficiente`, `dominio_nao_atendido`, `nivel_nao_autorizado`, `limite_mensal_atingido`, `circuito_aberto` (por **origem**) e `orcamento_excedido` (preço registrado do modelo). Fase 2 ordena os elegíveis por `w_custo·custo_norm + w_lat·latência_norm` (normalizados entre os elegíveis; `LLM_ROUTING_COST_WEIGHT`=0,7 e `LLM_ROUTING_LATENCY_WEIGHT`=0,3), depois `priority`, depois o default da origem. Sem latência medida o termo é zero: modelo novo não é penalizado.
-
-**Gateway.** `app/llm/gateway.py::invoke_via_gateway` aplica os overrides da Admin UI (`app/llm/registry_routing.py::effective_settings`, antes ignorados na decisão), lê o registro (`app/llm/registry_routing.py::load_registry_snapshot`; ilegível = nenhum candidato, fail-closed), decifra a credencial **só do modelo escolhido**, grava a latência de cada chamada bem-sucedida (`llm_call_latency`, mediana de 7 dias) e registra o modelo que respondeu (`app/llm/gateway.py::consume_last_selection`), que vai para `DiagnosisResponse.llm_model` e para `incidents` (DA-53).
-
-**Superfícies.** `/admin/models`: parâmetros por modelo no cadastro e na edição; orçamento e pesos (`DIAGNOSIS_BUDGET_USD`, `LLM_BUDGET_RESERVE_RATIO`, `LLM_GATEWAY_MAX_COST_USD`, pesos) como overrides de runtime; e o simulador `GET /admin/api/routing/preview`, que roda a mesma decisão sem chamar o LLM.
-
-**Invariantes.** A 3 (gateway é a única entrada) e a 8 (modelo nunca entra na tabela de rotas: o candidato vem de `llm_models`, dado do operador) se mantêm. A 9 foi **emendada**: a capacidade continua por origem, que é o teto; o modelo só restringe.
-
-**Validação.** `tests/test_registry_routing.py` (um teste por critério de aceite: todos os habilitados aparecem com posição ou motivo; `confidential` em `strict` só local; janela; domínio; limite mensal; failover pela lista com o modelo efetivo registrado; modo `.env` sem ler o registro — mais invariante 9, credencial, destino, premium, score, prioridade, preview e validação da API); `tests/test_registry_routing_repository.py` (leituras do registro, consumo aberto, credenciais, mediana de latência e chaves de runtime contra SQLite). `tests/test_llm_gateway.py::test_registry_com_destino_remoto_e_barrado_para_confidential` passou a exercitar o mecanismo novo (GOV-01).
-
-**Limitações (registradas de propósito).**
-- No modo gerenciado o `model_name` do caller (`llm_model` do state) não restringe os candidatos: quem escolhe é o engine.
-- Latência é medida por réplica e gravada no banco; sem `DATABASE_URL` o score usa só custo.
-- O circuito do modo `.env` continua por rótulo de provider (comportamento da DA-66 preservado).
-- Escalonamento automático para `premium` e roteamento por qualidade medida ficam fora (exigem decisão e baseline por modelo).
-
----
-
-### 68. Interfaces no idioma do navegador (DA-73)
-
-**O problema.** As duas interfaces tinham texto fixo em português: cerca de 175 textos no React (`frontend/src`) e cerca de 365 nos templates e no JS da Admin UI. A página React declarava `<html lang="en">` com conteúdo em pt-BR, a hora era formatada sempre como `pt-BR` e dinheiro com `toFixed`. As mensagens de erro exibidas vinham do `detail` do backend, em português.
-
-**A decisão** (aprovada em 2026-10-18). Idioma resolvido nesta ordem: `?lng=` na URL (revisão) → cookie `iic_locale` (escolha explícita, compartilhada pelas duas UIs) → idioma do navegador pelo idioma base (`pt-PT` → `pt-BR`) → fallback `en`. Locales: `pt-BR` e `en`. O conteúdo gerado pelo LLM fica fora: mudar o idioma do prompt altera o `prompt_digest` (DA-53) e exige nova medição.
-
-**UI web.** `react-i18next` com `i18next-browser-languagedetector` (`frontend/src/i18n/index.ts`), catálogos `frontend/src/i18n/locales/{pt-BR,en}.json`, seletor de idioma (`frontend/src/components/LanguageSelect.tsx`), `<html lang>` sincronizado, e formatação por `Intl` (`frontend/src/i18n/format.ts`). Códigos estáveis do backend (`trust_level`, motivo de escalonamento, `code` de erro) são traduzidos pelo código, nunca pelo texto.
-
-**Admin UI.** Negociação no servidor (`app/i18n/__init__.py::negotiate`, `Accept-Language` com pesos `q`), `t()`/`t_html()` nos templates Jinja e o catálogo do idioma embutido na página como `<script type="application/json">` — dado, não script, então a CSP `script-src 'self'` continua valendo; `<`, `>` e `&` vão escapados para o conteúdo não fechar a tag (`app/i18n/__init__.py::embed_json`). O JS do admin usa o mesmo catálogo e a mesma sintaxe do i18next (`{{x}}`, plural `_zero/_one/_other`). Respostas com `Vary: Accept-Language, Cookie` e `Content-Language`.
-
-**Erros por código.** `app/api_errors.py::CodedHTTPException`: erros de auth e da API admin passam a trazer `code` e `params` além do `detail` (mantido para clientes existentes). As UIs mostram o texto do catálogo para o `code`; sem código conhecido, o `detail`.
-
-**Pseudo-locale.** `?lng=xx` mostra todo texto do catálogo entre `⟦ ⟧`; o que aparece sem marca é texto fixo.
-
-**Garantia automática.** Gate `ui_i18n` (`app/i18n/checks.py`): paridade de chaves e de variáveis entre os locales; toda chave usada existe (estáticas e grupos dinâmicos); nenhum texto visível fora do catálogo (`app/i18n/inventory.py`, também em `scripts/i18n_inventory.py`).
-
-**Validação.** `tests/test_i18n.py` (negociação, interpolação e fallback, escape do catálogo embutido, catálogos reais consistentes, detecção de chave faltando/variável divergente/texto fixo, Admin UI em en e pt-BR pelo `Accept-Language`, cookie vencendo o navegador, pseudo-locale, erros com `code`, todo `code` com texto nos dois idiomas). Os testes de tela que conferem texto em português passam a fixar `Accept-Language: pt-BR`. Capturas Playwright das duas UIs em en, pt-BR e `xx`.
-
-**Limitações (registradas de propósito).**
-- O texto gerado pelo LLM e o relatório (`report_markdown`) seguem em português.
-- Textos livres do backend continuam no idioma em que foram escritos: o `detail` dos motivos no simulador de roteamento, a nota de cada conector no `/health` e os dados do usuário.
-- O inventário é heurístico: texto montado concatenando fragmentos de uma palavra escapa. O catálogo proíbe concatenar frases.
-- O e-mail de ativação (DA-55) não tem idioma por usuário.
-
----
-cisões de Arquitetura
+# Decisões de Arquitetura
 
 Registro das decisões de arquitetura (DAs) do Integration Incident Copilot:
 o problema real encontrado, a solução adotada, como foi validada e as
@@ -149,6 +87,7 @@ final.
 | 63 | [64](#64-skills-declarativas---yaml-como-fonte-de-verdade-para-capability-e-roteamento-da-63) | Skills declarativas — YAML como fonte de verdade para capability e roteamento (DA-63) |
 | 65 | [65](#65-degradação-graciosa-do-rag-quando-qdrant-cai-da-65) | Degradação graciosa do RAG: Qdrant cai → `_retrieve_hybrid` e `_retrieve_dense_only` retornam `[]` → rule engine ainda responde erros conhecidos; fluxo completo `/diagnose → run_diagnosis` pendente de teste de integração |
 | 71 | [66](#66-sanitização-do-resultado-de-busca-web-devolvido-ao-llm-da-71) | Resultado de busca web sanitizado e delimitado antes de voltar ao LLM (tool do ReAct e `web_search_node`) |
+| 74 | [69](#69-conteúdo-do-diagnóstico-no-idioma-pedido-da-74) | Conteúdo do diagnóstico (rule engine, avisos, relatório, prompt, ativação) no idioma pedido; pt-BR intacto e medido, `en` com digest próprio; gate `content_i18n` |
 | 73 | [68](#68-interfaces-no-idioma-do-navegador-da-73) | UI web e Admin UI no idioma do navegador: catálogos pt-BR/en, cookie compartilhado, `Intl`, erros por `code`, gate `ui_i18n` |
 | 72 | [67](#67-roteamento-por-registro-de-modelos-da-72) | Roteamento por registro de modelos: cada modelo habilitado é candidato do Policy Engine, com parâmetros por modelo, score custo × latência e failover pela lista |
 | — | — | DA-64: número não utilizado (pulo intencional) |
@@ -3196,3 +3135,92 @@ A função `load_skills()` em `app/mcp/skill_registry.py` carrega todas as skill
 **Limitações (registradas de propósito).**
 - Neutralização por padrões: reduz o risco, não o elimina. Paráfrases que não casem com `_INJECTION_PATTERNS` passam; o delimitador e o aviso são a segunda camada, não garantia.
 - O agente segue sem ferramenta de escrita (DA-27): uma injeção bem-sucedida afeta a qualidade do diagnóstico, não executa ação.
+
+---
+
+### 67. Roteamento por registro de modelos (DA-72)
+
+**O problema.** A DA-66 define que o agente escolhe o destino por elegibilidade (soberania, capacidade, janela de contexto, circuito, orçamento) e depois por preferência (custo × latência). O código fazia menos: os candidatos eram só `LLM_PROVIDER` e `LLM_FALLBACK_PROVIDER`; os modelos cadastrados em `/admin/models` diziam apenas **qual modelo** cada provider chamava (DA-46); capacidade vinha de tabela fixa; janela de contexto e latência não existiam; o limite mensal só era exibido; e o preço registrado não chegava à estimativa (corrigido antes, ver DA-67 item 5). Cadastrar um modelo não mudava a decisão do agente.
+
+**A decisão** (aprovada em 2026-10-18). No modo gerenciado (`LLM_REGISTRY_DB=true`), **cada modelo habilitado do registro é um candidato**. O Policy Engine avalia todos com as mesmas regras e devolve uma lista ordenada; o failover (DA-68) percorre essa lista. Fora do modo gerenciado nada muda.
+
+**Parâmetros por modelo** (migration `020_registry_routing.py`, `llm_models`; nulo = derivado ou herdado):
+
+| Coluna | Uso |
+|---|---|
+| `transport` (`ollama` · `openai_compatible` · `azure_openai`) | Cliente da chamada; nulo = derivado da origem |
+| `context_window_tokens` | Rejeita se contexto estimado + completion (×1,5) não couber |
+| `supports_tools` / `supports_response_format` / `supports_seed` | Só restringem a capacidade da origem |
+| `domains` (`sap`, `saas`, `generic`) | Rejeita se o domínio do supervisor não estiver na lista; nulo = todos |
+| `tier` (`local` · `standard` · `premium`) | `premium` é cadastrado e bloqueado (tier 3 da DA-44 exige decisão própria); nulo = `local` se loopback, senão `standard` |
+| `priority` | Desempate depois do score (menor primeiro) |
+| `monthly_limit_tokens` (já existia) | Passa a **bloquear** ao atingir 100% do período aberto |
+
+**Regras do engine** (`app/llm/routing.py::evaluate_routing`, ramo de registro). Fase 1 rejeita com motivo enumerado: `destino_fora_da_origem` (o `base_url` aponta para outro host que não a origem cadastrada), `soberania_bloqueada` (DA-43, avaliada sobre o destino final), `credencial_ausente` (origem cloud sem credencial cifrada, DA-47), `capability_faltando` (capacidade efetiva = origem ∩ modelo), `janela_insuficiente`, `dominio_nao_atendido`, `nivel_nao_autorizado`, `limite_mensal_atingido`, `circuito_aberto` (por **origem**) e `orcamento_excedido` (preço registrado do modelo). Fase 2 ordena os elegíveis por `w_custo·custo_norm + w_lat·latência_norm` (normalizados entre os elegíveis; `LLM_ROUTING_COST_WEIGHT`=0,7 e `LLM_ROUTING_LATENCY_WEIGHT`=0,3), depois `priority`, depois o default da origem. Sem latência medida o termo é zero: modelo novo não é penalizado.
+
+**Gateway.** `app/llm/gateway.py::invoke_via_gateway` aplica os overrides da Admin UI (`app/llm/registry_routing.py::effective_settings`, antes ignorados na decisão), lê o registro (`app/llm/registry_routing.py::load_registry_snapshot`; ilegível = nenhum candidato, fail-closed), decifra a credencial **só do modelo escolhido**, grava a latência de cada chamada bem-sucedida (`llm_call_latency`, mediana de 7 dias) e registra o modelo que respondeu (`app/llm/gateway.py::consume_last_selection`), que vai para `DiagnosisResponse.llm_model` e para `incidents` (DA-53).
+
+**Superfícies.** `/admin/models`: parâmetros por modelo no cadastro e na edição; orçamento e pesos (`DIAGNOSIS_BUDGET_USD`, `LLM_BUDGET_RESERVE_RATIO`, `LLM_GATEWAY_MAX_COST_USD`, pesos) como overrides de runtime; e o simulador `GET /admin/api/routing/preview`, que roda a mesma decisão sem chamar o LLM.
+
+**Invariantes.** A 3 (gateway é a única entrada) e a 8 (modelo nunca entra na tabela de rotas: o candidato vem de `llm_models`, dado do operador) se mantêm. A 9 foi **emendada**: a capacidade continua por origem, que é o teto; o modelo só restringe.
+
+**Validação.** `tests/test_registry_routing.py` (um teste por critério de aceite: todos os habilitados aparecem com posição ou motivo; `confidential` em `strict` só local; janela; domínio; limite mensal; failover pela lista com o modelo efetivo registrado; modo `.env` sem ler o registro — mais invariante 9, credencial, destino, premium, score, prioridade, preview e validação da API); `tests/test_registry_routing_repository.py` (leituras do registro, consumo aberto, credenciais, mediana de latência e chaves de runtime contra SQLite). `tests/test_llm_gateway.py::test_registry_com_destino_remoto_e_barrado_para_confidential` passou a exercitar o mecanismo novo (GOV-01).
+
+**Limitações (registradas de propósito).**
+- No modo gerenciado o `model_name` do caller (`llm_model` do state) não restringe os candidatos: quem escolhe é o engine.
+- Latência é medida por réplica e gravada no banco; sem `DATABASE_URL` o score usa só custo.
+- O circuito do modo `.env` continua por rótulo de provider (comportamento da DA-66 preservado).
+- Escalonamento automático para `premium` e roteamento por qualidade medida ficam fora (exigem decisão e baseline por modelo).
+
+---
+
+### 68. Interfaces no idioma do navegador (DA-73)
+
+**O problema.** As duas interfaces tinham texto fixo em português: cerca de 175 textos no React (`frontend/src`) e cerca de 365 nos templates e no JS da Admin UI. A página React declarava `<html lang="en">` com conteúdo em pt-BR, a hora era formatada sempre como `pt-BR` e dinheiro com `toFixed`. As mensagens de erro exibidas vinham do `detail` do backend, em português.
+
+**A decisão** (aprovada em 2026-10-18). Idioma resolvido nesta ordem: `?lng=` na URL (revisão) → cookie `iic_locale` (escolha explícita, compartilhada pelas duas UIs) → idioma do navegador pelo idioma base (`pt-PT` → `pt-BR`) → fallback `en`. Locales: `pt-BR` e `en`. O conteúdo gerado pelo LLM fica fora: mudar o idioma do prompt altera o `prompt_digest` (DA-53) e exige nova medição.
+
+**UI web.** `react-i18next` com `i18next-browser-languagedetector` (`frontend/src/i18n/index.ts`), catálogos `frontend/src/i18n/locales/{pt-BR,en}.json`, seletor de idioma (`frontend/src/components/LanguageSelect.tsx`), `<html lang>` sincronizado, e formatação por `Intl` (`frontend/src/i18n/format.ts`). Códigos estáveis do backend (`trust_level`, motivo de escalonamento, `code` de erro) são traduzidos pelo código, nunca pelo texto.
+
+**Admin UI.** Negociação no servidor (`app/i18n/__init__.py::negotiate`, `Accept-Language` com pesos `q`), `t()`/`t_html()` nos templates Jinja e o catálogo do idioma embutido na página como `<script type="application/json">` — dado, não script, então a CSP `script-src 'self'` continua valendo; `<`, `>` e `&` vão escapados para o conteúdo não fechar a tag (`app/i18n/__init__.py::embed_json`). O JS do admin usa o mesmo catálogo e a mesma sintaxe do i18next (`{{x}}`, plural `_zero/_one/_other`). Respostas com `Vary: Accept-Language, Cookie` e `Content-Language`.
+
+**Erros por código.** `app/api_errors.py::CodedHTTPException`: erros de auth e da API admin passam a trazer `code` e `params` além do `detail` (mantido para clientes existentes). As UIs mostram o texto do catálogo para o `code`; sem código conhecido, o `detail`.
+
+**Pseudo-locale.** `?lng=xx` mostra todo texto do catálogo entre `⟦ ⟧`; o que aparece sem marca é texto fixo.
+
+**Garantia automática.** Gate `ui_i18n` (`app/i18n/checks.py`): paridade de chaves e de variáveis entre os locales; toda chave usada existe (estáticas e grupos dinâmicos); nenhum texto visível fora do catálogo (`app/i18n/inventory.py`, também em `scripts/i18n_inventory.py`).
+
+**Validação.** `tests/test_i18n.py` (negociação, interpolação e fallback, escape do catálogo embutido, catálogos reais consistentes, detecção de chave faltando/variável divergente/texto fixo, Admin UI em en e pt-BR pelo `Accept-Language`, cookie vencendo o navegador, pseudo-locale, erros com `code`, todo `code` com texto nos dois idiomas). Os testes de tela que conferem texto em português passam a fixar `Accept-Language: pt-BR`. Capturas Playwright das duas UIs em en, pt-BR e `xx`.
+
+**Limitações (registradas de propósito).**
+- O texto gerado pelo LLM e o relatório (`report_markdown`) seguiam em português — resolvido pela DA-74 (§69).
+- Textos livres do backend (motivos do simulador de roteamento, nota dos conectores no `/health`) — resolvido pela DA-74 com códigos estáveis. Os dados do usuário seguem no idioma em que foram escritos.
+- O inventário é heurístico: texto montado concatenando fragmentos de uma palavra escapa. O catálogo proíbe concatenar frases.
+- O e-mail de ativação (DA-55) não tinha idioma por usuário — resolvido pela DA-74.
+
+---
+
+### 69. Conteúdo do diagnóstico no idioma pedido (DA-74)
+
+**O problema.** Com a DA-73 as telas passaram a seguir o idioma do navegador, mas o que o backend escreve continuava em português: causa raiz e passos do rule engine, avisos acrescentados pelos guardrails de confiança (`[confianca limitada - ...]`), o relatório Markdown, o texto do LLM, o e-mail/SMS de ativação e os motivos que as telas exibem (simulador de roteamento, notas dos conectores no `/health`, motivo de soberania). Um usuário em inglês via a tela em inglês e o diagnóstico em português.
+
+Na mesma investigação apareceram dois defeitos do rule engine: (1) a regra do TTL tem precedência sobre a regra em código de mesma categoria, e a do TTL sem `ex:probableRootCause` devolvia o texto genérico "Erro conhecido detectado via taxonomia SKOS." — a causa curada de `rules.py` (ex.: IDoc status 51) nunca chegava ao usuário (a evidência do k3d de 2026-10-18 mostra o texto genérico); (2) os passos do TTL eram separados por vírgula, e "Validar credenciais (token, API key, Basic Auth)" virava três passos.
+
+**A decisão** (2026-10-18, pedido "efetivar o i18n"). O idioma do conteúdo é um campo do pedido, não do servidor:
+
+- `IncidentRequest.locale` (também em `IncidentEventData`, A2A e na tool MCP): `pt-BR` (default, ausente = comportamento anterior) ou `en`; a tag do navegador é normalizada (`en-US` → `en`, `pt-PT` → `pt-BR`); outro idioma = 422 (`app/models.py::_coerce_locale`). O idioma vai ao estado do grafo, à resposta (`DiagnosisResponse.locale`) e a `incidents.locale` (migration `021_locale.py`). A UI web envia o idioma da tela (`frontend/src/i18n/index.ts::diagnosisLocale`; o pseudo-locale pede `en`).
+- **Rule engine:** os padrões casam em qualquer idioma; só o texto devolvido muda. pt-BR é o texto da própria regra (TTL/`rules.py`); `en` vem de `rules.<categoria>` em `app/i18n/locales/content.en.json` (`app/i18n/content.py::localize_rule`). O loader preenche causa e passos ausentes no TTL com a regra em código de mesma categoria (`app/agent/ontology_loader.py::_fill_from_hardcoded`) e separa passos por `;`.
+- **Avisos e relatório:** `content.<idioma>.json` (`diagnosis.*`, `report.*`); o `pt-BR` reproduz byte a byte os textos de antes (teste dourado do relatório). Valor interpolado não é reinterpretado.
+- **Prompt:** o pt-BR é o prompt medido e o digest dele não muda (o payload canônico do default não ganhou chave). Para `en`, o prompt medido recebe ao fim uma instrução de idioma (`app/agent/prompts.py::OUTPUT_LANGUAGE_INSTRUCTIONS`) e tem digest próprio, gravado na resposta. O gate `prompt_digest_measured` avisa (WARN) enquanto o digest `en` não estiver em `locales.en` do baseline e reprova se um digest medido divergir; `--write-prompt-baseline --prompt-locale en` grava depois de medir (o provider do promptfoo aceita o idioma como 4ª parte do prompt).
+- **Ativação:** `web_users.locale` guarda o idioma da Admin UI de quem cadastrou (ou o `locale` do payload); e-mail e SMS saem nesse idioma; linha antiga (nulo) = pt-BR.
+- **Textos que as telas exibem:** `app/llm/routing.py::sovereignty_decision` devolve código e parâmetros (o texto em pt continua no audit log e no `/llm/policy`), os candidatos do simulador trazem `detail_items` (motivo + parâmetros) e o `/health` traz a variável de cada conector (`setting`). As UIs montam o texto (`sovereigntyReason.*`, `reasonDetail.*`, `status.connectorNote.*`).
+
+**Garantia automática.** Gate `content_i18n` (`app/i18n/checks.py::content_i18n_problems`): paridade de chaves e variáveis entre os catálogos de conteúdo; toda categoria do rule engine (TTL + código) com causa e passos em cada idioma não-default, e nenhuma categoria órfã; todo idioma de conteúdo com instrução de idioma no prompt e presente nas interfaces.
+
+**Validação.** `tests/test_i18n_content.py` (34): normalização e 422 do `locale`; estado e resposta; digest pt-BR igual ao medido e `en` próprio; regra com causa curada (não mais genérica) e passo com vírgula inteiro; regra em pt-BR e en com a mesma decisão; aviso de guardrail e relatório em en; relatório pt-BR idêntico ao de antes; ativação pt-BR igual à de antes e en; motivos de soberania com código e o mesmo texto; gate reprovando regra sem tradução e variável divergente. Suítes existentes ajustadas onde o contrato mudou de propósito (dublês de `match_known_error`/`deliver_email`, gate do prompt com idiomas).
+
+**Limitações (registradas de propósito).**
+- O prompt `en` não foi medido pelo promptfoo: o placar de qualidade descreve só o pt-BR, e o gate diz isso.
+- O LLM recebe o contexto (documentos da base, persona, schema) em português e escreve em inglês por instrução: qualidade da tradução técnica depende do modelo.
+- Documentos da base de conhecimento e dados do usuário não são traduzidos; `matched_source` e identificadores técnicos ficam como estão.
+- Um diagnóstico já exibido não muda ao trocar o idioma da tela.

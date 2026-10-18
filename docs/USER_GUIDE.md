@@ -175,8 +175,11 @@ inesperados mostram a referência (`error_id`) que localiza o log no servidor.
 inglês; outros idiomas abrem em inglês). O seletor na barra lateral e na tela
 de login troca o idioma, e a escolha vale também para a Admin UI (cookie
 `iic_locale`). Datas, números e valores em USD seguem o idioma escolhido. O
-texto gerado pelo diagnóstico (causa raiz, próximos passos, relatório)
-continua no idioma do prompt.
+diagnóstico também: a UI pede o conteúdo (causa raiz, próximos passos,
+relatório) no idioma da tela. Um diagnóstico já exibido não muda ao trocar o
+idioma — rode-o de novo. Em inglês, a resposta do LLM usa um prompt que ainda
+não foi medido pelo promptfoo (os números de qualidade valem para o
+português).
 
 **Histórico** — diagnósticos da sessão atual, com confiança, causa raiz e a
 marca "revisão humana" quando o sinal pediu.
@@ -236,7 +239,10 @@ Campos que merecem atenção:
   não libera provider cloud para dado que o gateway trata como
   `confidential` (GOV-01, DA-43),
   `connector_source_system` (`system_key` do catálogo admin, melhora a
-  correlação do incidente, DA-50).
+  correlação do incidente, DA-50), `locale` (`pt-BR` ou `en`, aceita a tag do
+  navegador como `en-US`; idioma do conteúdo do diagnóstico, default `pt-BR`;
+  outro idioma devolve 422 — DA-74). A resposta traz o `locale` em que o
+  conteúdo foi produzido.
 
 **Diagnóstico assíncrono** — mesmo corpo, resposta imediata com `job_id`.
 Exige `REDIS_URL` e um worker RQ (profile `async`); sem isso, 503:

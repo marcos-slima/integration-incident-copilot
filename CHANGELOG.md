@@ -65,6 +65,17 @@ Contagens de testes conferidas com `pytest --collect-only` em 2026-10-18.
   `error_id`; o motivo completo, que cita origens internas, fica só no log.
   Todos os erros de `/diagnose` ganham `code`. Testes:
   `test_gateway_refusal_http.py` (4).
+- **DA-74** Conteúdo do diagnóstico no idioma pedido (`locale` em
+  `/diagnose`, A2A, MCP e Event Mesh; a UI envia o idioma da tela): rule
+  engine, avisos de confiança e relatório em pt-BR ou en; prompt `en` com
+  digest próprio (pt-BR continua o medido; `en` aparece como não medido no
+  gate); e-mail/SMS de ativação no idioma de quem cadastrou; motivos de
+  soberania, de roteamento e notas dos conectores com código estável,
+  traduzidos pelas UIs. Corrige: regras do TTL sem `probableRootCause`
+  devolviam "Erro conhecido detectado via taxonomia SKOS." no lugar da causa
+  curada de `rules.py`, e passos com vírgula eram quebrados em pedaços.
+  Migration 021 (`incidents.locale`, `web_users.locale`); gate
+  `content_i18n`. Testes: `test_i18n_content.py` (34).
 - **DA-73** UIs no idioma do navegador: UI web (`react-i18next`) e Admin UI
   (Jinja + JS, catálogo embutido sem quebrar a CSP) em pt-BR e en, com seletor
   de idioma compartilhado (cookie `iic_locale`), datas/números/USD por `Intl`,

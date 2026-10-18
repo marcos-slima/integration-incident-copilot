@@ -194,7 +194,7 @@ Variables, demo identifiers and how to add a connector:
 | What | Result | Where |
 |---|---|---|
 | Retrieval on the bundled evaluation set (90 in-scope queries, 20 out of scope) | Hit@1 95.6 % (86/90, 95 % CI 89.1–98.3 %), Hit@3 97.8 %, MRR 0.967; 19 of 20 out-of-scope queries rejected | `scripts/eval_rag.py`, fastembed, local run 2026-10-18; CI job `rag-quality` re-measures |
-| Quality gates | 21 deterministic checks: dataset, reranker invariant, prompt digest vs. the measured prompt, documentation links, symbols and environment variables, connector reachability, UI i18n | CI job `deterministic` |
+| Quality gates | 22 deterministic checks: dataset, reranker invariant, prompt digest vs. the measured prompt, documentation links, symbols and environment variables, connector reachability, UI and content i18n | CI job `deterministic` |
 | Database | migrations applied and checked; the 45 dashboard queries and the contract-drift end-to-end tests run against a real PostgreSQL | CI job `migrations_and_dashboards` |
 | Test coverage | 1525 tests passing, 82% code coverage (7745 lines; 1359 uncovered) | CI job `tests` |
 

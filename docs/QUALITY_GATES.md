@@ -27,6 +27,7 @@ verificadas à mão, uma vez, e nunca mais.
 | `docs_env_vars` | toda variável de ambiente citada na documentação (`VAR=` em bloco de código ou em backticks, e nome em backticks com prefixo deste projeto) é lida pelo projeto: campo do `Settings`, compose, manifests, workflows ou `.env.example`. Motivo: o `CONNECTORS.md` antigo mandava configurar variáveis inexistentes e o conector ficava em modo demo sem aviso | instantâneo | todo push/PR |
 | `connector_reachable` | todo conector registrado em `app/connectors/__init__.py` é aceito pelo Literal de `interface_type`, pelas choices do `--interface` do CLI, pelo dropdown da UI web (`SYSTEMS` em `frontend/src/components/DiagnoseView.tsx`), é documentado em `app/models.py`/`app/admin/models.py`, e tem domínio em `data/skills/*.yaml` lido pelo mesmo parser do runtime (`app/mcp/skill_registry.py`; exceto `apim`, cross-vendor por decisão); com o supervisor declarativo (DA-63), reprova também se `data/skills/` faltar ou se o `Dockerfile` não copiar o diretório para a imagem | instantâneo | todo push/PR |
 | `ui_i18n` | as duas UIs prontas para i18n (DA-73): catálogos `pt-BR`/`en` com as mesmas chaves e as mesmas variáveis `{{x}}`; toda chave usada no React, nos templates e no JS do admin existe; nenhum texto visível fora do catálogo (`app/i18n/inventory.py`; heurístico, `i18n-ignore` com motivo para falso positivo) | instantâneo | todo push/PR |
+| `content_i18n` | o conteúdo do diagnóstico existe em todo idioma suportado (DA-74): catálogos `content.<idioma>.json` com as mesmas chaves e variáveis, toda categoria do rule engine (TTL + `rules.py`) com causa raiz e passos em cada idioma não-default, e todo idioma com instrução de idioma no prompt | instantâneo | todo push/PR |
 | `connector_validation_matrix` | todo conector registrado em `app/connectors/__init__.py` tem linha na matriz de validação de `docs/ARCHITECTURE.md` — a única fonte de verdade sobre o que foi testado contra instância real — e nenhuma linha órfã sobrou para conector removido. Apodreceu em silêncio uma vez: `successfactors` ficou meses sem linha, com todos os gates verdes | instantâneo | todo push/PR |
 | `connector_coverage` | o mapa de cobertura (DA-58) ainda corresponde ao código: todo conector registrado tem linha em `data/connector_coverage.yaml` (9ª superfície da invariante 23), nenhuma declaração aponta para produto ou conector inexistente, e `docs/COVERAGE_MAP.md` — que é **gerado**, não editado — está em dia com os dados. Reprova por **incoerência**, nunca por lacuna: exigir cobertura completa seria exigir 76 conectores novos para o CI ficar verde | instantâneo | todo push/PR |
 | `migrations_and_dashboards` (job) | `alembic upgrade head` em banco limpo + as 45 queries dos 4 dashboards | ~1 min | todo push/PR |
@@ -52,7 +53,7 @@ flowchart LR
     end
 
     subgraph pr["A cada push e PR"]
-        det["<b>deterministic</b><br/>scripts/quality_gate.py<br/>21 gates"]
+        det["<b>deterministic</b><br/>scripts/quality_gate.py<br/>22 gates"]
         mig["<b>migrations_and_dashboards</b><br/>alembic upgrade + check<br/>45 queries dos dashboards<br/>e2e da DA-52 no Postgres"]
         tst["<b>test</b><br/>ruff + pytest, cobertura >= 80%"]
         rq["<b>rag-quality</b><br/>ingest com fastembed no Qdrant<br/>pytest -m rag_quality"]

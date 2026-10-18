@@ -286,8 +286,9 @@ mudam a cada reinício (cenário D de [`DEPLOYMENT.md`](DEPLOYMENT.md)).
 
 A UI web e a Admin UI seguem o idioma do navegador (`pt-BR` ou `en`; outro
 idioma cai em `en`). O seletor de idioma grava o cookie `iic_locale`, que vale
-para as duas. O conteúdo gerado pelo LLM (causa raiz, relatório) continua no
-idioma do prompt.
+para as duas. O conteúdo do diagnóstico (rule engine, avisos, relatório, texto
+do LLM) segue o `locale` do pedido, que a UI preenche com o idioma da tela
+(DA-74); sem `locale`, `pt-BR`.
 
 Para **adicionar um idioma** (ex.: `es`):
 
@@ -299,7 +300,22 @@ Para **adicionar um idioma** (ex.: `es`):
    `normalizeLocale`/`normalize_locale` (idioma base `es` → `es`).
 3. Inclua `es` em `LOCALES` de `app/i18n/checks.py`, para o gate `ui_i18n`
    conferir a paridade do catálogo novo.
-4. `cd frontend && npm run build`, e confira com `?lng=es`.
+4. Conteúdo do diagnóstico: copie `app/i18n/locales/content.en.json` para
+   `content.es.json` e traduza — inclusive `rules.<categoria>`, uma entrada por
+   regra do rule engine —, inclua `es` em `CONTENT_LOCALES`
+   (`app/i18n/content.py`) e escreva a instrução de idioma em
+   `OUTPUT_LANGUAGE_INSTRUCTIONS` (`app/agent/prompts.py`). O gate
+   `content_i18n` aponta o que faltar.
+5. Meça o prompt novo antes de citar qualidade:
+   `npx promptfoo eval ...` com o idioma como 4ª parte do prompt
+   (`descrição|||interface|||identificador|||es`) e depois
+   `PATH="$PWD/.venv/bin:$PATH" uv run python scripts/quality_gate.py --write-prompt-baseline --prompt-locale es`.
+   Até lá o gate `prompt_digest_measured` avisa que o idioma não foi medido.
+6. `cd frontend && npm run build`, e confira com `?lng=es`.
+
+Uma regra nova do rule engine (seção 5) precisa da causa e dos passos em cada
+idioma não-default (`rules.<categoria>` nos catálogos de conteúdo); o gate
+`content_i18n` reprova sem eles.
 
 Para revisar texto que tenha escapado do catálogo, abra qualquer tela com
 `?lng=xx`: todo texto do catálogo aparece entre `⟦ ⟧`; o que ficar sem a marca

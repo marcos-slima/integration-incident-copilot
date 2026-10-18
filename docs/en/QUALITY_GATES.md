@@ -27,6 +27,7 @@ verified by hand, once, and never again.
 | `docs_env_vars` | every environment variable cited in documentation (`VAR=` in code block or in backticks, and name in backticks with this project's prefix) is read by the project: field of `Settings`, compose, manifests, workflows or `.env.example`. Reason: the old `CONNECTORS.md` instructed to configure non-existent variables and the connector would fall into demo mode without warning | instantaneous | every push/PR |
 | `connector_reachable` | every connector registered in `app/connectors/__init__.py` is accepted by the `interface_type` Literal, by the `--interface` CLI choices, by the web UI dropdown (`SYSTEMS` in `frontend/src/components/DiagnoseView.tsx`), is documented in `app/models.py`/`app/admin/models.py`, and has domain in `data/skills/*.yaml` read by the same parser as runtime (`app/mcp/skill_registry.py`; except `apim`, cross-vendor by decision); with declarative supervisor (DA-63), also fails if `data/skills/` is missing or if the `Dockerfile` does not copy the directory to the image | instantaneous | every push/PR |
 | `ui_i18n` | both UIs ready for i18n (DA-73): `pt-BR`/`en` catalogs with the same keys and the same `{{x}}` variables; every key used in React, in the templates and in the admin JS exists; no visible text outside the catalog (`app/i18n/inventory.py`; heuristic, `i18n-ignore` with a reason for false positives) | instantaneous | every push/PR |
+| `content_i18n` | diagnosis content exists in every supported language (DA-74): `content.<language>.json` catalogs with the same keys and variables, every rule-engine category (TTL + `rules.py`) with root cause and steps in each non-default language, and every language with a language instruction in the prompt | instantaneous | every push/PR |
 | `connector_validation_matrix` | every connector registered in `app/connectors/__init__.py` has a row in the validation matrix of `docs/ARCHITECTURE.md` — the only source of truth about what was tested against real instance — and no orphan row remains for removed connector. It rotted silently once: `successfactors` remained months without a row, with all gates green | instantaneous | every push/PR |
 | `connector_coverage` | the coverage map (DA-58) still corresponds to the code: every registered connector has a row in `data/connector_coverage.yaml` (9th surface of invariant 23), no declaration points to non-existent product or connector, and `docs/COVERAGE_MAP.md` — which is **generated**, not edited — is up to date with the data. Fails by **incoherence**, never by gap: requiring full coverage would require 76 new connectors for the CI to be green | instantaneous | every push/PR |
 | `migrations_and_dashboards` (job) | `alembic upgrade head` in clean DB + the 45 queries of the 4 dashboards | ~1 min | every push/PR |
@@ -52,7 +53,7 @@ flowchart LR
     end
 
     subgraph pr["On every push and PR"]
-        det["<b>deterministic</b><br/>scripts/quality_gate.py<br/>21 gates"]
+        det["<b>deterministic</b><br/>scripts/quality_gate.py<br/>22 gates"]
         mig["<b>migrations_and_dashboards</b><br/>alembic upgrade + check<br/>45 queries of dashboards<br/>DA-52 e2e in Postgres"]
         tst["<b>test</b><br/>ruff + pytest, coverage >= 80%"]
         rq["<b>rag-quality</b><br/>ingest with fastembed in Qdrant<br/>pytest -m rag_quality"]

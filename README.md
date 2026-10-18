@@ -193,7 +193,7 @@ Variables, demo identifiers and how to add a connector:
 
 | What | Result | Where |
 |---|---|---|
-| Retrieval on the bundled evaluation set (18 in-scope queries, 10 out of scope) | Hit@1 94.4 %, Hit@3 100 %, MRR 0.972; 9 of 10 out-of-scope queries rejected | CI job `rag-quality` |
+| Retrieval on the bundled evaluation set (90 in-scope queries, 20 out of scope) | Hit@1 95.6 % (86/90, 95 % CI 89.1–98.3 %), Hit@3 97.8 %, MRR 0.967; 19 of 20 out-of-scope queries rejected | `scripts/eval_rag.py`, fastembed, local run 2026-10-18; CI job `rag-quality` re-measures |
 | Quality gates | 20 deterministic checks: dataset, reranker invariant, prompt digest vs. the measured prompt, documentation links, symbols and environment variables, connector reachability | CI job `deterministic` |
 | Database | migrations applied and checked; the 45 dashboard queries and the contract-drift end-to-end tests run against a real PostgreSQL | CI job `migrations_and_dashboards` |
 | Test coverage | 1525 tests passing, 82% code coverage (7745 lines; 1359 uncovered) | CI job `tests` |
@@ -216,7 +216,7 @@ The table below maps each capability to its implementation status and evidence.
 | Rule engine before LLM | VER | `nodes.py` (_run_diagnosis_agent); `rules.py:28-37, 97`; measured: ttl=28, hardcoded=22, combined=28 | README previously said 22 |
 | ReAct agent with optional web search | VER | `nodes.py:1085-1128` | One agent per incident, no autonomous action |
 | Hybrid RAG (dense + BM25) + reranker | VER | `app/rag/retriever.py:41`; CI job `rag-quality` | Production reranker: mmarco-mMiniLMv2-L12-H384-v1 |
-| Retrieval metrics (Hit@1 94.4%, MRR 0.972) | NVAL | README/CI; not reproduced (require Qdrant) | Always cite with n=18 and "reported by CI" |
+| Retrieval metrics (Hit@1 95.6%, MRR 0.967) | VER | `scripts/eval_rag.py` on 110 cases (2026-10-18) | Cite with n=90 in-scope and the 95% CI; corpus is the 15 bundled docs |
 | Reranker advantage | VER | `docs/RERANKER_BENCHMARK.md`; 17/18 vs 16/18, McNemar p=1.0; gate `reranker_invariant` = WARN | Not statistically significant |
 | GraphRAG / Neo4j | OPC | `config.py:378`; `graph.py:96`; CI `neo4j-smoke` | Disabled by default |
 | SKOS error taxonomy feeding rules | VER | `app/ontology/error_codes.ttl` (39 skos:Concept); `ontology_loader.py:211` | Error code taxonomy, not formal domain ontology |

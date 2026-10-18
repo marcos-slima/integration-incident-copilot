@@ -196,7 +196,7 @@ Variáveis, identificadores de demonstração e como adicionar um conector:
 
 | O quê | Resultado | Onde |
 |---|---|---|
-| Busca no conjunto de avaliação versionado (18 consultas no escopo, 10 fora) | Hit@1 94,4 %, Hit@3 100 %, MRR 0,972; 9 de 10 consultas fora de escopo rejeitadas | job de CI `rag-quality` |
+| Busca no conjunto de avaliação versionado (90 consultas no escopo, 20 fora) | Hit@1 95,6 % (86/90, IC95% 89,1–98,3 %), Hit@3 97,8 %, MRR 0,967; 19 de 20 consultas fora de escopo rejeitadas | `scripts/eval_rag.py`, fastembed, execução local em 2026-10-18; o job de CI `rag-quality` re-mede |
 | Quality gates | 20 verificações determinísticas: dataset, invariante do reranker, digest do prompt contra o prompt medido, links, símbolos e variáveis de ambiente da documentação, alcance dos conectores | job de CI `deterministic` |
 | Banco de dados | migrations aplicadas e conferidas; as 45 consultas dos dashboards e os testes ponta a ponta de drift de contrato rodam contra PostgreSQL real | job de CI `migrations_and_dashboards` |
 | Casos de uso | nove cenários com os números medidos por testes | [`docs/CASOS_DE_USO.md`](docs/CASOS_DE_USO.md) |

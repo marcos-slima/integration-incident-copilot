@@ -321,6 +321,20 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
     MCP no hub → então esta decisão ganha seção própria em
     `docs/DECISOES_DE_ARQUITETURA.md`, linha no índice e no livro-razão, e sai desta lista.
 
+- **DA-72 — Roteamento por registro de modelos** · aguardando aprovação.
+  - **O que é.** No modo gerenciado (`LLM_REGISTRY_DB=true`), cada modelo habilitado em
+    `llm_models` vira candidato do Policy Engine (DA-66), com parâmetros por modelo:
+    transporte, janela de contexto, capacidades (só restringem a origem), domínios,
+    nível, prioridade e limite mensal bloqueante. Score custo × latência com pesos em
+    configuração, latência medida pelo metering, failover (DA-68) pela lista ordenada e
+    simulador de roteamento em `/admin/models`.
+  - **Por que ainda não foi entregue.** Muda o desenho do roteamento e emenda a
+    invariante 9; depende de aprovação explícita.
+  - **O que já existe.** Policy Engine (DA-66), registro (DA-46), preço do modelo
+    efetivo na estimativa de custo (correção DA-67 de 2026-10-18).
+  - **Critério de entrada.** Aprovação → migration 020, engine, gateway, UI → seção
+    própria em `docs/DECISOES_DE_ARQUITETURA.md` e saída desta lista.
+
 > A DA-32 (AMQP 1.0 via Solace Cloud) **já foi entregue** (`app/events/amqp_consumer.py`,
 > commit `67b78e8`). Ela ficou nesta lista até a DA-51 criar o gate
 > `candidate_das_fresh`, que falha o build quando uma DA marcada como candidata

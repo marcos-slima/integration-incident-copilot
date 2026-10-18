@@ -13,7 +13,7 @@ verificadas à mão, uma vez, e nunca mais.
 | `rag_dataset_schema` | `data/eval/rag_eval_dataset.json`: campos obrigatórios, `interface_type` dentro do Literal do pipeline, piso de 15 casos | instantâneo | todo push/PR |
 | `corpus_coverage` | todo `expected_sources` existe em `data/sample_docs/` | instantâneo | todo push/PR |
 | `dataset_difficulty_mix` | existe ao menos um caso `hard` e um `out_of_scope` | instantâneo | todo push/PR |
-| `reranker_invariant` | o modelo em produção é o vencedor medido, com hit@1 e margem sobre o baseline | instantâneo | todo push/PR |
+| `reranker_invariant` | o modelo em produção foi medido, passa do piso de hit@1 e nenhum candidato é significativamente melhor (McNemar exato pareado, p < 0,05); vantagem pontual não significativa só avisa; sem dados por consulta, vale a margem mínima | instantâneo | todo push/PR |
 | `promptfoo_configs` | configs do promptfoo são YAML válido, têm `prompts`/`tests`/`providers`, e os scripts `exec:` referenciados existem | instantâneo | todo push/PR |
 | `llm_baseline` | existe baseline versionado do promptfoo (comparação de regressão de LLM) | instantâneo | todo push/PR |
 | `candidate_das_fresh` | nenhuma DA marcada como "candidata" no `CLAUDE.md` já entregue em `docs/ARCHITECTURE.md` | instantâneo | todo push/PR |

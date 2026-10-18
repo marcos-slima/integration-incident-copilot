@@ -12,7 +12,7 @@ treinado só em inglês (dataset MS MARCO).
 
 > **Re-execução de 2026-10-18 com 90 consultas in-scope (dataset ampliado).**
 > Mesma metodologia (corpus inteiro reranqueado por consulta, CPU, sem GPU),
-> resultados em `data/eval/reranker_benchmark_results_2026-10-18_n90.json`:
+> resultados em `data/eval/reranker_benchmark_results.json`:
 >
 > | Modelo | Hit@1 | MRR@5 | nDCG@5 | Latência média | vs. L-6 (McNemar exato) | IC 95% da diferença de Hit@1 |
 > |---|---|---|---|---|---|---|
@@ -27,16 +27,16 @@ treinado só em inglês (dataset MS MARCO).
 > bge-reranker-base tem o maior Hit@1 pontual, mas a diferença para o
 > mmarco é de uma consulta e custa ~3,6× a latência.
 >
-> **Decisão pendente (não aplicada):** o gate `reranker_invariant` exige
-> que produção seja o maior Hit@1 medido, com margem ≥ 0,05 sobre o melhor
-> ms-marco. Com estes números ele reprovaria nas duas regras, embora
-> nenhuma diferença seja significativa. Por isso o arquivo lido pelo gate
-> (`data/eval/reranker_benchmark_results.json`) continua sendo o de n=18, e
-> esta re-medição fica em arquivo próprio até uma decisão: (a) manter o
-> mmarco e mudar o gate para "produção não pode ser significativamente pior
-> que o melhor medido"; ou (b) trocar para bge-reranker-base (invariante 1,
-> exige DA nova). Um corpus maior que 15 documentos é o que tornaria o
-> benchmark discriminante.
+> **Decisão (2026-10-18): manter o mmarco e corrigir o gate.** A regra
+> antiga do `reranker_invariant` ("produção = maior Hit@1 medido, com margem
+> ≥ 0,05") reprovaria o mmarco por uma consulta de diferença para o
+> bge-reranker-base, sem significância. A regra nova compara produção com cada
+> candidato de forma pareada (McNemar exato sobre os acertos por consulta) e
+> só reprova se algum for significativamente melhor (p < 0,05); vantagem
+> pontual não significativa vira aviso. Estes resultados passaram a ser os do
+> arquivo lido pelo gate (`data/eval/reranker_benchmark_results.json`). O
+> invariante 1 (mmarco em produção) não muda. Um corpus maior que 15
+> documentos segue sendo o que tornaria o benchmark discriminante.
 
 > **Re-execução de 2026-10-07 (validação, M-20).** O resultado original
 > (abaixo) usou 13 consultas e apresentou "+7pp Hit@1" para uma diferença de

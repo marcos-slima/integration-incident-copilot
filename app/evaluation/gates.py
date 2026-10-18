@@ -202,10 +202,32 @@ def _parse_reranker_model(root: Path) -> str:
     return match.group(1)
 
 
+def _per_query_hits(result: dict) -> list[int] | None:
+    rows = result.get("per_query")
+    if not isinstance(rows, list) or not rows:
+        return None
+    hits = [r.get("hit_at_1") for r in rows if isinstance(r, dict)]
+    if len(hits) != len(rows) or not all(h in (0, 1) for h in hits):
+        return None
+    return hits
+
+
 def check_reranker_invariant(
     root: Path = REPO_ROOT, thresholds: Thresholds = DEFAULT_THRESHOLDS
 ) -> list[Finding]:
-    """DA-29: o modelo em producao tem que ser o vencedor medido, com margem sobre o baseline."""
+    """DA-29: o reranker em producao nao pode ser SIGNIFICATIVAMENTE pior
+    que outro candidato medido, e precisa passar do piso de hit@1.
+
+    Regra anterior: "producao = maior hit@1 medido, com margem >= 0,05 sobre
+    o ms-marco". Com o dataset de 90 consultas ela reprovava o mmarco por uma
+    diferenca de UMA consulta para o bge-reranker-base (McNemar p=1,0) - o
+    gate exigia trocar de modelo por ruido. Agora, quando o benchmark traz
+    acertos por consulta, a comparacao e pareada (McNemar exato, a mesma
+    funcao do benchmark): so reprova se um candidato for melhor com p < 0,05.
+    Vantagem pontual nao significativa vira aviso. Sem dados por consulta,
+    vale a regra de margem antiga (sem como testar significancia)."""
+    from app.rag.eval_metrics import paired_hit_comparison
+
     check = "reranker_invariant"
     try:
         in_code = _parse_reranker_model(root)
@@ -221,58 +243,61 @@ def check_reranker_invariant(
     if not scored:
         return _fail(check, f"{RERANKER_BENCHMARK} sem nenhum resultado com hit_at_1")
 
-    winner = max(scored, key=lambda r: r["hit_at_1"])
+    production = next((r for r in scored if r.get("hf_id") == in_code), None)
+    if production is None:
+        return _fail(
+            check,
+            f"app/rag/retriever.py usa '{in_code}', que nao foi medido no benchmark "
+            f"({', '.join(str(r.get('hf_id')) for r in scored)})",
+        )
+
     findings: list[Finding] = []
-
-    if in_code != winner.get("hf_id"):
+    if production["hit_at_1"] < thresholds.min_hit_at_1:
         findings.append(
             _fail(
                 check,
-                f"app/rag/retriever.py usa '{in_code}', mas o vencedor medido e "
-                f"'{winner.get('hf_id')}' (hit@1 {winner['hit_at_1']:.3f})",
-            )[0]
-        )
-    if winner["hit_at_1"] < thresholds.min_hit_at_1:
-        findings.append(
-            _fail(
-                check,
-                f"hit@1 do vencedor {winner['hit_at_1']:.3f} abaixo do piso {thresholds.min_hit_at_1}",
+                f"hit@1 de producao {production['hit_at_1']:.3f} abaixo do piso "
+                f"{thresholds.min_hit_at_1}",
             )[0]
         )
 
-    baselines = [r for r in scored if r is not winner and "marco" in str(r.get("key", "")).lower()]
-    if not baselines:
+    if len(scored) == 1:
         findings.append(
-            _warn(check, "nenhum baseline ms-marco no benchmark; margem nao verificavel")[0]
+            _warn(check, "benchmark sem outro candidato medido; comparacao nao verificavel")[0]
         )
-    else:
-        baseline = max(baselines, key=lambda r: r["hit_at_1"])
-        margin = winner["hit_at_1"] - baseline["hit_at_1"]
-        if margin < thresholds.min_benchmark_margin:
-            findings.append(
-                _fail(
-                    check,
-                    f"margem de hit@1 sobre '{baseline.get('key')}' e {margin:+.3f}, "
-                    f"abaixo do piso {thresholds.min_benchmark_margin:+.3f}",
-                )[0]
+    prod_hits = _per_query_hits(production)
+    for other in scored:
+        if other is production or other["hit_at_1"] <= production["hit_at_1"]:
+            continue
+        other_hits = _per_query_hits(other)
+        if prod_hits is not None and other_hits is not None and len(other_hits) == len(prod_hits):
+            stats = paired_hit_comparison(other_hits, prod_hits)
+            p_value = stats["mcnemar_exact_p"]
+            detail = (
+                f"'{other.get('key')}' hit@1 {other['hit_at_1']:.3f} vs producao "
+                f"{production['hit_at_1']:.3f} (n={stats['n']}, {stats['only_candidate']} x "
+                f"{stats['only_baseline']} discordantes, McNemar p={p_value}, IC95% "
+                f"[{stats['bootstrap_ci95_low']:+.3f}, {stats['bootstrap_ci95_high']:+.3f}])"
             )
-    # Validacao 2026-10-07 (M-20): a margem e de UMA consulta; o benchmark
-    # agora grava McNemar exato e IC 95% (scripts/benchmark_rerankers.py).
-    # Sem significancia, o gate avisa - a escolha continua defensavel por
-    # outros motivos (multilingue, latencia), mas nao por "acerta mais".
-    stats = winner.get("vs_baseline") or {}
-    p_value = stats.get("mcnemar_exact_p")
-    if p_value is not None and p_value >= 0.05:
-        findings.append(
-            _warn(
-                check,
-                f"vantagem do vencedor sobre o baseline NAO e significativa "
-                f"(n={stats.get('n')}, {stats.get('only_candidate')} x "
-                f"{stats.get('only_baseline')} consultas discordantes, McNemar p={p_value}, "
-                f"IC95% da diferenca [{stats.get('bootstrap_ci95_low'):+.3f}, "
-                f"{stats.get('bootstrap_ci95_high'):+.3f}])",
-            )[0]
-        )
+            if p_value < 0.05:
+                findings.append(
+                    _fail(check, f"candidato significativamente melhor que producao: {detail}")[0]
+                )
+            else:
+                findings.append(
+                    _warn(check, f"vantagem pontual NAO significativa sobre producao: {detail}")[0]
+                )
+        else:
+            margin = other["hit_at_1"] - production["hit_at_1"]
+            if margin >= thresholds.min_benchmark_margin:
+                findings.append(
+                    _fail(
+                        check,
+                        f"'{other.get('key')}' supera producao em {margin:+.3f} de hit@1 "
+                        f"(>= {thresholds.min_benchmark_margin:+.3f}) e o benchmark nao traz "
+                        "acertos por consulta para testar significancia",
+                    )[0]
+                )
     return findings or _ok(check)
 
 

@@ -1094,6 +1094,18 @@ arquitetural externa estão fechados** (rate limit global, persistência
 A2A, circuit breaker, redaction de PII, métricas/feedback, fila
 assíncrona e este). Resta só o longo prazo, ainda não autorizado.
 
+**Atualização (2026-10-18): regra do gate `reranker_invariant`.** Com o
+dataset ampliado para 90 consultas no escopo, nenhum candidato ficou
+significativamente melhor que o mmarco (bge-reranker-base: uma consulta a
+mais, McNemar p = 1,0). A regra "produção = maior Hit@1 medido, com margem
+≥ 0,05" exigiria trocar de modelo por ruído. Passou a ser: produção precisa
+ter sido medida, passar do piso de Hit@1 e nenhum candidato pode ser
+significativamente melhor (McNemar exato pareado, p < 0,05, via
+`app/rag/eval_metrics.py::paired_hit_comparison`); vantagem pontual não
+significativa vira aviso. Sem acertos por consulta no benchmark, vale a
+margem mínima antiga. O invariante 1 (mmarco em produção) não muda. Ver
+`docs/RERANKER_BENCHMARK.md`.
+
 ### 29. Redaction de PII antes do prompt e do Langfuse, com truncamento inteligente e backoff (DA-30)
 
 **O problema.** Havia truncamento (`_truncate` em `nodes.py`) e ele limita

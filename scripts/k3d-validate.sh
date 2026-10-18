@@ -145,10 +145,10 @@ echo "--- POST /diagnose sem chave (esperado 401)"
 code="$(curl -s -o /dev/null -w '%{http_code}' -X POST "$URL/diagnose" -H 'Content-Type: application/json' -d '{"description":"x"}')"
 echo "HTTP $code"; [ "$code" = "401" ] || fail "/diagnose sem chave retornou $code"
 
-echo "--- POST /diagnose IDoc 51 (rule engine) e OData timeout (LLM local)"
+echo "--- POST /diagnose IDoc 51 (rule engine) e Salesforce sem erro visivel (LLM local; nenhuma regra casa)"
 for body in \
   '{"description":"IDoc ORDERS05 parado com status 51 no S/4HANA","interface_type":"odata"}' \
-  '{"description":"Timeout ao chamar API_SALESORDER_SRV via CPI apos 60s","interface_type":"odata","identifier":"API_SALESORDER_SRV"}'; do
+  '{"description":"Pedido criado no Salesforce nao aparece no SAP SD e nenhum erro foi exibido ao usuario","interface_type":"salesforce"}'; do
   curl -sS --max-time 240 -w '\nHTTP %{http_code}\n' -X POST "$URL/diagnose" \
     -H "X-API-Key: $API_KEY_VALUE" -H 'Content-Type: application/json' -d "$body" \
     | python3 -c 'import json,sys; raw=sys.stdin.read(); body,_,code=raw.rpartition("\nHTTP "); d=json.loads(body); print(json.dumps({k:d.get(k) for k in ("probable_root_cause","diagnosis_confidence","llm_provider_used","agent_domain","matched_source")}, ensure_ascii=False)); print("HTTP", code.strip())'

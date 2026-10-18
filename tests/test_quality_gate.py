@@ -71,7 +71,7 @@ class TestRealRepository:
         falhas = [f"{f.check}: {f.message}" for f in findings if f.is_failure]
         assert not falhas, falhas
 
-    def test_reranker_em_producao_e_o_vencedor_medido(self):
+    def test_reranker_em_producao_nao_e_significativamente_pior(self):
         findings = check_reranker_invariant(REAL_ROOT)
         assert not [f for f in findings if f.is_failure]
 
@@ -169,52 +169,94 @@ class TestRerankerInvariant:
             },
         ]
 
-    def test_codigo_divergente_do_vencedor_falha(self, tmp_path):
-        root = _minimal_root(tmp_path)
-        (root / "app/rag/retriever.py").write_text(
-            'RERANKER_MODEL = "cross-encoder/outro-modelo"\n', encoding="utf-8"
-        )
-        (root / "data/eval/reranker_benchmark_results.json").write_text(
-            json.dumps(self._benchmark("cross-encoder/mmarco-mMiniLMv2-L12-H384-v1", 0.95)),
-            encoding="utf-8",
-        )
-        findings = check_reranker_invariant(root)
-        assert any("vencedor medido" in f.message for f in findings if f.is_failure)
+    MMARCO = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
 
-    def test_hit_at_1_abaixo_do_piso_falha(self, tmp_path):
-        root = _minimal_root(tmp_path)
+    def _write(self, root, results, model=None):
         (root / "app/rag/retriever.py").write_text(
-            'RERANKER_MODEL = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"\n', encoding="utf-8"
-        )
-        (root / "data/eval/reranker_benchmark_results.json").write_text(
-            json.dumps(self._benchmark("cross-encoder/mmarco-mMiniLMv2-L12-H384-v1", 0.80)),
-            encoding="utf-8",
-        )
-        findings = check_reranker_invariant(root, Thresholds(min_hit_at_1=0.90))
-        assert any("abaixo do piso" in f.message for f in findings if f.is_failure)
-
-    def test_margem_sobre_o_baseline_insuficiente_falha(self, tmp_path):
-        root = _minimal_root(tmp_path)
-        results = [
-            {
-                "key": "mmarco",
-                "hf_id": "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
-                "hit_at_1": 0.92,
-            },
-            {
-                "key": "ms-marco-L6",
-                "hf_id": "cross-encoder/ms-marco-MiniLM-L-6-v2",
-                "hit_at_1": 0.91,
-            },
-        ]
-        (root / "app/rag/retriever.py").write_text(
-            'RERANKER_MODEL = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"\n', encoding="utf-8"
+            f'RERANKER_MODEL = "{model or self.MMARCO}"\n', encoding="utf-8"
         )
         (root / "data/eval/reranker_benchmark_results.json").write_text(
             json.dumps(results), encoding="utf-8"
         )
+
+    @staticmethod
+    def _pq(hits: list[int]) -> list[dict]:
+        return [{"hit_at_1": h} for h in hits]
+
+    def test_modelo_de_producao_fora_do_benchmark_falha(self, tmp_path):
+        root = _minimal_root(tmp_path)
+        self._write(root, self._benchmark(self.MMARCO, 0.95), model="cross-encoder/outro-modelo")
+        findings = check_reranker_invariant(root)
+        assert any("nao foi medido" in f.message for f in findings if f.is_failure)
+
+    def test_hit_at_1_abaixo_do_piso_falha(self, tmp_path):
+        root = _minimal_root(tmp_path)
+        self._write(root, self._benchmark(self.MMARCO, 0.80))
+        findings = check_reranker_invariant(root, Thresholds(min_hit_at_1=0.90))
+        assert any("abaixo do piso" in f.message for f in findings if f.is_failure)
+
+    def test_candidato_significativamente_melhor_falha(self, tmp_path):
+        """30 consultas: candidato acerta 12 que producao erra, nenhuma ao contrario."""
+        root = _minimal_root(tmp_path)
+        prod = [1] * 18 + [0] * 12
+        cand = [1] * 30
+        self._write(
+            root,
+            [
+                {"key": "prod", "hf_id": self.MMARCO, "hit_at_1": 0.6, "per_query": self._pq(prod)},
+                {
+                    "key": "melhor",
+                    "hf_id": "x/melhor",
+                    "hit_at_1": 1.0,
+                    "per_query": self._pq(cand),
+                },
+            ],
+        )
+        findings = check_reranker_invariant(root, Thresholds(min_hit_at_1=0.5))
+        assert any("significativamente melhor" in f.message for f in findings if f.is_failure)
+
+    def test_vantagem_pontual_nao_significativa_so_avisa(self, tmp_path):
+        """Caso real de 2026-10-18: uma consulta de diferenca (McNemar p=1,0)."""
+        root = _minimal_root(tmp_path)
+        prod = [1] * 88 + [0] * 2
+        cand = [1] * 89 + [0]
+        self._write(
+            root,
+            [
+                {
+                    "key": "prod",
+                    "hf_id": self.MMARCO,
+                    "hit_at_1": 88 / 90,
+                    "per_query": self._pq(prod),
+                },
+                {
+                    "key": "bge",
+                    "hf_id": "BAAI/bge",
+                    "hit_at_1": 89 / 90,
+                    "per_query": self._pq(cand),
+                },
+            ],
+        )
+        findings = check_reranker_invariant(root)
+        assert not [f for f in findings if f.is_failure]
+        assert any("NAO significativa" in f.message for f in findings)
+
+    def test_sem_dados_por_consulta_usa_margem(self, tmp_path):
+        root = _minimal_root(tmp_path)
+        self._write(
+            root,
+            [
+                {"key": "prod", "hf_id": self.MMARCO, "hit_at_1": 0.90},
+                {"key": "outro", "hf_id": "x/outro", "hit_at_1": 0.96},
+            ],
+        )
         findings = check_reranker_invariant(root, Thresholds(min_benchmark_margin=0.05))
-        assert any("margem" in f.message for f in findings if f.is_failure)
+        assert any("supera producao" in f.message for f in findings if f.is_failure)
+
+    def test_producao_e_o_melhor_passa(self, tmp_path):
+        root = _minimal_root(tmp_path)
+        self._write(root, self._benchmark(self.MMARCO, 0.95))
+        assert not [f for f in check_reranker_invariant(root) if f.is_failure]
 
     def test_sem_baseline_no_benchmark_vira_aviso(self, tmp_path):
         root = _minimal_root(tmp_path)

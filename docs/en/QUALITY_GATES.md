@@ -13,7 +13,7 @@ verified by hand, once, and never again.
 | `rag_dataset_schema` | `data/eval/rag_eval_dataset.json`: required fields, `interface_type` within the pipeline Literal, minimum of 15 cases | instantaneous | every push/PR |
 | `corpus_coverage` | every `expected_sources` exists in `data/sample_docs/` | instantaneous | every push/PR |
 | `dataset_difficulty_mix` | at least one `hard` case and one `out_of_scope` case | instantaneous | every push/PR |
-| `reranker_invariant` | the production model is the measured winner, with hit@1 and margin over the baseline | instantaneous | every push/PR |
+| `reranker_invariant` | the production model was measured, clears the hit@1 floor, and no candidate is significantly better (paired exact McNemar, p < 0.05); a non-significant point lead only warns; without per-query data, the minimum margin applies | instantaneous | every push/PR |
 | `promptfoo_configs` | promptfoo configs are valid YAML, have `prompts`/`tests`/`providers`, and the referenced `exec:` scripts exist | instantaneous | every push/PR |
 | `llm_baseline` | there is a versioned promptfoo baseline (LLM regression comparison) | instantaneous | every push/PR |
 | `candidate_das_fresh` | no DA marked as "candidate" in `CLAUDE.md` is already delivered in `docs/ARCHITECTURE.md` | instantaneous | every push/PR |

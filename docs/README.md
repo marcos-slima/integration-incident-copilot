@@ -35,6 +35,7 @@ For the English version of this index, see [`docs/en/README.md`](en/README.md).
 | **Aprender o projeto inteiro, acompanhando a aplicação no debugger** | [`MANUAL.md`](MANUAL.md) — fonte única didática, 17 capítulos, cada um com uma sessão de debug |
 | Rodar pela primeira vez | [`GETTING_STARTED.md`](GETTING_STARTED.md) → [`USER_GUIDE.md`](USER_GUIDE.md) |
 | Levar para um ambiente novo | [`DEPLOY.md`](DEPLOY.md) → [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) |
+| Reproduzir a validação em Kubernetes (k3d) | [`TUTORIAL_K3D_KUBERNETES_LOCAL.md`](TUTORIAL_K3D_KUBERNETES_LOCAL.md) → [`EVIDENCIA_K3D_2026-10-18.md`](EVIDENCIA_K3D_2026-10-18.md) |
 | Entender o que existe hoje | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
 | Entender *por que* foi feito assim | [`DECISOES_DE_ARQUITETURA.md`](DECISOES_DE_ARQUITETURA.md) (índice das 50 DAs registradas, numeradas de DA-1 a DA-60) |
 | Debugar um incidente real | [`TUTORIAL_ARQUITETURA_DEBUG.md`](TUTORIAL_ARQUITETURA_DEBUG.md) |
@@ -81,6 +82,7 @@ atual está no código, no `ARCHITECTURE.md` e nos testes.
 | [`TUTORIAL_ARQUITETURA_DEBUG.md`](TUTORIAL_ARQUITETURA_DEBUG.md) | Da requisição ao relatório, com breakpoints no VS Code |
 | [`TUTORIAL_ACESSIBILIDADE_MULTIVENDOR.md`](TUTORIAL_ACESSIBILIDADE_MULTIVENDOR.md) | LLM Gateway e conector multi-vendor, passo a passo (Fase 8) |
 | [`TUTORIAL_FASE9_MULTIVENDOR_GRAPHRAG_A2A.md`](TUTORIAL_FASE9_MULTIVENDOR_GRAPHRAG_A2A.md) | Complementar ao anterior: GraphRAG e A2A (Fase 9) |
+| [`TUTORIAL_K3D_KUBERNETES_LOCAL.md`](TUTORIAL_K3D_KUBERNETES_LOCAL.md) | Reproduzir a validação do deploy em Kubernetes real (k3d), para usuários administrativos |
 | [`TCO_SAP_AI_CORE_VS_SELF_HOSTED.md`](TCO_SAP_AI_CORE_VS_SELF_HOSTED.md) | SAP AI Core vs. IA local sob medida — comparação de custo para conversa com cliente |
 | [`AVALIACAO_MODELOS_LOCAIS.md`](AVALIACAO_MODELOS_LOCAIS.md) | Avaliação empírica dos modelos locais (harness de refactoring) e ajuste do ambiente OpenCode — método, resultados e proveniência (2026-10-11) |
 

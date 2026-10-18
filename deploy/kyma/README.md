@@ -60,23 +60,28 @@ em [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md#implantacao).
   do Qdrant (ver seção 6 de `docs/DEPLOY.md`) contra o Qdrant do
   cluster, uma vez, após ele estar de pé.
 
-## Limitações explícitas desta fase (DA-24)
+## Validação em Kubernetes real (2026-10-18)
 
-Nenhum destes manifests foi validado contra um cluster Kyma real -
-não há cluster acessível neste ambiente de desenvolvimento, mesma
-limitação já registrada para Neo4j (DA-21) e para testes reais de MCP
-contra infraestrutura externa (DA-19). Em particular:
+Este bundle foi aplicado sem cópia num k3s local pelo overlay
+[`../local/`](../local/README.md) (`scripts/k3d-validate.sh`): rollout de API,
+worker, Qdrant e Redis, probes, ingest no Pod, `/diagnose` pelo rule engine e
+pelo LLM local, HPA escalando. A imagem foi construída de fato. Evidência em
+`docs/EVIDENCIA_K3D_2026-10-18.md`; reprodução em
+`docs/TUTORIAL_K3D_KUBERNETES_LOCAL.md`.
+
+## Limitações explícitas (DA-24)
+
+O que segue sem validação é o específico do Kyma gerenciado: nenhum destes
+manifests foi aplicado num cluster **Kyma** (o trial exige onboarding
+controlado pela SAP). Em particular:
 
 - O schema do CRD `APIRule` já mudou de versão mais de uma vez na
   história do Kyma - o `apiVersion: gateway.kyma-project.io/v1beta1`
   usado aqui é o correto até o conhecimento deste projeto, mas **deve
   ser conferido contra o cluster alvo** (`kubectl explain apirule.spec`)
   antes de aplicar de verdade.
-- Nenhum build/push de imagem Docker foi testado nesta fase (Docker
-  não está disponível neste ambiente de desenvolvimento) - o
-  `Dockerfile` foi revisado e corrigido (build reprodutível com
-  `uv.lock` + `--frozen`, usuário não-root, `CMD` direto no venv), mas
-  não foi construído de fato.
+- O push para um registry acessível pelo Kyma não foi testado (no k3d a
+  imagem é importada direto no nó, sem registry).
 - `accessStrategy: noop` no `APIRule` assume que a autenticação por
   API key de cada endpoint (DA-18/DA-23) é suficiente. Trocar para
   `jwt` (validando tokens XSUAA do BTP) seria a evolução natural se

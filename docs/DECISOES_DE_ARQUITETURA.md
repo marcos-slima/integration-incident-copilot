@@ -785,11 +785,16 @@ de dev a cada start (agora `CMD` chama `.venv/bin/uvicorn` direto) —
 contornava esse último problema.
 
 **Não-objetivos explícitos:** nenhum manifest foi validado contra um
-cluster Kyma real, nem imagem Docker construída de fato (sem cluster
-ou Docker acessível neste ambiente de desenvolvimento — mesma honestidade
-já aplicada ao Neo4j/DA-21 e ao MCP/DA-19); o schema do CRD `APIRule`
-deve ser conferido contra o cluster alvo antes de aplicar; Qdrant e
-Neo4j continuam pré-requisitos externos, não implantados por este bundle.
+cluster Kyma real (sem cluster acessível neste ambiente de desenvolvimento
+— mesma honestidade já aplicada ao Neo4j/DA-21 e ao MCP/DA-19); o schema
+do CRD `APIRule` deve ser conferido contra o cluster alvo antes de aplicar;
+Qdrant e Neo4j continuam pré-requisitos externos, não implantados por este bundle.
+
+**Nota (2026-10-17):** a imagem Docker **foi construída de fato** no Cenário C
+do deploy (DEPLOYMENT.md, seção C.6): contexto 1,87 MB, imagem 6,73 GB,
+validação ponta a ponta (`up -d` → `/health` → `/ready` → `/diagnose`). A
+DA-24 foi escrita antes dessa validação, daí a inconsistência. A correção
+desta nota deve ser removida quando o deploy em k3d/K3s for validado.
 
 **Validação:** `tests/test_kyma_manifests.py` (11 testes) — todo YAML
 sintaticamente válido, namespace consistente entre recursos, probes

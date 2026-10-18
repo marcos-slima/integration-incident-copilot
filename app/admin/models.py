@@ -51,6 +51,7 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Boolean,
     DateTime,
@@ -100,6 +101,19 @@ class LlmModel(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # DA-72 (migration 020): parametros que o Policy Engine usa para decidir.
+    # Nulo = derivado/herdado (comportamento anterior), nunca "permitido por
+    # omissao": capacidade nula herda a da ORIGEM (invariante 9 - o modelo so
+    # restringe), dominio nulo = todos, transporte/nivel nulos = derivados da
+    # origem (app/llm/registry_routing.py).
+    transport: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    context_window_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    supports_tools: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    supports_response_format: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    supports_seed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    domains: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    tier: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    priority: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_now
     )
@@ -496,6 +510,37 @@ class LlmRuntimeConfig(Base):
     rule_engine_enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     diagnosis_timeout_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     llm_request_timeout_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # DA-72 (migration 020): orcamento (DA-67) e pesos do score de roteamento
+    diagnosis_budget_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    llm_budget_reserve_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    llm_gateway_max_cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    llm_routing_cost_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
+    llm_routing_latency_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+# ---------------------------------------------------------------------------
+# llm_call_latency (DA-72: latencia por chamada para o score de roteamento)
+# ---------------------------------------------------------------------------
+
+
+class LlmCallLatency(Base):
+    """Uma linha por chamada LLM bem-sucedida. O score usa a mediana recente
+    por (origem, modelo); falhas ficam fora para nao premiar um destino que
+    responde rapido com erro."""
+
+    __tablename__ = "llm_call_latency"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_now
+    )
+    provider_origin: Mapped[str] = mapped_column(String(128), nullable=False)
+    model_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    latency_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    __table_args__ = (
+        Index("ix_llm_call_latency_model_created", "provider_origin", "model_id", "created_at"),
+    )
 
 
 # ---------------------------------------------------------------------------

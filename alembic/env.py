@@ -56,6 +56,7 @@ if _raw_url:
 from app.admin.models import (  # noqa: F401
     IntegrationSystem,
     LlmBudgetLedger,
+    LlmCallLatency,
     LlmCost,
     LlmCredential,
     LlmModel,

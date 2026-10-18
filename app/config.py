@@ -15,7 +15,7 @@ pro lugar errado" sem depender de mais ninguem.
 
 from typing import Literal
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 #: Prefixo usado nas mensagens de erro de DA-45, para que o texto aponte
@@ -113,6 +113,13 @@ class Settings(BaseSettings):
     # tokenizer aproximado (cl100k_base para modelos nao-OpenAI) e saida
     # maior que a prevista. 0.25 = 25%.
     llm_budget_reserve_ratio: float = 0.25
+
+    # DA-72: pesos do score de preferencia no roteamento por registro
+    # (custo e latencia normalizados entre os candidatos elegiveis). So
+    # valem no modo gerenciado (LLM_REGISTRY_DB=true); editaveis em
+    # /admin/models. Sem latencia medida, o termo de latencia e zero.
+    llm_routing_cost_weight: float = Field(default=0.7, ge=0.0)
+    llm_routing_latency_weight: float = Field(default=0.3, ge=0.0)
 
     # Avaliacao externa (curto prazo, item 4): timeout explicito por
     # chamada LLM - antes disso, nenhum provider (ChatOllama/ChatOpenAI/

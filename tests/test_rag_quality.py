@@ -11,6 +11,13 @@ EMBEDDING_BACKEND=fastembed, Qdrant 1.15, `scripts/eval_rag.py`):
   Hit@3: 100.0% (18/18) -> threshold conservador: 92%
   MRR:    0.972          -> threshold conservador: 0.85
   fora do escopo rejeitados: 9/10 -> threshold: 0.40
+Re-medido em 2026-10-18 com o dataset ampliado para 110 casos (90 no
+escopo, 20 fora; fastembed, Qdrant em memoria, `scripts/eval_rag.py`):
+  Hit@1:  95.6% (86/90, IC95% Wilson 89.1-98.3%)
+  Hit@3:  97.8% (88/90, IC95% 92.3-99.4%)
+  MRR:    0.967
+  fora do escopo rejeitados: 19/20 (IC95% 76.4-99.1%)
+Thresholds mantidos: todos os valores ficam acima com folga.
 """
 
 import pytest

@@ -759,8 +759,9 @@ print(retrieve('qual a receita de pão de queijo', top_k=3))
 ```
 
 Esperado: lista vazia ou candidato com calibrado muito baixo — a admissão
-rejeita. É essa diferença que o job `rag-quality` do CI mede (Hit@1 94,4 %,
-MRR 0,972; 9 de 10 consultas fora de escopo rejeitadas).
+rejeita. É essa diferença que o job `rag-quality` do CI mede (medição de
+2026-10-18 com 110 casos: Hit@1 95,6 %, MRR 0,967; 19 de 20 consultas fora
+de escopo rejeitadas).
 
 | # | Breakpoint em | Linha (commit `79510c0`) | O que inspecionar |
 |---|---|---|---|

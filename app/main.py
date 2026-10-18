@@ -31,7 +31,8 @@ from app.events import idempotency
 from app.events.amqp_consumer import amqp_consumer  # DA-32
 from app.events.consumer import handle_incident_event_async
 from app.exceptions import ConfigurationError, DiagnosisOverloadedError, DiagnosisTimeoutError
-from app.llm.gateway import describe_effective_policy
+from app.llm.budget import BudgetExhaustedError
+from app.llm.gateway import PolicyViolationError, describe_effective_policy
 from app.mcp.server import build_mcp_asgi_app
 from app.mcp.server import mcp as mcp_server
 from app.metrics import setup_metrics
@@ -388,7 +389,7 @@ def _unhandled_error_handler(request: Request, exc: Exception):
     )
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": "erro interno", "error_id": error_id},
+        content={"detail": "erro interno", "code": "internal_error", "error_id": error_id},
     )
 
 
@@ -398,8 +399,53 @@ def _diagnosis_overloaded_handler(request: Request, exc: DiagnosisOverloadedErro
     reenviar), em vez do 504 que o handler de DiagnosisTimeoutError daria."""
     return JSONResponse(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        content={"detail": str(exc)},
+        content={"detail": str(exc), "code": "overloaded"},
         headers={"Retry-After": "10"},
+    )
+
+
+def _gateway_refusal(request: Request, exc: Exception, code: str, detail: str) -> JSONResponse:
+    """DA-67/DA-66: recusa previsivel do AI Gateway nao e erro interno.
+    A mensagem da excecao cita origens (URLs internas) e motivos por
+    candidato - vai so para o log, com o error_id; o cliente recebe um
+    texto fixo e um `code` estavel para a UI e integracoes decidirem."""
+    error_id = uuid4().hex
+    logger.warning(
+        "[gateway_refusal] code=%s error_id=%s %s %s: %s",
+        code,
+        error_id,
+        request.method,
+        request.url.path,
+        exc,
+    )
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": detail, "code": code, "error_id": error_id},
+    )
+
+
+@app.exception_handler(BudgetExhaustedError)
+def _budget_exhausted_handler(request: Request, exc: BudgetExhaustedError):
+    """Sem Retry-After: reenviar o mesmo incidente abre um orcamento novo
+    com o mesmo limite e os mesmos precos - so muda com DIAGNOSIS_BUDGET_USD
+    ou com um provider mais barato elegivel."""
+    return _gateway_refusal(
+        request,
+        exc,
+        "budget_exhausted",
+        "Orcamento do diagnostico esgotado: nenhum provider elegivel cabe no "
+        "limite configurado (DIAGNOSIS_BUDGET_USD).",
+    )
+
+
+@app.exception_handler(PolicyViolationError)
+def _policy_violation_handler(request: Request, exc: PolicyViolationError):
+    return _gateway_refusal(
+        request,
+        exc,
+        "policy_violation",
+        "Nenhum provider permitido pela policy de soberania para a "
+        "sensibilidade deste incidente. Consulte GET /llm/policy.",
     )
 
 
@@ -413,7 +459,9 @@ def _diagnosis_timeout_handler(request: Request, exc: DiagnosisTimeoutError):
     /events/incident (ambos chamam run_diagnosis diretamente); o A2A
     (app/a2a/task_manager.py) ja captura Exception por conta propria e
     marca a task como failed, sem passar por aqui."""
-    return JSONResponse(status_code=status.HTTP_504_GATEWAY_TIMEOUT, content={"detail": str(exc)})
+    return JSONResponse(
+        status_code=status.HTTP_504_GATEWAY_TIMEOUT, content={"detail": str(exc), "code": "timeout"}
+    )
 
 
 # Avaliacao externa (nova revisao, P0 - "CI e a API nao sobem sem o

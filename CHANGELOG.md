@@ -65,6 +65,11 @@ Contagens de testes conferidas com `pytest --collect-only` em 2026-10-18.
   `error_id`; o motivo completo, que cita origens internas, fica só no log.
   Todos os erros de `/diagnose` ganham `code`. Testes:
   `test_gateway_refusal_http.py` (4).
+- **DA-67 (correção)** o roteamento buscava o preço registrado pelo rótulo do
+  provider (`"openai"`) e nunca o encontrava: a estimativa caía na tabela
+  interna (~33× o preço de `gpt-4o-mini`) e podia barrar o candidato por
+  orçamento. Agora busca pelo modelo efetivo; no modo gerenciado, pelo default
+  da origem. Testes: `test_llm_routing.py::TestCostEstimation` (+4).
 - **Migration 019** `incidents.should_escalate`, `escalation_reason`,
   `cost_usd` e `llm_calls` (custo debitado do orçamento do diagnóstico).
   Testes: `test_incident_escalation_cost.py` (6).

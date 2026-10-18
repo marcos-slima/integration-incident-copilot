@@ -2816,7 +2816,9 @@ A decisão é logada em audit log estruturado e exposta via `GET /llm/policy` (D
 - Quality gate: `da_registered` e `docs_code_references` validam a DA
 
 **Limitações (registradas de propósito).**
-- Scoring de latência ainda não usa dados históricos (placeholder para DA-67/70)
+- Os candidatos são só o provider primário e o de fallback (`LLM_PROVIDER`, `LLM_FALLBACK_PROVIDER`); os modelos cadastrados em `/admin/models` definem **qual modelo** cada provider chama (DA-46), não entram na escolha. Proposta de correção: DA-72 (candidata).
+- A ordenação é só por custo estimado. Latência não é medida por chamada (`Candidate.latency_ms` é sempre `None`) e os pesos custo×latência de `_get_scoring_weights` não existem em `Settings` nem são chamados.
+- Janela de contexto não é verificada.
 - Orçamento é estimado por heurística (substituído por contagem por família na DA-67)
 - Circuit breaker compartilhado entre réplicas requer Redis (DA-41)
 
@@ -2842,7 +2844,8 @@ A decisão é logada em audit log estruturado e exposta via `GET /llm/policy` (D
    - **Degradação:** o Policy Engine (DA-66) rejeita com `orcamento_excedido` os candidatos que não cabem; um candidato mais barato que ainda caiba (ex.: Ollama local) segue elegível.
    - **Esgotamento:** se o orçamento do diagnóstico barra todos os candidatos, o gateway levanta `BudgetExhaustedError`, classificada como `FailureClass.BUDGET_EXHAUSTED` (DA-68: sem retry, sem failover). Se quem barra é o teto por chamada, segue `PolicyViolationError` (comportamento DA-26).
 4. **Ledger persistente** (`record_budget_ledger`, migration `018_create_llm_budget_ledger.py`): estimado × real por chamada, best-effort.
-5. **Borda HTTP e registro do incidente** (2026-10-18): `BudgetExhaustedError` vira 503 com `code: budget_exhausted` e `error_id` (`app/main.py`), em vez do 500 genérico; `PolicyViolationError` vira 503 `policy_violation`. O motivo completo vai só para o log. O total debitado e o número de chamadas são gravados no incidente (`cost_usd`, `llm_calls`, migration `019_incidents_escalation_and_cost.py`) e aparecem na Admin UI. Testes: `tests/test_gateway_refusal_http.py`, `tests/test_incident_escalation_cost.py`.
+5. **Preço do modelo efetivo** (correção de 2026-10-18): a estimativa do roteamento consultava o registro com o **rótulo** do provider (`"openai"`) como `model_id`; nenhum registro casa com isso, e a estimativa caía sempre na tabela interna. Para `gpt-4o-mini` (US$ 0,15/0,60 por 1M) a tabela dava ~33× o preço real: 10 mil tokens estimados em US$ 0,15 contra US$ 0,0045, e um contexto acima de ~34 mil tokens era barrado pelo teto de US$ 0,50 custando ~US$ 0,015. Agora `app/llm/routing.py::_registry_prices_for` consulta pelo modelo que o provider vai chamar (`llm_model`, o `model_name` do caller ou o deployment do Azure) e, no modo gerenciado, cai no default habilitado da origem — a mesma regra de `app/admin/runtime.py::resolve_runtime_model`. Testes em `tests/test_llm_routing.py::TestCostEstimation` (o teste anterior mockava o preço pelo rótulo e escondia o bug).
+6. **Borda HTTP e registro do incidente** (2026-10-18): `BudgetExhaustedError` vira 503 com `code: budget_exhausted` e `error_id` (`app/main.py`), em vez do 500 genérico; `PolicyViolationError` vira 503 `policy_violation`. O motivo completo vai só para o log. O total debitado e o número de chamadas são gravados no incidente (`cost_usd`, `llm_calls`, migration `019_incidents_escalation_and_cost.py`) e aparecem na Admin UI. Testes: `tests/test_gateway_refusal_http.py`, `tests/test_incident_escalation_cost.py`.
 
 **Validação.** `tests/test_budget_ledger.py` (aritmética e reserva, acúmulo e esgotamento, degradação para candidato mais barato, teto por chamada continua valendo, chamada com falha não é debitada, mapeamento para `BUDGET_EXHAUSTED`, abertura e fechamento em `run_diagnosis` mesmo com erro); `tests/test_tokenizer_offline.py` (fallback para `ConnectionError`/`OSError`/`ImportError`, sem retentativa, um único aviso).
 

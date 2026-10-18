@@ -104,22 +104,80 @@ class TestCostEstimation:
         assert cost == 0.0
 
     def test_estimate_cost_uses_registry_when_available(self, monkeypatch):
-        """Com registry, deve usar preços reais."""
+        """Com registry, usa o preco do MODELO efetivo (llm_model), nao o
+        rotulo do provider. Antes o mock casava provider == "openai" e
+        escondia o bug: em producao nenhum registro tem model_id "openai"."""
+        calls = []
 
-        # Mock registry_prices para retornar preços conhecidos
-        def mock_prices(origin, provider):
-            if provider == "openai":
-                return (0.01, 0.03)  # $0.01 input, $0.03 output por 1M tokens
-            return None
+        def mock_prices(origin, model_id):
+            calls.append(model_id)
+            return (0.15, 0.6) if model_id == "gpt-4o-mini" else None
 
         monkeypatch.setattr("app.admin.repository.registry_prices", mock_prices)
-        cfg = Settings()
+        cfg = Settings(llm_model="gpt-4o-mini")
 
-        # 1000 tokens context, ~500 completion tokens
-        cost = _estimate_cost_usd("openai", 1000, cfg)
-        # 1000 * 0.01/1M + 500 * 0.03/1M = 0.00001 + 0.000015 = 0.000025
-        assert cost > 0
-        assert cost < 0.001  # custo muito pequeno para 1k tokens
+        cost = _estimate_cost_usd("openai", 10_000, cfg)
+        # 10_000 * 0.15/1M + 5_000 * 0.6/1M
+        assert cost == pytest.approx(0.0045)
+        assert calls == ["gpt-4o-mini"]
+
+    def test_estimate_cost_model_name_override_wins(self, monkeypatch):
+        seen = []
+        monkeypatch.setattr(
+            "app.admin.repository.registry_prices",
+            lambda origin, model_id: seen.append(model_id) or (1.0, 1.0),
+        )
+        _estimate_cost_usd("openai", 1000, Settings(llm_model="a"), model_name="b")
+        assert seen == ["b"]
+
+    def test_estimate_cost_azure_uses_deployment(self, monkeypatch):
+        seen = []
+        monkeypatch.setattr(
+            "app.admin.repository.registry_prices",
+            lambda origin, model_id: seen.append(model_id) or (1.0, 1.0),
+        )
+        cfg = Settings(
+            azure_openai_endpoint="https://x.openai.azure.com",
+            azure_openai_deployment="dep-prod",
+        )
+        _estimate_cost_usd("azure_openai", 1000, cfg)
+        assert seen == ["dep-prod"]
+
+    def test_managed_mode_falls_back_to_origin_default(self, monkeypatch):
+        """Modo gerenciado (DA-46): modelo pedido nao registrado -> responde
+        o default da origem, entao o preco e o dele."""
+        monkeypatch.setattr("app.admin.repository.registry_prices", lambda o, m: None)
+        monkeypatch.setattr("app.admin.repository.registry_default_prices", lambda o: (0.15, 0.6))
+        on = _estimate_cost_usd("openai", 10_000, Settings(llm_registry_db=True))
+        off = _estimate_cost_usd("openai", 10_000, Settings(llm_registry_db=False))
+        assert on == pytest.approx(0.0045)
+        assert off == pytest.approx(0.15)  # tabela interna: fora do modo gerenciado
+
+    def test_registered_price_no_longer_rejects_by_budget(self, monkeypatch):
+        """Regressao: com o preco real, gpt-4o-mini cabe no teto de US$ 0,50
+        com 40k tokens; pela tabela interna seria barrado (0,60)."""
+        monkeypatch.setattr(
+            "app.admin.repository.registry_prices",
+            lambda o, m: (0.15, 0.6) if m == "gpt-4o-mini" else None,
+        )
+        monkeypatch.setattr("app.llm.routing._circuit_is_open", lambda p, c: False)
+        cfg = Settings(llm_provider="openai", llm_fallback_provider="", llm_model="gpt-4o-mini")
+        decision = evaluate_routing(
+            RoutingRequest(
+                sensitivity="public",
+                task="diagnosis",
+                context_tokens=40_000,
+                budget_remaining_usd=0.50,
+                required_capabilities=ProviderCapabilities(
+                    supports_seed=False, supports_response_format=False, supports_tools=False
+                ),
+                primary_provider="openai",
+                fallback_provider=None,
+                config=cfg,
+            )
+        )
+        assert decision.selected_provider == "openai"
+        assert decision.candidates[0].estimated_cost_usd == pytest.approx(0.018)
 
 
 class TestCapabilities:

@@ -373,6 +373,7 @@ def invoke_via_gateway(
         primary_provider=cfg.llm_provider,
         fallback_provider=cfg.llm_fallback_provider,
         config=cfg,
+        model_name=model_name,
     )
 
     decision = evaluate_routing(request)

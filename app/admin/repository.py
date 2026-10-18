@@ -530,6 +530,29 @@ def registry_prices(origin: str, model_id: str) -> tuple[float | None, float | N
         return None
 
 
+def registry_default_prices(origin: str) -> tuple[float | None, float | None] | None:
+    """Preco do modelo default HABILITADO da origem - o que o modo gerenciado
+    (app/admin/runtime.py) usa quando o modelo pedido nao esta registrado.
+    Best-effort como registry_prices: sem banco ou com erro, None."""
+    if not settings.database_url or not origin:
+        return None
+    try:
+        from sqlalchemy import select
+
+        with _get_sync_session_factory()() as session:
+            row = session.execute(
+                select(LlmModel.price_in_per_1m, LlmModel.price_out_per_1m).where(
+                    LlmModel.provider_origin == (canonical_origin(origin) or origin),
+                    LlmModel.enabled.is_(True),
+                    LlmModel.is_default.is_(True),
+                )
+            ).first()
+            return (row[0], row[1]) if row else None
+    except Exception:
+        logger.exception("[routing] Falha ao ler preco default do registro (%s)", origin)
+        return None
+
+
 # ---------------------------------------------------------------------------
 # llm_runtime_config (DA-XX: overrides de runtime via admin UI)
 # ---------------------------------------------------------------------------

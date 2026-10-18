@@ -160,9 +160,11 @@ def test_run_diagnosis_propaga_sensibilidade_do_request(monkeypatch):
 
 def test_registry_com_destino_remoto_e_barrado_para_confidential(monkeypatch):
     """GOV-01: no modo gerenciado o base_url do registro (texto livre do
-    admin) e reavaliado. Ollama do .env em loopback, registro apontando
-    para host remoto: dado confidencial nao sai."""
-    from app.llm import factory, gateway
+    admin) e reavaliado. Desde a DA-72 o candidato e' o proprio modelo do
+    registro: origem em loopback com base_url remoto e' barrado antes de
+    qualquer chamada (destino fora da origem + soberania)."""
+    from app.llm import gateway
+    from app.llm.registry_routing import RegistryModel, RegistrySnapshot
 
     cfg = Settings(
         _env_file=None,
@@ -171,17 +173,21 @@ def test_registry_com_destino_remoto_e_barrado_para_confidential(monkeypatch):
         ollama_host="http://127.0.0.1:11434",
         llm_registry_db=True,
     )
-    monkeypatch.setattr(
-        "app.admin.runtime.resolve_runtime_model",
-        lambda provider, model, c: {
-            "model_id": "m",
-            "base_url": "https://gpu.terceiro.example.com",
-        },
+    snapshot = RegistrySnapshot(
+        models=(
+            RegistryModel(
+                id="1",
+                provider_origin="http://127.0.0.1:11434",
+                model_id="m",
+                base_url="https://gpu.terceiro.example.com",
+                transport="ollama",
+            ),
+        )
     )
+    monkeypatch.setattr(gateway, "load_registry_snapshot", lambda: snapshot)
     chamado = []
     monkeypatch.setattr(gateway, "get_chat_model", lambda **kw: chamado.append(kw))
-    monkeypatch.setattr(factory, "get_chat_model", lambda **kw: chamado.append(kw))
-    with pytest.raises(PolicyViolationError, match="destino resolvido pelo registro"):
+    with pytest.raises(PolicyViolationError, match="destino_fora_da_origem.*soberania_bloqueada"):
         gateway.invoke_via_gateway(
             lambda llm: None, state={"description": "x"}, prompt_text="x", config=cfg
         )

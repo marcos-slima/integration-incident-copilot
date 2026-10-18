@@ -56,6 +56,18 @@ curl -s -X POST http://localhost:8000/diagnose -H "X-API-Key: $API_KEY" \
 | `prompt_version` | `null` | Nenhum prompt produziu esta resposta |
 | `evidence[].trust_level` | inclui `simulated` | O dado do conector é de demonstração — e a resposta diz isso |
 
+O mesmo caso em inglês — a regra é a mesma, só o texto muda (DA-74):
+
+```bash
+curl -s -X POST http://localhost:8000/diagnose -H "X-API-Key: $API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"description":"IDoc travado com status 51","interface_type":"rfc","identifier":"RFC-IDOC-51-DEMO","locale":"en"}' \
+  | python3 -m json.tool | grep -E '"locale"|probable_root_cause'
+```
+
+Esperado: `"locale": "en"` e a causa começando por "IDoc in status 51". Na UI
+web, o seletor de idioma faz o mesmo.
+
 Detalhe do caso: [`CASOS_DE_USO.md`](CASOS_DE_USO.md), UC-01.
 
 ---

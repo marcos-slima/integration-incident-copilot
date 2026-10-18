@@ -519,6 +519,10 @@ flowchart LR
 | sem documento, sem conector e sem regra | 0,3 | `matched_source` anulado |
 | `matched_source` citado pelo LLM nao esta entre os documentos recuperados | 0,3 | `matched_source` anulado; o escalonamento marca `abstained` |
 
+Os prefixos acrescentados a causa raiz saem no idioma do `locale` do pedido
+(`app/i18n/locales/content.<idioma>.json`, chaves `diagnosis.*`); o texto
+pt-BR e o mesmo de antes da DA-74.
+
 `diagnosis_confidence` e uma heuristica para ordenar diagnosticos, nao uma
 probabilidade calibrada. O `web_untrusted` so apareceria a partir de
 `web_search_results`, campo que nenhum no do grafo preenche hoje (ver os
@@ -1547,6 +1551,21 @@ metricas e testada automaticamente, mesmo tratamento dado a
 Com isso, TODOS os itens do backlog priorizado pela segunda revisao
 arquitetural externa (P0/P1/P2) estao fechados.
 
+## Idioma das interfaces e do conteudo (DA-73/74)
+
+| O que | Decide o idioma | Onde |
+|---|---|---|
+| Telas da Web UI | `?lng` → cookie `iic_locale` → `navigator.languages` → `en` | `frontend/src/i18n/` (`react-i18next`) |
+| Telas da Admin UI | `?lng` → cookie `iic_locale` → `Accept-Language` → `en` | `app/i18n/__init__.py::negotiate`, catalogo embutido como JSON (CSP intacta) |
+| Mensagens de erro da API nas telas | `code` estavel do backend | `app/api_errors.py::CodedHTTPException` |
+| Conteudo do diagnostico (regras, avisos, relatorio, texto do LLM) | `IncidentRequest.locale` (`pt-BR` default · `en`) | `app/i18n/content.py`, `app/agent/prompts.py::OUTPUT_LANGUAGE_INSTRUCTIONS` |
+| E-mail e SMS de ativacao | `web_users.locale` (idioma de quem cadastrou) | `app/webusers.py::activation_email_text` |
+| Motivos de soberania, roteamento e conectores exibidos nas telas | codigo + parametros, montados pela tela | `app/llm/routing.py::sovereignty_decision`, `Candidate.detail_items`, `/health` (`setting`) |
+
+O pt-BR do conteudo e a fonte (regras no TTL e em `rules.py`) e o prompt
+medido; o `en` tem digest de prompt proprio, ainda nao medido (o gate
+`prompt_digest_measured` avisa). Gates: `ui_i18n` e `content_i18n`.
+
 ## Testes
 
 Testes unitarios (`tests/test_connectors.py`, `test_llm_factory.py`,
@@ -1909,6 +1928,11 @@ incidentes. A solução tem que ser:
 - Sem versãoamento: TTL é "latest", não snapshot; para rolling back, restaurar TTL anterior.
 - Fallback não grava log de erro (silencioso), exige monitoramento manual de `error_codes.ttl`.
 - Mapeamento TTL/hardcoded manual (não inferência automática).
+- DA-74: conceito do TTL sem `ex:probableRootCause` (ou sem passos) herda o
+  texto da regra em código de mesma categoria
+  (`app/agent/ontology_loader.py::_fill_from_hardcoded`); passos separados por
+  `;`. A tradução `en` de cada categoria fica em `content.en.json`
+  (`rules.<categoria>`), cobrada pelo gate `content_i18n`.
 
 ### Próximos passos (DA-61 Fases 2/3)
 

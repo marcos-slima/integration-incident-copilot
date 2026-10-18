@@ -339,9 +339,9 @@ flowchart LR
 
 | Objeto | Papel | Detalhe que importa |
 |---|---|---|
-| `IncidentRequest` | o que o cliente manda | `interface_type` é um `Literal` **fechado**; limites de tamanho em `MAX_DESCRIPTION_LENGTH`, `MAX_LOGS_LENGTH`, `MAX_PAYLOAD_LENGTH` |
+| `IncidentRequest` | o que o cliente manda | `interface_type` é um `Literal` **fechado**; limites de tamanho em `MAX_DESCRIPTION_LENGTH`, `MAX_LOGS_LENGTH`, `MAX_PAYLOAD_LENGTH`; `locale` (`pt-BR` default ou `en`, tag do navegador normalizada, outro idioma = 422) decide o idioma do conteúdo [DA-74] |
 | `CopilotState` | estado do grafo | `TypedDict, total=False` — o `StateGraph` **descarta chave fora do schema**. Campo novo que não entra aqui simplesmente desaparece no meio do pipeline |
-| `DiagnosisResponse` | o que o cliente recebe | inclui `evidence`, `escalation`, `matched_source` e a procedência (`llm_model`, `prompt_version`, `prompt_digest`) |
+| `DiagnosisResponse` | o que o cliente recebe | inclui `evidence`, `escalation`, `matched_source`, a procedência (`llm_model`, `prompt_version`, `prompt_digest`) e o `locale` em que o conteúdo foi produzido |
 | `DiagnosisModel` | o que o **LLM** devolve | validado na origem: `confidence` tem `ge=0.0, le=1.0` |
 
 ### 2.2 `Field(description=)` não é comentário
@@ -424,6 +424,12 @@ flowchart TB
 
 Três chaves **distintas** de propósito: um agente externo com a chave de A2A
 não ganha a superfície de administração, e vice-versa [DA-18/19/23/54].
+
+**Idioma.** As telas (Web UI e `/admin`) seguem o idioma do navegador, com
+seletor e cookie `iic_locale` compartilhado [DA-73]. O conteúdo do diagnóstico
+segue o `locale` do pedido, em qualquer superfície: REST e eventos no corpo,
+MCP como argumento da tool, A2A nos campos estruturados; a Web UI envia o
+idioma da tela [DA-74].
 
 ### 3.2 O boot que falha de propósito
 
@@ -791,8 +797,10 @@ chegam ao modelo.
 
 `app/agent/rules.py::ErrorRule` é um `dataclass` com `patterns` (regex),
 `probable_root_cause`, `next_steps`, `category` e `confidence` (default `0.90`).
-`match_known_error(text, has_connector_data)` percorre as regras e, no primeiro
-casamento não negado, devolve um `dict` **já compatível com `DiagnosisModel`**.
+`match_known_error(text, has_connector_data, locale)` percorre as regras e, no
+primeiro casamento não negado, devolve um `dict` **já compatível com
+`DiagnosisModel`**. Os padrões casam em qualquer idioma; o `locale` só muda o
+texto devolvido (`app/i18n/content.py::localize_rule`) [DA-74].
 
 ```mermaid
 flowchart LR
@@ -826,13 +834,27 @@ código de erro capturado do sistema de origem.
 
 ### 7.3 Regras e taxonomia SKOS
 
-`KNOWN_ERROR_RULES` tem **22** regras hardcoded (conferido neste checkout). Com
-`app/agent/ontology_loader.py::load_error_rules_combined`, as regras passam a
-vir de `app/ontology/error_codes.ttl` (SKOS) e as hardcoded entram como
-complemento das categorias ausentes [DA-61] — o [`README.md`](../README.md)
-registra **28** no total (22 + 6 da taxonomia). Se o TTL faltar ou não parsear,
-o carregador cai nas hardcoded; o fallback é silencioso (limitação aceita e
-registrada).
+`KNOWN_ERROR_RULES` tem **22** regras em código. Com
+`app/agent/ontology_loader.py::load_error_rules_combined`, as regras vêm de
+`app/ontology/error_codes.ttl` (SKOS) e as em código entram como complemento
+das categorias ausentes [DA-61]. Neste checkout o TTL tem **28** regras, que
+cobrem as 22 categorias em código mais 6 próprias — a carga combinada dá 28.
+
+Três detalhes do carregador [DA-74]:
+
+- **Causa e passos ausentes no TTL vêm da regra em código** de mesma categoria
+  (`::_fill_from_hardcoded`). Antes, o conceito sem `ex:probableRootCause`
+  devolvia "Erro conhecido detectado via taxonomia SKOS." e escondia a causa
+  curada — o IDoc status 51 respondia com o texto genérico.
+- **Passos separados por `;`** (`skos:note "next_steps: passo 1; passo 2"`).
+  Com `,`, "Validar credenciais (token, API key, Basic Auth)" virava três
+  passos.
+- **Idioma:** o texto da regra é o pt-BR; o `en` vem de `rules.<categoria>` em
+  `app/i18n/locales/content.en.json`. Regra nova sem essa entrada reprova o
+  gate `content_i18n`.
+
+Se o TTL faltar ou não parsear, o carregador cai nas regras em código; o
+fallback é silencioso (limitação aceita e registrada).
 
 Invariante: `RULE_ENGINE_ENABLED` é `True` por default e só se desliga em teste
 que precise forçar o LLM.
@@ -931,6 +953,14 @@ O prompt é **artefato de governança** [DA-53]: a resposta, o relatório e a
 tabela `incidents` carregam `llm_model`, `prompt_version` e `prompt_digest`. O
 gate `prompt_digest_measured` reprova o build se o digest do código divergir do
 baseline medido em `data/eval/prompt_baseline.json`.
+
+**Um digest por idioma** [DA-74]. O pt-BR é o prompt medido; o `en` é o mesmo
+prompt com uma instrução de idioma no fim
+(`app/agent/prompts.py::OUTPUT_LANGUAGE_INSTRUCTIONS`) e digest próprio
+(`::compute_digest("en")`), que é o gravado na resposta. Enquanto o `en` não
+estiver medido (`locales.en` no baseline), o gate **avisa** que o placar vale
+só para o pt-BR; medido e alterado, reprova. Para gravar depois de medir:
+`scripts/quality_gate.py --write-prompt-baseline --prompt-locale en`.
 
 ### 8.4 Fallback híbrido
 
@@ -1049,7 +1079,9 @@ Mais três guardrails em `::_apply_confidence_guardrails`:
 
 1. **Identificador não reconhecido** (`is_fallback`): confiança limitada a
    `0.4` e a causa raiz ganha o prefixo
-   `[confianca limitada - identificador nao reconhecido pelo sistema]`.
+   `[confianca limitada - identificador nao reconhecido pelo sistema]` (em
+   `en`, `[limited confidence - identifier not recognized by the system]`; os
+   avisos vêm de `content.<idioma>.json` [DA-74]).
 2. **`matched_source` alucinado é anulado.** Documento que o LLM cita mas que o
    retrieval nunca devolveu some da resposta e a confiança cai para `0.3` — e
    essa anulação é o que o capítulo 10 lê como abstenção. A checagem antes só
@@ -1353,6 +1385,10 @@ desenho:
   de gravar em claro [DA-60].
 - **Metering real** [DA-48]: tokens vêm de `usage_metadata` da resposta, não de
   estimativa (`app/admin/metering.py`).
+- **Ativação no idioma de quem cadastrou** [DA-74]: `web_users.locale` guarda o
+  idioma da Admin UI no cadastro (ou o `locale` do payload); e-mail e SMS saem
+  nesse idioma (`app/webusers.py::activation_email_text`). Linha antiga, sem
+  idioma, recebe o texto em pt-BR.
 
 ### 13.3 Correlação é fail-closed
 
@@ -1828,8 +1864,8 @@ este manual"); os entre colchetes são documentos do repositório.
 | 4 · Supervisor | DA_AULA_9_LANGGRAPH.md | DA-22/63 |
 | 5 · Conectores | [`CONNECTORS.md`](CONNECTORS.md) | DA-34/41/56/59 |
 | 6 · RAG | [`RERANKER_BENCHMARK.md`](RERANKER_BENCHMARK.md) | DA-1/17/25/29/38/42/45 |
-| 7 · Rule Engine | DA_AULA_11_RULES.md | DA-33/61/62 |
-| 8 · LLM e gateway | DA_AULA_8_LLMS.md | DA-2/20/26/39/43/45/53 |
+| 7 · Rule Engine | DA_AULA_11_RULES.md | DA-33/61/62/74 |
+| 8 · LLM e gateway | DA_AULA_8_LLMS.md | DA-2/20/26/39/43/45/53/66/67/68/72/74 |
 | 9 · Evidência | DA_AULA_10_NODES.md | DA-3/15/16/25/30 |
 | 10 · Escalonamento | DA_AULA_12_ESCALATION.md | DA-42/44 |
 | 11 · GraphRAG | [`TUTORIAL_FASE9_MULTIVENDOR_GRAPHRAG_A2A.md`](TUTORIAL_FASE9_MULTIVENDOR_GRAPHRAG_A2A.md) | DA-21/28 |
@@ -1839,7 +1875,7 @@ este manual"); os entre colchetes são documentos do repositório.
 | 15 · Observabilidade | DA_AULA_6_MONITORING.md, DA_AULA_16_OPERATIONAL.md, DA_AULA_20_MONITORING.md | DA-30/35/48 |
 | 16 · Testes e gates | [`QUALITY_GATES.md`](QUALITY_GATES.md), DA_AULA_15_TESTS.md, DA_AULA_22_TESTING.md | DA-29/51/58 |
 | 17 · Deploy | DA_AULA_18_CONTAINERS.md, DA_AULA_19_KYMA.md, DA_AULA_25_K3D.md, DA_AULA_XX_DEPLOY.md, [`TUTORIAL_K3D_KUBERNETES_LOCAL.md`](TUTORIAL_K3D_KUBERNETES_LOCAL.md) | DA-24, DA-31 (bloqueada) |
-| UI (transversal) | DA_AULA_23_UI.md, DA_AULA_17_FRONTEND.md | DA-54/55 |
+| UI (transversal) | DA_AULA_23_UI.md, DA_AULA_17_FRONTEND.md | DA-54/55/73/74 |
 | Debug (transversal) | DA_AULA_23_DEBUG.md, [`TUTORIAL_ARQUITETURA_DEBUG.md`](TUTORIAL_ARQUITETURA_DEBUG.md) | — |
 
 ---
@@ -1852,12 +1888,12 @@ deste manual precisa de confiança: cada um tem um comando.
 | Afirmação | Valor | Comando que reconfere |
 |---|---|---|
 | versão do projeto | 1.2.0 | `grep -m1 '^version' pyproject.toml` |
-| regras hardcoded | 22 | `uv run python -c "from app.agent.rules import KNOWN_ERROR_RULES as r; print(len(r))"` |
-| regras com taxonomia SKOS | 28 no total, segundo o README | `uv run python -c "from app.agent.ontology_loader import load_error_rules_combined as f; print(len(f()))"` |
+| regras em código | 22 | `uv run python -c "from app.agent.rules import KNOWN_ERROR_RULES as r; print(len(r))"` |
+| regras com taxonomia SKOS | 28 no total (o TTL cobre as 22 em código + 6) | `uv run python -c "from app.agent.ontology_loader import load_error_rules_combined as f; print(len(f()))"` |
 | conectores registrados | 10 | `uv run python -c "from app.connectors import _REGISTRY as r; print(len(r), sorted(r))"` |
-| migrations | 13 (head `013`) | `uv run alembic heads` |
-| gates de qualidade | 20 | `uv run python -c "from app.evaluation.gates import GATES; print(len(GATES))"` |
-| testes | 1525 no último build de CI | `uv run pytest tests/ -m "not integration" --collect-only -q \| tail -1` |
+| migrations | 21 (head `021`) | `uv run alembic heads` |
+| gates de qualidade | 22 | `uv run python -c "from app.evaluation.gates import GATES; print(len(GATES))"` |
+| testes | 1764 coletados (2026-10-18) | `uv run pytest tests/ -m "not integration" --collect-only -q \| tail -1` |
 | configurações de debug | 14 | contar `"name"` em `.vscode/launch.json` |
 | playbooks RAG curados | 15 | `ls data/sample_docs/*.md \| wc -l` |
 | limiares de escalonamento | 0.62 / 0.45 | `app/agent/escalation.py::FLOOR_TIER_MIN_EVIDENCE`, `::CURATED_TIER_MIN_EVIDENCE` |
@@ -1899,6 +1935,9 @@ Limites aceitos e registrados. Lê-los é parte de usar o sistema com honestidad
    anotação, versão e namespace).
 9. **O placar do LLM precisa ser re-medido** quando o modelo canônico muda:
    casos resolvidos pelo rule engine não medem o modelo.
+10. **O prompt em inglês não foi medido** [DA-74]: o placar descreve o pt-BR. O
+    LLM lê contexto e persona em português e escreve em inglês por instrução;
+    documentos da base e dados do usuário não são traduzidos.
 
 ---
 

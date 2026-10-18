@@ -246,7 +246,7 @@ The table below maps each capability to its implementation status and evidence.
 | Coverage | VER | 82% (7745 lines; 1359 uncovered); CI requires ≥80% (`tests.yml:55`) | |
 | Quality gates | VER | 20 defined (`gates.py:1515`); 18 PASS, 2 WARN, 0 FAIL | WARN: reranker, deployed model |
 | CI | VER | `tests.yml` (lint, tests, security, compose smoke, rag-quality, neo4j-smoke) and `quality.yml` | |
-| Kyma | NVAL | `deploy/kyma/` (10 files) | Never applied to real cluster |
+| Kyma | PARC | `deploy/kyma/` + `deploy/local/` | Applied to real Kubernetes (k3d, 2026-10-18); APIRule/Istio/BTP OIDC not validated |
 | Graceful degradation (Qdrant down) | VER | `app/rag/retriever.py`, DA-65, `tests/test_da65_rag_degradation.py` | `_retrieve_hybrid` e `_retrieve_dense_only` capturam exceção de Qdrant e retornam `[]` (DA-65); erros conhecidos ainda respondidos pelo rule engine. Testado em nível de retriever; fluxo completo `/diagnose → run_diagnosis` pendente de teste de integração |
 | Architecture decisions | VER | 55 sections in `docs/DECISOES_DE_ARQUITETURA.md`; 44 with DA | |
 
@@ -255,7 +255,7 @@ The table below maps each capability to its implementation status and evidence.
 The project is under active development. In 2026-10 a full audit was
 followed by verified fixes, and these limits remain open:
 
-- **Kyma:** the manifests in `deploy/kyma/` have never been applied to a real cluster.
+- **Managed Kyma:** the `deploy/kyma/` manifests were validated on real Kubernetes (k3d, `deploy/local` overlay, see `docs/EVIDENCIA_K3D_2026-10-18.md`); what is Kyma-specific is still unvalidated: `APIRule`, Istio and BTP OIDC.
 - **Connectors:** six of the ten have not been validated against a real instance (table above).
 - **Vector store outage:** with Qdrant down, `_retrieve_hybrid` and `_retrieve_dense_only` catch the exception and return an empty list (DA-65). Known errors covered by rules are still diagnosed deterministically. Verified manually; end-to-end test pending.
 

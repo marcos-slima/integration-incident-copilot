@@ -64,9 +64,12 @@ from app.admin.models import (  # noqa: F401
     LlmRequests,
     LlmTokens,
     LlmUsage,
+    RollbackLog,
+    Snapshot,
 )
 from app.contracts.baseline import SystemContract  # noqa: F401
 from app.db import Base
+from app.models.ab_testing_orm import ABExperiment  # noqa: F401
 from app.models.prompt_versioning_orm import PromptVersion  # noqa: F401
 from app.services.incident_repository import Incident  # noqa: F401
 
@@ -79,6 +82,21 @@ from app.services.incident_repository import Incident  # noqa: F401
 # Teste: tests/test_alembic_metadata.py.
 
 target_metadata = Base.metadata
+
+
+# Tabelas criadas pelo checkpointer do LangGraph (DA-69) em runtime, fora do
+# controle de migrations. Sem isso, `alembic check` num banco que ja rodou o
+# app propoe DROP TABLE dos checkpoints.
+_LANGGRAPH_TABLES = frozenset(
+    {"checkpoints", "checkpoint_blobs", "checkpoint_writes", "checkpoint_migrations"}
+)
+
+
+def include_object(obj, name, type_, reflected, compare_to):
+    if type_ == "table" and name in _LANGGRAPH_TABLES:
+        return False
+    table_name = getattr(getattr(obj, "table", None), "name", None)
+    return not (type_ == "index" and table_name in _LANGGRAPH_TABLES)
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +113,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
+        include_object=include_object,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -112,6 +131,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             compare_type=True,
+            include_object=include_object,
         )
         with context.begin_transaction():
             context.run_migrations()

@@ -99,8 +99,9 @@ def test_metadata_do_alembic_cobre_todas_as_tabelas_das_migrations() -> None:
         importlib.import_module(mod)
     from app.db import Base
 
-    # SA-01 (DA-82): tabela extra para rollback (não precisa estar no Base.orm)
-    # O rollback usa migration direta, não ORM.
+    # DA-82: snapshot_table/rollback_log agora tambem tem ORM em
+    # app/admin/models.py. O union mantem o teste tolerante caso o import de
+    # metadata seja parcial em algum contexto.
     assert criadas, "nenhum create_table encontrado"
     expected_tables = set(Base.metadata.tables) | {"snapshot_table", "rollback_log"}
     assert criadas <= expected_tables, sorted(criadas - expected_tables)

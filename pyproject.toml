@@ -83,6 +83,11 @@ dependencies = [
     # nao instala libpq; sem o binary o import falha com CHECKPOINTING_ENABLED).
     "langgraph-checkpoint-postgres>=3.2.0",
     "psycopg[binary]>=3.2",
+    "reportlab>=5.0.1",
+    # DA-89: export XLSX dos relatórios de compliance. Fica nas deps
+    # principais porque a rota /admin/reports/compliance/export depende
+    # dela em runtime (e o CI roda `uv sync --dev`, sem extras).
+    "openpyxl>=3.1",
 ]
 
 [project.optional-dependencies]
@@ -96,7 +101,6 @@ openai = [
 # Observabilidade Prometheus (Fase 2): PROMETHEUS_ENABLED=true exige este extra.
 # pip install -e ".[prometheus]"
 reports = [
-    "openpyxl>=3.1",      # escrita de .xlsx
     "jinja2>=3.1",        # templates Markdown/HTML
     "psycopg2-binary>=2.9",  # já em deps, mas declarado aqui p/ extra standalone
 ]

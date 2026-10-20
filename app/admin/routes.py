@@ -7,7 +7,7 @@ Separacao de rotas:
 - `/admin/api/*` - Endpoints JSON para CRUD e operações administrativas
 - `/admin/metrics/*` - Métricas e dashboards (DA-87)
 - `/admin/reports/*` - Relatórios compliance (DA-89)
-- `/admin/dashboard/*` - Visualizações HTML (DA-87/89)
+- `/admin/dashboard/compliance` - Dados para o dashboard de compliance (DA-89)
 
 Sem DATABASE_URL → HTTP 503 "Persistencia nao configurada" (fail-closed:
 nenhuma rota admin finge sucesso sem banco por tras).
@@ -16,7 +16,7 @@ nenhuma rota admin finge sucesso sem banco por tras).
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
@@ -1521,50 +1521,23 @@ async def rollback_knowledge_version(
 
 
 @router.get("/metrics/domains")
-async def get_domain_metrics(session: SessionReq) -> dict[str, Any]:
+async def get_domain_metrics(
+    session: SessionReq,
+    days: int = Query(default=30, ge=1, le=365, description="Janela em dias"),
+) -> dict[str, Any]:
     """DA-87: Métricas por domínio (sap/saas/generic) para dashboards.
 
-    Retorna:
-        - count por domínio
-        - hit@1 por domínio
-        - tempo médio por domínio
-        - custo por domínio
+    Janela: últimos ``days`` dias (default 30), limitada aos 1000 incidentes
+    mais recentes. Retorna count, hit@1, latência média e custo por domínio.
     """
 
     from app.admin.metrics import build_dashboard_data
 
     repo = IncidentRepository(session)
-    incidents = await repo.list_recent(limit=1000)  # últimos 1000 incidentes
+    since = datetime.now(UTC) - timedelta(days=days)
+    incidents = await repo.list_recent(limit=1000, since=since)
 
     # Transforma em dicts
-    incidents_data = [
-        {
-            "agent_domain": i.agent_domain,
-            "diagnosis_correct": i.diagnosis_correct,
-            "latency_ms": i.latency_ms,
-            "cost_usd": i.cost_usd,
-        }
-        for i in incidents
-    ]
-
-    return build_dashboard_data(incidents_data)
-
-
-@router.get("/dashboard/domains")
-async def get_domain_dashboard(session: SessionDep) -> dict[str, Any]:
-    """DA-87: Visualização HTML para dashboard de domínios.
-
-    Retorna dados estruturados para renderização no frontend.
-    """
-
-    from app.admin.metrics import build_dashboard_data
-
-    if session is None:
-        raise api_error(503, "db_not_configured", "Persistência não configurada")
-
-    repo = IncidentRepository(session)
-    incidents = await repo.list_recent(limit=1000)
-
     incidents_data = [
         {
             "agent_domain": i.agent_domain,

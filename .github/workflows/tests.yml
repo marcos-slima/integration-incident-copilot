@@ -40,7 +40,10 @@ jobs:
             cmake make gcc libssl-dev libffi-dev libsasl2-dev libsasl2-2
 
       - name: Sincronizar dependências
-        run: uv sync --dev
+        # `--extra prometheus`: os testes de app/metrics.py (DA-70) sao
+        # pulados sem prometheus_client/instrumentator. Sem o extra, o
+        # caminho nunca roda no CI (IIC-AUD-017).
+        run: uv sync --dev --extra prometheus
 
       - name: Ruff — lint
         run: uv run ruff check .

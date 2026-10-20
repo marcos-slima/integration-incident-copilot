@@ -1,8 +1,7 @@
 """DA-87: Testes de métricas por domínio (sap/saas/generic).
 
-Endpoins cobertos:
+Endpoint coberto:
 - GET /admin/metrics/domains
-- GET /admin/dashboard/domains
 """
 
 import os
@@ -38,16 +37,9 @@ class TestDomainMetricsAPI:
     """Testes unitários para a API de métricas por domínio (DA-87)."""
 
     def test_get_domain_metrics_endpoint_exists(self):
-        """Verifica que o endpoint /admin/metrics/domains está registrado."""
+        """Sem banco, a rota responde 503 (fail-closed), nunca 200."""
         response = client.get("/admin/metrics/domains", headers=_auth())
-        # Deve retornar 200 se o endpoint existir (sem banco: 503)
-        assert response.status_code in (200, 503)
-
-    def test_get_dashboard_domains_endpoint_exists(self):
-        """Verifica que o endpoint /admin/dashboard/domains está registrado."""
-        response = client.get("/admin/dashboard/domains", headers=_auth())
-        # Deve retornar 200 ou 503 (sem banco)
-        assert response.status_code in (200, 503)
+        assert response.status_code == 503
 
     def test_domain_hit1_calculation(self):
         """Verifica cálculo de Hit@1 por domínio."""
@@ -139,15 +131,68 @@ class TestDomainMetricsRepository:
         assert result_count["generic"] == 0
 
 
-class TestDomainDashboardHTML:
-    """Testes do endpoint de dashboard HTML."""
+class TestDomainMetricsRoute:
+    """Exercita a rota com sessao falsa: a lógica roda de verdade."""
 
-    def test_dashboard_renders_template(self):
-        """Verifica que o dashboard renderiza o template."""
-        response = client.get("/admin/dashboard/domains", headers=_auth())
-        # Se o endpoint existir, deve retornar JSON (não HTML renderizado)
-        # Com banco: 200, sem banco: 503
-        assert response.status_code in (200, 503)
+    def test_metrics_route_aggregates_repository_rows(self, monkeypatch):
+        from types import SimpleNamespace
+
+        import app.admin.routes as admin_routes
+
+        class FakeRepo:
+            def __init__(self, session):
+                self.session = session
+
+            async def list_recent(self, limit=50, **kwargs):
+                # A rota deve recortar a janela (days=7 -> since preenchido)
+                assert kwargs["since"] is not None
+                return [
+                    SimpleNamespace(
+                        agent_domain="sap",
+                        diagnosis_correct=True,
+                        latency_ms=1000,
+                        cost_usd=0.001,
+                    ),
+                    SimpleNamespace(
+                        agent_domain="saas",
+                        diagnosis_correct=False,
+                        latency_ms=500,
+                        cost_usd=0.002,
+                    ),
+                ]
+
+        monkeypatch.setattr(admin_routes, "IncidentRepository", FakeRepo)
+        app.dependency_overrides[admin_routes._require_session] = lambda: object()
+        try:
+            response = client.get("/admin/metrics/domains?days=7", headers=_auth())
+        finally:
+            app.dependency_overrides.pop(admin_routes._require_session, None)
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 2
+        domains = {item["domain"]: item for item in body["domains"]}
+        assert domains["sap"]["count"] == 1
+        assert domains["sap"]["hit1"] == 1.0
+        assert domains["saas"]["count"] == 1
+        assert domains["saas"]["hit1"] == 0.0
+
+    @pytest.mark.parametrize("days", [0, 366])
+    def test_metrics_route_rejects_out_of_range_window(self, days: int):
+        import app.admin.routes as admin_routes
+
+        # Sem sessao valida o 503 da dependency vence a validacao da query;
+        # com sessao falsa, o FastAPI valida `days` e devolve 422.
+        app.dependency_overrides[admin_routes._require_session] = lambda: object()
+        try:
+            response = client.get(f"/admin/metrics/domains?days={days}", headers=_auth())
+        finally:
+            app.dependency_overrides.pop(admin_routes._require_session, None)
+        assert response.status_code == 422
+
+
+class TestDomainDashboardData:
+    """Testes da estrutura de dados do dashboard."""
 
     def test_dashboard_data_structure(self):
         """Verifica estrutura de dados para o dashboard."""

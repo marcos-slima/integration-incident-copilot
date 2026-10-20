@@ -3302,9 +3302,13 @@ e seguro.
 **Decisão.**
 - Tabela `snapshot_table`: registra versão do schema antes de cada deploy
 - Tabela `rollback_log`: registro de todos os rollbacks com timestamp, hash e status
-- Endpoint `/admin/deploy/rollback`: API para solicitar rollback com `target_schema_hash`
+- Endpoint `/admin/deploy/rollback`: removido em 2026-10-20 (importava funções
+  inexistentes e usava autenticação de usuário final). Será reintroduzido no
+  `admin_router`, com chave de admin e repositório real, quando o mecanismo de
+  rollback existir.
 
 **O que NÃO foi feito.**
+- Endpoint de rollback (removido; ver acima)
 - Auto-rollback em caso de falha (só manual via API)
 - Histórico de schema completo (apenas hash para identificação)
 
@@ -3418,21 +3422,6 @@ testes de load e stress régulares.
 - `tests/test_load_testing.py` (3 testes)
 
 ---
-
-### 73. Dicionário de artefatos
-
-**Motivo.** Em produção, é essencial poder reverter para uma versão anterior do
-schema em caso de falha no deploy. O snapshot do schema permite rollback rápido
-e seguro.
-
-**Decisão.**
-- Tabela `snapshot_table`: registra versão do schema antes de cada deploy
-- Tabela `rollback_log`: registro de todos os rollbacks com timestamp, hash e status
-- Endpoint `/admin/deploy/rollback`: API para solicitar rollback com `target_schema_hash`
-
-**O que NÃO foi feito.**
-- Auto-rollback em caso de falha (só manual via API)
-- Histórico de schema completo (apenas hash para identificação)
 
 ### 74. Explicabilidade XAI (DA-83)
 

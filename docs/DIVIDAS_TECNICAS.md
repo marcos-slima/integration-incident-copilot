@@ -138,6 +138,22 @@ Este documento lista as dívidas técnicas identificadas no IIC com base na Aval
 
 ---
 
+## 8. Dívida de processo (IIC-AUD-016)
+
+A entrega das DAs 79/82/84/85/86/88 em um único commit (`dab51dd`, na branch
+`docs/en-translation`) juntou features de banco, API, testes e documentação.
+Isso dificultou revisão, reversão e atribuição de regressão por DA.
+
+**Decisão (2026-10-20).** Preservar o histórico (sem force-push); rebaixar
+DA-79/84/85 para candidatas; e, a partir daqui, usar um commit
+`feat(DA-N)`/`fix(IIC-AUD-N)` por decisão, com suíte e quality gate verdes antes
+de cada commit. Antes de abrir PR para `master`, separar o lote em commits
+revisáveis ou registrar a exceção no PR.
+
+**Status:** aberta (processo), sem impacto funcional imediato.
+
+---
+
 **Responsável:** Arquiteto de Soluções de IA
 **Data:** 2026-10-19
 **Próxima revisão:** 2026-11-19 (após Sprint 1)

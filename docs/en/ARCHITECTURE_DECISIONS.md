@@ -728,7 +728,46 @@ Event Mesh → BTP/Kyma), all executed in this same work session.
 
 An external architectural review identified two real problems that
 survived DA-24: (1) the `Dockerfile` did not build the frontend
-(React/Vite) from source — it expected a ready `static/dist/`, which is in `.gitignore` and does not exist in a clean clone,
-breaking exactly the build flow described in the
+(React/Vite) from source — it expected a ready `static/dist/`, which is in
+`.gitignore` and does not exist in a clean clone, breaking exactly the build
+flow described in `deploy/kyma/README.md` (this was already self-reported as
+pending in `docs/DEPLOY.md`, but was not fixed during DA-24); (2) the default
+LLM model diverged between `app/config.py`
+(`qwen3-coder-next:latest`, canonical source) and `.env.example` /
+`docker-compose.yml` (both `qwen2.5-coder:32b`).
 
-[Output truncated. Continue reading with offset: 806]
+Fixed with a second stage in the `Dockerfile`
+(`node:22-slim AS frontend-build`, `npm ci && npm run build`) whose result is
+copied to `static/dist` in the final stage via `COPY --from=frontend-build`;
+`.dockerignore` added (it did not exist); `docs/DEPLOY.md` section 2 updated;
+`.env.example` and `docker-compose.yml` aligned to the canonical model in
+`config.py`. Validated by running `npm ci && npm run build` in isolation (it
+generates the expected `dist/`) — a full Docker image build was not tested
+(Docker unavailable in this environment, the same limitation already recorded
+in DA-24).
+
+---
+
+## Recent decisions (DA-75–DA-92, 2026-10-20)
+
+This section keeps the English record aligned with the Portuguese source in
+[`../DECISOES_DE_ARQUITETURA.md`](../DECISOES_DE_ARQUITETURA.md). Status is the
+real one after the 2026-10-20 technical audit; the detailed findings are in
+`CHANGELOG.md`.
+
+| DA | Status | Note |
+|---|---|---|
+| DA-75 | Delivered | Native LangGraph `interrupt()` + `Command(resume=...)`; `/incidents/{id}/review` resumes from checkpoint |
+| DA-76 | Delivered | `ai_warning` in `DiagnosisResponse`, pt-BR/en catalog and report |
+| DA-79 | Candidate | `tenant_id` schema and repository filters exist, but isolation is not fail-closed on every path |
+| DA-82 | Schema-only | `snapshot_table`/`rollback_log`; endpoint removed until a real rollback mechanism exists |
+| DA-83 | Delivered | `explanation` in `DiagnosisResponse` and `_build_xai_explanation` |
+| DA-84 | Candidate | Table, ORM and repository; version/rollback endpoints are missing |
+| DA-85 | Candidate | Table, ORM and repository; experiments endpoints and `_run_ab_test()` are missing |
+| DA-86 | Delivered | Version/history/rollback endpoints; the history UI is still pending |
+| DA-87 | Delivered | `/admin/metrics/domains` with a `days` window; duplicate `/admin/dashboard/domains` removed |
+| DA-88 | Delivered | `app/scripts/load_test.py`, config and `tests/test_load_testing.py` (3 tests) |
+| DA-89 | Delivered | PDF/XLSX compliance export |
+| DA-90 | Delivered | GRC documentation and conformance tests |
+| DA-91 | Delivered | RBAC tests assert exact statuses; DA-87/89 routes exercised |
+| DA-92 | Recorded | Canonical model `qwen3.6:35b-a3b` since 2026-10-13; promptfoo re-baseline pending (DA-51) |

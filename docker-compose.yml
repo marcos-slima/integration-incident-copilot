@@ -268,12 +268,20 @@ services:
     # A-12: autenticacao via REDIS_PASSWORD (opt-in); se vazio, sobe sem senha
     # (compativel com dev local sem Redis protegido). Em producao, defina
     # REDIS_PASSWORD no .env e configure o mesmo valor em REDIS_URL.
-    command: >
-      sh -c "if [ -n "$$REDIS_PASSWORD" ]; then
-               redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD";
-             else
-               redis-server --appendonly yes;
-             fi"
+    # Forma lista: a versao anterior era `sh -c "if [ -n "$$REDIS_PASSWORD" ]..."`
+    # e as aspas internas fechavam a string externa. O shell recebia
+    # `[ -n $REDIS_PASSWORD ]` (sem aspas), que e verdadeiro mesmo com a
+    # variavel vazia, e o Redis subia com `--requirepass` sem argumento.
+    # `exec` mantem o redis-server como PID 1 (sinais do compose).
+    command:
+      - sh
+      - -c
+      - |
+        if [ -n "$$REDIS_PASSWORD" ]; then
+          exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+        else
+          exec redis-server --appendonly yes
+        fi
     environment:
       REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
 

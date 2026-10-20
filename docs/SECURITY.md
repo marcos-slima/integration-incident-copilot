@@ -40,12 +40,12 @@ This document describes the **threat model** and **security test suite** for the
 
 | Category | Tests | File |
 |---|---|---|
-| **Authentication** | `test_auth_missing_key`, `test_auth_invalid_key` | `tests/test_auth.py` |
-| **Rate limiting** | `test_rate_limit_exceeded`, `test_rate_limit_reset` | `tests/test_rate_limit.py` |
-| **PII redaction** | `test_pii_redaction_credit_card`, `test_pii_redaction_email` | `tests/test_pii_redaction.py` |
-| **Prompt tampering** | `test_prompt_digest_mismatch` | `tests/test_prompt_digest.py` |
-| **Policy bypass** | `test_policy_fail_closed_unknown_origin` | `tests/test_mcp_policy.py` |
-| **Fernet encryption** | `test_evidence_encryption_roundtrip` | `tests/test_fernet.py` |
+| **Authentication** | `test_diagnose_requires_api_key_when_configured` | `tests/test_api.py` |
+| **Rate limiting** | `test_login_rate_limit_com_x_api_key_nao_e_contornado` | `tests/test_auth.py` |
+| **PII redaction** | `test_redact_pii_text_email`, `test_redact_pii_text_cpf_formatted` | `tests/test_redaction.py` |
+| **Prompt tampering** | `test_passa_com_digest_igual` | `tests/test_prompt_versioning.py` |
+| **Policy bypass** | `test_enforce_denies_unregistered_tool_fail_closed` | `tests/test_mcp_policy.py` |
+| **Fernet encryption** | `test_fernet_roundtrip` | `tests/test_security.py` |
 
 ### 3.2. Test execution
 
@@ -74,7 +74,7 @@ uv run pytest tests/ -m "not integration" -v --cov=app --cov-fail-under=80
 
 ### 4.1. Checklist
 
-- [ ] All secrets encrypted at rest (`app/admin/fernet.py`).
+- [ ] All secrets encrypted at rest (`app/admin/crypto.py`).
 - [ ] PII redaction before any LLM call (`nodes.py::_redact_pii`).
 - [ ] API key validation on `/diagnose`, `/mcp`, `/a2a` (`main.py:Depends(APIKeyHeader)`).
 - [ ] Rate limiting on `/incidents/{id}/review` (`main.py:rate_limiter(10, 60)`).

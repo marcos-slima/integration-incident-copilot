@@ -385,6 +385,10 @@ class Settings(BaseSettings):
 
     # Qdrant
     qdrant_url: str = "http://127.0.0.1:6333"
+    # Timeout (segundos) dos probes de infraestrutura do /ready (Qdrant e
+    # Ollama; Redis tem timeout curto proprio). Kyma define 5s para nao
+    # marcar o Pod como degradado por uma resposta lenta do cluster.
+    infra_probe_timeout: float = 1.0
 
     # Neo4j / GraphRAG (app/rag/graph_store.py) - desligado por default
     # (graph_rag_enabled=False). Ligar exige DUAS coisas: (1) subir o

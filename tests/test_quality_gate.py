@@ -612,6 +612,30 @@ class TestDocumentedDas:
         assert len(falhas) == 1
         assert "DA-1 rotulada ARCHITECTURE" in falhas[0].message
 
+    def test_da_duplicada_em_headings_reprova(self, tmp_path):
+        """IIC-AUD-034: a mesma DA em duas secoes com numeros diferentes.
+
+        O check de numero de secao nao ve isso (§61 e §48 sao unicos); sem
+        este teste o indice aponta para a copia e a prosa original fica orfa.
+        """
+        _decisoes(tmp_path).write_text(
+            "## Decisões de Arquitetura\n\n"
+            "| DA | Seção | O que é |\n|---|---|---|\n"
+            "| 1 | [1](#a) | a |\n\n"
+            "### 1. Coisa (DA-1)\n### 61. Copia (DA-1)\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "CLAUDE.md").write_text(
+            "| DA | O que é |\n|---|---|\n| DA-1 | a |\n", encoding="utf-8"
+        )
+        (tmp_path / "docs").mkdir(exist_ok=True)
+        (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
+
+        falhas = [f for f in check_index_current(tmp_path) if f.is_failure]
+        assert len(falhas) == 1
+        assert "DA duplicada em headings" in falhas[0].message
+        assert "DA-1" in falhas[0].message
+
     def test_secao_com_numero_duplicado_reprova(self, tmp_path):
         """IIC-AUD-010: duas secoes `### 75.` no documento de DAs."""
         _decisoes(tmp_path).write_text(
@@ -801,6 +825,20 @@ def test_docs_code_references_nao_cobra_caminho_cru_em_auditoria_historica(tmp_p
         "citava `scripts/sumiu.py` no commit auditado\n", encoding="utf-8"
     )
     assert not [f for f in check_docs_code_references(root) if f.is_failure]
+
+
+def test_docs_code_references_acusa_caminho_cru_em_docs(tmp_path: Path) -> None:
+    """IIC-AUD-030: o gate so' olhava README/CLAUDE e deixava passar
+    caminhos quebrados em docs/SECURITY.md e docs/DECISOES."""
+    root = _docs_root(tmp_path)
+    (root / "docs/T.md").write_text(
+        "ver `data/skills/sumiu.yaml` e `deploy/kyma/sumiu.yaml`\n", encoding="utf-8"
+    )
+
+    falhas = [f for f in check_docs_code_references(root) if f.is_failure]
+    mensagem = " ".join(f.message for f in falhas)
+    assert "data/skills/sumiu.yaml nao existe" in mensagem
+    assert "deploy/kyma/sumiu.yaml nao existe" in mensagem
 
 
 def test_docs_code_references_aceita_corpus_citado_cru(tmp_path: Path) -> None:

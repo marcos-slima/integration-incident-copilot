@@ -52,6 +52,16 @@ class PromptVersionRepository:
         """Adiciona uma nova versão de um prompt."""
         digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
 
+        # SQLite + SQLAlchemy async + StaticPool tem flush tardio. Se a versão
+        # atual está marcada como is_current=True no ORM memory mas não foi
+        # flushada para o DB, o próximo INSERT com is_current=True causará
+        # violação. Solução: validar antes de escrever e atualizar o DB.
+        if is_current:
+            current = await self.get_current_version(prompt_id)
+            if current is not None:
+                current.is_current = False
+                await self._session.flush()  # force UPDATE para DB
+
         version_entry = PromptVersion(
             prompt_id=prompt_id,
             version=version,
@@ -63,17 +73,6 @@ class PromptVersionRepository:
         self._session.add(version_entry)
         await self._session.flush()
 
-        # Se esta é a versão atual, desmarcar as demais
-        if is_current:
-            stmt = select(PromptVersion).where(
-                PromptVersion.prompt_id == prompt_id,
-                PromptVersion.version != version,
-            )
-            result = await self._session.execute(stmt)
-            for v in result.scalars():
-                v.is_current = False
-            await self._session.flush()
-
         return version_entry
 
     async def rollback_to_version(
@@ -84,10 +83,13 @@ class PromptVersionRepository:
         if target is None:
             return None
 
-        # Desmarcar a versão atual atual
+        # Desmarcar a versão atual atual ( para SQLite compatibility)
+        # Mesmo problema do add_version: flush tardio faz olhar antigo de
+        # is_current no DB durante o test rollback.
         current = await self.get_current_version(prompt_id)
         if current is not None and current.version != target_version:
             current.is_current = False
+            await self._session.flush()  # force UPDATE antes do INSERT
 
         # Marcar a versão alvo como atual
         target.is_current = True

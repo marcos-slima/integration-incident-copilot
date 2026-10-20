@@ -732,13 +732,14 @@ consumidor usa o score cru [DA-42].
 ### 6.3 Ingestão
 
 ```bash
-uv run python -m app.rag.ingest --target incidents --reset
+uv run python -m app.rag.ingest --target incidents --reset-collection
 ```
 
 Pontos de atenção (`app/rag/ingest.py`):
 
-- `--target` escolhe entre os destinos de `::TARGETS`; `--reset` recria a
-  coleção; `--reset-state` esquece o que já foi processado.
+- `--target` escolhe entre os destinos de `::TARGETS`; `--reset` é alias de
+  `--reset-state` (esquece o que já foi processado, **sem** apagar a coleção);
+  `--reset-collection` apaga e recria a coleção (e limpa o estado).
 - A **identidade do embedding** é carimbada na coleção
   (`app/rag/embedding_guard.py::stamp_collection`) e verificada na leitura
   (`::verify_collection_embedding`): indexar com `fastembed` e consultar com
@@ -1903,7 +1904,7 @@ deste manual precisa de confiança: cada um tem um comando.
 corrigidas por este manual): a
 TRILHA_ESTUDOS_AGENTES_IA.md cita "68 testes",
 "21 regras", "2 migrations", o modelo `qwen3-coder-next:latest` e o script
-`scripts/start-local.sh`, que não existe neste checkout; o `CLAUDE.md` fala em
+`start-local.sh`, que não existe neste checkout; o `CLAUDE.md` fala em
 "13 configurações" de debug, e são 14. O [`README.md`](../README.md) está
 atualizado.
 

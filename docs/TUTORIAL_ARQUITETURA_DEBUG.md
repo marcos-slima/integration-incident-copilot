@@ -124,7 +124,7 @@ como `DiagnosisResponse` + `report_markdown`.
 | Etapa | Arquivo | O que faz |
 |---|---|---|
 | Entrada HTTP + validação | `app/main.py` | Define `POST /diagnose`, delega pro grafo |
-| Contratos de dados | `app/models.py` | `IncidentRequest` (entrada), `DiagnosisResponse` (saída) |
+| Contratos de dados | `app/models/models.py` | `IncidentRequest` (entrada), `DiagnosisResponse` (saída) |
 | Configuração central | `app/config.py` | Única fonte de verdade — URLs, modelo, credenciais, lida do `.env` |
 | Orquestração (o "workflow") | `app/agent/graph.py` | Define os 9 nodes e as arestas entre eles |
 | Busca de dados no sistema SAP + multi-vendor | `app/connectors/` | `base.py` (contrato comum), 10 conectores (OData, RFC, ServiceNow, Salesforce, Workday, Ariba, SuccessFactors, CAP, APIManagement, PO/PI) - modo real quando configurado; validação por conector em `docs/ARCHITECTURE.md` |

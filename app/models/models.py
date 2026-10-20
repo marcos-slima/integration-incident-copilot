@@ -468,15 +468,3 @@ class ReviewIncidentRequest(BaseModel):
         default="human",
         description="Quem revisou - 'human' (padrao) ou 'system' (ex: outra automacao).",
     )
-
-
-# DA-82: RollbackRequest para endpoint /admin/deploy/rollback
-class RollbackRequest(BaseModel):
-    """Corpo de POST /admin/deploy/rollback."""
-
-    target_schema_hash: str = Field(
-        description="Hash do schema para o qual deve-se fazer rollback."
-    )
-    user_id: str | None = Field(
-        default=None, description="ID do usuario solicitante (para log de auditoria)."
-    )

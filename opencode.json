@@ -6,6 +6,7 @@
         "type": "remote",
         "url": "http://127.0.0.1:8000/mcp/",
         "disabled": false,
+        "codemode": false,
         "headers": {
           "X-API-Key": "{env:API_KEY}"
         }

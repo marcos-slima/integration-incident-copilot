@@ -182,7 +182,7 @@ jobs:
 
       - name: promptfoo eval
         if: steps.infra.outputs.configured == 'true'
-        run: npx --yes promptfoo@latest eval -c promptfooconfig.yaml -o resultados.json
+        run: npx --yes promptfoo@0.124.1 eval -c promptfooconfig.yaml -o resultados.json
 
       - name: Comparar com o baseline versionado
         if: steps.infra.outputs.configured == 'true'

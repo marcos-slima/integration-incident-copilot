@@ -107,5 +107,11 @@ data:
   # do header, que o cliente escolhe. Confirme as faixas do seu cluster.
   FORWARDED_ALLOW_IPS: "127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,100.64.0.0/10"
   WEB_UI_USERS: ""
-  # B-07: Tempo em segundos para probes de service (Qdrant/Ollama/Redis/Neo4j/Langfuse)
+  # DA-18: em producao a API nao pode subir com chave efemera por replica
+  # (o HPA roda 2-6 pods e cada uma geraria uma chave diferente, causando
+  # 401 intermitente). Com REQUIRE_AUTH=true, o lifespan aborta o startup
+  # se API_KEY/A2A_API_KEY/EVENT_MESH_API_KEY nao vierem do Secret.
+  REQUIRE_AUTH: "true"
+  # B-07: timeout em segundos dos probes Qdrant/Ollama do /ready
+  # (app/main.py::_probe_infra_services; Redis usa socket timeout proprio).
   INFRA_PROBE_TIMEOUT: "5"

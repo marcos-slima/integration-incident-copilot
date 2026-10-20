@@ -43,6 +43,18 @@ os.environ["REDIS_URL"] = ""
 os.environ["NEO4J_URI"] = ""
 os.environ["NEO4J_USER"] = ""
 os.environ["NEO4J_PASSWORD"] = ""
+# Flags de features opt-in tambem precisam ser isoladas: com
+# GRAPH_RAG_ENABLED=true no .env local, o lifespan de app.main exige
+# NEO4J_PASSWORD (que zeramos acima) e a suite inteira falhava antes de
+# qualquer teste. O CI, sem .env, passava - um falso verde/vermelho
+# dependente da maquina. Desligar aqui mantem a suite hermética; testes
+# que exercitam a feature usam Settings(...) explicito ou monkeypatch.
+os.environ["GRAPH_RAG_ENABLED"] = "false"
+os.environ["CHECKPOINTING_ENABLED"] = "false"
+os.environ["PROMETHEUS_ENABLED"] = "false"
+os.environ["ONTOLOGY_ENRICHMENT_ENABLED"] = "false"
+os.environ["AMQP_ENABLED"] = "false"
+os.environ["WEB_SEARCH_ENABLED"] = "false"
 
 import pytest
 

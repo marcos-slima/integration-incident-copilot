@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from app.evaluation.gates import (
@@ -67,6 +68,23 @@ def test_variavel_do_compose_conta_como_conhecida(tmp_path):
         encoding="utf-8",
     )
     assert "POSTGRES_PASSWORD" in known_env_vars(root)
+
+
+def test_env_example_cobre_todos_os_settings():
+    """IIC-AUD-037: a direcao Settings -> .env.example tambem importa.
+
+    O gate `docs_env_vars` so' cobra o que a doc cita; uma setting nova
+    ficava invisivel para quem copia o .env.example. O conjunto e' o mesmo
+    (128 campos quando este teste foi escrito), entao a comparacao direta
+    nao depende de lista manual.
+    """
+    from app.config import Settings
+
+    texto = (REPO_ROOT / ".env.example").read_text(encoding="utf-8")
+    chaves = set(re.findall(r"^#?\s*([A-Z][A-Z0-9_]+)=", texto, re.MULTILINE))
+    faltando = sorted({campo.upper() for campo in Settings.model_fields} - chaves)
+
+    assert not faltando, f"settings ausentes do .env.example: {faltando}"
 
 
 def test_repo_real_conhece_as_variaveis_dos_conectores():

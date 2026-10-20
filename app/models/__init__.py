@@ -21,7 +21,6 @@ from app.models.models import (
     IncidentEventEnvelope,
     IncidentRequest,
     ReviewIncidentRequest,
-    RollbackRequest,
     VerifyIncidentRequest,
 )
 from app.models.prompt_versioning_orm import PromptVersion
@@ -43,6 +42,5 @@ __all__ = [
     "IncidentRequest",
     "PromptVersion",
     "ReviewIncidentRequest",
-    "RollbackRequest",
     "VerifyIncidentRequest",
 ]

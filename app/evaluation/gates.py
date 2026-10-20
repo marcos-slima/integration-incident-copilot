@@ -857,6 +857,21 @@ def check_index_current(root: Path = REPO_ROOT) -> list[Finding]:
             f"{DECISIONS_DOC}: {', '.join(f'§{n}' for n in repetidos)}",
         )
 
+    # IIC-AUD-034: uma DA pode aparecer em DUAS secoes com numeros de secao
+    # diferentes (§48 e §61, por exemplo). O check acima nao ve isso porque
+    # os numeros de secao sao unicos; `_documented_das` guarda so o ultimo
+    # heading, entao o indice aponta para a copia e a original fica orfa.
+    das_nos_titulos: list[int] = []
+    for grupo in re.findall(r"^### .*?\((DA-[\d/]+)\)", readme, re.MULTILINE):
+        das_nos_titulos.extend(int(n) for n in grupo.replace("DA-", "").split("/"))
+    das_repetidas = sorted({n for n in das_nos_titulos if das_nos_titulos.count(n) > 1})
+    if das_repetidas:
+        return _fail(
+            check,
+            f"DA duplicada em headings de {DECISIONS_DOC}: {_das(das_repetidas)} "
+            "— consolide em uma unica secao",
+        )
+
     tabelas = re.findall(
         r"^\| DA \| Seção \| O que é \|\n\|---\|---\|---\|\n(.*?)(?:\n\n|\Z)",
         readme,
@@ -1041,8 +1056,13 @@ _CODE_REF = re.compile(
 # `app/scripts/`) e `app/models/..._versions.py` (nunca existiu) passavam.
 # Restrito a arquivos de codigo/config com extensao conhecida: diretorios
 # (`app/admin/`) e globs (`content.*.json`) ficam de fora.
+# IIC-AUD-030: inclui data/, deploy/ e frontend/ (o gate so' olhava
+# app/tests/scripts/alembic e deixava passar `data/skills/escalation.yaml`).
+# frontend/ so' com extensoes suportadas (py, json, ya?ml, toml, sh, sql)
+# porque o frontend tem muitos .ts/.js e .css que o gate nao deve cobrir.
 _BARE_CODE_PATH = re.compile(
-    r"`((?:app|tests|scripts|alembic)/[A-Za-z0-9_./-]+\.(?:py|json|ya?ml|toml|sh|sql))`"
+    r"`((?:app|tests|scripts|alembic|data|deploy)/"
+    r"[A-Za-z0-9_./-]+\.(?:py|json|ya?ml|toml|sh|sql))`"
 )
 
 _MD_CITACAO = re.compile(r"`([\w./-]+\.md)`")
@@ -1114,10 +1134,11 @@ def check_docs_code_references(root: Path = REPO_ROOT) -> list[Finding]:
                     f"{doc.relative_to(root)}: cita {citacao} que nao existe em lugar nenhum"
                 )
 
-        # Caminhos crus so' nos dois documentos que sao contexto de agente.
-        # Os relatorios historicos de auditoria citam arquivos que existiram
-        # no commit auditado e nao existem mais; cobra-los seria ruido.
-        if doc.name in {"CLAUDE.md", "README.md"}:
+        # Caminhos crus em todos os docs rastreados (README, CLAUDE e
+        # docs/), nao so' os dois de contexto de agente. Os relatorios
+        # historicos AUDITORIA_*/EVIDENCIA_* citam arquivos do commit
+        # auditado que podem nao existir mais; cobra-los seria ruido.
+        if not doc.name.startswith(("AUDITORIA_", "EVIDENCIA_")):
             for caminho in sorted(set(_BARE_CODE_PATH.findall(texto))):
                 if not (root / caminho).is_file():
                     problemas.append(f"{doc.relative_to(root)}: {caminho} nao existe")

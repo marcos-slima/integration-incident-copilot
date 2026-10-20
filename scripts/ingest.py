@@ -18,6 +18,20 @@ Mapeamento de --collection:
 import argparse
 import subprocess
 import sys
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_SUPPORTED_SUFFIXES = {".md", ".pdf", ".epub"}
+
+# Mesma resolucao de app.rag.ingest.resolve_source_dir: usa o diretorio
+# primario se ele tiver algum arquivo suportado; senao, o fallback.
+_SOURCE_DIRS: dict[str, tuple[Path, Path | None]] = {
+    "incidents": (
+        _REPO_ROOT / "data" / "knowledge_base",
+        _REPO_ROOT / "data" / "sample_docs",
+    ),
+    "reference": (_REPO_ROOT / "data" / "reference_library", None),
+}
 
 _COLLECTION_MAP: dict[str, str] = {
     "sap_docs": "incidents",
@@ -29,12 +43,32 @@ _COLLECTION_MAP: dict[str, str] = {
 }
 
 
+def _tem_documentos(diretorio: Path) -> bool:
+    return diretorio.exists() and any(
+        caminho.is_file() and caminho.suffix.lower() in _SUPPORTED_SUFFIXES
+        for caminho in diretorio.rglob("*")
+    )
+
+
+def _resolve_source_dir(target: str) -> Path | None:
+    if target not in _SOURCE_DIRS:
+        return None
+    primario, fallback = _SOURCE_DIRS[target]
+    if _tem_documentos(primario):
+        return primario
+    return fallback
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Ingestao RAG (wrapper CI)")
     parser.add_argument(
         "--source",
         default=None,
-        help="Diretorio de documentos (ignorado — app.rag.ingest usa paths internos configurados).",
+        help=(
+            "Diretorio de documentos. Precisa ser o diretorio efetivo de "
+            "app.rag.ingest (data/knowledge_base ou o fallback "
+            "data/sample_docs); divergencia falha em vez de ser ignorada."
+        ),
     )
     parser.add_argument(
         "--collection",
@@ -52,6 +86,25 @@ def main() -> int:
             f"Opcoes: {sorted(_COLLECTION_MAP)}"
         )
         return 1
+
+    if args.source is not None:
+        efetivo = _resolve_source_dir(target)
+        if efetivo is None:
+            print(
+                "[scripts.ingest] --source nao pode ser validado para "
+                f"--collection {args.collection!r} (target {target!r}); "
+                "remova --source."
+            )
+            return 2
+        informado = Path(args.source).resolve()
+        if informado != efetivo.resolve():
+            print(
+                f"[scripts.ingest] --source={args.source!r} diverge do diretorio "
+                f"efetivo {str(efetivo.relative_to(_REPO_ROOT))!r}; "
+                "ajuste o argumento ou remova-o (o alvo e' escolhido por "
+                "app.rag.ingest.resolve_source_dir)."
+            )
+            return 2
 
     cmd = [sys.executable, "-m", "app.rag.ingest", "--target", target]
     if args.reset_collection:

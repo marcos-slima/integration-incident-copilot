@@ -103,7 +103,7 @@ Este documento lista as dívidas técnicas identificadas no IIC com base na Aval
 |---|---|
 | DA-85 | Pipeline A/B testing | `/admin/models/compare` com métricas |
 | DA-77 | Validação LLM security | Mocks para prompt injection |
-| DA-88 | Load testing | `scripts/load_test.py` com k6 |
+| DA-88 | Load testing | `app/scripts/load_test.py` com k6 |
 
 ### Sprint 4 (UX Completa)
 | ID | Dívida | Entregas |

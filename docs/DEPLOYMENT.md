@@ -287,15 +287,17 @@ Serviços e profiles:
 
 | Serviço | Profile | Porta (default) |
 |---|---|---|
+| `api` | *(sem profile)* | 8000 |
 | `qdrant` | *(sem profile)* | 6333 |
 | `postgres` | `observability` | 5432 |
-| `grafana` | `observability` | 3001 |
+| `grafana` | `observability` | 3002 |
 | `reporter` | `observability` | — |
 | `redis` | `async` | 6379 (bind `127.0.0.1`) |
 | `worker` | `async` | — |
 | `neo4j` | `graphrag` | 7474 / 7687 |
 | `ollama` | `container-ollama` | 11434 |
-| `api` | *(sem profile)* | 8000 |
+| `mailpit` | `mailpit` | 8025 (UI) / 1025 (SMTP) |
+| `messagepit` | `messagepit` | 8026 (UI) / 1026 (SMTP) / 8200 (SMS) |
 
 ### B.2. `.env` no modo **nativo** — loopback
 

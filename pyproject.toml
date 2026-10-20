@@ -100,10 +100,6 @@ openai = [
 ]
 # Observabilidade Prometheus (Fase 2): PROMETHEUS_ENABLED=true exige este extra.
 # pip install -e ".[prometheus]"
-reports = [
-    "jinja2>=3.1",        # templates Markdown/HTML
-    "psycopg2-binary>=2.9",  # já em deps, mas declarado aqui p/ extra standalone
-]
 prometheus = [
     "prometheus-fastapi-instrumentator>=7.0",
 ]

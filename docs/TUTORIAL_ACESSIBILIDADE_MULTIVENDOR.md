@@ -188,7 +188,7 @@ import nenhum.
 
 `_REGISTRY` ganhou uma entrada: `"servicenow": ServiceNowConnector`.
 
-### 3.7 `app/models.py` (arquivo existente, ajustado)
+### 3.7 `app/models/models.py` (arquivo existente, ajustado)
 
 `IncidentRequest.interface_type` passou de
 `Literal["odata", "rfc"]` para `Literal["odata", "rfc", "servicenow"]`.
@@ -342,14 +342,14 @@ uv run python -m app.agent.graph "Alerta ServiceNow aberto automaticamente" \
    sobrescrever modelo/endpoint/chave do novo provedor.
 
 **Novo conector** (ex. hipotético: Zendesk — Salesforce e Workday já
-existem): criar `app/connectors/zendesk_connector.py` herdando de
+existem): criar um arquivo em `app/connectors/` herdando de
 `ExternalSystemConnector`, seguindo exatamente o padrão do
 `ServiceNowConnector` (modo demo quando não configurado, HTTP real via
 `httpx` quando configurado, `client` injetável para teste). Hoje o
 conector precisa aparecer em **9 superfícies**, listadas em
 [CONNECTORS.md §4](CONNECTORS.md#4-como-adicionar-um-conector) — entre
 elas `_REGISTRY` **e** `_REAL_MODE_SETTING` em
-`app/connectors/__init__.py`, os `Literal` de `app/models.py` e os
+`app/connectors/__init__.py`, os `Literal` de `app/models/models.py` e os
 `choices` de `--interface` na CLI de `app/agent/graph.py`. A
 orquestração do grafo em si não muda — é esse o ponto da interface
 comum.

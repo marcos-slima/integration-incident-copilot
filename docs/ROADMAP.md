@@ -86,7 +86,7 @@ Este documento descreve o plano de execução para o Integration Incident Copilo
 **Objetivo:** Testar deploy completo antes de produção
 
 **Tarefas:**
-- [ ] Script `scripts/validate_k3d.py` executando smoke tests
+- [ ] Script `scripts/k3d-validate.sh` executando smoke tests
 - [ ] CI/CD job `validate-k3d` no GitHub Actions
 - [ ] Verificar: postgres up, Ollama disponível, Qdrant indexado
 - [ ] Teste de diagnóstico completo end-to-end

@@ -135,7 +135,7 @@ flowchart LR
 
 `diagnosis_confidence` is a heuristic for
 the UI bar; `evidence_strength` is the ground truth for
-the quality gate (`tests/test_evidence_strength.py`).
+the quality gate (`tests/test_evidence.py`).
 
 ---
 
@@ -519,7 +519,7 @@ flowchart LR
 
 `diagnosis_confidence` is a heuristic for
 the UI bar; `evidence_strength` is the ground truth for
-the quality gate (`tests/test_evidence_strength.py`).
+the quality gate (`tests/test_evidence.py`).
 
 ---
 

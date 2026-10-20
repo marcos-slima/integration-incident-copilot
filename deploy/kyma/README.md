@@ -32,6 +32,9 @@ cp secret.example.yaml /tmp/secret.yaml
 # edite /tmp/secret.yaml com os valores reais
 kubectl apply -f /tmp/secret.yaml
 rm /tmp/secret.yaml
+# O ConfigMap define REQUIRE_AUTH=true: sem API_KEY, A2A_API_KEY e
+# EVENT_MESH_API_KEY no Secret, o Pod entra em CrashLoopBackOff de
+# proposito (falha cedo em vez de gerar chave efemera por replica).
 
 # 4. Todo o resto (namespace, config, deployment, service, hpa, apirule)
 kubectl apply -k .

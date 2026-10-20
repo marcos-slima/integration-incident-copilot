@@ -537,12 +537,13 @@ def _probe_infra_services() -> dict[str, str]:
     DA-35: /health antes retornava status="ok" sempre, independente de
     Qdrant/Ollama estarem acessiveis — nao era um readiness probe real.
     Agora faz GET nos endpoints de health de cada servico configurado,
-    com timeout de 1s para nao impactar o tempo de resposta do /ready.
+    com timeout configuravel (INFRA_PROBE_TIMEOUT, default 1s) para nao
+    impactar o tempo de resposta do /ready.
     """
     import httpx  # import local: mantém ordenacao de imports sem quebrar isort
 
     results: dict[str, str] = {}
-    _timeout = httpx.Timeout(1.0)
+    _timeout = httpx.Timeout(settings.infra_probe_timeout)
 
     if settings.qdrant_url:
         try:

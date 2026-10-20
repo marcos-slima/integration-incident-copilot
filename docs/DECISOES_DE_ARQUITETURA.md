@@ -76,16 +76,16 @@ final.
 | 60 | [51](#51-criptografia-em-repouso-de-evidence_json-com-fernet-da-60) | Criptografia em repouso de `evidence_json` com Fernet (`LLM_CREDENTIALS_MASTER_KEY`) + migration idempotente `009_encrypt_evidence_json.py` |
 | 61 | [52](#52-taxonomia-de-erros-sap-com-ttl-rdflib-da-61) | Taxonomia de erros SAP com TTL/RDFLib (SKOS) para Rule Engine: carregamento dinâmico vs hardcoded, zero breaking changes (DA-61 Fase 1) |
 | 62 | [53](#53-neo4j-loader-para-skos-taxonomy-import-da-62) | Neo4j loader para SKOS taxonomy import (idempotent upsert, Cypher queries) |
-| 57 | [61](#61-fontes-de-busca-web-como-configuração-e-approved-que-não-era-no-op-da-57) | Fontes de busca web como configuração (`web_search_sources`): `WEB_SEARCH_POLICY=approved` deixa de ser no-op |
-| 58 | [62](#62-mapa-de-cobertura-dedicated-generic-e-absent-da-58) | Mapa de cobertura produto SAP × mecanismo, calculado de dados versionados: 3 níveis (`dedicated` / `generic` / `absent`) em vez de um booleano |
-| 59 | [63](#63-conectores-multi-vendor-fluxo-completo-padrão-comum-e-documentação-da-59) | Conectores multi-vendor: fluxo completo, padrão comum, checklist de 8 superfícies ao adicionar conector, documento consolidado `/docs/CONNECTORS.md` |
+| 57 | [48](#48-fontes-de-busca-web-como-configuração-e-approved-que-não-era-no-op-da-57) | Fontes de busca web como configuração (`web_search_sources`): `WEB_SEARCH_POLICY=approved` deixa de ser no-op |
+| 58 | [49](#49-mapa-de-cobertura-dedicated-generic-e-absent-da-58) | Mapa de cobertura produto SAP × mecanismo, calculado de dados versionados: 3 níveis (`dedicated` / `generic` / `absent`) em vez de um booleano |
+| 59 | [50](#50-conectores-multi-vendor-fluxo-completo-padrão-comum-e-documentação-da-59) | Conectores multi-vendor: fluxo completo, padrão comum, checklist de 8 superfícies ao adicionar conector, documento consolidado `/docs/CONNECTORS.md` |
 | 66 | [56](#56-policy-engine-puro-para-roteamento-llm-da-66) | Policy Engine puro para roteamento LLM: duas fases (elegibilidade rígida → scoring de preferências), decisão auditável |
 | 67 | [57](#57-token-budgeting-e-orçamento-por-tarefa-da-67) | Token budgeting e orçamento por tarefa: tokenizer real (tiktoken), preços reais do registry, estimado × real |
 | 68 | [58](#58-matriz-de-falhas-e-failover-tipado-da-68) | Matriz de falhas e failover tipado: taxonomia fechada, mapear exceções → classe, definir retry/backoff/circuit/failover/escala |
 | 69 | [59](#59-checkpointing-e-execução-resumível-da-69) | Checkpointing e execução resumível: `checkpointer=PostgresSaver`, `thread_id` = id do incidente, retomada a partir do último nó concluído |
 | 70 | [60](#60-métricas-e-finops-da-70) | Métricas e FinOps: Prometheus (`llm_requests_total`, `llm_tokens_total`, `llm_cost_usd_total`, `llm_budget_deviation_ratio`, `diagnosis_duration_seconds`) |
-| 63 | [64](#64-skills-declarativas---yaml-como-fonte-de-verdade-para-capability-e-roteamento-da-63) | Skills declarativas — YAML como fonte de verdade para capability e roteamento (DA-63) |
-| 65 | [65](#65-degradação-graciosa-do-rag-quando-qdrant-cai-da-65) | Degradação graciosa do RAG: Qdrant cai → `_retrieve_hybrid` e `_retrieve_dense_only` retornam `[]` → rule engine ainda responde erros conhecidos; fluxo completo `/diagnose → run_diagnosis` pendente de teste de integração |
+| 63 | [54](#54-skills-declarativas---yaml-como-fonte-de-verdade-para-capability-e-roteamento-da-63) | Skills declarativas — YAML como fonte de verdade para capability e roteamento (DA-63) |
+| 65 | [55](#55-degradação-graciosa-do-rag-quando-qdrant-cai-da-65) | Degradação graciosa do RAG: Qdrant cai → `_retrieve_hybrid` e `_retrieve_dense_only` retornam `[]` → rule engine ainda responde erros conhecidos; fluxo completo `/diagnose → run_diagnosis` pendente de teste de integração |
 | 71 | [66](#66-sanitização-do-resultado-de-busca-web-devolvido-ao-llm-da-71) | Resultado de busca web sanitizado e delimitado antes de voltar ao LLM (tool do ReAct e `web_search_node`) |
 | 74 | [69](#69-conteúdo-do-diagnóstico-no-idioma-pedido-da-74) | Conteúdo do diagnóstico (rule engine, avisos, relatório, prompt, ativação) no idioma pedido; pt-BR intacto e medido, `en` com digest próprio; gate `content_i18n` |
 | 73 | [68](#68-interfaces-no-idioma-do-navegador-da-73) | UI web e Admin UI no idioma do navegador: catálogos pt-BR/en, cookie compartilhado, `Intl`, erros por `code`, gate `ui_i18n` |
@@ -1852,7 +1852,9 @@ benchmark invalidado e um gate vermelho. O texto ficou como está, e o digest
 passa a **incluir os dois**, de modo que mexer em qualquer um dos dois
 exige re-medição. A duplicação continua, mas deixou de ser invisível.
 
-**Validação.** 44 testes novos em `tests/test_prompt_versioning.py`, e o
+**Validação.** Testes em `tests/test_prompt_versioning.py` (a contagem
+atual sai de `pytest --collect-only -q tests/test_prompt_versioning.py`,
+para não envelhecer no texto), e o
 resto do trabalho foi provar que **não mudou nada**: o texto extraído foi
 conferido byte a byte contra o renderizado pré-DA-53, em quatro cenários
 (sap/saas/generic/sem-contexto), com os sha256 travados em teste
@@ -2971,168 +2973,12 @@ Dashboards: estender os existentes e passar em `scripts/validate_dashboards.py`.
 - `grafana/dashboards/`: dashboards FinOps
 
 **Validação.**
-- `tests/test_metrics.py`: testes de métricas
+- `tests/test_metrics_finops.py`: testes de métricas
 - `scripts/validate_dashboards.py`: 45 queries passando
 
 **Limitações (registradas de propósito).**
 - Métricas FinOps requerem `PROMETHEUS_ENABLED=true`
 - Alguns dados (ex: custo real) só estão disponíveis após o diagnóstico
-
----
-
-### 61. Web search sources (DA-57)
-
-**O problema.** A busca na web (DuckDuckGo via `duckduckgo-search`) é usada como fonte de evidência quando o RAG não encontra nada. A DA-57 estabelece que a busca web é **fail-closed**: se o serviço estiver indisponível, o gateway não tenta fallback para outro mecanismo de busca (não há alternativa confiável).
-
-**O caso de uso.** Um operador quer saber se o Copilot vai falhar silenciosamente ou levantar uma exceção quando o serviço de busca web estiver fora. A resposta deve ser clara: **fail-closed**.
-
-**A solução.** `app/web_search_sources.py` implementa `search_web()` que:
-
-- Usa `duckduckgo-search` (via `DDGS`) como única fonte de busca web
-- Não tem fallback (fail-closed)
-- Levanta `WebSearchError` se o serviço estiver indisponível
-- Não usa LLM para validar resultados (DA-57, invariante 24)
-
-**Implementação.**
-- `app/web_search_sources.py`: `search_web()` com `DDGS` e `WebSearchError`
-- `tests/test_web_search_sources.py`: 24 testes passando
-- `app/agent/nodes.py`: `web_search_node` usa `search_web()` e trata `WebSearchError`
-
-**Validação.**
-- `tests/test_web_search_sources.py`: 24 testes passando
-- Quality gate: `connector_reachable` valida que `web_search_sources` está no registry
-
-**Limitações (registradas de propósito).**
-- Busca web é apenas para complemento de evidência (não substitui RAG)
-- Não há cache de resultados (repete chamadas)
-- Não há retry automático (fail-closed)
-
-**Próximos passos.**
-- (nenhum, DA-57 está completa)
-
----
-
-### 62. Connector coverage (DA-58)
-
-**O problema.** Cada conector tem uma cobertura de produtos e mecanismos diferente. A DA-58 estabelece uma matriz de cobertura (27 produtos × 9 mecanismos) e exige que cada conector declare quais combinações suporta.
-
-**O caso de uso.** Um operador quer saber se o conector ServiceNow suporta o produto "incident" com o mecanismo "REST". A resposta deve ser clara: sim ou não, baseado na matriz declarada.
-
-**A solução.** `data/connector_coverage.yaml` declara a cobertura de cada conector:
-
-- 27 produtos (SAP, ServiceNow, Salesforce, etc.)
-- 9 mecanismos (OData, RFC, REST, etc.)
-- Cada conector declara quais combinações suporta
-
-A função `coverage_for_connector()` em `app/rag/coverage.py` verifica se um conector suporta uma combinação produto × mecanismo.
-
-**Implementação.**
-- `data/connector_coverage.yaml`: matriz de cobertura declarativa
-- `app/rag/coverage.py`: `coverage_for_connector()` e `generate_coverage_map()`
-- `scripts/coverage_map.py`: gera `docs/COVERAGE_MAP.md`
-
-**Validação.**
-- `tests/test_rag_coverage.py`: 12 testes passando
-- Quality gate: `connector_coverage` valida consistência da matriz
-
-**Limitações (registradas de propósito).**
-- Cobertura é declarativa (não validada contra implementação real)
-- Não há métrica de "quão bem" cada mecanismo funciona
-
-**Próximos passos.**
-- (nenhum, DA-58 está completa)
-
----
-
-### 63. Connectors (DA-59)
-
-**O problema.** O projeto tem 10 conectores (OData, RFC, ServiceNow, Salesforce, Workday, Ariba, SuccessFactors, CAP, APIManagement, PO/PI), cada um com sua própria API e comportamento. A DA-59 consolidada documenta todos os conectores em um único lugar.
-
-**O caso de uso.** Um desenvolvedor quer saber como o conector ServiceNow funciona, quais são seus métodos obrigatórios e como testá-lo. A resposta deve estar em `docs/CONNECTORS.md`.
-
-**A solução.** `docs/CONNECTORS.md` é o documento central de referência para todos os conectores:
-
-- Descrição de cada conector
-- Métodos obrigatórios (`fetch_data()`, `validate()`, etc.)
-- Exemplos de uso
-- Limitações conhecidas
-
-**Implementação.**
-- `docs/CONNECTORS.md`: documentação consolidada de todos os conectores
-- `app/connectors/`: implementação de cada conector
-- `tests/test_connectors/`: testes de cada conector
-
-**Validação.**
-- `tests/test_connectors.py`: 10 testes passando (um por conector)
-- Quality gate: `connector_validation_matrix` valida que cada conector tem documentação
-
-**Limitações (registradas de propósito).**
-- Documentação pode ficar desatualizada (requer manutenção manual)
-- Não há validação automática de consistência entre código e docs
-
-**Próximos passos.**
-- (nenhum, DA-59 está completa)
-
----
-
-### 64. Skill registry (DA-63)
-
-**O problema.** O Copilot usa skills declarativas (em `data/skills/*.yaml`) para mapear `capability` + `interface_type` → `domain`. A DA-63 estabelece o formato e validação dessas skills.
-
-**O caso de uso.** Um desenvolvedor quer adicionar uma nova skill para mapear `capability="sap_rfc"` + `interface_type="IDoc"` → `domain="sap_diagnosis"`. A resposta deve ser clara: adicione uma linha em `data/skills/diagnose_incident.yaml`.
-
-**A solução.** `data/skills/*.yaml` declara skills em formato YAML:
-
-- `capability`: string (ex: "sap_odata", "servicenow_rest")
-- `interface_type`: string (ex: "OData", "REST", "IDoc")
-- `domain`: string (ex: "sap_diagnosis", "saas_diagnosis", "generic")
-
-A função `load_skills()` em `app/mcp/skill_registry.py` carrega todas as skills e cria um índice.
-
-**Implementação.**
-- `data/skills/diagnose_incident.yaml`: skills de diagnóstico
-- `data/skills/escalation.yaml`: skills de escalonamento
-- `app/mcp/skill_registry.py`: `load_skills()`, `get_domain()`, `get_capabilities()`
-
-**Validação.**
-- `tests/test_skill_registry.py`: 12 testes passando
-- Quality gate: `connector_reachable` valida que skills estão no registry
-
-**Limitações (registradas de propósito).**
-- Skills são estáticas (não mudam em runtime)
-- Não há validação de conflitos (última skill vence)
-
-**Próximos passos.**
-- (nenhum, DA-63 está completa)
-
----
-
-### 65. Degradação graciosa do RAG (DA-65)
-
-**O problema.** Quando o Qdrant está indisponível, o RAG degrada graciosamente usando apenas o índice denso (sem sparse). A DA-65 estabelece o comportamento de degradação.
-
-**O caso de uso.** Um operador quer saber se o Copilot continua funcionando quando o Qdrant está fora. A resposta deve ser clara: sim, usando apenas o índice denso (sem sparse).
-
-**A solução.** `app/rag/retriever.py` implementa `_retrieve_hybrid()` com degradação:
-
-- Tenta hybrid (dense + sparse) primeiro
-- Se sparse falhar, cai para dense-only
-- Se dense falhar, levanta exceção
-
-**Implementação.**
-- `app/rag/retriever.py`: `_retrieve_hybrid()`, `_retrieve_dense_only()`
-- `tests/test_da65_rag_degradation.py`: 2 testes passando
-
-**Validação.**
-- `tests/test_da65_rag_degradation.py`: 2 testes passando
-- Quality gate: `rag_dataset_schema` valida que o dataset tem o schema correto
-
-**Limitações (registradas de propósito).**
-- Dense-only é mais lento (sem sparse)
-- Não há fallback para web search (DA-57: fail-closed)
-
-**Próximos passos.**
-- (nenhum, DA-65 está completa)
 
 ---
 
@@ -3378,7 +3224,7 @@ ter versionamento de artefatos e capacidade de fazer rollback.
 - Endpoints `/admin/api/prompt/versions`, `/admin/api/prompt/{id}/versions/{version}` e `/admin/api/prompt/{id}/rollback/{version}`: **não implementados**.
 
 **Validação.**
-- `tests/test_prompt_versioning.py` (5 testes)
+- `tests/test_prompt_versioning.py` (contagem via `pytest --collect-only`)
 
 ---
 

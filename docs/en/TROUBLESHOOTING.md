@@ -198,7 +198,7 @@ DA-73 (screens) and DA-74 (content).
 | English screen, Portuguese diagnosis | Diagnosis run before switching languages (the one on screen does not change; run it again), or an API client without the `locale` field (without it, content comes in `pt-BR`). |
 | `/diagnose` returns 422 with `locale nao suportado` | Content exists in `pt-BR` and `en`. Browser tags such as `en-US` and `pt-PT` are accepted; other languages are not. |
 | Text between `⟦ ⟧` on screen | Review pseudo-locale (`?lng=xx`). Switch the language in the selector. |
-| `prompt_digest_measured` gate warns about the `en` prompt | Expected until the English prompt is measured with promptfoo; it does not fail. |
+| `prompt_digest_measured` gate warns about the `en` prompt | The `en` digest is not in `locales.en` (or changed after the measurement). Measure and re-record it as described in [`CUSTOMIZACAO.md`](../CUSTOMIZACAO.md) ("Idioma das interfaces"). |
 | `content_i18n` gate fails after a new rule | The new category needs `rules.<category>` (cause and steps) in `app/i18n/locales/content.en.json`. |
 | Activation e-mail in the wrong language | It goes out in the Admin UI language of whoever created the user (or the `locale` sent on creation). Users created before migration 021 get pt-BR. |
 

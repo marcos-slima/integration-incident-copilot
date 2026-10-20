@@ -306,11 +306,18 @@ Para **adicionar um idioma** (ex.: `es`):
    (`app/i18n/content.py`) e escreva a instrução de idioma em
    `OUTPUT_LANGUAGE_INSTRUCTIONS` (`app/agent/prompts.py`). O gate
    `content_i18n` aponta o que faltar.
-5. Meça o prompt novo antes de citar qualidade:
-   `npx promptfoo eval ...` com o idioma como 4ª parte do prompt
-   (`descrição|||interface|||identificador|||es`) e depois
-   `PATH="$PWD/.venv/bin:$PATH" uv run python scripts/quality_gate.py --write-prompt-baseline --prompt-locale es`.
-   Até lá o gate `prompt_digest_measured` avisa que o idioma não foi medido.
+5. Meça o prompt novo antes de citar qualidade: use o idioma como 4ª parte
+   do prompt (`descrição|||interface|||identificador|||es`). Para `en`, o
+   arquivo `prompts/case.en.txt` já faz isso:
+
+   ```bash
+   npx promptfoo eval -c promptfooconfig.yaml -p prompts/case.en.txt -o resultados-en.json
+   PATH="$PWD/.venv/bin:$PATH" uv run python scripts/quality_gate.py --write-prompt-baseline --prompt-locale en
+   ```
+
+   Para outro idioma, crie um `prompts/case.<idioma>.txt` equivalente e troque
+   `--prompt-locale`. Até medir, o gate `prompt_digest_measured` avisa que o
+   idioma não foi medido.
 6. `cd frontend && npm run build`, e confira com `?lng=es`.
 
 Uma regra nova do rule engine (seção 5) precisa da causa e dos passos em cada

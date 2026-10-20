@@ -36,18 +36,21 @@ verificadas à mão, uma vez, e nunca mais.
 
 ### WARNs conhecidos (IIC-AUD-023)
 
-O gate completo termina com três avisos permanentes, todos informativos:
+O gate completo termina com dois avisos permanentes, ambos informativos:
 
 - `reranker_invariant`: `bge-reranker-base` tem vantagem pontual sobre a
   produção (0,989 × 0,978), mas não significativa (McNemar p = 1,0). O
   mmarco continua sendo o modelo de produção (DA-29).
-- `deployed_model_evaluated`: o `.env` local aponta para `gpt-4o-mini`,
-  enquanto o baseline mediu `qwen3.6:35b-a3b`. O aviso é correto: a qualidade
-  só está medida para o modelo que o baseline registra. Rode o promptfoo com o
-  modelo em uso antes de promover uma release.
-- `prompt_digest_measured` para `en`: o prompt `pt-BR` é o medido; o `en` tem
-  digest próprio e continua não medido pelo promptfoo. Enquanto isso, os
-  números de qualidade valem para `pt-BR`.
+- `deployed_model_evaluated`: o ConfigMap do Kyma
+  (`deploy/kyma/configmap.yaml`) aponta para `gpt-4o-mini`, enquanto o
+  baseline mediu `qwen3.6:35b-a3b`. O aviso é correto: a qualidade só está
+  medida para o modelo que o baseline registra. Rode o promptfoo com o modelo
+  em uso antes de promover uma release.
+
+O prompt `en` foi medido em 2026-10-20 com `qwen3.6:35b-a3b` (11 casos,
+17 asserts, 0 falhas) e o digest está em `locales.en` do
+`data/eval/prompt_baseline.json`. Se o aviso `prompt_digest_measured` voltar,
+o texto `en` mudou depois da medição ou o baseline foi regravado sem medir.
 
 ## Pipeline de avaliacao
 

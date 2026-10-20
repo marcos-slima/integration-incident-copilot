@@ -212,7 +212,7 @@ DA-73 (telas) e DA-74 (conteúdo).
 | Tela em inglês e diagnóstico em português | Diagnóstico feito antes de trocar o idioma (o já exibido não muda; rode de novo), ou cliente da API sem o campo `locale` (sem ele, o conteúdo sai em `pt-BR`). |
 | `/diagnose` responde 422 com `locale nao suportado` | O conteúdo existe em `pt-BR` e `en`. Tags do navegador como `en-US` e `pt-PT` são aceitas; outros idiomas não. |
 | Texto entre `⟦ ⟧` na tela | Pseudo-locale de revisão (`?lng=xx`). Troque o idioma no seletor. |
-| Gate `prompt_digest_measured` com aviso sobre o prompt `en` | Esperado enquanto o prompt em inglês não for medido pelo promptfoo; não reprova. Passo a passo em [`CUSTOMIZACAO.md`](CUSTOMIZACAO.md) ("Idioma das interfaces"). |
+| Gate `prompt_digest_measured` com aviso sobre o prompt `en` | O digest `en` não está em `locales.en` (ou mudou depois da medição). Meça e regrave conforme [`CUSTOMIZACAO.md`](CUSTOMIZACAO.md) ("Idioma das interfaces"). |
 | Gate `content_i18n` reprova depois de uma regra nova | A categoria nova precisa de `rules.<categoria>` (causa e passos) em `app/i18n/locales/content.en.json`. |
 | E-mail de ativação no idioma errado | Sai no idioma da Admin UI de quem cadastrou (ou no `locale` do cadastro). Usuários anteriores à migration 021 recebem em pt-BR. |
 

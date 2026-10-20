@@ -5,6 +5,12 @@
 **Referência:** Avaliação Arquitetural (`docs/AVALIACAO_ARQUITETURAL_PRODUTO_AI.md`)
 **Estágio atual:** MVP/Piloto (21/21 quality gates passando)
 
+> **Atualização 2026-10-20:** DA-79, DA-84 e DA-85 foram formalmente
+> rebaixadas para candidatas no livro-razão (`CLAUDE.md`) e removidas do
+> índice de DAs entregues. A prosa de §73, §75 e §76 de
+> `docs/DECISOES_DE_ARQUITETURA.md` permanece como histórico; o status
+> abaixo (pendente/parcial) é o que vale para planejamento.
+
 ---
 
 ## 1. Resumo Executivo

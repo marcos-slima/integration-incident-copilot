@@ -92,16 +92,13 @@ final.
 | 72 | [67](#67-roteamento-por-registro-de-modelos-da-72) | Roteamento por registro de modelos: cada modelo habilitado é candidato do Policy Engine, com parâmetros por modelo, score custo × latência e failover pela lista |
 | 75 | [70](#70-aprovação-humana-no-grafo-human-in-the-loop-da-75) | Human-in-the-Loop: interrupt no node de diagnóstico quando `escalation.should_escalate == True`, endpoint `/incidents/{id}/review` para retomada com `hitl_response` |
 | 76 | [71](#71-aviso-de-ia-no-relatório-e-api-da-76) | Aviso de IA — texto embutido no template do relatório, chave `ai_warning` no catálogo (pt-BR + en), campo `DiagnosisResponse.ai_warning` |
-| 79 | [73](#73-multi-tenancy-da-79) | Multi-tenancy: campo `tenant_id` em IncidentRequest/IncidentEventData, índice no DB, queries filtradas por tenant, isolamento de credenciais |
-| 82 | [72](#72-rollback-deployment-da-82) | Rollback automático de deployment — tabela `snapshot_table`, `rollback_log`, endpoint `/admin/deploy/rollback` |
+| 82 | [72](#72-rollback-deployment-da-82) | Rollback de deployment — tabelas `snapshot_table`/`rollback_log` (schema apenas); endpoint removido até existir mecanismo real de rollback |
 | 83 | [74](#74-explicabilidade-xai-da-83) | Explicabilidade XAI — campo `explanation` em `DiagnosisResponse`, função `_build_xai_explanation` |
-| 84 | [75](#75-controle-de-versão-de-prompt-da-84) | Controle de Versão de Prompt: tabela `prompt_versions`, endpoint `/admin/prompt/{id}/rollback/{version}`, endpoint `/admin/prompt/versions` para listagem |
-| 85 | [76](#76-pipeline-ab-testing-da-85) | Pipeline A/B testing: tabela `ab_experiments`, endpoint `/admin/ab/experiments`, endpoint `/diagnose/ab/{experiment_id}` para rodar diagnóstico com variante, função `_run_ab_test()` |
 | 86 | [77](#77-ui-versionamento-rag-da-86) | UI versionamento RAG: tabela `knowledge_document_versions`, endpoints `/admin/knowledge/documents/{id}/versions`, `/rollback/{version}`, `/history/{id}` |
-| 87 | [75](#75-dashboard-por-dom-nio-da-87) | Dashboard de Performance por Domínio: endpoints `/admin/metrics/domains` e `/admin/dashboard/domains`, métricas count/hit@1/latência/custo por domain (sap/saas/generic) |
+| 87 | [75](#75-dashboard-por-domínio-da-87) | Dashboard de Performance por Domínio: endpoints `/admin/metrics/domains` e `/admin/dashboard/domains`, métricas count/hit@1/latência/custo por domain (sap/saas/generic) |
 | 88 | [78](#78-testes-de-escalonamento-da-88) | Testes de escalonamento: script `scripts/load_test.py` com métricas p50/p95/p99 e TPS, config `tests/load_test_config.py`, 3 testes em `tests/test_load_testing.py` |
-| 89 | [76](#76-relatrios-compliance-da-89) | Relatórios automatizados de compliance export: endpoint `/admin/reports/compliance/export?format=pdf|xlsx`, relatório com resumo/quality/auditoria |
-| 90 | [77](#77-documentao-grc-da-90) | Documentação GRC (ISO 27001, SOC2): mapeamento, guia de auditoria, checklist |
+| 89 | [76](#76-relatórios-compliance-da-89) | Relatórios automatizados de compliance export: endpoint `/admin/reports/compliance/export?format=pdf|xlsx`, relatório com resumo/quality/auditoria |
+| 90 | [77](#77-documentação-grc-da-90) | Documentação GRC (ISO 27001, SOC2): mapeamento, guia de auditoria, checklist |
 | 91 | [79](#79-testes-rbac-completos-da-91) | Testes RBAC completos para todos os endpoints |
 | — | — | DA-64: número não utilizado (pulo intencional) |
 
@@ -109,6 +106,11 @@ final.
 > DA-41, DA-12) foram retro-registradas em bloco, fora da ordem crescente de
 > DA. O número da seção é a posição no arquivo, não o número da DA. DA-32 a
 > DA-35 têm a prosa em [`ARCHITECTURE.md`](ARCHITECTURE.md).
+
+> **DAs candidatas (2026-10-20):** DA-79, DA-84 e DA-85 foram rebaixadas para
+> candidatas. A prosa de §73, §75 e §76 permanece como histórico editorial,
+> mas essas DAs não fazem parte do índice de DAs entregues nem do livro-razão
+> em `CLAUDE.md`.
 
 ---
 
@@ -3315,7 +3317,12 @@ e seguro.
 
 ---
 
-### 73. Multi-tenancy (DA-79)
+### 73. Multi-tenancy (DA-79 — candidata; histórico)
+
+> **Status (2026-10-20): candidata.** O schema (`tenant_id`) e os filtros de
+> repositório existem, mas o isolamento não é fail-closed em todos os caminhos.
+> O texto abaixo é o registro histórico da decisão original; a pendência vive
+> em `CLAUDE.md` (lista de DAs candidatas) e `docs/DIVIDAS_TECNICAS.md`.
 
 **Motivo.** Isolamento de tenants é essencial para produtos SaaS multi-tenant. Sem
 tenant_id em incidents e queries filtradas por tenant, dados de um cliente podem
@@ -3346,7 +3353,12 @@ vazar para outro.
 
 ---
 
-### 75. Controle de Versão de Prompt (DA-84)
+### 75. Controle de Versão de Prompt (DA-84 — candidata; histórico)
+
+> **Status (2026-10-20): candidata.** Tabela, ORM e repositório existem; os
+> endpoints de listagem/rollback não foram implementados. O texto abaixo é o
+> registro histórico da decisão original; a pendência vive em `CLAUDE.md`
+> (lista de DAs candidatas) e `docs/DIVIDAS_TECNICAS.md`.
 
 **Motivo.** Para correlacionar regressões de qualidade com versões de prompt, é essencial
 ter versionamento de artefatos e capacidade de fazer rollback.
@@ -3369,7 +3381,12 @@ ter versionamento de artefatos e capacidade de fazer rollback.
 
 ---
 
-### 76. Pipeline A/B Testing (DA-85)
+### 76. Pipeline A/B Testing (DA-85 — candidata; histórico)
+
+> **Status (2026-10-20): candidata.** Tabela, ORM e repositório existem; não há
+> endpoint de experimentos nem `_run_ab_test()`. O texto abaixo é o registro
+> histórico da decisão original; a pendência vive em `CLAUDE.md` (lista de DAs
+> candidatas) e `docs/DIVIDAS_TECNICAS.md`.
 
 **Motivo.** Para validar melhorias em prompts ou pipeline, é necessário poder comparar
 variantes de forma sistemática com métricas quantitativas.

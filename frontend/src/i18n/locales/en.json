@@ -84,6 +84,7 @@
     "rootCause": "Probable root cause",
     "nextSteps": "Next steps",
     "referenceDoc": "Reference document",
+    "explanation": "Why this diagnosis",
     "reportShow": "Show full report",
     "reportHide": "Hide full report",
     "demoIds": "Demo identifiers",

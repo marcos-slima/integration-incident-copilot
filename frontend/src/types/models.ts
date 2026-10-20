@@ -64,6 +64,9 @@ export interface DiagnosisResponse {
   incident_id?: string;
   trace_id?: string;
   escalation?: EscalationSignal;
+  // DA-76/DA-83: campos de resultado (nao do corpo de /verify).
+  ai_warning?: string;
+  explanation?: string;
 }
 
 // espelho de app/agent/escalation.py::EscalationDecision.as_log_fields (DA-44).

@@ -383,6 +383,17 @@ class DiagnosisResponse(BaseModel):
             "Ajuda usuario final entender por que o modelo chegou a aquela conclusao."
         ),
     )
+    # DA-76: aviso obrigatorio em toda resposta de diagnostico. Vive aqui
+    # (e nao em VerifyIncidentRequest, onde nunca era lido) porque e um
+    # campo do RESULTADO, nao do corpo de verificacao.
+    ai_warning: str = Field(
+        default="",
+        description=(
+            "Aviso de IA que deve ser exibido ao usuario: o conteudo foi "
+            "gerado por inteligencia artificial e pode conter imprecisoes. "
+            "Em pt-BR e en, vem do catalogo de conteudo (content.pt-BR.json / content.en.json)."
+        ),
+    )
 
 
 class VerifyIncidentRequest(BaseModel):
@@ -433,14 +444,6 @@ class VerifyIncidentRequest(BaseModel):
             "(DiagnosisResponse.trace_id) - necessario para gravar o "
             "score de feedback no Langfuse. Sem isso, o feedback so "
             "afeta o grafo (Neo4j), quando GraphRAG estiver ligado."
-        ),
-    )
-    ai_warning: str = Field(
-        default="",
-        description=(
-            "Aviso de IA que deve ser exibido ao usuario: o conteudo foi "
-            "gerado por inteligencia artificial e pode conter imprecisoes. "
-            "Em pt-BR e en, vem do catalogo de conteudo (content.pt-BR.json / content.en.json)."
         ),
     )
 

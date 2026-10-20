@@ -33,6 +33,7 @@ from langchain_core.tools import tool as lc_tool
 from langfuse import Langfuse, get_client, observe
 from langfuse.langchain import CallbackHandler
 from langgraph.prebuilt import create_react_agent
+from langgraph.types import interrupt
 
 from app.agent import prompts
 from app.agent.escalation import compute_escalation_signal
@@ -1128,6 +1129,71 @@ _ENTERPRISE_SPECIALIST_PERSONA = prompts.ENTERPRISE_SPECIALIST_PERSONA
 _GENERIC_INTEGRATION_PERSONA = prompts.GENERIC_INTEGRATION_PERSONA
 
 
+def _build_hitl_pending_diagnosis(state: CopilotState) -> dict:
+    """Diagnostico deterministico do estado pendente de revisao (DA-75).
+
+    Nao chama LLM: usa apenas o topo do contexto recuperado e o
+    evidence_strength calculado em codigo. O operador pode aprovar, editar
+    a causa ou rejeitar em POST /incidents/{id}/review.
+    """
+    locale = state.get("locale")
+    top_hit = (state.get("retrieved_context") or [{}])[0]
+    source = top_hit.get("source")
+    return {
+        "probable_root_cause": content_text(
+            locale,
+            "diagnosis.hitlPendingCause",
+            source=source or content_text(locale, "report.noMatchedSource"),
+        ),
+        "confidence": 0.0,
+        "model_confidence": 0.0,
+        "diagnosis_confidence": 0.0,
+        "matched_source": source,
+        "next_steps": [content_text(locale, "diagnosis.hitlPendingStep")],
+        "evidence_strength": _compute_evidence_strength(state),
+        # Sem chamada ao LLM nao existe proveniencia de prompt verdadeira
+        # (mesmo principio da invariante 21 para o rule engine).
+        "prompt_digest": None,
+        "prompt_version": None,
+    }
+
+
+def _apply_hitl_response(pending: dict, response: object, state: CopilotState) -> dict:
+    """Aplica approve/edit/reject ao diagnostico pendente, sem reexecutar
+    connector/RAG/LLM. Chamado quando o grafo retoma depois do interrupt."""
+    diagnosis = dict(pending)
+    payload = response if isinstance(response, dict) else {}
+    action = payload.get("action") or "approve"
+    if action == "edit":
+        edited = payload.get("edited_cause")
+        if edited:
+            diagnosis["probable_root_cause"] = edited
+    elif action == "reject":
+        diagnosis["probable_root_cause"] = content_text(state.get("locale"), "report.hitlRejected")
+    diagnosis["hitl_review"] = action
+    diagnosis["hitl_reviewed_by"] = payload.get("reviewed_by")
+    diagnosis["hitl_reviewed_at"] = payload.get("reviewed_at")
+    return diagnosis
+
+
+def _wrap_diagnosis_result(result: dict) -> CopilotState:
+    """Separa os campos de HITL do diagnostico antes de devolver o update.
+
+    report_node le `hitl_request`/`hitl_response` no TOPO do CopilotState;
+    antes desta correcao eles ficavam aninhados em `diagnosis` e o node
+    nunca via o pedido de revisao (achado 001 da auditoria).
+    """
+    hitl_request = result.pop("hitl_request", None)
+    hitl_response = result.pop("hitl_response", None)
+    update: CopilotState = {"diagnosis": result}
+    if hitl_request is not None:
+        update["hitl_request"] = hitl_request
+    if hitl_response is not None:
+        update["hitl_response"] = hitl_response
+        update["hitl_reviewed"] = True
+    return update
+
+
 def _run_diagnosis_agent(state: CopilotState, persona: str) -> dict:
     model_name = state.get("llm_model") or settings.llm_model
 
@@ -1152,6 +1218,32 @@ def _run_diagnosis_agent(state: CopilotState, persona: str) -> dict:
             return _rule_match
 
     prompt = _build_diagnosis_prompt(state, persona)
+
+    # DA-75 (correcao): o sinal de escalonamento e' verificado ANTES de
+    # qualquer chamada ao LLM. Antes desta correcao o LLM era chamado e o
+    # resultado descartado quando should_escalate era verdadeiro - custo
+    # pago sem uso e diagnosis_confidence=0.0 na resposta. Agora:
+    #   - com checkpointing, interrupt() pausa o grafo e o operador
+    #     retoma via POST /incidents/{id}/review (Command(resume=...));
+    #   - sem checkpointing, devolvemos hitl_request no topo do update
+    #     (o wrapper abaixo) e o relatorio fica pendente.
+    escalation = compute_escalation_signal(state)
+    if escalation.should_escalate:
+        pending = _build_hitl_pending_diagnosis(state)
+        hitl_request = {
+            "incident_id": state.get("incident_id"),
+            "escalation": escalation.as_log_fields(),
+            "prompt": prompt,
+            "locale": state.get("locale"),
+            "probable_root_cause": pending["probable_root_cause"],
+            "matched_source": pending["matched_source"],
+            "evidence_strength": pending["evidence_strength"],
+        }
+        if state.get("hitl_interrupt_enabled"):
+            response = interrupt(hitl_request)
+            reviewed = _apply_hitl_response(pending, response, state)
+            return {**reviewed, "hitl_request": hitl_request, "hitl_response": response}
+        return {**pending, "hitl_request": hitl_request}
 
     if state.get("debug"):
         print("=" * 60)
@@ -1287,29 +1379,6 @@ def _run_diagnosis_agent(state: CopilotState, persona: str) -> dict:
     diagnosis = _apply_confidence_guardrails(diagnosis, state)
     diagnosis["llm_provider_used"] = llm_provider_used
 
-    # DA-75: verifica escalonamento antes de chamar o LLM
-    escalation = compute_escalation_signal(state)
-    if escalation.should_escalate:
-        # Grava hitl_request no estado para o endpoint de revisão
-        # O LLM não é chamado neste caso, mas registra proveniência do prompt
-        provenance = prompts.get_spec(state.get("locale")).provenance()
-        return {
-            "probable_root_cause": diagnosis.get("probable_root_cause", "N/A"),
-            "confidence": diagnosis.get("confidence", 0.0),
-            "model_confidence": float(
-                diagnosis.get("model_confidence", diagnosis.get("confidence", 0.0))
-            ),
-            "matched_source": diagnosis.get("matched_source"),
-            "next_steps": diagnosis.get("next_steps", []),
-            "hitl_request": {
-                "incident_id": state.get("incident_id"),
-                "escalation": escalation.as_log_fields(),
-                "prompt": prompt,
-                "locale": state.get("locale"),
-            },
-            "prompt_digest": provenance["prompt_digest"],
-            "prompt_version": provenance["prompt_version"],
-        }
     # DA-72/DA-53: o modelo que respondeu. No roteamento por registro ele
     # pode nao ser o `llm_model` do state; sem selecao (gateway substituido
     # em teste), fica o do state.
@@ -1345,14 +1414,14 @@ def _recover_matched_source_from_raw(raw: str) -> str | None:
 def sap_diagnosis_node(state: CopilotState) -> CopilotState:
     """Sub-agente especialista SAP - roteado pelo supervisor quando
     `agent_domain == "sap"` (ver app/agent/supervisor.py)."""
-    return {"diagnosis": _run_diagnosis_agent(state, _SAP_SPECIALIST_PERSONA)}
+    return _wrap_diagnosis_result(_run_diagnosis_agent(state, _SAP_SPECIALIST_PERSONA))
 
 
 @observe_span(name="saas_specialist")
 def saas_diagnosis_node(state: CopilotState) -> CopilotState:
     """Sub-agente especialista multi-fornecedor (SaaS empresarial) -
     roteado pelo supervisor quando `agent_domain == "saas"`."""
-    return {"diagnosis": _run_diagnosis_agent(state, _ENTERPRISE_SPECIALIST_PERSONA)}
+    return _wrap_diagnosis_result(_run_diagnosis_agent(state, _ENTERPRISE_SPECIALIST_PERSONA))
 
 
 @observe_span(name="generic_specialist")
@@ -1361,7 +1430,7 @@ def generic_diagnosis_node(state: CopilotState) -> CopilotState:
     quando `agent_domain == "generic"` (nenhum dominio identificado).
     DA-22: usa persona agnosta de fornecedor em vez de reutilizar a
     persona SaaS, que assumia vocabulario de fornecedores especificos."""
-    return {"diagnosis": _run_diagnosis_agent(state, _GENERIC_INTEGRATION_PERSONA)}
+    return _wrap_diagnosis_result(_run_diagnosis_agent(state, _GENERIC_INTEGRATION_PERSONA))
 
 
 def _fallback_diagnosis(raw: str, locale: str | None = None) -> dict:
@@ -1429,8 +1498,10 @@ def report_node(state: CopilotState) -> CopilotState:
       em vez de uma lista plana. Deixa claro para o analista o que o
       pipeline observou diretamente versus o que veio de inferencia/RAG.
     """
-    # DA-75: se hitl_request existe, o diagnostico foi interrompido para revisao
-    if state.get("hitl_request"):
+    # DA-75: se hitl_request existe (e ainda nao ha resposta humana), o
+    # diagnostico foi interrompido para revisao. Depois do resume, ambos
+    # existem e o relatorio final deve ser renderizado normalmente.
+    if state.get("hitl_request") and not state.get("hitl_response"):
         return {"report_markdown": content_text(state.get("locale"), "report.hitlPending")}
 
     diagnosis = state.get("diagnosis", {})

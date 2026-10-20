@@ -217,12 +217,12 @@ flowchart LR
         ret["retrieve"] --> s3["retrieved_context"]
         gen["graph_enrich"] --> s4["graph_history"]
         dia["sap / saas / generic_diagnose"] --> s5["diagnosis"]
-        rep["report"] --> s6["report_markdown"]
+        rep["report"] --> s6["report_markdown, explanation"]
         gw["graph_write"] --> n4j[("Neo4j: efeito colateral,<br/>nao escreve no estado")]
     end
     morto["web_search_results<br/>(nenhum no do grafo escreve)"]
     ont["ontology_enrich"] --> s7["ontology_candidates"]
-    hitl["hitl_review"] --> s8["hitl_request, hitl_response, confidence_adjustment"]
+    hitl["hitl_review"] --> s8["hitl_request, hitl_response,<br/>hitl_interrupt_enabled, hitl_reviewed,<br/>confidence_adjustment"]
     risk["risk_assessment"] --> s9["risk_level, risk_confidence, risk_factors"]
     entrada --> nos
     ont --> s7

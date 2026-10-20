@@ -694,7 +694,7 @@ It is not raw log: it is the **queryable** history of each diagnosis.
 - **Real token metering** by origin/model (DA-46/48, no estimate).
   Screen: `/admin/usage`.
 - **`system_contracts`** — SAP contract baseline and drift (DA-52).
-- **Grafana** (`observability` profile): `http://localhost:3001` — 4
+- **Grafana** (`observability` profile): `http://localhost:3002` — 4
   dashboards (SOC, iPaaS, COI, Systems); the 45 queries are validated
   against the real Postgres in CI.
 

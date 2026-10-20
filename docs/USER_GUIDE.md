@@ -696,7 +696,7 @@ Não é log bruto: é o histórico **consultável** de cada diagnóstico.
 - **Metering de tokens reais** por origem/modelo (DA-46/48, sem estimativa).
   Tela: `/admin/usage`.
 - **`system_contracts`** — baseline de contrato SAP e drift (DA-52).
-- **Grafana** (profile `observability`): `http://localhost:3001` — 4
+- **Grafana** (profile `observability`): `http://localhost:3002` — 4
   dashboards (SOC, iPaaS, COI, Systems); as 45 queries são validadas
   contra o Postgres real no CI.
 

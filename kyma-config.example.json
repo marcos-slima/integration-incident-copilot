@@ -1,11 +1,11 @@
 {
-  "name": "edc28716-kyma-trial",
+  "name": "<kyma-cluster-name>",
   "gvisor": { "enabled": false },
   "modules": { "default": true, "channel": "regular" },
   "oidc": {
     "list": [
       {
-        "clientID": "12b13a26-d993-4d0c-aa08-5f5852bbdff6",
+        "clientID": "<oidc-client-id>",
         "encodedJwksArray": "",
         "groupsClaim": "groups",
         "groupsPrefix": "-",
@@ -17,5 +17,5 @@
       }
     ]
   },
-  "administrators": ["s.marcos.lima@gmail.com"]
+  "administrators": ["<admin-email>"]
 }

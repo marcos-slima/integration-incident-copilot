@@ -292,7 +292,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="SAP Integration Copilot",
     description="Assistente de IA para diagnostico de incidentes de integracao SAP",
-    version="1.3.0",
+    version="1.4.0",
     lifespan=lifespan,
     # DEP-01: docs desligaveis em producao (EXPOSE_API_DOCS=false).
     docs_url="/docs" if settings.expose_api_docs else None,

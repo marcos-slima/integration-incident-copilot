@@ -43,11 +43,15 @@ entregue, o que é schema-only e o que voltou para candidata.
   job instala `--extra prometheus`.
 - **008** API: `ai_warning` e `explanation` chegam a `/diagnose`.
 - **DA-74** Prompt `en` medido com promptfoo em 2026-10-20 (`qwen3.6:35b-a3b`,
-  11 casos, 17 asserts, 0 falhas); digest em `locales.en`. Gate passa a
-  21 PASS / 2 WARN.
+  17 casos (12 via LLM + 5 via rule engine), 0 falhas); digest em
+  `locales.en`. Gate passa a 21 PASS / 2 WARN.
 - **CI** Compose smoke recebe as senhas de interpolação e um `.env` com chave
   efêmera; healthcheck do Qdrant usa `bash` (a imagem não tem `python3`);
   espera do Neo4j sem `IndentationError`; `aiohttp` 3.14.3 → 3.14.5 (CVEs).
+- **CI (promptfoo)** `llm_eval` deixa de rodar no agendado — runner hospedado
+  sem Ollama/Qdrant — e passa a `workflow_dispatch` com input `runner`;
+  `actions/setup-node` e `astral-sh/setup-uv`; sem infraestrutura o job falha
+  com mensagem explícita, em vez de verde falso.
 - **009/010/011/012/014/018/019/022/023** Documentação e higiene: tabela de DAs
   sem duplicatas, seções únicas, `--reset-collection` na troca de embedding,
   Grafana em 3002, Python fixado, `kyma-config` fora do índice, 14 configs de

@@ -3,7 +3,7 @@ name: Quality gate
 # DA-51: o que a suite nao cobre.
 #   deterministico          — sempre. Sem LLM, sem infra, segundos.
 #   migrations + dashboards — Postgres efemero; valida alembic E as 45 queries.
-#   llm_eval                — agendado/manual; exige provider (ver docs/QUALITY_GATES.md).
+#   llm_eval                — manual, em runner com Ollama+Qdrant; nao roda no agendado.
 on:
   push:
     branches: [master, main]
@@ -13,6 +13,11 @@ on:
     # 03:17 UTC — fora do horario pico dos runners hospedados.
     - cron: "17 3 * * *"
   workflow_dispatch:
+    inputs:
+      runner:
+        description: "Label do runner (use self-hosted com Ollama+Qdrant para llm_eval)"
+        required: false
+        default: "ubuntu-latest"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -117,45 +122,70 @@ jobs:
 
   llm_eval:
     name: promptfoo — gate de LLM
-    # So no agendado/manual: no runner hospedado nao ha Ollama nem o modelo de
-    # 51 GB, e o provider padrao dos configs e local (exec:).
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Manual: o provider dos configs e local (exec:) e precisa de Ollama,
+    # Qdrant com o corpus ingerido e o modelo de 35B. O runner hospedado
+    # nao tem nada disso; agendar so produzia falha diaria.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
-      - uses: astral-sh/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Verificar provider de LLM
-        id: provider
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Verificar infraestrutura (Ollama + Qdrant)
+        id: infra
+        env:
+          OLLAMA_HOST: ${{ vars.OLLAMA_HOST }}
+          QDRANT_URL: ${{ vars.QDRANT_URL }}
         run: |
-          if [ -n "${{ secrets.OPENAI_API_KEY }}" ]; then
-            echo "configured=true" >> "$GITHUB_OUTPUT"
+          ollama_host="${OLLAMA_HOST:-http://127.0.0.1:11434}"
+          qdrant_url="${QDRANT_URL:-http://127.0.0.1:6333}"
+          ok=true
+          if curl -sf --max-time 5 "$ollama_host/api/tags" >/dev/null; then
+            echo "Ollama: ok"
           else
-            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Ollama: inacessivel em $ollama_host"
+            ok=false
+          fi
+          if curl -sf --max-time 5 "$qdrant_url/healthz" >/dev/null; then
+            echo "Qdrant: ok"
+          else
+            echo "Qdrant: inacessivel em $qdrant_url"
+            ok=false
+          fi
+          echo "configured=$ok" >> "$GITHUB_OUTPUT"
+          if [ "$ok" != true ]; then
             {
               echo "## promptfoo — NAO EXECUTADO"
               echo
-              echo "Sem \`OPENAI_API_KEY\` no repo. Este job **nao** e um verde:"
-              echo "o gate de LLM segue sem verificacao automatica."
+              echo "O runner nao tem Ollama e/ou Qdrant acessiveis. O gate de LLM"
+              echo "nao rodou; este job **nao** e um verde."
               echo
-              echo "Opcoes: (1) configure o secret, (2) rode localmente e versione o"
-              echo "baseline: \`npx promptfoo eval -c promptfooconfig.yaml -o resultados.json\`"
-              echo "e depois \`uv run python scripts/quality_gate.py --write-promptfoo-baseline resultados.json\`."
+              echo "Use um runner self-hosted com Ollama (modelo qwen3.6:35b-a3b)"
+              echo "e Qdrant com o corpus ingerido, e dispare com runner=self-hosted."
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      - name: Falhar sem infraestrutura de LLM
+        if: steps.infra.outputs.configured != 'true'
+        run: |
+          echo "::error::promptfoo nao executado: Ollama/Qdrant indisponiveis no runner."
+          exit 1
+
       - name: promptfoo eval
-        if: steps.provider.outputs.configured == 'true'
+        if: steps.infra.outputs.configured == 'true'
         run: npx --yes promptfoo@latest eval -c promptfooconfig.yaml -o resultados.json
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
       - name: Comparar com o baseline versionado
-        if: steps.provider.outputs.configured == 'true'
+        if: steps.infra.outputs.configured == 'true'
         run: uv run python scripts/quality_gate.py --compare-promptfoo resultados.json
 
       - uses: actions/upload-artifact@v4

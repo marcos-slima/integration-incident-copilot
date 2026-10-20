@@ -5,7 +5,12 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 
 ---
 
-## [1.3.0] — 2026-10-20
+## [1.4.0] — 2026-10-20
+
+> **Numeração.** A tag `v1.3.0` já existe no remoto apontando para um commit
+> experimental (`a854531`, linha v1.3) que não é ancestral do `master`. Para
+> não reescrever uma tag publicada, esta release usa o próximo minor
+> disponível, **1.4.0**.
 
 Lote entregue entre 19 e 20/10, mais a auditoria técnica de 2026-10-20
 (25 achados, `IIC-AUD-001`…`025`). O status abaixo é o real — o que está
@@ -61,10 +66,11 @@ entregue, o que é schema-only e o que voltou para candidata.
 
 ### Versionamento
 
-A versão canônica desta release é **1.3.0** em `pyproject.toml`, `app/main.py`
+A versão canônica desta release é **1.4.0** em `pyproject.toml`, `app/main.py`
 e `app/a2a/agent_card.py`. As entradas `2.0.0`/`2.0.1` abaixo são históricas de
 uma numeração experimental anterior e não devem ser usadas para release; o
-próximo lote, quando houver, será **1.4.0** (minor).
+próximo lote, quando houver, será **1.5.0** (minor). A tag `v1.3.0` também é
+histórica: aponta para a linha experimental antiga e não descreve este código.
 
 ---
 

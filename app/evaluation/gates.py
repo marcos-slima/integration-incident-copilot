@@ -687,6 +687,32 @@ def _registered_das(root: Path) -> set[int]:
     return registradas
 
 
+def check_da_table_unique(root: Path = REPO_ROOT) -> list[Finding]:
+    """O livro-razao do CLAUDE.md nao pode ter a mesma DA em duas linhas.
+
+    A tabela e' editada a mao e cresceu por colagem de blocos; a mesma DA
+    chegou a aparecer tres vezes (DA-83/88) e duas vezes (DA-84/85/86/91).
+    `_registered_das` usa `set`, entao duplicata era invisivel para os gates
+    de prosa e de indice. Duplicata tambem faz o leitor achar que ha duas
+    entregas da mesma decisao.
+    """
+    check = "da_table_unique"
+    text = (root / CLAUDE_DOC).read_text(encoding="utf-8")
+    linhas = re.findall(r"^\|\s*(DA-[\d/]+)\s*\|", text, re.MULTILINE)
+    contagem: dict[int, int] = {}
+    for linha in linhas:
+        for n in linha.replace("DA-", "").split("/"):
+            contagem[int(n)] = contagem.get(int(n), 0) + 1
+    duplicadas = sorted(n for n, c in contagem.items() if c > 1)
+    if duplicadas:
+        return _fail(
+            check,
+            f"linhas duplicadas no registro do CLAUDE.md: {_das(duplicadas)} "
+            "— cada DA tem uma unica linha",
+        )
+    return _ok(check)
+
+
 def check_documented_das(root: Path = REPO_ROOT) -> list[Finding]:
     """Toda DA registrada tem prosa localizavel — nas DUAS direcoes.
 
@@ -818,6 +844,19 @@ def check_index_current(root: Path = REPO_ROOT) -> list[Finding]:
     """
     check = "das_index_current"
     readme = (root / DECISIONS_DOC).read_text(encoding="utf-8")
+
+    # Numeracao de secao duplicada quebra link por ancora e torna ambigua a
+    # coluna "Seção" do indice. `_documented_das` guarda so' o ultimo heading
+    # de cada DA, entao a duplicata era invisivel.
+    numeros = [int(n) for n in re.findall(r"^### (\d+)\.", readme, re.MULTILINE)]
+    repetidos = sorted({n for n in numeros if numeros.count(n) > 1})
+    if repetidos:
+        return _fail(
+            check,
+            "numeracao de secao duplicada em "
+            f"{DECISIONS_DOC}: {', '.join(f'§{n}' for n in repetidos)}",
+        )
+
     tabelas = re.findall(
         r"^\| DA \| Seção \| O que é \|\n\|---\|---\|---\|\n(.*?)(?:\n\n|\Z)",
         readme,
@@ -997,6 +1036,15 @@ _CODE_REF = re.compile(
     r"`((?:app|tests|scripts)/[A-Za-z0-9_/]+\.py)(?:::([A-Za-z_][A-Za-z0-9_]*)|:(\d+)(?:-(\d+))?)`"
 )
 
+# Caminho citado "cru" (sem `::simbolo` e sem `:linha`). O regex antigo so'
+# via a forma precisa; por isso `scripts/load_test.py` (real em
+# `app/scripts/`) e `app/models/..._versions.py` (nunca existiu) passavam.
+# Restrito a arquivos de codigo/config com extensao conhecida: diretorios
+# (`app/admin/`) e globs (`content.*.json`) ficam de fora.
+_BARE_CODE_PATH = re.compile(
+    r"`((?:app|tests|scripts|alembic)/[A-Za-z0-9_./-]+\.(?:py|json|ya?ml|toml|sh|sql))`"
+)
+
 _MD_CITACAO = re.compile(r"`([\w./-]+\.md)`")
 
 
@@ -1065,6 +1113,14 @@ def check_docs_code_references(root: Path = REPO_ROOT) -> list[Finding]:
                 problemas.append(
                     f"{doc.relative_to(root)}: cita {citacao} que nao existe em lugar nenhum"
                 )
+
+        # Caminhos crus so' nos dois documentos que sao contexto de agente.
+        # Os relatorios historicos de auditoria citam arquivos que existiram
+        # no commit auditado e nao existem mais; cobra-los seria ruido.
+        if doc.name in {"CLAUDE.md", "README.md"}:
+            for caminho in sorted(set(_BARE_CODE_PATH.findall(texto))):
+                if not (root / caminho).is_file():
+                    problemas.append(f"{doc.relative_to(root)}: {caminho} nao existe")
 
     if problemas:
         return _fail(check, "; ".join(sorted(problemas)[:8]))
@@ -1698,6 +1754,7 @@ GATES = {
     "candidate_das_fresh": check_candidate_das,
     "implemented_das_documented": check_documented_das,
     "da_registered": check_da_registered,
+    "da_table_unique": check_da_table_unique,
     "das_index_current": check_index_current,
     "preflight_delegates": check_preflight_delegates,
     "prompt_digest_measured": check_prompt_digest,

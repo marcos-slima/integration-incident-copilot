@@ -44,7 +44,7 @@ confidencial pode ir. A comparação de custo está em
 | **Multiagente com roteamento determinístico** | Um supervisor encaminha cada incidente para um especialista SAP, SaaS ou genérico com código, não com LLM. |
 | **Feito para outros agentes** | REST, **MCP** (Streamable HTTP), **A2A 0.3** (JSON-RPC 2.0) e **CloudEvents 1.0** (webhook e AMQP 1.0 para SAP Event Mesh / Solace) executam o mesmo pipeline. |
 | **Detecção de drift de contrato** | Observa o `$metadata` OData, classifica a mudança como breaking ou aditiva e abre incidente antes que o consumidor quebre em produção. |
-| **Medido e com gates** | A qualidade da busca roda no CI contra um conjunto de avaliação versionado; 20 quality gates conferem o que a documentação afirma, e os diagramas de arquitetura são gerados do código ou testados contra ele. |
+| **Medido e com gates** | A qualidade da busca roda no CI contra um conjunto de avaliação versionado; 23 quality gates conferem o que a documentação afirma, e os diagramas de arquitetura são gerados do código ou testados contra ele. |
 
 ## Arquitetura
 

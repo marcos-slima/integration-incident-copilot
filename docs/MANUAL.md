@@ -1571,7 +1571,7 @@ uv run uvicorn app.main:app
 curl -s -H "Authorization: Bearer $METRICS_TOKEN" http://127.0.0.1:8000/metrics | grep '^iic_'
 
 # Grafana
-curl -sf http://localhost:3001/api/health
+curl -sf http://localhost:3002/api/health
 
 # as 45 queries contra o Postgres real
 uv run python scripts/validate_dashboards.py --dsn "$DATABASE_URL"
@@ -1611,7 +1611,7 @@ uv run pytest tests/ -m "not integration" --collect-only -q | tail -1   # total 
 ```
 
 O CI roda `-m "not integration"` com `--cov-fail-under=80`. No último build
-registrado no [`README.md`](../README.md): **1525 testes, 82 % de cobertura**.
+registrado no [`README.md`](../README.md): **1888 testes, 82 % de cobertura**.
 O número muda a cada commit — use o `--collect-only` acima em vez de confiar em
 qualquer documento, inclusive este.
 
@@ -1620,7 +1620,7 @@ Marcadores (`pyproject.toml`): `integration` (stack viva), `browser`
 automaticamente** quando a infra não está lá; os 9 e2e da DA-52 só rodam com
 `IIC_TEST_DATABASE_URL`.
 
-### 16.2 Os 22 gates determinísticos
+### 16.2 Os 23 gates determinísticos
 
 `app/evaluation/gates.py::GATES` — sem LLM, sem infra, rodam em qualquer CI:
 

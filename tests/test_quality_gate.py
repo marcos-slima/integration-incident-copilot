@@ -14,6 +14,7 @@ from app.evaluation.gates import (
     check_connector_validation_matrix,
     check_corpus_coverage,
     check_da_registered,
+    check_da_table_unique,
     check_difficulty_mix,
     check_docs_code_references,
     check_docs_markup_integrity,
@@ -611,6 +612,45 @@ class TestDocumentedDas:
         assert len(falhas) == 1
         assert "DA-1 rotulada ARCHITECTURE" in falhas[0].message
 
+    def test_secao_com_numero_duplicado_reprova(self, tmp_path):
+        """IIC-AUD-010: duas secoes `### 75.` no documento de DAs."""
+        _decisoes(tmp_path).write_text(
+            "## Decisões de Arquitetura\n\n"
+            "| DA | Seção | O que é |\n|---|---|---|\n"
+            "| 1 | [75](#a) | a |\n| 2 | [75](#b) | b |\n\n"
+            "### 75. Coisa (DA-1)\n### 75. Outra (DA-2)\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "CLAUDE.md").write_text(
+            "| DA | O que é |\n|---|---|\n| DA-1 | a |\n| DA-2 | b |\n", encoding="utf-8"
+        )
+        (tmp_path / "docs").mkdir(exist_ok=True)
+        (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
+        falhas = [f for f in check_index_current(tmp_path) if f.is_failure]
+        assert len(falhas) == 1
+        assert "duplicada" in falhas[0].message
+        assert "§75" in falhas[0].message
+
+
+class TestDaTableUnique:
+    """IIC-AUD-009: a tabela de DAs cresceu por colagem e duplicou linhas."""
+
+    def test_linha_duplicada_reprova(self, tmp_path):
+        (tmp_path / "CLAUDE.md").write_text(
+            "| DA | O que é |\n|---|---|\n| DA-83 | a |\n| DA-88 | b |\n| DA-83 | a de novo |\n",
+            encoding="utf-8",
+        )
+        falhas = [f for f in check_da_table_unique(tmp_path) if f.is_failure]
+        assert len(falhas) == 1
+        assert "DA-83" in falhas[0].message
+
+    def test_linha_unica_passa(self, tmp_path):
+        (tmp_path / "CLAUDE.md").write_text(
+            "| DA | O que é |\n|---|---|\n| DA-83 | a |\n| DA-88 | b |\n",
+            encoding="utf-8",
+        )
+        assert not [f for f in check_da_table_unique(tmp_path) if f.is_failure]
+
 
 # ---------------------------------------------------------------------------
 # Gates de integridade da documentacao e de alcancabilidade dos conectores.
@@ -740,6 +780,27 @@ def test_docs_code_references_acusa_md_fantasma(tmp_path: Path) -> None:
     falha = next(f for f in check_docs_code_references(root) if f.is_failure)
     assert "learnings.md" in falha.message
     assert "nao existe em lugar nenhum" in falha.message
+
+
+def test_docs_code_references_acusa_caminho_cru_inexistente(tmp_path: Path) -> None:
+    """IIC-AUD-009: `scripts/load_test.py` (real em `app/scripts/`) passava
+    porque o regex antigo so' cobria `arquivo.py::simbolo` e `:linha`."""
+    root = _docs_root(tmp_path)
+    (root / "CLAUDE.md").write_text(
+        "ver `scripts/load_test.py` e `app/models/fantasma.py`\n", encoding="utf-8"
+    )
+    falhas = [f for f in check_docs_code_references(root) if f.is_failure]
+    mensagem = " ".join(f.message for f in falhas)
+    assert "scripts/load_test.py nao existe" in mensagem
+    assert "app/models/fantasma.py nao existe" in mensagem
+
+
+def test_docs_code_references_nao_cobra_caminho_cru_em_auditoria_historica(tmp_path: Path) -> None:
+    root = _docs_root(tmp_path)
+    (root / "docs/AUDITORIA_ANTIGA.md").write_text(
+        "citava `scripts/sumiu.py` no commit auditado\n", encoding="utf-8"
+    )
+    assert not [f for f in check_docs_code_references(root) if f.is_failure]
 
 
 def test_docs_code_references_aceita_corpus_citado_cru(tmp_path: Path) -> None:

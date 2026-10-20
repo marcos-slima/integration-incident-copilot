@@ -69,6 +69,20 @@ pelo LLM local, HPA escalando. A imagem foi construída de fato. Evidência em
 `docs/EVIDENCIA_K3D_2026-10-18.md`; reprodução em
 `docs/TUTORIAL_K3D_KUBERNETES_LOCAL.md`.
 
+## Validação estática (2026-10-20)
+
+Sem cluster Kyma, o bundle foi validado apenas offline:
+
+- `kubectl kustomize deploy/kyma` renderizou os 7 recursos do
+  `kustomization.yaml` sem erro.
+- `kubectl apply --dry-run=client --validate=false` passou para os seis
+  recursos core: Namespace, ConfigMap, Service, Deployment da API, Deployment
+  do worker e HPA.
+- O `APIRule` **não** pôde ser validado: o CRD
+  `gateway.kyma-project.io/v1beta1` não existe fora do cluster
+  (`no matches for kind "APIRule"`). Isso confirma a limitação abaixo; não
+  substitui o teste num cluster Kyma gerenciado.
+
 ## Limitações explícitas (DA-24)
 
 O que segue sem validação é o específico do Kyma gerenciado: nenhum destes

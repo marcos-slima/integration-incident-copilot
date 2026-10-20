@@ -50,11 +50,15 @@ Este documento estabelece as políticas, responsabilidades e controles de govern
 - **Proibido**: `sk-` prefix em any test value (triggers gitleaks).
 - **Obrigatório**: Pre-commit hooks (ruff, ruff-format, gitleaks, trim-whitespace).
 
-### 4.3.版本 do código
+### 4.3. Versão do código
 
 - Branch `main` → sempre release-ready.
 - Branch `dev` → feature integration.
-- Tags semânticas: `vX.Y.Z` (ex: `v1.2.0`).
+- Tags semânticas: `vX.Y.Z` (ex: `v1.4.0`).
+- Tags são imutáveis: nunca reutilize nem mova uma tag já publicada. Se o
+  número existir, use o próximo minor/patch e registre o motivo no
+  `CHANGELOG.md` (foi o que aconteceu com a tag experimental `v1.3.0`, que
+  levou a release de 2026-10-20 a ser `v1.4.0`).
 - Migrations: sequencial, idempotent, `alembic upgrade head` antes de deploy.
 
 ---

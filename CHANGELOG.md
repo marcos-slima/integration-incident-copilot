@@ -5,6 +5,59 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 
 ---
 
+## [Não lançado] — DAs 75–92 e auditoria 2026-10-20 (branch `docs/en-translation`)
+
+Lote entregue entre 19 e 20/10, mais a auditoria técnica de 2026-10-20
+(25 achados, `IIC-AUD-001`…`025`). O status abaixo é o real — o que está
+entregue, o que é schema-only e o que voltou para candidata.
+
+| DA | Status | Evidência / observação |
+|---|---|---|
+| DA-75 | Entregue | `interrupt()` nativo do LangGraph + `Command(resume=...)`; `/incidents/{id}/review` usa checkpoint |
+| DA-76 | Entregue | `ai_warning` em `DiagnosisResponse`, catálogo pt-BR/en e relatório |
+| DA-79 | Candidata | Schema (`tenant_id`) e filtros de repositório existem; isolamento não é fail-closed em todos os caminhos |
+| DA-82 | Schema-only | Tabelas `snapshot_table`/`rollback_log`; endpoint removido até existir mecanismo real |
+| DA-83 | Entregue | `explanation` em `DiagnosisResponse` e `_build_xai_explanation` |
+| DA-84 | Candidata | Tabela, ORM e repositório; endpoints de versão/rollback ausentes |
+| DA-85 | Candidata | Tabela, ORM e repositório; endpoints e `_run_ab_test()` ausentes |
+| DA-86 | Entregue | Endpoints de versões/histórico/rollback; UI de histórico ainda pendente |
+| DA-87 | Entregue | `/admin/metrics/domains` com janela `days`; rota duplicada `/admin/dashboard/domains` removida |
+| DA-88 | Entregue | `app/scripts/load_test.py`, config e `tests/test_load_testing.py` (3 testes) |
+| DA-89 | Entregue | Export PDF/XLSX de compliance |
+| DA-90 | Entregue | Documentação GRC e testes de conformidade |
+| DA-91 | Entregue | Testes RBAC com status exatos; rotas DA-87/89 exercitadas |
+| DA-92 | Registrada | Modelo canônico `qwen3.6:35b-a3b` desde 2026-10-13; re-baseline do promptfoo pendente (DA-51) |
+
+### Correções da auditoria de 2026-10-20
+
+- **001/015** HITL nativo: escalonamento antes do LLM, `hitl_request` no topo do
+  estado, retomada por `Command(resume=...)`, sem conexão Postgres própria.
+- **002/005/021** Admin/RBAC: `/admin/deploy/rollback` removida; testes exigem
+  `401`/`503` exatos; `/admin/dashboard/domains` removida e
+  `/admin/metrics/domains` aceita `days`.
+- **003/004/016** Livro-razão: DA-79/84/85 rebaixadas para candidatas e o
+  processo de entrega em lote registrado como dívida (histórico preservado).
+- **006/028** ORM × migrations: `Snapshot`/`RollbackLog`, índices e colunas de
+  gateway alinhados; `alembic check` verde nas migrations 022–028.
+- **007/013/017** CI: `nosec B704` justificado, `conftest` isola Redis/Neo4j,
+  job instala `--extra prometheus`.
+- **008** API: `ai_warning` e `explanation` chegam a `/diagnose`.
+- **009/010/011/012/014/018/019/022/023** Documentação e higiene: tabela de DAs
+  sem duplicatas, seções únicas, `--reset-collection` na troca de embedding,
+  Grafana em 3002, Python fixado, `kyma-config` fora do índice, 14 configs de
+  debug e WARNs conhecidos documentados.
+- **020/024/025** Sem ação de código: bundle movido para fora do repositório;
+  falha AMQP é do ambiente; nenhum segredo na árvore.
+
+### Versionamento
+
+A versão canônica continua **1.2.0** em `pyproject.toml`, `app/main.py` e
+`app/a2a/agent_card.py` até a próxima release. As entradas `2.0.0`/`2.0.1`
+abaixo são históricas de uma numeração experimental anterior e não devem ser
+usadas para release; a próxima release será **1.3.0** (minor).
+
+---
+
 ## [Não lançado] — validação 2026-10-06/07 (branch `fix/validacao-2026-10-06`)
 
 Correções da auditoria de 2026-10-05, em blocos, cada um verificado em clone

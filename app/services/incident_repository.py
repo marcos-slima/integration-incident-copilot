@@ -264,12 +264,14 @@ class IncidentRepository:
         source_system: str | None = None,
         verified: bool | None = None,
         tenant_id: str | None = None,
+        since: datetime | None = None,
     ) -> list[Incident]:
         """Incidentes mais recentes, com filtros opcionais (DA-50, DA-79).
 
         verified=None -> todos; True -> so verificados; False -> so os que
         ainda nao tem veredito humano (diagnosis_correct IS NULL).
         tenant_id=None -> todos tenants; valor -> apenas tenant específico.
+        since=None -> sem recorte temporal; datetime -> created_at >= since.
         """
         stmt = select(Incident)
         if interface_type:
@@ -282,6 +284,8 @@ class IncidentRepository:
             stmt = stmt.where(Incident.diagnosis_correct.is_(None))
         if tenant_id:
             stmt = stmt.where(Incident.tenant_id == tenant_id)
+        if since is not None:
+            stmt = stmt.where(Incident.created_at >= since)
         stmt = stmt.order_by(Incident.created_at.desc()).limit(limit)
         result = await self._session.execute(stmt)
         return list(result.scalars())

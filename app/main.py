@@ -5,7 +5,6 @@ import secrets
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
 from uuid import uuid4
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Security, status
@@ -17,7 +16,6 @@ from langfuse import get_client
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from sqlalchemy.orm import Session
 
 from app import auth_guard
 from app.a2a.agent_card import get_agent_card
@@ -31,7 +29,6 @@ from app.auth import ensure_session_secret_configured, verify_session_cookie
 from app.auth import router as auth_router
 from app.config import settings
 from app.connectors import connector_status
-from app.db import get_db_session
 from app.events import idempotency
 from app.events.amqp_consumer import amqp_consumer  # DA-32
 from app.events.consumer import handle_incident_event_async
@@ -46,7 +43,6 @@ from app.models import (
     IncidentEventEnvelope,
     IncidentRequest,
     ReviewIncidentRequest,
-    RollbackRequest,
     VerifyIncidentRequest,
 )
 from app.queue import AsyncQueueUnavailableError, enqueue_diagnosis, get_job_status
@@ -1060,36 +1056,3 @@ app.mount(
 # contrato de ferramentas (diagnose_incident, list_connectors) e a
 # justificativa arquitetural completa.
 app.mount("/mcp", build_mcp_asgi_app())
-
-
-# DA-82: endpoint de rollback de deployment (admin)
-@app.post(
-    "/admin/deploy/rollback",
-    dependencies=[Depends(verify_session_or_api_key)],
-)
-def rollback_deploy(
-    payload: RollbackRequest,
-    session: Annotated[Session, Depends(get_db_session)],
-) -> dict:
-    """DA-82: rollback para versao anterior de schema via snapshot."""
-    from app.admin.repository import get_snapshot_before, record_rollback
-
-    # Busca snapshot anterior ao schema_hash alvo
-    snapshot = get_snapshot_before(session, payload.target_schema_hash)
-    if not snapshot:
-        raise HTTPException(status_code=404, detail="Snapshot anterior nao encontrado")
-
-    # Registra rollback no log
-    record_rollback(
-        session=session,
-        schema_hash=snapshot.schema_hash,
-        user_id=payload.user_id or "system",
-        status="pending",
-    )
-
-    # Retorna sucesso
-    return {
-        "status": "rollback_scheduled",
-        "snapshot_schema_hash": snapshot.schema_hash,
-        "rolled_back_at": datetime.now(UTC).isoformat(),
-    }

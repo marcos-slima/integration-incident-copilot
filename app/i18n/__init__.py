@@ -139,7 +139,7 @@ def embed_json(catalog: dict[str, Any]) -> Markup:
     crus, o conteudo nao fecha a tag nem vira HTML."""
     raw = json.dumps(catalog, ensure_ascii=False, separators=(",", ":"))
     safe = raw.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
-    return Markup(safe)
+    return Markup(safe)  # nosec B704 - `safe` ja trocou <, > e & por escapes JSON
 
 
 def template_context(request: Any, surface: str = "admin") -> dict[str, Any]:
@@ -153,7 +153,7 @@ def template_context(request: Any, surface: str = "admin") -> dict[str, Any]:
         # Catalogo e arquivo do repositorio (confiavel); valores interpolados
         # sao escapados antes.
         escaped = {k: Markup.escape(v) for k, v in values.items()}
-        return Markup(translate(surface, locale, key, **escaped))
+        return Markup(translate(surface, locale, key, **escaped))  # nosec B704 - valores escapados acima; catalogo e do repo
 
     return {
         "t": t,

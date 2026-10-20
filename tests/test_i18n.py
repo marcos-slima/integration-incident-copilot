@@ -67,6 +67,19 @@ def test_embed_json_cannot_close_the_script_tag():
     assert json.loads(out) == {"a": "</script><script>alert(1)</script> & <b>"}
 
 
+def test_t_html_escapes_interpolated_values():
+    """B704 (nosec): o catalogo e do repo, mas os valores vem do usuario."""
+    from types import SimpleNamespace
+
+    from app.i18n import template_context
+
+    request = SimpleNamespace(query_params={}, cookies={}, headers={"accept-language": "pt-BR"})
+    t_html = template_context(request)["t_html"]
+    out = str(t_html("usage.confirmReset", model="<script>alert(1)</script>"))
+    assert "<script>" not in out
+    assert "&lt;script&gt;" in out
+
+
 def test_real_catalogs_are_consistent_and_complete():
     assert ui_i18n_problems(ROOT) == []
 

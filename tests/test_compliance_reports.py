@@ -35,15 +35,14 @@ class TestComplianceReportsAPI:
     """Testes unitários para a API de relatórios compliance (DA-89)."""
 
     def test_get_compliance_export_pdf_endpoint_exists(self):
-        """Verifica que o endpoint /admin/reports/compliance/export está registrado (PDF)."""
+        """Sem banco, o export responde 503 (fail-closed), nunca 200."""
         response = client.get("/admin/reports/compliance/export?format=pdf", headers=_auth())
-        # Deve retornar 200 (se com auth e banco) ou 422 (formato inválido) ou 503 (sem banco)
-        assert response.status_code in (200, 422, 503)
+        assert response.status_code == 503
 
     def test_get_compliance_export_xlsx_endpoint_exists(self):
-        """Verifica que o endpoint /admin/reports/compliance/export está registrado (XLSX)."""
+        """Sem banco, o export responde 503 (fail-closed), nunca 200."""
         response = client.get("/admin/reports/compliance/export?format=xlsx", headers=_auth())
-        assert response.status_code in (200, 422, 503)
+        assert response.status_code == 503
 
     def test_unknown_format_returns_422(self):
         """Formato desconhecido deve retornar 422 Unprocessable Entity."""
@@ -54,6 +53,56 @@ class TestComplianceReportsAPI:
         """Falta de parâmetro format deve retornar 422."""
         response = client.get("/admin/reports/compliance/export", headers=_auth())
         assert response.status_code == 422
+
+
+class TestComplianceExportRoute:
+    """Exercita a rota com dados falsos: exporta de verdade, sem banco."""
+
+    @staticmethod
+    def _fake_data():
+        async def fake_data(session, days=7):
+            return {
+                "incidents": [
+                    {
+                        "id": "123e4567-e89b-12d3-a456-426614174000",
+                        "created_at": "2026-10-20T10:00:00Z",
+                        "agent_domain": "sap",
+                        "probable_root_cause": "Timeout de resposta",
+                        "model_confidence": 0.95,
+                        "diagnosis_correct": True,
+                        "cost_usd": 0.001,
+                    }
+                ],
+                "generated_at": "2026-10-20T10:00:00Z",
+            }
+
+        return fake_data
+
+    def _get_with_fake_db(self, monkeypatch, format_: str):
+        from app.admin import reports
+        from app.db import get_db_session
+
+        monkeypatch.setattr(reports, "get_compliance_data", self._fake_data())
+        app.dependency_overrides[get_db_session] = lambda: object()
+        try:
+            return client.get(
+                f"/admin/reports/compliance/export?format={format_}&days=7",
+                headers=_auth(),
+            )
+        finally:
+            app.dependency_overrides.pop(get_db_session, None)
+
+    def test_pdf_export_route_returns_pdf(self, monkeypatch):
+        response = self._get_with_fake_db(monkeypatch, "pdf")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("application/pdf")
+        assert response.content.startswith(b"%PDF")
+
+    def test_xlsx_export_route_returns_xlsx(self, monkeypatch):
+        response = self._get_with_fake_db(monkeypatch, "xlsx")
+        assert response.status_code == 200
+        assert "spreadsheetml" in response.headers["content-type"]
+        assert response.content.startswith(b"PK")
 
 
 class TestComplianceReportData:

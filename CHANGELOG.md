@@ -5,7 +5,7 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 
 ---
 
-## [Não lançado] — DAs 75–92 e auditoria 2026-10-20 (branch `docs/en-translation`)
+## [1.3.0] — 2026-10-20
 
 Lote entregue entre 19 e 20/10, mais a auditoria técnica de 2026-10-20
 (25 achados, `IIC-AUD-001`…`025`). O status abaixo é o real — o que está
@@ -61,10 +61,10 @@ entregue, o que é schema-only e o que voltou para candidata.
 
 ### Versionamento
 
-A versão canônica continua **1.2.0** em `pyproject.toml`, `app/main.py` e
-`app/a2a/agent_card.py` até a próxima release. As entradas `2.0.0`/`2.0.1`
-abaixo são históricas de uma numeração experimental anterior e não devem ser
-usadas para release; a próxima release será **1.3.0** (minor).
+A versão canônica desta release é **1.3.0** em `pyproject.toml`, `app/main.py`
+e `app/a2a/agent_card.py`. As entradas `2.0.0`/`2.0.1` abaixo são históricas de
+uma numeração experimental anterior e não devem ser usadas para release; o
+próximo lote, quando houver, será **1.4.0** (minor).
 
 ---
 

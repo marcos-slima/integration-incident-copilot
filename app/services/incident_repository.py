@@ -102,6 +102,9 @@ class Incident(Base):
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error_codes: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
+    # DA-79: tenant identifier for multi-tenancy isolation
+    tenant_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -116,12 +119,14 @@ class Incident(Base):
     verified_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
     verified_root_cause: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # DA-79: índice composto para performance de filtros por tenant e tempo
     # Índices compostos para as queries típicas dos dashboards
     __table_args__ = (
         Index("ix_incidents_agent_created", "agent_domain", "created_at"),
         Index("ix_incidents_provider_created", "llm_provider_used", "created_at"),
         Index("ix_incidents_sensitivity", "sensitivity_level", "created_at"),
         Index("ix_incidents_escalate_created", "should_escalate", "created_at"),
+        Index("ix_incidents_tenant_created", "tenant_id", "created_at"),
     )
 
     def __repr__(self) -> str:
@@ -160,6 +165,8 @@ class IncidentRepository:
         redaction_applied: bool = False,
         latency_ms: int | None = None,
         error_codes: list[str] | None = None,
+        # DA-79: tenant_id para multi-tenancy
+        tenant_id: str | None = None,
         # campos da DiagnosisResponse
         trace_id: str | None = None,
         probable_root_cause: str | None = None,
@@ -185,6 +192,7 @@ class IncidentRepository:
             redaction_applied=redaction_applied,
             latency_ms=latency_ms,
             error_codes=error_codes,
+            tenant_id=tenant_id,
             trace_id=trace_id,
             probable_root_cause=probable_root_cause,
             model_confidence=model_confidence,
@@ -255,11 +263,13 @@ class IncidentRepository:
         interface_type: str | None = None,
         source_system: str | None = None,
         verified: bool | None = None,
+        tenant_id: str | None = None,
     ) -> list[Incident]:
-        """Incidentes mais recentes, com filtros opcionais (DA-50).
+        """Incidentes mais recentes, com filtros opcionais (DA-50, DA-79).
 
         verified=None -> todos; True -> so verificados; False -> so os que
         ainda nao tem veredito humano (diagnosis_correct IS NULL).
+        tenant_id=None -> todos tenants; valor -> apenas tenant específico.
         """
         stmt = select(Incident)
         if interface_type:
@@ -270,6 +280,8 @@ class IncidentRepository:
             stmt = stmt.where(Incident.diagnosis_correct.is_not(None))
         elif verified is False:
             stmt = stmt.where(Incident.diagnosis_correct.is_(None))
+        if tenant_id:
+            stmt = stmt.where(Incident.tenant_id == tenant_id)
         stmt = stmt.order_by(Incident.created_at.desc()).limit(limit)
         result = await self._session.execute(stmt)
         return list(result.scalars())
@@ -283,3 +295,61 @@ class IncidentRepository:
         elif verified is False:
             stmt = stmt.where(Incident.diagnosis_correct.is_(None))
         return int((await self._session.execute(stmt)).scalar_one())
+
+    # ------------------------------------------------------------------
+    # DA-79: Multi-tenancy queries
+    # ------------------------------------------------------------------
+
+    async def filter_by_tenant_id(
+        self,
+        tenant_id: str,
+        limit: int = 50,
+        *,
+        verified: bool | None = None,
+    ) -> list[Incident]:
+        """DA-79: Filtra incidentes por tenant_id com ordenação por tempo.
+
+        Retorna incidentes mais recentes do tenant específico, seguros
+        contra vazamento de dados entre tenants.
+
+        Args:
+            tenant_id: ID do tenant a ser filtrado
+            limit: Número máximo de results a retornar
+            verified: None = todos; True = só verificados; False = não verificados
+
+        Returns:
+            Lista de incidentes do tenant, ordenados por created_at DESC
+        """
+        stmt = select(Incident).where(Incident.tenant_id == tenant_id)
+        if verified is True:
+            stmt = stmt.where(Incident.diagnosis_correct.is_not(None))
+        elif verified is False:
+            stmt = stmt.where(Incident.diagnosis_correct.is_(None))
+        stmt = stmt.order_by(Incident.created_at.desc()).limit(limit)
+        result = await self._session.execute(stmt)
+        return list(result.scalars())
+
+    async def get_by_id_and_tenant(
+        self, incident_id: uuid.UUID | str, tenant_id: str
+    ) -> Incident | None:
+        """DA-79: Busca incidente específico de um tenant específico.
+
+        Previne acesso a incidentes de outro tenant (fail-closed).
+
+        Args:
+            incident_id: ID do incidente
+            tenant_id: ID do tenant esperado
+
+        Returns:
+            Incidente se encontrado e pertencer ao tenant, None caso contrário
+        """
+        if isinstance(incident_id, str):
+            try:
+                incident_id = uuid.UUID(incident_id)
+            except ValueError:
+                return None
+
+        result = await self._session.execute(
+            select(Incident).where(Incident.id == incident_id, Incident.tenant_id == tenant_id)
+        )
+        return result.scalar_one_or_none()

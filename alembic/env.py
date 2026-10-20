@@ -55,6 +55,7 @@ if _raw_url:
 # Importar models SEM app/db.py (que tenta engine async):
 from app.admin.models import (  # noqa: F401
     IntegrationSystem,
+    KnowledgeDocumentVersion,
     LlmBudgetLedger,
     LlmCallLatency,
     LlmCost,
@@ -66,6 +67,7 @@ from app.admin.models import (  # noqa: F401
 )
 from app.contracts.baseline import SystemContract  # noqa: F401
 from app.db import Base
+from app.models.prompt_versioning_orm import PromptVersion  # noqa: F401
 from app.services.incident_repository import Incident  # noqa: F401
 
 # DB-01 (validacao 2026-10-07): TODO modelo com tabela precisa estar no

@@ -331,8 +331,8 @@ e por que mexer na descrição de um campo pode reprovar o build.
 
 ```mermaid
 flowchart LR
-    REQ["IncidentRequest<br/>app/models.py:14<br/>entrada validada"] -->|"run_diagnosis()"| ST["CopilotState<br/>app/agent/state.py:59<br/>TypedDict compartilhado"]
-    ST -->|"report_node"| RES["DiagnosisResponse<br/>app/models.py:180<br/>saída + evidência"]
+    REQ["IncidentRequest<br/>app/models/models.py:14<br/>entrada validada"] -->|"run_diagnosis()"| ST["CopilotState<br/>app/agent/state.py:59<br/>TypedDict compartilhado"]
+    ST -->|"report_node"| RES["DiagnosisResponse<br/>app/models/models.py:180<br/>saída + evidência"]
     ST -.->|"with_structured_output"| DM["DiagnosisModel<br/>app/agent/state.py:14<br/>saída do LLM"]
     DM -.-> ST
 ```
@@ -631,8 +631,8 @@ de um jeito diferente, e quase sempre em silêncio:
 | # | Superfície | Onde | Se faltar |
 |---|---|---|---|
 | 1 | registro e variável de modo real | `app/connectors/__init__.py::_REGISTRY`, `::_REAL_MODE_SETTING` | não existe |
-| 2 | `Literal` da requisição | `IncidentRequest.interface_type` em `app/models.py` | 422 em toda chamada |
-| 3 | `Literal` do evento | `IncidentEventData.interface_type` em `app/models.py` | evento rejeitado |
+| 2 | `Literal` da requisição | `IncidentRequest.interface_type` em `app/models/models.py` | 422 em toda chamada |
+| 3 | `Literal` do evento | `IncidentEventData.interface_type` em `app/models/models.py` | evento rejeitado |
 | 4 | domínio de roteamento | `domains` em `data/skills/diagnose_incident.yaml` | cai em `generic` |
 | 5 | CLI | `choices` de `--interface` em `app/agent/graph.py` | só por HTTP |
 | 6 | catálogo admin | `app/admin/models.py::CONNECTOR_TYPES` | invisível na tela que responde "qual sistema é" |

@@ -1,10 +1,13 @@
-"""Rotas /admin/api/* — CRUD do registro de modelos + metering (DA-46/47/48).
+"""Rotas /admin/* — CRUD do registro de modelos + metering + dashboards (DA-46/47/48/87/89).
 
 Autenticacao: ADMIN_API_KEY dedicada (header X-API-Admin-Key,
-app/admin/security.py) em TODAS as rotas deste router. A separacao
-`/admin/api/*` (JSON, protegido) de `/admin/*` (paginas Jinja2 finas,
-sem dado sensivel — os dados so chegam via API com a chave) e intencional:
-a UI admin e a shell; o detalhe do que existe no banco exige auth.
+app/admin/security.py) em TODAS as rotas deste router.
+
+Separacao de rotas:
+- `/admin/api/*` - Endpoints JSON para CRUD e operações administrativas
+- `/admin/metrics/*` - Métricas e dashboards (DA-87)
+- `/admin/reports/*` - Relatórios compliance (DA-89)
+- `/admin/dashboard/*` - Visualizações HTML (DA-87/89)
 
 Sem DATABASE_URL → HTTP 503 "Persistencia nao configurada" (fail-closed:
 nenhuma rota admin finge sucesso sem banco por tras).
@@ -13,16 +16,18 @@ nenhuma rota admin finge sucesso sem banco por tras).
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin.correlation import build_system_index, correlate
 from app.admin.crypto import decrypt_evidence
-from app.admin.models import WebUser
+from app.admin.models import KnowledgeDocumentVersion, WebUser
 from app.admin.repository import AdminRepository
 from app.admin.security import verify_admin_key
 from app.api_errors import api_error
@@ -34,7 +39,7 @@ from app.services.incident_repository import IncidentRepository
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/admin/api", dependencies=[Depends(verify_admin_key)])
+router = APIRouter(prefix="/admin", dependencies=[Depends(verify_admin_key)])
 
 SessionDep = Annotated[AsyncSession | None, Depends(get_db_session)]
 
@@ -242,7 +247,7 @@ def _model_out(model: Any, usage: Any | None) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/registry/status")
+@router.get("/api/registry/status")
 async def registry_status(
     session: SessionDep,
 ) -> dict[str, Any]:
@@ -303,7 +308,7 @@ def _env_runtime_values() -> dict[str, Any]:
     return {key: getattr(settings, key, None) for key in RUNTIME_CONFIG_KEYS}
 
 
-@router.get("/runtime-config")
+@router.get("/api/runtime-config")
 async def get_runtime_config(session: SessionDep) -> dict[str, Any]:
     """Overrides de runtime armazenados no banco.
 
@@ -320,7 +325,7 @@ async def get_runtime_config(session: SessionDep) -> dict[str, Any]:
     return {**_env_runtime_values(), "env_values": None}
 
 
-@router.patch("/runtime-config")
+@router.patch("/api/runtime-config")
 async def patch_runtime_config(
     payload: RuntimeConfigPatch,
     session: SessionReq,
@@ -358,7 +363,7 @@ async def patch_runtime_config(
     return result
 
 
-@router.get("/effective-config")
+@router.get("/api/effective-config")
 async def effective_config(session: SessionDep) -> dict[str, Any]:
     """GAP de usabilidade: exportar configuracao efetiva via UI.
 
@@ -462,7 +467,7 @@ def _mask_sensitive(value: Any, is_sensitive: bool) -> str:
     return f"{s[:3]}...{s[-3:]}"
 
 
-@router.get("/runtime-config/check-activate")
+@router.get("/api/runtime-config/check-activate")
 async def check_activate_registry(session: SessionDep) -> dict[str, Any]:
     """GAP-2: pré-check antes de ativar LLM_REGISTRY_DB.
 
@@ -540,7 +545,7 @@ async def check_activate_registry(session: SessionDep) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/models")
+@router.get("/api/models")
 async def list_models(session: SessionReq) -> list[dict[str, Any]]:
     repo = AdminRepository(session)
     models = await repo.list_models()
@@ -551,7 +556,7 @@ async def list_models(session: SessionReq) -> list[dict[str, Any]]:
     return out
 
 
-@router.post("/models", status_code=status.HTTP_201_CREATED)
+@router.post("/api/models", status_code=status.HTTP_201_CREATED)
 async def create_model(
     payload: ModelCreate,
     session: SessionReq,
@@ -574,7 +579,7 @@ async def create_model(
     return _model_out(model, None)
 
 
-@router.get("/models/{model_id}")
+@router.get("/api/models/{model_id}")
 async def get_model(
     model_id: str,
     session: SessionReq,
@@ -587,7 +592,7 @@ async def get_model(
     return _model_out(model, usage)
 
 
-@router.patch("/models/{model_id}")
+@router.patch("/api/models/{model_id}")
 async def patch_model(
     model_id: str,
     payload: ModelPatch,
@@ -601,7 +606,7 @@ async def patch_model(
     return _model_out(model, usage)
 
 
-@router.delete("/models/{model_id}")
+@router.delete("/api/models/{model_id}")
 async def delete_model(
     model_id: str,
     session: SessionReq,
@@ -613,7 +618,7 @@ async def delete_model(
     return {"status": "deleted", "id": model_id}
 
 
-@router.get("/routing/preview")
+@router.get("/api/routing/preview")
 async def routing_preview(
     session: SessionDep,
     sensitivity: Literal["public", "confidential"] = "confidential",
@@ -668,7 +673,7 @@ async def routing_preview(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/credentials")
+@router.get("/api/credentials")
 async def list_credentials(session: SessionReq) -> list[dict[str, Any]]:
     repo = AdminRepository(session)
     out: list[dict[str, Any]] = []
@@ -689,7 +694,7 @@ async def list_credentials(session: SessionReq) -> list[dict[str, Any]]:
     return out
 
 
-@router.put("/credentials/{provider_origin:path}")
+@router.put("/api/credentials/{provider_origin:path}")
 async def set_credential(
     provider_origin: str,
     payload: CredentialIn,
@@ -714,7 +719,7 @@ async def set_credential(
     }
 
 
-@router.delete("/credentials/{provider_origin:path}")
+@router.delete("/api/credentials/{provider_origin:path}")
 async def delete_credential(
     provider_origin: str,
     session: SessionReq,
@@ -732,13 +737,13 @@ async def delete_credential(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/usage")
+@router.get("/api/usage")
 async def usage_summary(session: SessionReq) -> list[dict[str, Any]]:
     repo = AdminRepository(session)
     return await repo.usage_summary()
 
 
-@router.post("/usage/{provider_origin:path}/{model_id}/reset")
+@router.post("/api/usage/{provider_origin:path}/{model_id}/reset")
 async def reset_usage(
     provider_origin: str,
     model_id: str,
@@ -801,13 +806,13 @@ def _validate_system_values(
         raise api_error(422, "invalid_system_fields", "; ".join(bad), details="; ".join(bad))
 
 
-@router.get("/systems")
+@router.get("/api/systems")
 async def list_systems(session: SessionReq) -> list[dict[str, Any]]:
     repo = AdminRepository(session)
     return [_system_out(s) for s in await repo.list_systems()]
 
 
-@router.post("/systems", status_code=status.HTTP_201_CREATED)
+@router.post("/api/systems", status_code=status.HTTP_201_CREATED)
 async def create_system(
     payload: SystemCreate,
     session: SessionReq,
@@ -825,7 +830,7 @@ async def create_system(
     return _system_out(system)
 
 
-@router.get("/systems/{system_id}")
+@router.get("/api/systems/{system_id}")
 async def get_system(
     system_id: str,
     session: SessionReq,
@@ -837,7 +842,7 @@ async def get_system(
     return _system_out(system)
 
 
-@router.patch("/systems/{system_id}")
+@router.patch("/api/systems/{system_id}")
 async def patch_system(
     system_id: str,
     payload: SystemPatch,
@@ -856,7 +861,7 @@ async def patch_system(
     return _system_out(system)
 
 
-@router.delete("/systems/{system_id}")
+@router.delete("/api/systems/{system_id}")
 async def delete_system(
     system_id: str,
     session: SessionReq,
@@ -903,13 +908,13 @@ def _validate_source_interface_type(interface_type: str) -> None:
         )
 
 
-@router.get("/web-search-sources")
+@router.get("/api/web-search-sources")
 async def list_web_search_sources(session: SessionReq) -> list[dict[str, Any]]:
     repo = AdminRepository(session)
     return [_source_out(s) for s in await repo.list_web_search_sources()]
 
 
-@router.post("/web-search-sources", status_code=status.HTTP_201_CREATED)
+@router.post("/api/web-search-sources", status_code=status.HTTP_201_CREATED)
 async def create_web_search_source(
     payload: WebSearchSourceCreate,
     session: SessionReq,
@@ -940,7 +945,7 @@ async def create_web_search_source(
     return _source_out(source)
 
 
-@router.get("/web-search-sources/{source_id}")
+@router.get("/api/web-search-sources/{source_id}")
 async def get_web_search_source(source_id: str, session: SessionReq) -> dict[str, Any]:
     repo = AdminRepository(session)
     source = await repo.get_web_search_source(source_id)
@@ -949,7 +954,7 @@ async def get_web_search_source(source_id: str, session: SessionReq) -> dict[str
     return _source_out(source)
 
 
-@router.patch("/web-search-sources/{source_id}")
+@router.patch("/api/web-search-sources/{source_id}")
 async def patch_web_search_source(
     source_id: str,
     payload: WebSearchSourcePatch,
@@ -976,7 +981,7 @@ async def patch_web_search_source(
     return _source_out(source)
 
 
-@router.delete("/web-search-sources/{source_id}")
+@router.delete("/api/web-search-sources/{source_id}")
 async def delete_web_search_source(source_id: str, session: SessionReq) -> dict[str, Any]:
     repo = AdminRepository(session)
     if not await repo.delete_web_search_source(source_id):
@@ -985,7 +990,7 @@ async def delete_web_search_source(source_id: str, session: SessionReq) -> dict[
     return {"status": "deleted", "id": source_id}
 
 
-@router.get("/systems/{system_id}/incidents")
+@router.get("/api/systems/{system_id}/incidents")
 async def list_system_incidents(
     system_id: str,
     session: SessionReq,
@@ -1071,7 +1076,7 @@ def _incident_out(
     return out
 
 
-@router.get("/incidents")
+@router.get("/api/incidents")
 async def list_incidents(
     session: SessionReq,
     limit: int = Query(default=50, ge=1, le=200),
@@ -1099,7 +1104,7 @@ async def list_incidents(
     ]
 
 
-@router.get("/incidents/{incident_id}")
+@router.get("/api/incidents/{incident_id}")
 async def get_incident(incident_id: str, session: SessionReq) -> dict[str, Any]:
     index = build_system_index(await AdminRepository(session).list_systems())
     incident = await IncidentRepository(session).get_by_id(incident_id)
@@ -1164,7 +1169,7 @@ async def _get_user_or_404(session: AsyncSession, user_id: str) -> Any:
     return user
 
 
-@router.get("/users")
+@router.get("/api/users")
 async def list_users(session: SessionReq) -> list[dict[str, Any]]:
     from sqlalchemy import select
 
@@ -1172,7 +1177,7 @@ async def list_users(session: SessionReq) -> list[dict[str, Any]]:
     return [_user_out(u) for u in users]
 
 
-@router.post("/users", status_code=status.HTTP_201_CREATED)
+@router.post("/api/users", status_code=status.HTTP_201_CREATED)
 async def create_user(payload: UserCreate, session: SessionReq, request: Request) -> dict[str, Any]:
     """Cria usuario PENDENTE de e-mail. A senha inicial entra como PBKDF2
     (mesmo formato DA-54) — nunca em claro em lugar nenhum.
@@ -1216,7 +1221,7 @@ async def create_user(payload: UserCreate, session: SessionReq, request: Request
     return out
 
 
-@router.post("/users/{user_id}/email-token")
+@router.post("/api/users/{user_id}/email-token")
 async def reissue_email_token(user_id: str, session: SessionReq) -> dict[str, Any]:
     """Reemite o token da etapa 1 (so' para pendentes de e-mail)."""
     from app.webusers import (
@@ -1249,7 +1254,7 @@ async def reissue_email_token(user_id: str, session: SessionReq) -> dict[str, An
     }
 
 
-@router.post("/users/{user_id}/phone-code")
+@router.post("/api/users/{user_id}/phone-code")
 async def reissue_phone_code(user_id: str, session: SessionReq) -> dict[str, Any]:
     """Reemite o codigo da etapa 2 (so' para pendentes de telefone).
 
@@ -1289,7 +1294,7 @@ async def reissue_phone_code(user_id: str, session: SessionReq) -> dict[str, Any
     }
 
 
-@router.patch("/users/{user_id}")
+@router.patch("/api/users/{user_id}")
 async def patch_user(
     user_id: str,
     payload: UserPatch,
@@ -1325,7 +1330,7 @@ async def patch_user(
     return _user_out(user)
 
 
-@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/api/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(user_id: str, session: SessionReq) -> None:
     user = await _get_user_or_404(session, user_id)
     username = user.username
@@ -1381,4 +1386,295 @@ async def get_ontology_hierarchy(
         "uri": result[0]["root_uri"],
         "broader": result[0]["broader"],
         "narrower": result[0]["narrower"],
+    }
+
+
+# ---------------------------------------------------------------------------
+# DA-86: versionamento de documentos RAG (UI /admin/knowledge/documents)
+# ---------------------------------------------------------------------------
+
+
+class KnowledgeVersionCreate(BaseModel):
+    """Payload de criação de uma versão de documento (DA-86)."""
+
+    content: str = Field(min_length=1)
+    is_current: bool = False
+
+
+def _version_to_dict(version: KnowledgeDocumentVersion) -> dict[str, Any]:
+    return {
+        "id": version.id,
+        "document_id": version.document_id,
+        "version": version.version,
+        "content": version.content,
+        "created_at": version.created_at.isoformat() if version.created_at else None,
+        "is_current": version.is_current,
+    }
+
+
+async def _load_versions(session: AsyncSession, document_id: str) -> list[KnowledgeDocumentVersion]:
+    result = await session.execute(
+        select(KnowledgeDocumentVersion)
+        .where(KnowledgeDocumentVersion.document_id == document_id)
+        .order_by(KnowledgeDocumentVersion.version)
+    )
+    return list(result.scalars().all())
+
+
+@router.post("/api/knowledge/documents/{document_id}/versions", status_code=201)
+async def create_knowledge_version(
+    document_id: str, payload: KnowledgeVersionCreate, session: SessionDep
+) -> dict[str, Any]:
+    """DA-86: cria a próxima versão de um documento de conhecimento."""
+    if session is None:
+        raise api_error(503, "db_not_configured", "Persistencia nao configurada")
+
+    existing = await _load_versions(session, document_id)
+    next_version = (max((v.version for v in existing), default=0)) + 1
+
+    if payload.is_current:
+        for version in existing:
+            version.is_current = False
+
+    row = KnowledgeDocumentVersion(
+        document_id=document_id,
+        version=next_version,
+        content=payload.content,
+        is_current=payload.is_current,
+    )
+    session.add(row)
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise api_error(
+            409,
+            "version_exists",
+            f"versão {next_version} já existe para o documento {document_id}",
+        ) from None
+
+    await session.refresh(row)
+    return _version_to_dict(row)
+
+
+@router.get("/api/knowledge/documents/{document_id}/versions")
+async def list_knowledge_versions(document_id: str, session: SessionDep) -> dict[str, Any]:
+    """DA-86: lista as versões de um documento e qual está ativa."""
+    if session is None:
+        raise api_error(503, "db_not_configured", "Persistencia nao configurada")
+
+    versions = await _load_versions(session, document_id)
+    if not versions:
+        raise api_error(404, "document_not_found", f"documento {document_id} não encontrado")
+
+    current = next((v.version for v in versions if v.is_current), None)
+    return {
+        "document_id": document_id,
+        "versions": [_version_to_dict(v) for v in versions],
+        "current_version": current,
+    }
+
+
+@router.get("/api/knowledge/documents/{document_id}/history")
+async def knowledge_version_history(document_id: str, session: SessionDep) -> dict[str, Any]:
+    """DA-86: histórico completo de versões (somente leitura)."""
+    if session is None:
+        raise api_error(503, "db_not_configured", "Persistencia nao configurada")
+
+    versions = await _load_versions(session, document_id)
+    if not versions:
+        raise api_error(404, "document_not_found", f"documento {document_id} não encontrado")
+
+    return {
+        "document_id": document_id,
+        "versions": [_version_to_dict(v) for v in versions],
+    }
+
+
+@router.post("/api/knowledge/documents/{document_id}/rollback/{version}")
+async def rollback_knowledge_version(
+    document_id: str, version: int, session: SessionDep
+) -> dict[str, Any]:
+    """DA-86: marca uma versão anterior como ativa (rollback)."""
+    if session is None:
+        raise api_error(503, "db_not_configured", "Persistencia nao configurada")
+
+    versions = await _load_versions(session, document_id)
+    if not versions:
+        raise api_error(404, "document_not_found", f"documento {document_id} não encontrado")
+
+    if not any(v.version == version for v in versions):
+        raise api_error(
+            404, "version_not_found", f"versão {version} não encontrada para {document_id}"
+        )
+
+    for v in versions:
+        v.is_current = v.version == version
+    await session.commit()
+
+    return {"document_id": document_id, "current_version": version}
+
+
+# ---------------------------------------------------------------------------
+# DA-87: Métricas por domínio (dashboard)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/metrics/domains")
+async def get_domain_metrics(session: SessionReq) -> dict[str, Any]:
+    """DA-87: Métricas por domínio (sap/saas/generic) para dashboards.
+
+    Retorna:
+        - count por domínio
+        - hit@1 por domínio
+        - tempo médio por domínio
+        - custo por domínio
+    """
+
+    from app.admin.metrics import build_dashboard_data
+
+    repo = IncidentRepository(session)
+    incidents = await repo.list_recent(limit=1000)  # últimos 1000 incidentes
+
+    # Transforma em dicts
+    incidents_data = [
+        {
+            "agent_domain": i.agent_domain,
+            "diagnosis_correct": i.diagnosis_correct,
+            "latency_ms": i.latency_ms,
+            "cost_usd": i.cost_usd,
+        }
+        for i in incidents
+    ]
+
+    return build_dashboard_data(incidents_data)
+
+
+@router.get("/dashboard/domains")
+async def get_domain_dashboard(session: SessionDep) -> dict[str, Any]:
+    """DA-87: Visualização HTML para dashboard de domínios.
+
+    Retorna dados estruturados para renderização no frontend.
+    """
+
+    from app.admin.metrics import build_dashboard_data
+
+    if session is None:
+        raise api_error(503, "db_not_configured", "Persistência não configurada")
+
+    repo = IncidentRepository(session)
+    incidents = await repo.list_recent(limit=1000)
+
+    incidents_data = [
+        {
+            "agent_domain": i.agent_domain,
+            "diagnosis_correct": i.diagnosis_correct,
+            "latency_ms": i.latency_ms,
+            "cost_usd": i.cost_usd,
+        }
+        for i in incidents
+    ]
+
+    return build_dashboard_data(incidents_data)
+
+
+# ---------------------------------------------------------------------------
+# DA-89: Relatórios compliance export
+# ---------------------------------------------------------------------------
+
+
+@router.get("/reports/compliance/export")
+async def export_compliance_report(
+    session: SessionDep,
+    format: Literal["pdf", "xlsx"] = Query(..., description="Formato de exportação"),
+    days: int = Query(default=7, ge=1, le=365, description="Número de dias para filtro"),
+) -> Response:
+    """DA-89: Exportar relatório compliance (PDF ou XLSX).
+
+    Gera relatório com:
+        - Resumo de incidentes
+        - Métricas de qualidade (Hit@1, accuracy)
+        - Eventos auditáveis
+        - Custos por domínio
+
+    ``format`` é validado pelo FastAPI antes da dependency de banco, então
+    formatos inválidos retornam 422 mesmo sem DATABASE_URL configurado.
+    """
+    from app.admin.reports import (
+        PDF_MEDIA_TYPE,
+        XLSX_MEDIA_TYPE,
+        build_compliance_summary,
+        calculate_quality_metrics,
+        export_pdf,
+        export_xlsx,
+        extract_auditable_events,
+        get_compliance_data,
+    )
+
+    if session is None:
+        raise api_error(503, "db_not_configured", "Persistência não configurada")
+
+    # Busca dados do banco
+    compliance_data = await get_compliance_data(session, days=days)
+
+    if compliance_data.get("error"):
+        raise api_error(503, "db_error", f"Erro ao buscar dados: {compliance_data['error']}")
+
+    incidents = compliance_data.get("incidents", [])
+
+    # Constrói relatório
+    summary = build_compliance_summary(incidents)
+    metrics = calculate_quality_metrics(incidents)
+    auditable_events = extract_auditable_events(incidents)
+
+    report_data = {
+        "summary": summary,
+        "metrics": metrics,
+        "by_domain": summary["by_domain"],
+        "auditable_events": auditable_events,
+        "generated_at": compliance_data.get("generated_at"),
+    }
+
+    # Exporta no formato solicitado
+    if format == "pdf":
+        return Response(content=export_pdf(report_data), media_type=PDF_MEDIA_TYPE)
+
+    return Response(content=export_xlsx(report_data), media_type=XLSX_MEDIA_TYPE)
+
+
+@router.get("/dashboard/compliance")
+async def get_compliance_dashboard(session: SessionDep) -> dict[str, Any]:
+    """DA-89: Visualização HTML para dashboard de compliance.
+
+    Retorna dados estruturados para renderização no frontend.
+    """
+    from app.admin.reports import build_compliance_summary, calculate_quality_metrics
+
+    if session is None:
+        raise api_error(503, "db_not_configured", "Persistência não configurada")
+
+    repo = IncidentRepository(session)
+    incidents = await repo.list_recent(limit=1000)
+
+    incidents_data = [
+        {
+            "id": str(i.id),
+            "created_at": i.created_at,
+            "agent_domain": i.agent_domain,
+            "probable_root_cause": i.probable_root_cause,
+            "model_confidence": i.model_confidence,
+            "diagnosis_correct": i.diagnosis_correct,
+            "verified_at": i.verified_at,
+            "cost_usd": i.cost_usd,
+        }
+        for i in incidents
+    ]
+
+    summary = build_compliance_summary(incidents_data)
+    metrics = calculate_quality_metrics(incidents_data)
+
+    return {
+        "summary": summary,
+        "metrics": metrics,
+        "generated_at": datetime.now(UTC).isoformat(),
     }

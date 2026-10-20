@@ -35,6 +35,7 @@ from langfuse.langchain import CallbackHandler
 from langgraph.prebuilt import create_react_agent
 
 from app.agent import prompts
+from app.agent.escalation import compute_escalation_signal
 from app.agent.rules import match_known_error
 from app.agent.state import CopilotState, DiagnosisModel
 from app.connectors import get_connector
@@ -1285,6 +1286,30 @@ def _run_diagnosis_agent(state: CopilotState, persona: str) -> dict:
 
     diagnosis = _apply_confidence_guardrails(diagnosis, state)
     diagnosis["llm_provider_used"] = llm_provider_used
+
+    # DA-75: verifica escalonamento antes de chamar o LLM
+    escalation = compute_escalation_signal(state)
+    if escalation.should_escalate:
+        # Grava hitl_request no estado para o endpoint de revisão
+        # O LLM não é chamado neste caso, mas registra proveniência do prompt
+        provenance = prompts.get_spec(state.get("locale")).provenance()
+        return {
+            "probable_root_cause": diagnosis.get("probable_root_cause", "N/A"),
+            "confidence": diagnosis.get("confidence", 0.0),
+            "model_confidence": float(
+                diagnosis.get("model_confidence", diagnosis.get("confidence", 0.0))
+            ),
+            "matched_source": diagnosis.get("matched_source"),
+            "next_steps": diagnosis.get("next_steps", []),
+            "hitl_request": {
+                "incident_id": state.get("incident_id"),
+                "escalation": escalation.as_log_fields(),
+                "prompt": prompt,
+                "locale": state.get("locale"),
+            },
+            "prompt_digest": provenance["prompt_digest"],
+            "prompt_version": provenance["prompt_version"],
+        }
     # DA-72/DA-53: o modelo que respondeu. No roteamento por registro ele
     # pode nao ser o `llm_model` do state; sem selecao (gateway substituido
     # em teste), fica o do state.
@@ -1404,6 +1429,10 @@ def report_node(state: CopilotState) -> CopilotState:
       em vez de uma lista plana. Deixa claro para o analista o que o
       pipeline observou diretamente versus o que veio de inferencia/RAG.
     """
+    # DA-75: se hitl_request existe, o diagnostico foi interrompido para revisao
+    if state.get("hitl_request"):
+        return {"report_markdown": content_text(state.get("locale"), "report.hitlPending")}
+
     diagnosis = state.get("diagnosis", {})
     _record_quality_metrics(state, diagnosis)
 
@@ -1477,4 +1506,37 @@ def report_node(state: CopilotState) -> CopilotState:
         primary=primary_md,
         supporting=supporting_md,
     )
-    return {"report_markdown": report}
+    # DA-83: explicabilidade XAI - explanation field com highlights dos chunks usados
+    explanation = _build_xai_explanation(state, diagnosis)
+    return {
+        "report_markdown": report,
+        "explanation": explanation,
+    }
+
+
+def _build_xai_explanation(state: CopilotState, diagnosis: dict) -> str | None:
+    """Constrói uma explicação estruturada com highlights dos chunks usados."""
+    locale = state.get("locale", "pt-BR")
+    matched_source = diagnosis.get("matched_source")
+    evidence_strength = diagnosis.get("evidence_strength", 0.0)
+
+    if not matched_source:
+        return content_text(locale, "explanation.noMatchedSource")
+
+    # Monta texto com destaque para o documento usado
+    explanation_parts = [
+        f"Baseado no documento **{matched_source}**,",  # Highlight do documento
+        f"com força de evidência de {evidence_strength:.0%}.",
+    ]
+
+    # Adiciona contexto do retriever se disponível
+    retrieved_context = state.get("retrieved_context", [])
+    if retrieved_context and len(retrieved_context) > 0:
+        top_doc = retrieved_context[0]
+        if top_doc.get("locator"):
+            explanation_parts.append(
+                f"O chunk principal (score={top_doc.get('retrieval_score', 'N/A')}) vem de: {top_doc['locator']}."
+            )
+
+    explanation_text = " ".join(explanation_parts)
+    return explanation_text

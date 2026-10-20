@@ -107,8 +107,8 @@ nona:
 | # | Superfície | Onde |
 |---|---|---|
 | 1 | Registro e variável de modo real | `app/connectors/__init__.py::_REGISTRY` e `_REAL_MODE_SETTING` |
-| 2 | Literal da requisição | `IncidentRequest.interface_type` em `app/models.py` |
-| 3 | Literal do evento | `IncidentEventData.interface_type` em `app/models.py` |
+| 2 | Literal da requisição | `IncidentRequest.interface_type` em `app/models/models.py` |
+| 3 | Literal do evento | `IncidentEventData.interface_type` em `app/models/models.py` |
 | 4 | Domínio de roteamento (DA-63) | `domains.sap` ou `domains.saas` em `data/skills/diagnose_incident.yaml`; o supervisor (`app/agent/supervisor.py::_DOMAIN_INDEX`) deriva o roteamento daí (fora dos dois, como o `apim`, o domínio sai da descrição) |
 | 5 | CLI | `choices` de `--interface` em `app/agent/graph.py` |
 | 6 | Catálogo admin | `app/admin/models.py::CONNECTOR_TYPES` |

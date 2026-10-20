@@ -809,9 +809,10 @@ def _connector_root(
     (tmp_path / "app/connectors").mkdir(parents=True)
     (tmp_path / "app/agent").mkdir(parents=True)
     (tmp_path / "app/admin").mkdir(parents=True)
+    (tmp_path / "app/models").mkdir(parents=True)
     (tmp_path / "frontend/src/components").mkdir(parents=True)
     (tmp_path / "app/connectors/__init__.py").write_text(registry, encoding="utf-8")
-    (tmp_path / "app/models.py").write_text(literal, encoding="utf-8")
+    (tmp_path / "app/models/models.py").write_text(literal, encoding="utf-8")
     # O catalogo admin (DA-49) tem a PROPRIA tupla `CONNECTOR_TYPES` — e' a
     # sexta superficie do gate. O fixture precisa fornecer uma de verdade:
     # o arquivo do admin nao e' o Literal do pipeline.
@@ -882,7 +883,7 @@ _SANE_REGISTRY = (
     "_REAL_MODE_SETTING = {\n    'odata': 'odata_service_url',\n"
     "    'successfactors': 'sfsf_base_url',\n    'apim': 'apim_analytics_url',\n}\n"
 )
-# O gate ancora no nome do campo (`interface_type:`) de proposito: app/models.py
+# O gate ancora no nome do campo (`interface_type:`) de proposito: app/models/models.py
 # tem outros Literals (sensitivity_level, trust_level) e ancorar no Literal
 # "qualquer um" trazia sensitivity_level junto.
 

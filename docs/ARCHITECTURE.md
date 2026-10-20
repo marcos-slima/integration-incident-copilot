@@ -198,7 +198,7 @@ duplicada.
 | Servicos | `app/services/` | gravacao de incidentes (`incident_recorder.py`, `incident_repository.py`) e fontes de busca aprovadas (`web_search_sources.py`) |
 | Admin | `app/admin/` | registro de modelos e credenciais cifradas, uso, sistemas, usuarios, correlacao (DA-46 a DA-50) |
 | Contratos | `app/contracts/` | drift de contrato OData (DA-52) |
-| Config e modelos | `app/config.py`, `app/models.py` | `Settings` como fonte unica; contratos Pydantic da API |
+| Config e modelos | `app/config.py`, `app/models/models.py` | `Settings` como fonte unica; contratos Pydantic da API |
 
 ## Contrato de estado e memoria
 
@@ -980,7 +980,7 @@ nativo). `data` carrega exatamente os mesmos campos de
 `IncidentRequest` (a informacao e a MESMA que um humano digitaria em
 `/diagnose`, so que originada automaticamente). Hoje so um `type` e
 reconhecido - `com.sap.integration.incident.detected.v1` - modelado
-como `Literal` em `IncidentEventEnvelope` (`app/models.py`): qualquer
+como `Literal` em `IncidentEventEnvelope` (`app/models/models.py`): qualquer
 outro valor e rejeitado com `422` automaticamente pelo Pydantic, em
 vez de tentar interpretar silenciosamente um payload de formato
 desconhecido.
@@ -1174,7 +1174,7 @@ dense + sparse -> RRF -> candidate pool -> cross encoder -> evidence threshold -
   rejeitado) e os dois ramos do fallback de `reference_library`.
 
 **2. Evidence/Trust Layer.** A resposta do diagnostico (`DiagnosisResponse`)
-ganhou um campo `evidence: list[Evidence]` (`app/models.py`) - uma
+ganhou um campo `evidence: list[Evidence]` (`app/models/models.py`) - uma
 entrada por fonte REAL consultada nesta execucao (conector, RAG,
 GraphRAG, busca web, descricao do usuario), cada uma com um
 `trust_level` decidido pelo TIPO da fonte:
@@ -1504,7 +1504,7 @@ correct informados E (desde a DA-50) nao houver linha gravavel na tabela
 `incidents` (sem `DATABASE_URL` ou incidente inexistente) - nada para
 registrar em lugar nenhum; GraphRAG
 ligado com incident_id inexistente continua 404. Ver
-`app/models.py::VerifyIncidentRequest` (campos `correct`/`trace_id`
+`app/models/models.py::VerifyIncidentRequest` (campos `correct`/`trace_id`
 novos) e `app/main.py::verify_incident_endpoint`.
 
 ## Benchmark cientifico de rerankers (DA-29)

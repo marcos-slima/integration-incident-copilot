@@ -893,7 +893,7 @@ def check_index_current(root: Path = REPO_ROOT) -> list[Finding]:
 # ---------------------------------------------------------------------------
 
 DOCS_DIR = Path("docs")
-PIPELINE_MODEL_SOURCE = Path("app/models.py")
+PIPELINE_MODEL_SOURCE = Path("app/models/models.py")
 CONNECTORS_SOURCE = Path("app/connectors/__init__.py")
 SKILLS_DIR = Path("data/skills")
 SUPERVISOR_SOURCE = Path("app/agent/supervisor.py")

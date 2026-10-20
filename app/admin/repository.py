@@ -159,16 +159,22 @@ class AdminRepository:
 
     # -- credenciais (DA-47) ------------------------------------------------
 
-    async def set_credential(self, provider_origin: str, plaintext_key: str) -> LlmCredential:
+    async def set_credential(
+        self, provider_origin: str, plaintext_key: str, *, tenant_id: str | None = None
+    ) -> LlmCredential:
         """Grava (ou rotaciona) a credencial cifrada de uma origem.
 
         `plaintext_key` existe apenas aqui, em memoria, na request — o
         banco guarda o token Fernet e a mascara. Nunca retornamos o
-        plaintext para o chamador."""
+        plaintext para o chamador.
+
+        DA-79: tenant_id opcional. Quando fornecido, a credencial é
+        isolada por tenant (tenant_id + provider_origin é a chave única).
+        Quando None, a credencial é global (comportamento original)."""
         origin = canonical_origin(provider_origin) or provider_origin.strip()
         encrypted = crypto.encrypt_secret(plaintext_key)
         masked = crypto.mask_secret(plaintext_key)
-        existing = await self.get_credential(origin)
+        existing = await self.get_credential(origin, tenant_id=tenant_id)
         if existing is not None:
             existing.encrypted_key = encrypted
             existing.masked = masked
@@ -178,37 +184,55 @@ class AdminRepository:
             existing.updated_at = _now()
             await self._session.flush()
             return existing
+
+        # DA-79: incluir tenant_id na criação
         row = LlmCredential(
             provider_origin=origin,
             encrypted_key=encrypted,
             key_version=1,
             masked=masked,
+            tenant_id=tenant_id,
         )
         self._session.add(row)
         await self._session.flush()
         return row
 
-    async def get_credential(self, provider_origin: str) -> LlmCredential | None:
-        result = await self._session.execute(
-            select(LlmCredential).where(
-                LlmCredential.provider_origin
-                == (canonical_origin(provider_origin) or provider_origin.strip())
-            )
-        )
+    async def get_credential(
+        self, provider_origin: str, *, tenant_id: str | None = None
+    ) -> LlmCredential | None:
+        """Busca credencial por origin e tenant_id (ou sem tenant_id)."""
+        origin = canonical_origin(provider_origin) or provider_origin.strip()
+
+        # DA-79: construir query com ou sem tenant_id
+        stmt = select(LlmCredential).where(LlmCredential.provider_origin == origin)
+        if tenant_id is not None:
+            stmt = stmt.where(LlmCredential.tenant_id == tenant_id)
+        else:
+            # Quando tenant_id=None, buscar apenas credentials globais (tenant_id IS NULL)
+            stmt = stmt.where(LlmCredential.tenant_id.is_(None))
+
+        result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def delete_credential(self, provider_origin: str) -> bool:
-        row = await self.get_credential(provider_origin)
+    async def delete_credential(
+        self, provider_origin: str, *, tenant_id: str | None = None
+    ) -> bool:
+        """Deleta credencial por origin e tenant_id (ou sem tenant_id)."""
+        row = await self.get_credential(provider_origin, tenant_id=tenant_id)
         if row is None:
             return False
         await self._session.delete(row)
         await self._session.flush()
         return True
 
-    async def decrypt_credential(self, provider_origin: str) -> str | None:
+    async def decrypt_credential(
+        self, provider_origin: str, *, tenant_id: str | None = None
+    ) -> str | None:
         """Plaintext da credencial de uma origem (uso exclusivo do
-        runtime, DA-46 — factory managed mode). None se nao existir."""
-        row = await self.get_credential(provider_origin)
+        runtime, DA-46 — factory managed mode). None se nao existir.
+
+        DA-79: tenant_id opcional para isolamento por tenant."""
+        row = await self.get_credential(provider_origin, tenant_id=tenant_id)
         if row is None:
             return None
         return crypto.decrypt_secret(row.encrypted_key)

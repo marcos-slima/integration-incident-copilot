@@ -982,7 +982,7 @@ AMQP 1.0). `data` carries exactly the same fields as
 `IncidentRequest` (the information is the SAME a human would type in
 `/diagnose`, just generated automatically). Today only one `type` is
 recognized—`com.sap.integration.incident.detected.v1`—modeled
-as `Literal` in `IncidentEventEnvelope` (`app/models.py`): any
+as `Literal` in `IncidentEventEnvelope` (`app/models/models.py`): any
 other value is rejected with `422` automatically by Pydantic, instead
 of trying to silently interpret a payload of unknown format.
 
@@ -1169,7 +1169,7 @@ dense + sparse -> RRF -> candidate pool -> cross encoder -> evidence threshold -
   rejeitado) e os dois ramos do fallback de `reference_library`.
 
 **2. Evidence/Trust Layer.** A resposta do diagnostico (`DiagnosisResponse`)
-ganhou um campo `evidence: list[Evidence]` (`app/models.py`) - uma
+ganhou um campo `evidence: list[Evidence]` (`app/models/models.py`) - uma
 entrada por fonte REAL consultada nesta execucao (conector, RAG,
 GraphRAG, busca web, descricao do usuario), cada uma com um
 `trust_level` decidido pelo TIPO da fonte:
@@ -1455,7 +1455,7 @@ correct informados E (desde a DA-50) nao houver linha gravavel na tabela
 `incidents` (sem `DATABASE_URL` ou incidente inexistente) - nada para
 registrar em lugar nenhum; GraphRAG
 ligado com incident_id inexistente continua 404. Ver
-`app/models.py::VerifyIncidentRequest` (campos `correct`/`trace_id`
+`app/models/models.py::VerifyIncidentRequest` (campos `correct`/`trace_id`
 novos) e `app/main.py::verify_incident_endpoint`.
 
 ## Benchmark cientifico de rerankers (DA-29)

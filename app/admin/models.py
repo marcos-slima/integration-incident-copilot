@@ -137,15 +137,20 @@ class LlmModel(Base):
 
 
 class LlmCredential(Base):
-    """Credencial de um provider por ORIGEM, cifrada (DA-47).
+    """Credencial de um provider por ORIGEM, cifrada (DA-47, DA-79).
 
     Uma linha por provider_origin (chave primaria). `encrypted_key` e um
     token Fernet; `masked` guarda a representacao segura para a UI
     (prefixo 4 + '****' + sufixo 4) — a API nunca devolve plaintext.
+
+    DA-79: tenant_id opcional para isolation de credenciais por tenant.
+    Quando None, credencial é global. Quando preenchido, (tenant_id,
+    provider_origin) torna-se a chave única.
     """
 
     __tablename__ = "llm_credentials"
 
+    tenant_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     provider_origin: Mapped[str] = mapped_column(String(128), primary_key=True)
     encrypted_key: Mapped[str] = mapped_column(Text, nullable=False)
     key_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
@@ -157,6 +162,20 @@ class LlmCredential(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_now, onupdate=_now
+    )
+
+    __table_args__ = (
+        # DA-79: quando tenant_id não é NULL, (tenant_id, provider_origin) é único
+        # when tenant_id is NULL, only provider_origin needs to be unique (global cred)
+        # Para PostgreSQL: índice parcial único
+        Index(
+            "uq_llm_credentials_tenant_origin",
+            "tenant_id",
+            "provider_origin",
+            unique=True,
+            postgresql_where=text("tenant_id IS NOT NULL"),
+        ),
+        Index("ix_llm_credentials_tenant", "tenant_id"),
     )
 
     def __repr__(self) -> str:
@@ -619,3 +638,41 @@ class LlmCost(Base):
         Index("ix_llm_cost_created_at", "created_at"),
         Index("ix_llm_cost_provider", "provider"),
     )
+
+
+# ---------------------------------------------------------------------------
+# knowledge_document_versions (DA-86: UI versionamento RAG)
+# ---------------------------------------------------------------------------
+class KnowledgeDocumentVersion(Base):
+    """Versão de documento de conhecimento para rollback (DA-86).
+
+    Permite manter histórico de versões de documentos RAG e fazer rollback
+    para versões anteriores. Um documento pode ter várias versões, sendo
+    exatamente uma marcada como `is_current=True`.
+
+    Campos:
+        document_id: UUID do documento (externo ao Qdrant, identifica o arquivo)
+        version: Número sequencial da versão (incremental por documento)
+        content: Conteúdo completo do documento naquela versão
+        created_at: Timestamp da criação da versão
+        is_current: Flag de qual versão está ativa (apenas uma por documento)
+    """
+
+    __tablename__ = "knowledge_document_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    document_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_now
+    )
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+
+    __table_args__ = (UniqueConstraint("document_id", "version", name="uq_document_version"),)
+
+    def __repr__(self) -> str:
+        return (
+            f"<KnowledgeDocumentVersion doc={self.document_id} v{self.version} "
+            f"current={self.is_current}>"
+        )

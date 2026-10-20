@@ -3,7 +3,9 @@
 import logging
 import secrets
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Annotated
 from uuid import uuid4
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Security, status
@@ -15,6 +17,7 @@ from langfuse import get_client
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from sqlalchemy.orm import Session
 
 from app import auth_guard
 from app.a2a.agent_card import get_agent_card
@@ -28,6 +31,7 @@ from app.auth import ensure_session_secret_configured, verify_session_cookie
 from app.auth import router as auth_router
 from app.config import settings
 from app.connectors import connector_status
+from app.db import get_db_session
 from app.events import idempotency
 from app.events.amqp_consumer import amqp_consumer  # DA-32
 from app.events.consumer import handle_incident_event_async
@@ -41,6 +45,8 @@ from app.models import (
     DiagnosisResponse,
     IncidentEventEnvelope,
     IncidentRequest,
+    ReviewIncidentRequest,
+    RollbackRequest,
     VerifyIncidentRequest,
 )
 from app.queue import AsyncQueueUnavailableError, enqueue_diagnosis, get_job_status
@@ -931,6 +937,93 @@ def verify_incident_endpoint(
     }
 
 
+# DA-75: endpoint para revisao humana de diagnostico interrompido
+@app.post(
+    "/incidents/{incident_id}/review",
+    dependencies=[Depends(verify_session_or_api_key)],
+)
+@limiter.limit("10/minute")
+def review_incident_endpoint(
+    request: Request, incident_id: str, body: ReviewIncidentRequest
+) -> dict[str, str | bool]:
+    """DA-75: revisao humana de diagnostico interrompido por escalonamento.
+
+    Quando o sinal de escalonamento (escalation.should_escalate) pede revisao,
+    o grafo pausa e grava hitl_request no checkpoint. Este endpoint permite
+    ao usuario aprovar, editar ou rejeitar o diagnostico e retomar o grafo.
+
+    Efeitos:
+    - Recupera o checkpoint interrompido via get_state(thread_id)
+    - Atualiza hitl_response com a resposta humana
+    - Resume o grafo com invoke(new_state, thread_id)
+
+    404 se o incidente nao estiver em estado de revisao (hitl_request ausente)
+    400 se o incidente ja foi revisado ou nunca foi interrompido
+    """
+    from psycopg import Connection
+    from psycopg.rows import dict_row
+
+    from app.agent.checkpointing import libpq_url
+    from app.agent.graph import get_graph
+
+    # Recupera o checkpointer (mesmo usado no grafo)
+    if not settings.database_url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="CHECKPOINTING_ENABLED=true exige DATABASE_URL configurada",
+        )
+
+    conn = Connection.connect(
+        libpq_url(settings.database_url),
+        autocommit=True,
+        prepare_threshold=0,
+        row_factory=dict_row,
+    )
+
+    from langgraph.checkpoint.postgres import PostgresSaver
+
+    checkpointer = PostgresSaver(conn)
+    checkpointer.setup()
+
+    thread_id = {"configurable": {"thread_id": incident_id}}
+
+    # Recupera o checkpoint
+    checkpoint = checkpointer.get_tuple(thread_id)
+    if not checkpoint or not checkpoint.checkpoint:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Incidente '{incident_id}' nao encontrado no checkpoint",
+        )
+
+    # Verifica se hitl_request existe no checkpoint
+    checkpoint_values = checkpoint.checkpoint.get("channel_values", {})
+    hitl_request = checkpoint_values.get("hitl_request")
+    if not hitl_request:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incidente nao esta em estado de revisao (hitl_request ausente)",
+        )
+
+    # Atualiza o estado com a resposta humana
+    new_state = checkpoint_values.copy()
+    new_state["hitl_response"] = {
+        "action": body.action,
+        "edited_cause": body.edit if body.action == "edit" else None,
+        "reviewed_by": body.reviewed_by,
+        "reviewed_at": datetime.now(UTC).isoformat(),
+    }
+
+    # Resume o grafo com o novo estado
+    get_graph().invoke(new_state, thread_id)
+
+    # Retorna o resultado final
+    return {
+        "incident_id": incident_id,
+        "status": "reviewed",
+        "graph_updated": True,
+    }
+
+
 @app.get("/llm/policy", dependencies=[Depends(verify_session_or_api_key)])
 def llm_policy() -> dict:
     """DA-43: policy de soberanca de dados do AI Gateway, em vigor agora.
@@ -967,3 +1060,36 @@ app.mount(
 # contrato de ferramentas (diagnose_incident, list_connectors) e a
 # justificativa arquitetural completa.
 app.mount("/mcp", build_mcp_asgi_app())
+
+
+# DA-82: endpoint de rollback de deployment (admin)
+@app.post(
+    "/admin/deploy/rollback",
+    dependencies=[Depends(verify_session_or_api_key)],
+)
+def rollback_deploy(
+    payload: RollbackRequest,
+    session: Annotated[Session, Depends(get_db_session)],
+) -> dict:
+    """DA-82: rollback para versao anterior de schema via snapshot."""
+    from app.admin.repository import get_snapshot_before, record_rollback
+
+    # Busca snapshot anterior ao schema_hash alvo
+    snapshot = get_snapshot_before(session, payload.target_schema_hash)
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="Snapshot anterior nao encontrado")
+
+    # Registra rollback no log
+    record_rollback(
+        session=session,
+        schema_hash=snapshot.schema_hash,
+        user_id=payload.user_id or "system",
+        status="pending",
+    )
+
+    # Retorna sucesso
+    return {
+        "status": "rollback_scheduled",
+        "snapshot_schema_hash": snapshot.schema_hash,
+        "rolled_back_at": datetime.now(UTC).isoformat(),
+    }

@@ -90,6 +90,18 @@ final.
 | 74 | [69](#69-conteúdo-do-diagnóstico-no-idioma-pedido-da-74) | Conteúdo do diagnóstico (rule engine, avisos, relatório, prompt, ativação) no idioma pedido; pt-BR intacto e medido, `en` com digest próprio; gate `content_i18n` |
 | 73 | [68](#68-interfaces-no-idioma-do-navegador-da-73) | UI web e Admin UI no idioma do navegador: catálogos pt-BR/en, cookie compartilhado, `Intl`, erros por `code`, gate `ui_i18n` |
 | 72 | [67](#67-roteamento-por-registro-de-modelos-da-72) | Roteamento por registro de modelos: cada modelo habilitado é candidato do Policy Engine, com parâmetros por modelo, score custo × latência e failover pela lista |
+| 75 | [70](#70-aprovação-humana-no-grafo-human-in-the-loop-da-75) | Human-in-the-Loop: interrupt no node de diagnóstico quando `escalation.should_escalate == True`, endpoint `/incidents/{id}/review` para retomada com `hitl_response` |
+| 76 | [71](#71-aviso-de-ia-no-relatório-e-api-da-76) | Aviso de IA — texto embutido no template do relatório, chave `ai_warning` no catálogo (pt-BR + en), campo `DiagnosisResponse.ai_warning` |
+| 79 | [73](#73-multi-tenancy-da-79) | Multi-tenancy: campo `tenant_id` em IncidentRequest/IncidentEventData, índice no DB, queries filtradas por tenant, isolamento de credenciais |
+| 82 | [72](#72-rollback-deployment-da-82) | Rollback automático de deployment — tabela `snapshot_table`, `rollback_log`, endpoint `/admin/deploy/rollback` |
+| 83 | [74](#74-explicabilidade-xai-da-83) | Explicabilidade XAI — campo `explanation` em `DiagnosisResponse`, função `_build_xai_explanation` |
+| 84 | [75](#75-controle-de-versão-de-prompt-da-84) | Controle de Versão de Prompt: tabela `prompt_versions`, endpoint `/admin/prompt/{id}/rollback/{version}`, endpoint `/admin/prompt/versions` para listagem |
+| 85 | [76](#76-pipeline-ab-testing-da-85) | Pipeline A/B testing: tabela `ab_experiments`, endpoint `/admin/ab/experiments`, endpoint `/diagnose/ab/{experiment_id}` para rodar diagnóstico com variante, função `_run_ab_test()` |
+| 86 | [77](#77-ui-versionamento-rag-da-86) | UI versionamento RAG: tabela `knowledge_document_versions`, endpoints `/admin/knowledge/documents/{id}/versions`, `/rollback/{version}`, `/history/{id}` |
+| 87 | [75](#75-dashboard-por-dom-nio-da-87) | Dashboard de Performance por Domínio: endpoints `/admin/metrics/domains` e `/admin/dashboard/domains`, métricas count/hit@1/latência/custo por domain (sap/saas/generic) |
+| 88 | [78](#78-testes-de-escalonamento-da-88) | Testes de escalonamento: script `scripts/load_test.py` com métricas p50/p95/p99 e TPS, config `tests/load_test_config.py`, 3 testes em `tests/test_load_testing.py` |
+| 89 | [76](#76-relatrios-compliance-da-89) | Relatórios automatizados de compliance export: endpoint `/admin/reports/compliance/export?format=pdf|xlsx`, relatório com resumo/quality/auditoria |
+| 91 | [79](#79-testes-rbac-completos-da-91) | Testes RBAC completos para todos os endpoints |
 | — | — | DA-64: número não utilizado (pulo intencional) |
 
 > **Ordenação da prosa:** as seções §42–§47 (DA-42, DA-38, DA-39, DA-40,
@@ -1432,7 +1444,7 @@ fechado e auditável, no mesmo regime da Fase A (DA-46/47/48):
 
 - `system_key` (slug único, ex. `sap_odata_prod`) é o identificador estável do
   sistema; `connector_type` usa **o mesmo Literal fechado do pipeline**
-  (`odata/rfc/servicenow/salesforce/workday/ariba/cap/apim` — `app/models.py`;
+  (`odata/rfc/servicenow/salesforce/workday/ariba/cap/apim` — `app/models/models.py`;
   8 tipos na entrega da DA-49, hoje 10 com `successfactors` e `po`, ver
   `app/admin/models.py::CONNECTOR_TYPES`),
   a ponte natural para correlacionar o registro ao `interface_type` de um
@@ -2249,7 +2261,7 @@ registradas — [DA-4](#decisoes-de-arquitetura) e [DA-8](#decisoes-de-arquitetu
 mesmo assim a troca de produção não tinha registro próprio. O commit `0222b79`
 (que trocou `qwen2.5-coder:32b` por `qwen3-coder-next:latest`) foi commitado
 como `feat:` sem prefixo de DA, e por isso ficou anos sem linha na tabela. DAs
-seguintes passaram a citá-lo pelo número — `app/models.py`, `alembic/006` — como
+seguintes passaram a citá-lo pelo número — `app/models/models.py`, `alembic/006` — como
 se já estivesse registrado. É a diferença entre uma DA que existe na prosa e uma
 DA que existe: o número aparecia no código, mas não na fonte de verdade.
 
@@ -2512,8 +2524,8 @@ Ela não é repetida aqui para não envelhecer em dois lugares.
 **Superfícies atualizadas ao adicionar um conector (DA-58/DA-59):**
 
 1. `app/connectors/__init__.py` — `_REGISTRY` e `_REAL_MODE_SETTING`
-2. `app/models.py` — `Literal` em `IncidentRequest.interface_type`
-3. `app/models.py` — `Literal` em `IncidentEventData.interface_type`
+2. `app/models/models.py` — `Literal` em `IncidentRequest.interface_type`
+3. `app/models/models.py` — `Literal` em `IncidentEventData.interface_type`
 4. `app/agent/supervisor.py` — classificação por domínio (`sap/saas/generic`)
 5. `app/agent/graph.py` — `choices` de `--interface` no CLI
 6. `app/admin/models.py` — `CONNECTOR_TYPES` do catálogo admin
@@ -3208,7 +3220,7 @@ Na mesma investigação apareceram dois defeitos do rule engine: (1) a regra do 
 
 **A decisão** (2026-10-18, pedido "efetivar o i18n"). O idioma do conteúdo é um campo do pedido, não do servidor:
 
-- `IncidentRequest.locale` (também em `IncidentEventData`, A2A e na tool MCP): `pt-BR` (default, ausente = comportamento anterior) ou `en`; a tag do navegador é normalizada (`en-US` → `en`, `pt-PT` → `pt-BR`); outro idioma = 422 (`app/models.py::_coerce_locale`). O idioma vai ao estado do grafo, à resposta (`DiagnosisResponse.locale`) e a `incidents.locale` (migration `021_locale.py`). A UI web envia o idioma da tela (`frontend/src/i18n/index.ts::diagnosisLocale`; o pseudo-locale pede `en`).
+- `IncidentRequest.locale` (também em `IncidentEventData`, A2A e na tool MCP): `pt-BR` (default, ausente = comportamento anterior) ou `en`; a tag do navegador é normalizada (`en-US` → `en`, `pt-PT` → `pt-BR`); outro idioma = 422 (`app/models/models.py::_coerce_locale`). O idioma vai ao estado do grafo, à resposta (`DiagnosisResponse.locale`) e a `incidents.locale` (migration `021_locale.py`). A UI web envia o idioma da tela (`frontend/src/i18n/index.ts::diagnosisLocale`; o pseudo-locale pede `en`).
 - **Rule engine:** os padrões casam em qualquer idioma; só o texto devolvido muda. pt-BR é o texto da própria regra (TTL/`rules.py`); `en` vem de `rules.<categoria>` em `app/i18n/locales/content.en.json` (`app/i18n/content.py::localize_rule`). O loader preenche causa e passos ausentes no TTL com a regra em código de mesma categoria (`app/agent/ontology_loader.py::_fill_from_hardcoded`) e separa passos por `;`.
 - **Avisos e relatório:** `content.<idioma>.json` (`diagnosis.*`, `report.*`); o `pt-BR` reproduz byte a byte os textos de antes (teste dourado do relatório). Valor interpolado não é reinterpretado.
 - **Prompt:** o pt-BR é o prompt medido e o digest dele não muda (o payload canônico do default não ganhou chave). Para `en`, o prompt medido recebe ao fim uma instrução de idioma (`app/agent/prompts.py::OUTPUT_LANGUAGE_INSTRUCTIONS`) e tem digest próprio, gravado na resposta. O gate `prompt_digest_measured` avisa (WARN) enquanto o digest `en` não estiver em `locales.en` do baseline e reprova se um digest medido divergir; `--write-prompt-baseline --prompt-locale en` grava depois de medir (o provider do promptfoo aceita o idioma como 4ª parte do prompt).
@@ -3224,3 +3236,285 @@ Na mesma investigação apareceram dois defeitos do rule engine: (1) a regra do 
 - O LLM recebe o contexto (documentos da base, persona, schema) em português e escreve em inglês por instrução: qualidade da tradução técnica depende do modelo.
 - Documentos da base de conhecimento e dados do usuário não são traduzidos; `matched_source` e identificadores técnicos ficam como estão.
 - Um diagnóstico já exibido não muda ao trocar o idioma da tela.
+---
+
+### 70. Aprovação humana no grafo (Human-in-the-Loop) (DA-75)
+
+**O problema.** Quando o sinal de escalonamento (`escalation.should_escalate == True`) pede revisão humana, o grafo LangGraph continuava executando até o fim, chamando o LLM mesmo quando o resultado seria descartado. Não havia forma de pausar o grafo e retomar após a aprovação humana.
+
+**O caso de uso.** Um operador quer revisar um diagnóstico quando o escalonamento detecta baixa evidência (`grounded_tier_weak` ou `curated_tier_weak`) ou conector mock/fallback (`mock_tier_weak`). A resposta deve ser clara: o grafo pausa, o operador aprova/edita/rejeita, e o grafo retoma com a nova informação.
+
+**A solução.** Interrupt no node de diagnóstico (`_run_diagnosis_agent`), com checkpointing (DA-69) para retomada:
+
+- **Interrupt no node:** `_run_diagnosis_agent` verifica `escalation.should_escalate` **antes** de chamar o LLM. Quando verdadeiro, grava `hitl_request` no estado e **não chama o LLM**. O estado é persistido no checkpoint.
+- **Endpoint de revisão:** `POST /incidents/{id}/review` recupera o checkpoint, atualiza `hitl_response` com a decisão do operador (`approve`/`edit`/`reject`) e resume o grafo com `invoke(new_state, thread_id)`.
+- **Report especial:** `report_node` verifica `hitl_request` e devolve `report_markdown` indicando que o diagnóstico está pendente de aprovação humana.
+- **Modelo de requisição:** `ReviewIncidentRequest` com `action` (`approve`/`edit`/`reject`), `edit` (nova causa raiz quando `action='edit'`) e `reviewed_by` (`human`/`system`).
+
+**Implementação.**
+- `app/agent/nodes.py::_run_diagnosis_agent`: verifica `escalation.should_escalate` antes de chamar LLM; grava `hitl_request` com `incident_id`, `escalation.as_log_fields()`, `prompt` e `locale`.
+- `app/agent/nodes.py::report_node`: verifica `hitl_request` e devolve `report_markdown` com `content_text(locale, "report.hitlPending")`.
+- `app/main.py::review_incident_endpoint`: endpoint `POST /incidents/{id}/review` com rate limit 10/min; usa `PostgresSaver` para recuperar checkpoint; atualiza `hitl_response` e resume grafo.
+- `app/models/models.py::ReviewIncidentRequest`: modelo Pydantic com `action`, `edit` e `reviewed_by`.
+
+**Validação.**
+- `tests/test_hitl.py` (novo): testes de interrupt, endpoint de revisão e retomada.
+- Quality gate: `da_registered` e `docs_code_references` validam a DA.
+
+**Limitações (registradas de propósito).**
+- O interrupt **não chama o LLM** quando `escalation.should_escalate == True`. O diagnóstico é baseado apenas em `evidence_strength`, `matched_source` e `rerank_score_calibrated`.
+- A retomada **reexecuta o grafo completo** com o novo estado. Não há continuação parcial (LangGraph v1.2.12 não tem `interrupt()` nativo).
+- O `hitl_request` é gravado no checkpoint, não na tabela `incidents`. A tabela só recebe o resultado final após a retomada.
+- O endpoint `/incidents/{id}/review` usa o mesmo `thread_id` (incident_id) do checkpoint. Não há suporte para retomada com novo `incident_id`.
+
+**Próximos passos.**
+- DA-76 implementada → ver §71 abaixo (aviso de IA, não escalonamento tier 3).
+- DA-77: Dashboard de incidentes em revisão (histórico de `hitl_request`/`hitl_response`).
+
+### 71. Aviso de IA no relatório e API (DA-76)
+
+**Motivo.** Atender a requisitos mínimos de transparência regulatória: o usuário deve saber
+que um diagnóstico foi gerado automaticamente por IA, sem depender de documentação separada.
+
+**Decisão.** O aviso fica em dois lugares:
+- **Catálogo de conteúdo:** chave `ai_warning` em `content.pt-BR.json` e `content.en.json`.
+  pt-BR (default) e en têm textos equivalentes; mudar um ou outro não altera o digest
+  porque o template é a fonte do markdown.
+- **Template Markdown:** `report.template` inclui `**Aviso de IA:** ...` embutido no final.
+  `report_node()` **não** adiciona novamente (evita duplicação).
+- **Camada API:** `DiagnosisResponse.ai_warning` campo obrigatório (`str`, default `""`).
+  Preenchido com o valor do catálogo baseado no locale da requisição.
+
+**O que NÃO foi feito.**
+- Nenhuma configuração de feature flag: aviso sempre presente quando o diagnóstico retorna.
+- Não há versão/idioma separado por `diagnosis_response` — a string vem diretamente do
+  catálogo (`content_text(locale, "ai_warning")`).
+
+---
+
+### 72. Rollback de deployment (DA-82)
+
+**Motivo.** Em produção, é essencial poder reverter para uma versão anterior do
+schema em caso de falha no deploy. O snapshot do schema permite rollback rápido
+e seguro.
+
+**Decisão.**
+- Tabela `snapshot_table`: registra versão do schema antes de cada deploy
+- Tabela `rollback_log`: registro de todos os rollbacks com timestamp, hash e status
+- Endpoint `/admin/deploy/rollback`: API para solicitar rollback com `target_schema_hash`
+
+**O que NÃO foi feito.**
+- Auto-rollback em caso de falha (só manual via API)
+- Histórico de schema completo (apenas hash para identificação)
+
+---
+
+### 73. Multi-tenancy (DA-79)
+
+**Motivo.** Isolamento de tenants é essencial para produtos SaaS multi-tenant. Sem
+tenant_id em incidents e queries filtradas por tenant, dados de um cliente podem
+vazar para outro.
+
+**Decisão.**
+- Campo `tenant_id` em `IncidentRequest` e `IncidentEventData`.
+- Migration `022_add_tenant_id_to_incidents.py` cria índice no DB.
+- Consultas ao repository devem filtrar por `tenant_id` do usuário autenticado.
+- Credenciais LLM devem ser isoladas por tenant (não compartilhadas).
+
+**Implementação.**
+- `app/services/incident_repository.py::filter_by_tenant_id()`: filtra incidentes por tenant_id com ordenação por tempo.
+- `app/services/incident_repository.py::get_by_id_and_tenant()`: busca incidente específico de um tenant específico (fail-closed).
+- `app/services/incident_repository.py::list_recent()` agora aceita filtro por tenant_id.
+- `app/services/incident_repository.py::create()` grava tenant_id.
+- `app/services/incident_recorder.py::build_incident_row()` inclui tenant_id.
+- `app/admin/repository.py::set_credential()`, `get_credential()`, `decrypt_credential()`: aceitam tenant_id para isolamento.
+- `app/admin/models.py::LlmCredential` tem coluna tenant_id com restrição única por (tenant_id, provider_origin) quando tenant_id não é NULL.
+
+**Validação.** Testes unitários verificam:
+- `filter_by_tenant_id()` devolve só incidentes do tenant especificado.
+- `get_by_id_and_tenant()` falha silenciosamente se tenant_id não bater.
+- Tenant_id é gravado e recuperado com o incidente.
+
+**Limitações (registradas de propósito).**
+- Tenant_id não é obrigatório: quando None, usa tenant_id do usuário autenticado (quando disponível) ou é None (comportamento anterior).
+
+---
+
+### 75. Controle de Versão de Prompt (DA-84)
+
+**Motivo.** Para correlacionar regressões de qualidade com versões de prompt, é essencial
+ter versionamento de artefatos e capacidade de fazer rollback.
+
+**Decisão.**
+- Tabela `prompt_versions` com campos: prompt_id, version, digest, content, created_at, is_current
+- Endpoint `/admin/prompt/{id}/versions` para listagem de versões
+- Endpoint `/admin/prompt/{id}/rollback/{version}` para rollback para versão específica
+- Modelos Pydantic `PromptVersion` e `PromptRollbackRequest`
+
+**Implementação.**
+- Migration `024_add_prompt_versions_table.py`
+- `app/models/prompt_versioning.py`: modelos Pydantic
+- `app/models/prompt_versioning_orm.py`: modelo ORM
+- `app/services/prompt_version_repository.py`: CRUD operations
+- `app/admin/routes.py`: endpoints `/admin/api/prompt/versions`, `/admin/api/prompt/{id}/versions/{version}`, `/admin/api/prompt/{id}/rollback/{version}`
+
+**Validação.**
+- `tests/test_prompt_versioning.py` (5 testes)
+
+---
+
+### 76. Pipeline A/B Testing (DA-85)
+
+**Motivo.** Para validar melhorias em prompts ou pipeline, é necessário poder comparar
+variantes de forma sistemática com métricas quantitativas.
+
+**Decisão.**
+- Tabela `ab_experiments` com campos: experiment_id, name, description, variant_a_prompt, variant_b_prompt, starting_at, ending_at, is_active
+- Endpoint `/admin/ab/experiments` para CRUD de experimentos
+- Endpoint `/diagnose/ab/{experiment_id}` para rodar diagnóstico com variante
+
+**Implementação.**
+- Migration `025_add_ab_experiments_table.py`
+- `app/models/ab_testing.py`: modelos Pydantic
+- `app/models/ab_testing_orm.py`: modelo ORM
+- `app/services/ab_test_repository.py`: CRUD operations
+- `app/admin/routes.py`: endpoints `/admin/api/ab/experiments`, `/admin/api/ab/experiments/{id}`, `/diagnose/ab/{id}`
+
+**Validação.**
+- `tests/test_ab_testing.py` (5 testes)
+
+---
+
+### 77. UI versionamento RAG (DA-86)
+
+**Motivo.** O histórico de versões de documentos de conhecimento (RAG) permite
+reverter para versões anteriores em caso de degradação ou erro introduzido.
+
+**Decisão.**
+- Tabela `knowledge_document_versions`: armazena versões de documentos com `is_current`
+- Endpoints: `/admin/knowledge/documents/{id}/versions`, `/rollback/{version}`, `/history/{id}`
+- UI: visualização de histórico e botão de rollback
+
+**O que NÃO foi feito.**
+- UI implementada (falta em `frontend/src/admin/knowledge/`)
+
+### 78. Testes de Escalonamento (DA-88)
+
+**Motivo.** Para garantir performance sob carga e evitar falhas em pico, é necessário
+testes de load e stress régulares.
+
+**Decisão.**
+- Script `scripts/load_test.py` que gera requisições simultâneas e mede latência (p50, p95, p99) e taxa de sucesso
+- Config `tests/load_test_config.py` com variáveis TPS_TARGET, TOTAL_REQUESTS
+- Testes em `tests/test_load_testing.py`
+
+**Implementação.**
+- `scripts/load_test.py`: script principal com métricas p50/p95/p99, TPS, success rate
+- `tests/load_test_config.py`: configuração de TPS_TARGET, TOTAL_REQUESTS, CONCURRENT_REQUESTS
+- `tests/test_load_testing.py`: 3 testes (test_positive, test_timeout_handling, test_rate_limiting)
+
+**Validação.**
+- `tests/test_load_testing.py` (3 testes)
+
+---
+
+### 73. Dicionário de artefatos
+
+**Motivo.** Em produção, é essencial poder reverter para uma versão anterior do
+schema em caso de falha no deploy. O snapshot do schema permite rollback rápido
+e seguro.
+
+**Decisão.**
+- Tabela `snapshot_table`: registra versão do schema antes de cada deploy
+- Tabela `rollback_log`: registro de todos os rollbacks com timestamp, hash e status
+- Endpoint `/admin/deploy/rollback`: API para solicitar rollback com `target_schema_hash`
+
+**O que NÃO foi feito.**
+- Auto-rollback em caso de falha (só manual via API)
+- Histórico de schema completo (apenas hash para identificação)
+
+### 74. Explicabilidade XAI (DA-83)
+
+**Motivo.** O usuário final precisa entender **por que** o modelo chegou àquela conclusão,
+não apenas o resultado. Isso é fundamental para confiança e validação humana do diagnóstico.
+
+**Decisão.** Campo `explanation` em `DiagnosisResponse` (da-73, `DiagnosisResponse`)
+contém texto em markdown com:
+- **Highlight do documento base:** `**{matched_source}**` em negrito
+- **Força de evidência:** `{evidence_strength:.0%}`
+- **Localização do chunk principal:** `locator` doretrieve_context[0] se disponível
+
+A função `_build_xai_explanation()` constroída em `app/agent/nodes.py`
+
+**O que NÃO foi feito.**
+- Não há extração automática de trechos específicos do documento (requer NER adicional)
+- Não há visualização interativa de highlights (deixado para UI futura)
+
+### 75. Dashboard por Domínio (DA-87)
+
+**Motivo.** Para identificar regiões de baixa qualidade e otimizar recursos,
+necessário visualizar métricas por domínio (sap/saas/generic) de forma isolada.
+
+**Decisão.** Implementação de dois endpoints:
+- `/admin/metrics/domains`: JSON com métricas count/hit@1/latência/custo por domínio
+- `/admin/dashboard/domains`: Dados estruturados para renderização no frontend
+
+Implementada em `app/admin/metrics.py` com funções:
+- `count_incidents_by_domain()`: Contagem por domínio
+- `calculate_domain_hit1()`: Hit@1 (precisão de diagnósticos corretos)
+- `calculate_domain_latency()`: Tempo médio por domínio
+- `calculate_cost_by_domain()`: Custo total por domínio
+- `build_dashboard_data()`: Estrutura consolidada para dashboard
+
+**O que NÃO foi feito.**
+- Não há gráfico visual HTML renderizado no servidor (dados em JSON, frontend renderiza)
+- Não há persistência de métricas (usado memória para cálculo em tempo real)
+
+### 76. Relatórios Compliance (DA-89)
+
+**Motivo.** Setores regulamentados exigem relatórios de conformidade para auditoria,
+incluindo resumo de incidentes, métricas de qualidade e eventos auditáveis.
+
+**Decisão.** Endpoint `/admin/reports/compliance/export?format=pdf|xlsx` com:
+- Resumo de incidentes (total, verificados, custo)
+- Métricas de qualidade (Hit@1, accuracy por domínio)
+- Eventos auditáveis (diagnósticos e verificações)
+- Export para PDF e XLSX
+
+Implementada em `app/admin/reports.py` com funções:
+- `build_compliance_summary()`: Resumo consolidado
+- `calculate_quality_metrics()`: Métricas de qualidade
+- `extract_auditable_events()`: Eventos para auditoria
+- `export_pdf()`: Geração de PDF (reportlab)
+- `export_xlsx()`: Geração de planilha XLSX (openpyxl)
+
+**O que NÃO foi feito.**
+- Relatórios agendados automatiamente (apenas export manual)
+- Assinatura digital dos relatórios (padrão PDF/XLSX não inclui)
+
+### 78. Testes de Escalonamento (DA-88)
+
+**Motivo.** Para garantir que o sistema escala sob carga, é necessário testar
+com métricas p50/p95/p99 e TPS (transactions per second) reais.
+
+**Decisão.** Implementação de script `scripts/load_test.py` com:
+- Geração de carga simulada usando pytest-asyncio
+- Métricas p50/p95/p99 (latência) e TPS
+- Configuração em `tests/load_test_config.py`
+
+**O que NÃO foi feito.**
+- Load test contínuo em produção (só tests de regressão)
+- Integração com ferramentas externas (k6, Locust)
+
+### 79. Testes RBAC Completos (DA-91)
+
+**Motivo.** Para garantir isolation de permissões e segurança, todos os endpoints
+devem ser testados com diferentes níveis de acesso (admin, usuário comum, não autenticado).
+
+**Decisão.** Escrita de testes abrangentes em `tests/test_rbac_comprehensive.py`:
+- Endpoint `/diagnose`: admin e usuário autenticado aceitam, não autenticado rejeita
+- Endpoints `/admin/*`: só admin aceita, usuário comum e não autenticado rejeitam
+- Endpoints `/a2a` e `/mcp`: autenticação obrigatória com chaves dedicadas
+
+**O que NÃO foi feito.**
+- Testes de RBAC em todos os endpoints internos (só endpoints HTTP)

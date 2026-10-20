@@ -54,6 +54,11 @@ class IncidentRequest(BaseModel):
         | None
     ) = None
     identifier: str | None = None  # ex: nome do iFlow, RFC destination, numero de IDoc/incidente
+    # DA-79: tenant identifier for multi-tenancy isolation
+    tenant_id: str | None = Field(
+        default=None,
+        description="DA-79: tenant identifier. Quando None, usa tenant_id do usuario autenticado.",
+    )
     # A-05: campos SOC/iPaaS — opcionais, permitem que clientes informem contexto de seguranca
     # diretamente (ex: sistemas de monitoracao que ja classificaram o incidente).
     # Sem esses campos, o pipeline deriva classificacao por heuristicas internas (gateway.py).
@@ -123,6 +128,11 @@ class IncidentEventData(BaseModel):
         | None
     ) = None
     identifier: str | None = None
+    # DA-79: tenant identifier for multi-tenancy isolation
+    tenant_id: str | None = Field(
+        default=None,
+        description="DA-79: tenant identifier. Quando None, usa tenant_id do usuario autenticado.",
+    )
     # A-05: mesmos campos SOC/iPaaS de IncidentRequest para consistencia
     connector_source_system: str | None = None
     sensitivity_level: Literal["public", "internal", "confidential", "secret"] | None = None
@@ -363,6 +373,16 @@ class DiagnosisResponse(BaseModel):
             "pipeline nao escala sozinho para um modelo pago."
         ),
     )
+    # DA-83 (2026-10-19): Explicabilidade XAI - campo explanation para highlight de chunks usados
+    explanation: str | None = Field(
+        default=None,
+        description=(
+            "Explicacao estruturada do diagnostico em linguagem natural, "
+            "com highlight dos chunks de contexto mais relevantes e por que foram escolhidos. "
+            "Formato: markdown com chunks em bloco de codigo ou destaque em negrito. "
+            "Ajuda usuario final entender por que o modelo chegou a aquela conclusao."
+        ),
+    )
 
 
 class VerifyIncidentRequest(BaseModel):
@@ -414,4 +434,46 @@ class VerifyIncidentRequest(BaseModel):
             "score de feedback no Langfuse. Sem isso, o feedback so "
             "afeta o grafo (Neo4j), quando GraphRAG estiver ligado."
         ),
+    )
+    ai_warning: str = Field(
+        default="",
+        description=(
+            "Aviso de IA que deve ser exibido ao usuario: o conteudo foi "
+            "gerado por inteligencia artificial e pode conter imprecisoes. "
+            "Em pt-BR e en, vem do catalogo de conteudo (content.pt-BR.json / content.en.json)."
+        ),
+    )
+
+
+class ReviewIncidentRequest(BaseModel):
+    """DA-75: corpo de POST /incidents/{incident_id}/review.
+
+    Quando o sinal de escalonamento (escalation.should_escalate) pede revisao,
+    o grafo pausa e grava hitl_request no checkpoint. Este endpoint permite
+    ao usuario aprovar, editar ou rejeitar o diagnostico e retomar o grafo.
+    """
+
+    action: Literal["approve", "edit", "reject"] = Field(
+        description="Acao do usuario: aprovar (continua com o diagnostico), "
+        "edit (substitui a causa raiz), ou reject (descarta o diagnostico)."
+    )
+    edit: str | None = Field(
+        default=None,
+        description="Nova causa raiz quando action='edit'. Ignorado para outras acoes.",
+    )
+    reviewed_by: Literal["human", "system"] = Field(
+        default="human",
+        description="Quem revisou - 'human' (padrao) ou 'system' (ex: outra automacao).",
+    )
+
+
+# DA-82: RollbackRequest para endpoint /admin/deploy/rollback
+class RollbackRequest(BaseModel):
+    """Corpo de POST /admin/deploy/rollback."""
+
+    target_schema_hash: str = Field(
+        description="Hash do schema para o qual deve-se fazer rollback."
+    )
+    user_id: str | None = Field(
+        default=None, description="ID do usuario solicitante (para log de auditoria)."
     )

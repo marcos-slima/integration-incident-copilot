@@ -239,7 +239,10 @@ def test_relatorio_pt_br_identico_ao_de_antes(monkeypatch):
 
 **Supporting Facts** (RAG / busca web / relato do usuario — revisao humana recomendada):
 - (nenhum fato de suporte)
-"""
+
+---
+
+**Aviso de IA:** Este diagnostico foi gerado por inteligencia artificial. O conteudo pode conter imprecisoes. Sempre valide as informacoes antes de tomar decisoes operacionais."""
     assert report == expected
 
 

@@ -42,6 +42,12 @@ entregue, o que é schema-only e o que voltou para candidata.
 - **007/013/017** CI: `nosec B704` justificado, `conftest` isola Redis/Neo4j,
   job instala `--extra prometheus`.
 - **008** API: `ai_warning` e `explanation` chegam a `/diagnose`.
+- **DA-74** Prompt `en` medido com promptfoo em 2026-10-20 (`qwen3.6:35b-a3b`,
+  11 casos, 17 asserts, 0 falhas); digest em `locales.en`. Gate passa a
+  21 PASS / 2 WARN.
+- **CI** Compose smoke recebe as senhas de interpolação e um `.env` com chave
+  efêmera; healthcheck do Qdrant usa `bash` (a imagem não tem `python3`);
+  espera do Neo4j sem `IndentationError`; `aiohttp` 3.14.3 → 3.14.5 (CVEs).
 - **009/010/011/012/014/018/019/022/023** Documentação e higiene: tabela de DAs
   sem duplicatas, seções únicas, `--reset-collection` na troca de embedding,
   Grafana em 3002, Python fixado, `kyma-config` fora do índice, 14 configs de
@@ -121,8 +127,8 @@ Contagens de testes conferidas com `pytest --collect-only` em 2026-10-18.
 - **DA-74** Conteúdo do diagnóstico no idioma pedido (`locale` em
   `/diagnose`, A2A, MCP e Event Mesh; a UI envia o idioma da tela): rule
   engine, avisos de confiança e relatório em pt-BR ou en; prompt `en` com
-  digest próprio (pt-BR continua o medido; `en` aparece como não medido no
-  gate); e-mail/SMS de ativação no idioma de quem cadastrou; motivos de
+  digest próprio (pt-BR e `en` medidos; `locales.en` gravado em 2026-10-20);
+  e-mail/SMS de ativação no idioma de quem cadastrou; motivos de
   soberania, de roteamento e notas dos conectores com código estável,
   traduzidos pelas UIs. Corrige: regras do TTL sem `probableRootCause`
   devolviam "Erro conhecido detectado via taxonomia SKOS." no lugar da causa

@@ -1563,8 +1563,8 @@ arquitetural externa (P0/P1/P2) estao fechados.
 | Motivos de soberania, roteamento e conectores exibidos nas telas | codigo + parametros, montados pela tela | `app/llm/routing.py::sovereignty_decision`, `Candidate.detail_items`, `/health` (`setting`) |
 
 O pt-BR do conteudo e a fonte (regras no TTL e em `rules.py`) e o prompt
-medido; o `en` tem digest de prompt proprio, ainda nao medido (o gate
-`prompt_digest_measured` avisa). Gates: `ui_i18n` e `content_i18n`.
+medido; o `en` tem digest de prompt proprio, medido em 2026-10-20
+(`locales.en` no baseline). Gates: `ui_i18n` e `content_i18n`.
 
 ## Testes
 

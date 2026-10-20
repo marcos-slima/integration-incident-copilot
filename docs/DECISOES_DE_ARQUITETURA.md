@@ -3236,7 +3236,7 @@ Na mesma investigação apareceram dois defeitos do rule engine: (1) a regra do 
 **Validação.** `tests/test_i18n_content.py` (34): normalização e 422 do `locale`; estado e resposta; digest pt-BR igual ao medido e `en` próprio; regra com causa curada (não mais genérica) e passo com vírgula inteiro; regra em pt-BR e en com a mesma decisão; aviso de guardrail e relatório em en; relatório pt-BR idêntico ao de antes; ativação pt-BR igual à de antes e en; motivos de soberania com código e o mesmo texto; gate reprovando regra sem tradução e variável divergente. Suítes existentes ajustadas onde o contrato mudou de propósito (dublês de `match_known_error`/`deliver_email`, gate do prompt com idiomas).
 
 **Limitações (registradas de propósito).**
-- O prompt `en` não foi medido pelo promptfoo: o placar de qualidade descreve só o pt-BR, e o gate diz isso.
+- O prompt `en` foi medido em 2026-10-20 com `qwen3.6:35b-a3b` (11 casos, 17 asserts, 0 falhas); o digest está em `locales.en`. O placar continua separado do pt-BR porque são prompts distintos.
 - O LLM recebe o contexto (documentos da base, persona, schema) em português e escreve em inglês por instrução: qualidade da tradução técnica depende do modelo.
 - Documentos da base de conhecimento e dados do usuário não são traduzidos; `matched_source` e identificadores técnicos ficam como estão.
 - Um diagnóstico já exibido não muda ao trocar o idioma da tela.

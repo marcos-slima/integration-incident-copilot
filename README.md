@@ -244,7 +244,7 @@ The table below maps each capability to its implementation status and evidence.
 | Langfuse | VER | `observe_span` in retrieve, graph_enrich, graph_write, web_search, 3 specialists, report and root; CallbackHandler on LLM | supervisor and connector not instrumented |
 | Tests | VER | `-m "not integration"`: 1888 passed, 17 skipped, 17 deselected, 0 failures | Without Qdrant, Ollama and Neo4j |
 | Coverage | VER | 82% (7745 lines; 1359 uncovered); CI requires ≥80% (`tests.yml:55`) | |
-| Quality gates | VER | 23 defined (`gates.py`); 20 PASS, 3 WARN, 0 FAIL | WARN: reranker, deployed model, `en` prompt digest |
+| Quality gates | VER | 23 defined (`gates.py`); 21 PASS, 2 WARN, 0 FAIL | WARN: reranker, deployed model |
 | CI | VER | `tests.yml` (lint, tests, security, compose smoke, rag-quality, neo4j-smoke) and `quality.yml` | |
 | Kyma | PARC | `deploy/kyma/` + `deploy/local/` | Applied to real Kubernetes (k3d, 2026-10-18); APIRule/Istio/BTP OIDC not validated |
 | Graceful degradation (Qdrant down) | VER | `app/rag/retriever.py`, DA-65, `tests/test_da65_rag_degradation.py` | `_retrieve_hybrid` e `_retrieve_dense_only` capturam exceção de Qdrant e retornam `[]` (DA-65); erros conhecidos ainda respondidos pelo rule engine. Testado em nível de retriever; fluxo completo `/diagnose → run_diagnosis` pendente de teste de integração |
@@ -265,7 +265,7 @@ Each of these is documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 - ✅ All 16 remediation phases completed
 - ✅ 1888 tests passing (unit, without integration), 82% code coverage
-- ✅ Quality gate: 20 PASS, 3 WARN
+- ✅ Quality gate: 21 PASS, 2 WARN
 - ✅ README corrected: 28 rules (22 hardcoded + 6 SKOS), 55 sections, CIO 2025 source
 - ✅ Evidence matrix added with implementation status (VER/NVAL/OPC/PARC/AUS)
 - ✅ Root cause explanations added for Qdrant and web search gaps

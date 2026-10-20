@@ -31,7 +31,7 @@ verified by hand, once, and never again.
 | `connector_validation_matrix` | every connector registered in `app/connectors/__init__.py` has a row in the validation matrix of `docs/ARCHITECTURE.md` — the only source of truth about what was tested against real instance — and no orphan row remains for removed connector. It rotted silently once: `successfactors` remained months without a row, with all gates green | instantaneous | every push/PR |
 | `connector_coverage` | the coverage map (DA-58) still corresponds to the code: every registered connector has a row in `data/connector_coverage.yaml` (9th surface of invariant 23), no declaration points to non-existent product or connector, and `docs/COVERAGE_MAP.md` — which is **generated**, not edited — is up to date with the data. Fails by **incoherence**, never by gap: requiring full coverage would require 76 new connectors for the CI to be green | instantaneous | every push/PR |
 | `migrations_and_dashboards` (job) | `alembic upgrade head` in clean DB + the 45 queries of the 4 dashboards | ~1 min | every push/PR |
-| `llm_eval` (job) | promptfoo against the baseline; fail on regression case | depends on provider | scheduled 03:17 UTC + manual |
+| `llm_eval` (job) | promptfoo against the baseline; fail on regression case | runner with Ollama+Qdrant | manual (`workflow_dispatch`) |
 
 ## Evaluation pipeline
 
@@ -64,7 +64,7 @@ flowchart LR
         db["<b>docker-build</b>"]
     end
 
-    subgraph scheduled["Scheduled (03:17 UTC) or manual"]
+    subgraph scheduled["Manual (workflow_dispatch)"]
         llm["<b>llm_eval</b><br/>promptfoo eval<br/>--compare-promptfoo"]
     end
 
@@ -97,7 +97,7 @@ flowchart LR
 - **What is deterministic runs on every push:** dataset shape, corpus,
   reranker invariant, prompt digest, promptfoo configs,
   documentation, connector coverage. No LLM and no infrastructure.
-- **What measures the LLM runs scheduled** (`llm_eval`) and compares with the recorded
+- **What measures the LLM runs manually** (`llm_eval`) and compares with the recorded
   baseline; without baseline, the `llm_baseline` gate warns instead of passing.
 - **What only runs on your machine** (Ollama 80B, reranker with more
   queries, corpus ingestion) generates the artifacts that the gates check
@@ -133,11 +133,12 @@ uv run python scripts/validate_dashboards.py --dsn "postgresql://iic:<password>@
 
 The promptfoo of this repository runs **local model** via `exec:` provider
 (`scripts/promptfoo_provider.py`). A hosted GitHub runner has no Ollama
-nor the 51 GB model, so the `llm_eval` job only runs in scheduled or manual, and
-even then requires an alternative provider configured (`OPENAI_API_KEY`).
+nor the 51 GB model, so the `llm_eval` job only runs **manually**, on a runner
+with Ollama and Qdrant with the corpus ingested. It does not run on the
+schedule: scheduling it on a hosted runner only produced a daily failure.
 
-Without provider, the job **does not turn green**: it writes "NOT EXECUTED" in the summary
-explaining that the LLM gate remains without automatic verification. A gate that
+Without infrastructure, the job **does not turn green**: it writes "NOT EXECUTED" in the summary
+and fails with an explicit message. A gate that
 reports success without having run is worse than not existing.
 
 To close the cycle when running locally:
@@ -158,7 +159,8 @@ rejected with exit 1 — never interpreted as "zero regressions".
 - **Real RAG quality.** `reranker_invariant` confirms that the production model is the *measured winner before*. Re-running the benchmark requires Qdrant with
   the corpus ingested and the cross-encoder; this lives in `scripts/benchmark_rerankers.py`,
   run manually. A gate that depended on this would only run in CI with GPU.
-- **The promptfoo in every PR.** Due to cost and the local model, it is scheduled.
+- **The promptfoo in every PR.** Due to cost and the local model, it does not
+  run on PRs; it is manual on a prepared runner.
 - **Visual result of dashboards.** `validate_dashboards.py` proves that the query
   runs; it does not prove that the dashboard shows what someone expects.
 - **Errors that only appear with a specific filter selected.** The validator

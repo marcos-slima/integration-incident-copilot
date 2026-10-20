@@ -101,6 +101,7 @@ final.
 | 87 | [75](#75-dashboard-por-dom-nio-da-87) | Dashboard de Performance por Domínio: endpoints `/admin/metrics/domains` e `/admin/dashboard/domains`, métricas count/hit@1/latência/custo por domain (sap/saas/generic) |
 | 88 | [78](#78-testes-de-escalonamento-da-88) | Testes de escalonamento: script `scripts/load_test.py` com métricas p50/p95/p99 e TPS, config `tests/load_test_config.py`, 3 testes em `tests/test_load_testing.py` |
 | 89 | [76](#76-relatrios-compliance-da-89) | Relatórios automatizados de compliance export: endpoint `/admin/reports/compliance/export?format=pdf|xlsx`, relatório com resumo/quality/auditoria |
+| 90 | [77](#77-documentao-grc-da-90) | Documentação GRC (ISO 27001, SOC2): mapeamento, guia de auditoria, checklist |
 | 91 | [79](#79-testes-rbac-completos-da-91) | Testes RBAC completos para todos os endpoints |
 | — | — | DA-64: número não utilizado (pulo intencional) |
 
@@ -3491,6 +3492,22 @@ Implementada em `app/admin/reports.py` com funções:
 **O que NÃO foi feito.**
 - Relatórios agendados automatiamente (apenas export manual)
 - Assinatura digital dos relatórios (padrão PDF/XLSX não inclui)
+
+### 77. Documentação GRC (DA-90)
+
+**Motivo.** Para obtenção de certificações (ISO 27001, SOC2), é essencial
+documentar o mapeamento de controles, guias de auditoria e checklists.
+
+**Decisão.** Criação de três documentos:
+- `docs/GRM_MAPPING.md`: Mapeamento completo ISO 27001 + SOC2
+- `docs/GRM_AUDIT.md`: Guia de auditoria com cronograma e procedimentos
+- `docs/GRM_CHECKLIST.md`: Checklist de verificação pré-auditoria
+
+Ambiente: `tests/test_grm_documentation.py` com 18 testes para validar:
+
+**O que NÃO foi feito.**
+- Integração com ferramentas de compliance (ex: ServiceNow GRC)
+- Relatórios automáticos para registro externo
 
 ### 78. Testes de Escalonamento (DA-88)
 

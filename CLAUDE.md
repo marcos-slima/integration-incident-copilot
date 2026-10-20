@@ -308,11 +308,8 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
 | DA-74 | Conteúdo do diagnóstico no idioma pedido: `IncidentRequest.locale` (`pt-BR` default · `en`; tag do navegador normalizada; outro = 422) → estado → resposta e `incidents.locale`; rule engine por `rules.<categoria>` do catálogo de conteúdo (pt-BR é a própria regra), avisos de guardrail e relatório por `content.<idioma>.json` (pt-BR byte a byte igual), prompt `en` = medido + instrução de idioma com digest próprio (gate avisa enquanto não medido), ativação no idioma de quem cadastrou (`web_users.locale`), motivos de soberania/roteamento com código estável para as UIs; gate `content_i18n` | `app/i18n/content.py`, `app/i18n/locales/content.*.json`, `app/agent/prompts.py` (`OUTPUT_LANGUAGE_INSTRUCTIONS`), `app/agent/rules.py`, `app/agent/ontology_loader.py`, `app/agent/nodes.py`, `app/webusers.py`, `app/llm/routing.py::sovereignty_decision`, `alembic/versions/021_locale.py` |
 | DA-75 | Aprovação humana no grafo: quando `escalation.should_escalate == True`, o node de diagnóstico não chama o LLM e grava `hitl_request` no estado; endpoint `/incidents/{id}/review` usa checkpoint para retomar o grafo com resposta humana (`hitl_response`); usa `compute_escalation_signal` (DA-44) e checkpointer (DA-69) | `app/agent/nodes.py`, `app/main.py`, `app/agent/escalation.py`, `app/agent/checkpointing.py`, `app/models/models.py::ReviewIncidentRequest` |
 | DA-76 | Aviso de IA — alerta de que o diagnóstico é produto de IA: chave `ai_warning` no catálogo de conteúdo (`pt-BR` default e `en`); campo obrigatório `ai_warning` em `DiagnosisResponse` (string vazia como default); texto do aviso embutido na template Markdown do `report.template`; UI exibe o aviso quando presente | `app/i18n/locales/content.*.json`, `app/models/models.py::DiagnosisResponse`, `app/agent/nodes.py::report_node`, `app/agent/graph.py` |
-| DA-79 | Multi-tenancy: campo `tenant_id` em `IncidentRequest`/`IncidentEventData`, índice no DB, queries filtradas por tenant, isolamento de credenciais por tenant | `app/models/models.py`, `alembic/versions/022_add_tenant_id_to_incidents.py`, `app/services/incident_repository.py`, `app/admin/repository.py` |
 | DA-82 | Rollback de deployment — tabelas `snapshot_table`/`rollback_log` (schema apenas); endpoint removido até existir mecanismo real de rollback | `alembic/versions/aa5bc901f443_da_82_rollback_de_deployment_com_.py`, `app/models/models.py::RollbackRequest` |
 | DA-83 | Explicabilidade XAI — campo `explanation` em `DiagnosisResponse` com texto Highlight dos chunks usados, função `_build_xai_explanation` | `app/models/models.py`, `app/agent/nodes.py`, `app/i18n/locales/content.*.json` |
-| DA-84 | Controle de Versão de Prompt: tabela `prompt_versions`, endpoint `/admin/prompt/{id}/rollback/{version}`, endpoint `/admin/prompt/versions` para listagem | `app/models/prompt_versioning.py`, `app/models/prompt_versioning_orm.py`, `app/services/prompt_version_repository.py`, `app/admin/routes.py`, `alembic/versions/024_add_prompt_versions_table.py` |
-| DA-85 | Pipeline A/B testing: tabela `ab_experiments`, endpoint `/admin/ab/experiments`, endpoint `/diagnose/ab/{experiment_id}` para rodar diagnóstico com variante, função `_run_ab_test()` | `app/models/ab_testing.py`, `app/models/ab_testing_orm.py`, `app/services/ab_test_repository.py`, `app/admin/routes.py`, `alembic/versions/025_add_ab_experiments_table.py` |
 | DA-86 | UI versionamento RAG: tabela `knowledge_document_versions`, endpoints `/admin/knowledge/documents/{id}/versions`, `/rollback/{version}`, `/history/{id}` | `app/models/knowledge_document_versions.py`, `app/admin/routes.py`, `alembic/versions/026_add_knowledge_document_versions_table.py` |
 | DA-87 | Dashboard de Performance por Domínio: endpoints `/admin/metrics/domains` e `/admin/dashboard/domains`, métricas count/hit@1/latência/custo por domain (sap/saas/generic) | `app/admin/metrics.py`, `app/admin/routes.py`, `tests/test_domain_metrics.py` |
 | DA-88 | Testes de escalonamento: script `scripts/load_test.py` com métricas p50/p95/p99 e TPS, config `tests/load_test_config.py`, 3 testes em `tests/test_load_testing.py` | `scripts/load_test.py`, `tests/load_test_config.py`, `tests/test_load_testing.py` |
@@ -320,15 +317,13 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
 | DA-90 | Documentação GRC (ISO 27001, SOC2): mapeamento, guia de auditoria, checklist | `docs/GRM_MAPPING.md`, `docs/GRM_AUDIT.md`, `docs/GRM_CHECKLIST.md`, `tests/test_grm_documentation.py` |
 | DA-88 | Testes de escalonamento: script `scripts/load_test.py` com métricas p50/p95/p99 e TPS, config `tests/load_test_config.py`, 3 testes em `tests/test_load_testing.py` | `scripts/load_test.py`, `tests/load_test_config.py`, `tests/test_load_testing.py` |
 | DA-83 | Explicabilidade XAI — campo `explanation` em `DiagnosisResponse` com texto Highlight dos chunks usados, função `_build_xai_explanation` | `app/models/models.py`, `app/agent/nodes.py`, `app/i18n/locales/content.*.json` |
-| DA-84 | Controle de Versão de Prompt: tabela `prompt_versions`, endpoint `/admin/prompt/{id}/rollback/{version}`, endpoint `/admin/prompt/versions` para listagem | `app/models/prompt_versioning.py`, `app/models/prompt_versioning_orm.py`, `app/services/prompt_version_repository.py`, `app/admin/routes.py`, `alembic/versions/024_add_prompt_versions_table.py` |
-| DA-85 | Pipeline A/B testing: tabela `ab_experiments`, endpoint `/admin/ab/experiments`, endpoint `/diagnose/ab/{experiment_id}` para rodar diagnóstico com variante, função `_run_ab_test()` | `app/models/ab_testing.py`, `app/models/ab_testing_orm.py`, `app/services/ab_test_repository.py`, `app/admin/routes.py`, `alembic/versions/025_add_ab_experiments_table.py` |
 | DA-86 | UI versionamento RAG: tabela `knowledge_document_versions`, endpoints `/admin/knowledge/documents/{id}/versions`, `/rollback/{version}`, `/history/{id}` | `app/models/knowledge_document_versions.py`, `app/admin/routes.py`, `alembic/versions/026_add_knowledge_document_versions_table.py` |
 | DA-83 | Explicabilidade XAI — campo `explanation` em `DiagnosisResponse` com texto Highlight dos chunks usados, função `_build_xai_explanation` | `app/models/models.py`, `app/agent/nodes.py`, `app/i18n/locales/content.*.json` |
 | DA-91 | Testes RBAC completos para todos os endpoints | `tests/test_rbac_comprehensive.py` |
 | DA-88 | Testes de escalonamento: script `scripts/load_test.py` com métricas p50/p95/p99 e TPS, config `tests/load_test_config.py`, 3 testes em `tests/test_load_testing.py` | `scripts/load_test.py`, `tests/load_test_config.py`, `tests/test_load_testing.py` |
 | DA-91 | Testes RBAC completos para todos os endpoints | `tests/test_rbac_comprehensive.py` |
 
-**DAs candidatas (sem implementação ainda):**
+**DAs candidatas (não entregues ou com implementação parcial):**
 - **DA-31 — SAP AI Agent Hub registration (MCP + A2A)** · bloqueada: exige tenant Kyma.
   - **O que é.** Publicar o copiloto como agente no SAP AI Agent Hub, apontando para as
     superfícies que já existem: o servidor MCP (Streamable HTTP em `/mcp`) e a camada
@@ -344,6 +339,18 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
   - **Critério de entrada.** Tenant Kyma disponível → registrar o AgentCard e o endpoint
     MCP no hub → então esta decisão ganha seção própria em
     `docs/DECISOES_DE_ARQUITETURA.md`, linha no índice e no livro-razão, e sai desta lista.
+- **DA-79, DA-84 e DA-85 — rebaixadas para candidatas em 2026-10-20.**
+  - **DA-79 (multi-tenancy).** O schema (`tenant_id`, migration 022) e os filtros de
+    repositório existem, mas o isolamento não é fail-closed em todos os caminhos
+    (leituras diretas, exportações e credenciais). Permanece candidata até o
+    isolamento ponta a ponta ser verificável.
+  - **DA-84 (versionamento de prompt).** Tabela, ORM e repositório existem; os
+    endpoints `/admin/api/prompt/...` não foram implementados. Permanece candidata.
+  - **DA-85 (A/B testing).** Tabela, ORM e repositório existem; não há endpoint de
+    experimentos nem `_run_ab_test()`. Permanece candidata.
+  - **Histórico.** A prosa original continua em `docs/DECISOES_DE_ARQUITETURA.md`
+    §73, §75 e §76, marcada como candidata; não há force-push nem remoção de
+    commits.
 
 > A DA-32 (AMQP 1.0 via Solace Cloud) **já foi entregue** (`app/events/amqp_consumer.py`,
 > commit `67b78e8`). Ela ficou nesta lista até a DA-51 criar o gate

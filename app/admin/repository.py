@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.admin import crypto
 from app.admin.models import (
     IntegrationSystem,
+    LlmCallLatency,
     LlmCredential,
     LlmModel,
     LlmRuntimeConfig,
@@ -41,6 +42,18 @@ from app.db import get_sync_session_factory
 from app.llm.origins import canonical_origin
 
 logger = logging.getLogger(__name__)
+
+# DA-72: colunas de llm_models que o Policy Engine usa para decidir.
+MODEL_ROUTING_KEYS: tuple[str, ...] = (
+    "transport",
+    "context_window_tokens",
+    "supports_tools",
+    "supports_response_format",
+    "supports_seed",
+    "domains",
+    "tier",
+    "priority",
+)
 
 
 def _now() -> datetime:
@@ -89,6 +102,7 @@ class AdminRepository:
         enabled: bool = True,
         is_default: bool = False,
         notes: str | None = None,
+        **routing: Any,
     ) -> LlmModel:
         row = LlmModel(
             provider_origin=canonical_origin(provider_origin) or provider_origin.strip(),
@@ -100,6 +114,8 @@ class AdminRepository:
             enabled=enabled,
             is_default=is_default,
             notes=notes or None,
+            # DA-72: parametros de roteamento (so as chaves conhecidas)
+            **{k: v for k, v in routing.items() if k in MODEL_ROUTING_KEYS and v is not None},
         )
         self._session.add(row)
         await self._session.flush()
@@ -119,10 +135,13 @@ class AdminRepository:
             "enabled",
             "is_default",
             "notes",
+            *MODEL_ROUTING_KEYS,
         }
         for key, value in fields.items():
             if key not in allow:
                 continue
+            if key == "priority" and value is None:
+                continue  # NOT NULL: null no PATCH nao apaga a prioridade
             if key == "base_url":
                 value = (value or "").strip() or None
             setattr(model, key, value)
@@ -140,16 +159,22 @@ class AdminRepository:
 
     # -- credenciais (DA-47) ------------------------------------------------
 
-    async def set_credential(self, provider_origin: str, plaintext_key: str) -> LlmCredential:
+    async def set_credential(
+        self, provider_origin: str, plaintext_key: str, *, tenant_id: str | None = None
+    ) -> LlmCredential:
         """Grava (ou rotaciona) a credencial cifrada de uma origem.
 
         `plaintext_key` existe apenas aqui, em memoria, na request — o
         banco guarda o token Fernet e a mascara. Nunca retornamos o
-        plaintext para o chamador."""
+        plaintext para o chamador.
+
+        DA-79: tenant_id opcional. Quando fornecido, a credencial é
+        isolada por tenant (tenant_id + provider_origin é a chave única).
+        Quando None, a credencial é global (comportamento original)."""
         origin = canonical_origin(provider_origin) or provider_origin.strip()
         encrypted = crypto.encrypt_secret(plaintext_key)
         masked = crypto.mask_secret(plaintext_key)
-        existing = await self.get_credential(origin)
+        existing = await self.get_credential(origin, tenant_id=tenant_id)
         if existing is not None:
             existing.encrypted_key = encrypted
             existing.masked = masked
@@ -159,37 +184,55 @@ class AdminRepository:
             existing.updated_at = _now()
             await self._session.flush()
             return existing
+
+        # DA-79: incluir tenant_id na criação
         row = LlmCredential(
             provider_origin=origin,
             encrypted_key=encrypted,
             key_version=1,
             masked=masked,
+            tenant_id=tenant_id,
         )
         self._session.add(row)
         await self._session.flush()
         return row
 
-    async def get_credential(self, provider_origin: str) -> LlmCredential | None:
-        result = await self._session.execute(
-            select(LlmCredential).where(
-                LlmCredential.provider_origin
-                == (canonical_origin(provider_origin) or provider_origin.strip())
-            )
-        )
+    async def get_credential(
+        self, provider_origin: str, *, tenant_id: str | None = None
+    ) -> LlmCredential | None:
+        """Busca credencial por origin e tenant_id (ou sem tenant_id)."""
+        origin = canonical_origin(provider_origin) or provider_origin.strip()
+
+        # DA-79: construir query com ou sem tenant_id
+        stmt = select(LlmCredential).where(LlmCredential.provider_origin == origin)
+        if tenant_id is not None:
+            stmt = stmt.where(LlmCredential.tenant_id == tenant_id)
+        else:
+            # Quando tenant_id=None, buscar apenas credentials globais (tenant_id IS NULL)
+            stmt = stmt.where(LlmCredential.tenant_id.is_(None))
+
+        result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def delete_credential(self, provider_origin: str) -> bool:
-        row = await self.get_credential(provider_origin)
+    async def delete_credential(
+        self, provider_origin: str, *, tenant_id: str | None = None
+    ) -> bool:
+        """Deleta credencial por origin e tenant_id (ou sem tenant_id)."""
+        row = await self.get_credential(provider_origin, tenant_id=tenant_id)
         if row is None:
             return False
         await self._session.delete(row)
         await self._session.flush()
         return True
 
-    async def decrypt_credential(self, provider_origin: str) -> str | None:
+    async def decrypt_credential(
+        self, provider_origin: str, *, tenant_id: str | None = None
+    ) -> str | None:
         """Plaintext da credencial de uma origem (uso exclusivo do
-        runtime, DA-46 — factory managed mode). None se nao existir."""
-        row = await self.get_credential(provider_origin)
+        runtime, DA-46 — factory managed mode). None se nao existir.
+
+        DA-79: tenant_id opcional para isolamento por tenant."""
+        row = await self.get_credential(provider_origin, tenant_id=tenant_id)
         if row is None:
             return None
         return crypto.decrypt_secret(row.encrypted_key)
@@ -530,11 +573,59 @@ def registry_prices(origin: str, model_id: str) -> tuple[float | None, float | N
         return None
 
 
+def registry_default_prices(origin: str) -> tuple[float | None, float | None] | None:
+    """Preco do modelo default HABILITADO da origem - o que o modo gerenciado
+    (app/admin/runtime.py) usa quando o modelo pedido nao esta registrado.
+    Best-effort como registry_prices: sem banco ou com erro, None."""
+    if not settings.database_url or not origin:
+        return None
+    try:
+        from sqlalchemy import select
+
+        with _get_sync_session_factory()() as session:
+            row = session.execute(
+                select(LlmModel.price_in_per_1m, LlmModel.price_out_per_1m).where(
+                    LlmModel.provider_origin == (canonical_origin(origin) or origin),
+                    LlmModel.enabled.is_(True),
+                    LlmModel.is_default.is_(True),
+                )
+            ).first()
+            return (row[0], row[1]) if row else None
+    except Exception:
+        logger.exception("[routing] Falha ao ler preco default do registro (%s)", origin)
+        return None
+
+
 # ---------------------------------------------------------------------------
 # llm_runtime_config (DA-XX: overrides de runtime via admin UI)
 # ---------------------------------------------------------------------------
 
 _RUNTIME_CONFIG_ID = 1
+
+# Colunas de llm_runtime_config que a Admin UI le e grava. DA-72 acrescentou
+# orcamento (DA-67) e pesos de roteamento.
+RUNTIME_CONFIG_KEYS: tuple[str, ...] = (
+    "llm_registry_db",
+    "llm_provider",
+    "llm_route",
+    "llm_fallback_provider",
+    "llm_credentials_master_key",
+    "data_sovereignty_mode",
+    "confidential_allowed_origins",
+    "require_auth",
+    "rule_engine_enabled",
+    "diagnosis_timeout_seconds",
+    "llm_request_timeout_seconds",
+    "diagnosis_budget_usd",
+    "llm_budget_reserve_ratio",
+    "llm_gateway_max_cost_usd",
+    "llm_routing_cost_weight",
+    "llm_routing_latency_weight",
+)
+
+
+def _runtime_row_dict(row: Any) -> dict[str, Any]:
+    return {key: getattr(row, key, None) for key in RUNTIME_CONFIG_KEYS}
 
 
 def get_runtime_config() -> dict[str, Any] | None:
@@ -550,12 +641,7 @@ def get_runtime_config() -> dict[str, Any] | None:
             ).scalar_one_or_none()
             if row is None:
                 return None
-            return {
-                "llm_registry_db": row.llm_registry_db,
-                "llm_provider": row.llm_provider,
-                "llm_route": row.llm_route,
-                "llm_fallback_provider": row.llm_fallback_provider,
-            }
+            return _runtime_row_dict(row)
     except Exception:
         logger.exception("[runtime_config] Falha ao ler overrides de runtime")
         return None
@@ -575,15 +661,350 @@ def update_runtime_config(fields: dict[str, Any]) -> dict[str, Any] | None:
             if row is None:
                 return None
             for key, value in fields.items():
-                if key in {"llm_registry_db", "llm_provider", "llm_route", "llm_fallback_provider"}:
+                if key in RUNTIME_CONFIG_KEYS:
                     setattr(row, key, value)
             session.commit()
-            return {
-                "llm_registry_db": row.llm_registry_db,
-                "llm_provider": row.llm_provider,
-                "llm_route": row.llm_route,
-                "llm_fallback_provider": row.llm_fallback_provider,
-            }
+            return _runtime_row_dict(row)
     except Exception:
         logger.exception("[runtime_config] Falha ao atualizar overrides de runtime")
         return None
+
+
+# ---------------------------------------------------------------------------
+# llm_budget_ledger (DA-67: estimado × real por diagnóstico)
+# ---------------------------------------------------------------------------
+
+
+def record_budget_ledger(
+    incident_id: str | None,
+    origin: str,
+    model_id: str,
+    estimated_cost_usd: float,
+    actual_cost_usd: float,
+    tokens_estimated: int,
+    tokens_actual_in: int,
+    tokens_actual_out: int,
+) -> bool:
+    """Grava ledger de orçamento estimado × real por diagnóstico (DA-67).
+
+    Best-effort: sem DATABASE_URL ou erro de DB, devolve False (não bloqueia
+    o diagnóstico).
+
+    Devolve True se gravou com sucesso.
+    """
+    if not settings.database_url:
+        return False
+    try:
+        from app.admin.models import LlmBudgetLedger
+
+        deviation_ratio = None
+        if estimated_cost_usd > 0:
+            deviation_ratio = (actual_cost_usd - estimated_cost_usd) / estimated_cost_usd
+
+        with _get_sync_session_factory()() as session:
+            ledger = LlmBudgetLedger(
+                incident_id=incident_id,
+                provider_origin=origin,
+                model_id=model_id,
+                estimated_cost_usd=estimated_cost_usd,
+                actual_cost_usd=actual_cost_usd,
+                deviation_ratio=deviation_ratio,
+                tokens_estimated=tokens_estimated,
+                tokens_actual_in=tokens_actual_in,
+                tokens_actual_out=tokens_actual_out,
+            )
+            session.add(ledger)
+            session.commit()
+            return True
+    except Exception:
+        logger.exception(
+            "[budget_ledger] Falha ao gravar ledger (%s/%s) — diagnostico nao afetado",
+            origin,
+            model_id,
+        )
+        return False
+
+
+# ---------------------------------------------------------------------------
+# llm_metrics (DA-70: FinOps metrics para dashboards Grafana)
+# ---------------------------------------------------------------------------
+
+
+def record_llm_request(provider: str, model: str) -> bool:
+    """Grava chamada LLM no banco para dashboards Grafana (DA-70).
+
+    Usa upsert para evitar duplicatas em caso de concorrência.
+    Best-effort: sem DATABASE_URL ou erro de DB, devolve False (não bloqueia
+    o diagnóstico).
+
+    Devolve True se gravou com sucesso.
+    """
+    if not settings.database_url:
+        return False
+    try:
+        from sqlalchemy import text
+
+        with _get_sync_session_factory()() as session:
+            session.execute(
+                text(
+                    """
+                    INSERT INTO llm_requests (created_at, provider, model, count)
+                    VALUES (:created_at, :provider, :model, 1)
+                    ON CONFLICT (created_at, provider, model) DO UPDATE
+                    SET count = llm_requests.count + 1
+                    """
+                ),
+                {
+                    "created_at": _now(),
+                    "provider": provider,
+                    "model": model,
+                },
+            )
+            session.commit()
+            return True
+    except Exception:
+        logger.exception(
+            "[llm_metrics] Falha ao gravar llm_requests (%s/%s) — diagnostico nao afetado",
+            provider,
+            model,
+        )
+        return False
+
+
+def record_llm_tokens(provider: str, model: str, input_tokens: int, output_tokens: int) -> bool:
+    """Grava tokens LLM no banco para dashboards Grafana (DA-70).
+
+    Usa upsert para evitar duplicatas em caso de concorrência.
+    Best-effort: sem DATABASE_URL ou erro de DB, devolve False (não bloqueia
+    o diagnóstico).
+
+    Devolve True se gravou com sucesso.
+    """
+    if not settings.database_url:
+        return False
+    try:
+        from sqlalchemy import text
+
+        with _get_sync_session_factory()() as session:
+            # Grava tokens de input
+            session.execute(
+                text(
+                    """
+                    INSERT INTO llm_tokens (created_at, provider, model, token_type, count)
+                    VALUES (:created_at, :provider, :model, 'input', :input_tokens)
+                    ON CONFLICT (created_at, provider, model, 'input') DO UPDATE
+                    SET count = llm_tokens.count + :input_tokens
+                    """
+                ),
+                {
+                    "created_at": _now(),
+                    "provider": provider,
+                    "model": model,
+                    "input_tokens": input_tokens,
+                },
+            )
+            # Grava tokens de output
+            session.execute(
+                text(
+                    """
+                    INSERT INTO llm_tokens (created_at, provider, model, token_type, count)
+                    VALUES (:created_at, :provider, :model, 'output', :output_tokens)
+                    ON CONFLICT (created_at, provider, model, 'output') DO UPDATE
+                    SET count = llm_tokens.count + :output_tokens
+                    """
+                ),
+                {
+                    "created_at": _now(),
+                    "provider": provider,
+                    "model": model,
+                    "output_tokens": output_tokens,
+                },
+            )
+            session.commit()
+            return True
+    except Exception:
+        logger.exception(
+            "[llm_metrics] Falha ao gravar llm_tokens (%s/%s) — diagnostico nao afetado",
+            provider,
+            model,
+        )
+        return False
+
+
+def record_llm_cost(provider: str, model: str, cost_usd: float) -> bool:
+    """Grava custo LLM no banco para dashboards Grafana (DA-70).
+
+    Usa upsert para evitar duplicatas em caso de concorrência.
+    Best-effort: sem DATABASE_URL ou erro de DB, devolve False (não bloqueia
+    o diagnóstico).
+
+    Devolve True se gravou com sucesso.
+    """
+    if not settings.database_url:
+        return False
+    try:
+        from sqlalchemy import text
+
+        with _get_sync_session_factory()() as session:
+            session.execute(
+                text(
+                    """
+                    INSERT INTO llm_cost (created_at, provider, model, cost_usd)
+                    VALUES (:created_at, :provider, :model, :cost_usd)
+                    ON CONFLICT (created_at, provider, model) DO UPDATE
+                    SET cost_usd = llm_cost.cost_usd + :cost_usd
+                    """
+                ),
+                {
+                    "created_at": _now(),
+                    "provider": provider,
+                    "model": model,
+                    "cost_usd": cost_usd,
+                },
+            )
+            session.commit()
+            return True
+    except Exception:
+        logger.exception(
+            "[llm_metrics] Falha ao gravar llm_cost (%s/%s) — diagnostico nao afetado",
+            provider,
+            model,
+        )
+        return False
+
+
+# ---------------------------------------------------------------------------
+# DA-72: leituras sync para o roteamento por registro
+# ---------------------------------------------------------------------------
+
+
+def load_registry_models() -> list[dict[str, Any]] | None:
+    """Modelos HABILITADOS do registro, com os parametros de roteamento.
+
+    None (e nao lista vazia) quando nao ha banco ou a leitura falha: o
+    chamador trata como "registro indisponivel" e falha fechado."""
+    if not settings.database_url:
+        return None
+    try:
+        with _get_sync_session_factory()() as session:
+            rows = session.execute(select(LlmModel).where(LlmModel.enabled.is_(True))).scalars()
+            return [
+                {
+                    "id": str(r.id),
+                    "provider_origin": r.provider_origin,
+                    "model_id": r.model_id,
+                    "base_url": r.base_url,
+                    "price_in_per_1m": r.price_in_per_1m,
+                    "price_out_per_1m": r.price_out_per_1m,
+                    "monthly_limit_tokens": r.monthly_limit_tokens,
+                    "is_default": r.is_default,
+                    **{k: getattr(r, k) for k in MODEL_ROUTING_KEYS},
+                }
+                for r in rows
+            ]
+    except Exception:
+        logger.exception("[routing/DA-72] Falha ao ler o registro de modelos")
+        return None
+
+
+def credentialed_origins() -> set[str]:
+    """Origens com credencial cifrada gravada (sem decifrar nada)."""
+    if not settings.database_url:
+        return set()
+    try:
+        with _get_sync_session_factory()() as session:
+            return set(session.execute(select(LlmCredential.provider_origin)).scalars())
+    except Exception:
+        logger.exception("[routing/DA-72] Falha ao listar credenciais")
+        return set()
+
+
+def registry_credential(origin: str) -> str | None:
+    """Chave decifrada da origem (DA-47). None sem credencial ou em erro."""
+    if not settings.database_url or not origin:
+        return None
+    try:
+        with _get_sync_session_factory()() as session:
+            cred = session.execute(
+                select(LlmCredential).where(
+                    LlmCredential.provider_origin == (canonical_origin(origin) or origin)
+                )
+            ).scalar_one_or_none()
+            return crypto.decrypt_secret(cred.encrypted_key) if cred else None
+    except Exception:
+        logger.exception("[routing/DA-72] Falha ao ler credencial (%s)", origin)
+        return None
+
+
+def open_usage_tokens() -> dict[tuple[str, str], int]:
+    """Tokens (in+out) do periodo aberto por (origem, modelo) - base do
+    bloqueio por limite mensal."""
+    if not settings.database_url:
+        return {}
+    try:
+        with _get_sync_session_factory()() as session:
+            rows = session.execute(
+                select(
+                    LlmUsage.provider_origin,
+                    LlmUsage.model_id,
+                    LlmUsage.tokens_in,
+                    LlmUsage.tokens_out,
+                ).where(LlmUsage.period_end.is_(None))
+            ).all()
+            return {(o, m): int(ti or 0) + int(to or 0) for o, m, ti, to in rows}
+    except Exception:
+        logger.exception("[routing/DA-72] Falha ao ler consumo aberto")
+        return {}
+
+
+def latency_medians(days: int = 7, per_model: int = 200) -> dict[tuple[str, str], float]:
+    """Mediana da latencia (ms) das chamadas recentes por (origem, modelo).
+
+    Calculada em Python sobre as `per_model` mais recentes dos ultimos `days`
+    dias - portavel (SQLite nos testes) e limitado em memoria."""
+    if not settings.database_url:
+        return {}
+    try:
+        from datetime import timedelta
+        from statistics import median
+
+        since = _now() - timedelta(days=days)
+        with _get_sync_session_factory()() as session:
+            rows = session.execute(
+                select(
+                    LlmCallLatency.provider_origin,
+                    LlmCallLatency.model_id,
+                    LlmCallLatency.latency_ms,
+                )
+                .where(LlmCallLatency.created_at >= since)
+                .order_by(LlmCallLatency.created_at.desc())
+            ).all()
+        samples: dict[tuple[str, str], list[int]] = {}
+        for origin, model_id, ms in rows:
+            bucket = samples.setdefault((origin, model_id), [])
+            if len(bucket) < per_model:
+                bucket.append(int(ms))
+        return {key: float(median(vals)) for key, vals in samples.items() if vals}
+    except Exception:
+        logger.exception("[routing/DA-72] Falha ao ler latencias")
+        return {}
+
+
+def record_call_latency(origin: str, model_id: str, latency_ms: int) -> bool:
+    """Grava a latencia de uma chamada bem-sucedida. Best-effort."""
+    if not settings.database_url or not origin or not model_id:
+        return False
+    try:
+        with _get_sync_session_factory()() as session:
+            session.add(
+                LlmCallLatency(
+                    provider_origin=canonical_origin(origin) or origin,
+                    model_id=model_id,
+                    latency_ms=max(0, int(latency_ms)),
+                )
+            )
+            session.commit()
+            return True
+    except Exception:
+        logger.exception("[routing/DA-72] Falha ao gravar latencia (%s/%s)", origin, model_id)
+        return False

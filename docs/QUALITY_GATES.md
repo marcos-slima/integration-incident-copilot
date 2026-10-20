@@ -13,23 +13,44 @@ verificadas à mão, uma vez, e nunca mais.
 | `rag_dataset_schema` | `data/eval/rag_eval_dataset.json`: campos obrigatórios, `interface_type` dentro do Literal do pipeline, piso de 15 casos | instantâneo | todo push/PR |
 | `corpus_coverage` | todo `expected_sources` existe em `data/sample_docs/` | instantâneo | todo push/PR |
 | `dataset_difficulty_mix` | existe ao menos um caso `hard` e um `out_of_scope` | instantâneo | todo push/PR |
-| `reranker_invariant` | o modelo em produção é o vencedor medido, com hit@1 e margem sobre o baseline | instantâneo | todo push/PR |
+| `reranker_invariant` | o modelo em produção foi medido, passa do piso de hit@1 e nenhum candidato é significativamente melhor (McNemar exato pareado, p < 0,05); vantagem pontual não significativa só avisa; sem dados por consulta, vale a margem mínima | instantâneo | todo push/PR |
 | `promptfoo_configs` | configs do promptfoo são YAML válido, têm `prompts`/`tests`/`providers`, e os scripts `exec:` referenciados existem | instantâneo | todo push/PR |
 | `llm_baseline` | existe baseline versionado do promptfoo (comparação de regressão de LLM) | instantâneo | todo push/PR |
 | `candidate_das_fresh` | nenhuma DA marcada como "candidata" no `CLAUDE.md` já entregue em `docs/ARCHITECTURE.md` | instantâneo | todo push/PR |
 | `implemented_das_documented` | toda DA registrada no `CLAUDE.md` tem prosa localizável (seção `### N. ... (DA-N)` em `docs/DECISOES_DE_ARQUITETURA.md`, ou `docs/ARCHITECTURE.md` como local alternativo declarado) — e, no sentido inverso, nenhuma seção `(DA-N)` órfã | instantâneo | todo push/PR |
 | `das_index_current` | o índice de DAs de `docs/DECISOES_DE_ARQUITETURA.md` é único (sem tabela colada duas vezes), lista exatamente o mesmo conjunto do registro do `CLAUDE.md`, cada linha aponta para seção que existe, e o número da coluna Seção é o do heading real (não o da seção vizinha) | instantâneo | todo push/PR |
 | `da_registered` | toda DA citada no código de produto (`app/`, `scripts/`, `alembic/`) tem linha na tabela de DAs do `CLAUDE.md`. Nove DAs estavam fora do livro-razão com a prosa só na docstring: três delas (soberania de dados, AMQP 1.0, circuit breaker Redis) são das mais arquiteturais do projeto e invisíveis para quem navega pelas DAs | instantâneo | todo push/PR |
+| `da_table_unique` | nenhuma DA aparece em duas linhas do registro do `CLAUDE.md`; duplicatas eram invisíveis porque `_registered_das` usa `set` | instantâneo | todo push/PR |
 | `preflight_delegates` | o preflight de RAM do harness é `app/evaluation/ram_preflight.py`, não python inline no `scripts/promptfoo_remote.sh` | instantâneo | todo push/PR |
 | `prompt_digest_measured` | o prompt em produção (`app/agent/prompts.py`) tem o mesmo digest do prompt **medido** no `data/eval/prompt_baseline.json` | instantâneo | todo push/PR |
 | `docs_markup_integrity` | fences de código balanceados e links relativos `.md` resolvendo, em `docs/`, `README.md` e `CLAUDE.md` | instantâneo | todo push/PR |
-| `docs_code_references` | referências `app/x.py::símbolo` e `app/x.py:N` citadas na documentação existem no código e na linha, e toda citação de arquivo .md em backticks existe em lugar real (raiz, `docs/`, `data/sample_docs/` ou ao lado do doc) | instantâneo | todo push/PR |
+| `docs_code_references` | referências `app/x.py::símbolo` e `app/x.py:N` citadas na documentação existem no código e na linha; caminhos crus em backticks (`app/…`, `tests/…`, `scripts/…`, `alembic/…`) existem no `CLAUDE.md`/`README.md`; e toda citação de arquivo .md em backticks existe em lugar real (raiz, `docs/`, `data/sample_docs/` ou ao lado do doc). Relatórios históricos de auditoria ficam fora da checagem de caminho cru: eles descrevem o commit auditado, não a árvore atual | instantâneo | todo push/PR |
 | `docs_env_vars` | toda variável de ambiente citada na documentação (`VAR=` em bloco de código ou em backticks, e nome em backticks com prefixo deste projeto) é lida pelo projeto: campo do `Settings`, compose, manifests, workflows ou `.env.example`. Motivo: o `CONNECTORS.md` antigo mandava configurar variáveis inexistentes e o conector ficava em modo demo sem aviso | instantâneo | todo push/PR |
-| `connector_reachable` | todo conector registrado em `app/connectors/__init__.py` é aceito pelo Literal de `interface_type`, pelas choices do `--interface` do CLI, pelo dropdown da UI web (`SYSTEMS` em `frontend/src/components/DiagnoseView.tsx`), é documentado em `app/models.py`/`app/admin/models.py`, e tem domínio em `data/skills/*.yaml` lido pelo mesmo parser do runtime (`app/mcp/skill_registry.py`; exceto `apim`, cross-vendor por decisão); com o supervisor declarativo (DA-63), reprova também se `data/skills/` faltar ou se o `Dockerfile` não copiar o diretório para a imagem | instantâneo | todo push/PR |
+| `connector_reachable` | todo conector registrado em `app/connectors/__init__.py` é aceito pelo Literal de `interface_type`, pelas choices do `--interface` do CLI, pelo dropdown da UI web (`SYSTEMS` em `frontend/src/components/DiagnoseView.tsx`), é documentado em `app/models/models.py`/`app/admin/models.py`, e tem domínio em `data/skills/*.yaml` lido pelo mesmo parser do runtime (`app/mcp/skill_registry.py`; exceto `apim`, cross-vendor por decisão); com o supervisor declarativo (DA-63), reprova também se `data/skills/` faltar ou se o `Dockerfile` não copiar o diretório para a imagem | instantâneo | todo push/PR |
+| `ui_i18n` | as duas UIs prontas para i18n (DA-73): catálogos `pt-BR`/`en` com as mesmas chaves e as mesmas variáveis `{{x}}`; toda chave usada no React, nos templates e no JS do admin existe; nenhum texto visível fora do catálogo (`app/i18n/inventory.py`; heurístico, `i18n-ignore` com motivo para falso positivo) | instantâneo | todo push/PR |
+| `content_i18n` | o conteúdo do diagnóstico existe em todo idioma suportado (DA-74): catálogos `content.<idioma>.json` com as mesmas chaves e variáveis, toda categoria do rule engine (TTL + `rules.py`) com causa raiz e passos em cada idioma não-default, e todo idioma com instrução de idioma no prompt | instantâneo | todo push/PR |
 | `connector_validation_matrix` | todo conector registrado em `app/connectors/__init__.py` tem linha na matriz de validação de `docs/ARCHITECTURE.md` — a única fonte de verdade sobre o que foi testado contra instância real — e nenhuma linha órfã sobrou para conector removido. Apodreceu em silêncio uma vez: `successfactors` ficou meses sem linha, com todos os gates verdes | instantâneo | todo push/PR |
 | `connector_coverage` | o mapa de cobertura (DA-58) ainda corresponde ao código: todo conector registrado tem linha em `data/connector_coverage.yaml` (9ª superfície da invariante 23), nenhuma declaração aponta para produto ou conector inexistente, e `docs/COVERAGE_MAP.md` — que é **gerado**, não editado — está em dia com os dados. Reprova por **incoerência**, nunca por lacuna: exigir cobertura completa seria exigir 76 conectores novos para o CI ficar verde | instantâneo | todo push/PR |
 | `migrations_and_dashboards` (job) | `alembic upgrade head` em banco limpo + as 45 queries dos 4 dashboards | ~1 min | todo push/PR |
 | `llm_eval` (job) | promptfoo contra o baseline; falha em regressão de caso | depende do provider | agendado 03:17 UTC + manual |
+
+### WARNs conhecidos (IIC-AUD-023)
+
+O gate completo termina com dois avisos permanentes, ambos informativos:
+
+- `reranker_invariant`: `bge-reranker-base` tem vantagem pontual sobre a
+  produção (0,989 × 0,978), mas não significativa (McNemar p = 1,0). O
+  mmarco continua sendo o modelo de produção (DA-29).
+- `deployed_model_evaluated`: o ConfigMap do Kyma
+  (`deploy/kyma/configmap.yaml`) aponta para `gpt-4o-mini`, enquanto o
+  baseline mediu `qwen3.6:35b-a3b`. O aviso é correto: a qualidade só está
+  medida para o modelo que o baseline registra. Rode o promptfoo com o modelo
+  em uso antes de promover uma release.
+
+O prompt `en` foi medido em 2026-10-20 com `qwen3.6:35b-a3b` (11 casos,
+17 asserts, 0 falhas) e o digest está em `locales.en` do
+`data/eval/prompt_baseline.json`. Se o aviso `prompt_digest_measured` voltar,
+o texto `en` mudou depois da medição ou o baseline foi regravado sem medir.
 
 ## Pipeline de avaliacao
 
@@ -51,7 +72,7 @@ flowchart LR
     end
 
     subgraph pr["A cada push e PR"]
-        det["<b>deterministic</b><br/>scripts/quality_gate.py<br/>20 gates"]
+        det["<b>deterministic</b><br/>scripts/quality_gate.py<br/>23 gates"]
         mig["<b>migrations_and_dashboards</b><br/>alembic upgrade + check<br/>45 queries dos dashboards<br/>e2e da DA-52 no Postgres"]
         tst["<b>test</b><br/>ruff + pytest, cobertura >= 80%"]
         rq["<b>rag-quality</b><br/>ingest com fastembed no Qdrant<br/>pytest -m rag_quality"]

@@ -30,6 +30,9 @@ from app.admin.repository import AdminRepository
 from app.config import settings
 from app.main import app
 
+# DA-73: a Admin UI segue o idioma do navegador; estes testes conferem o texto pt-BR.
+_PT_BR = {"Accept-Language": "pt-BR"}
+
 client = TestClient(app)
 
 ADMIN_KEY = "admin-systems-test-key"
@@ -272,6 +275,6 @@ def test_registry_status_conta_sistemas(_live_db):
 
 
 def test_ui_systems_ok():
-    r = client.get("/admin/systems")
+    r = client.get("/admin/systems", headers=_PT_BR)  # DA-73: textos conferidos em pt-BR
     assert r.status_code == 200
     assert "Sistemas integrados" in r.text

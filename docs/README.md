@@ -11,6 +11,21 @@ estiver errado, corrija o código e, se for uma decisão, registre uma DA. Ver
 [`QUALITY_GATES.md`](QUALITY_GATES.md) para o que é verificado
 automaticamente a cada build.
 
+**Documentação bilíngue:** PT em `docs/` é a fonte; EN em `docs/en/` acompanha; alterações entram primeiro no PT; cabeçalho de cada arquivo EN registra o commit-fonte.
+
+---
+
+## English translation
+
+The English translation of this index is at [`docs/en/README.md`](en/README.md).
+Documents with translation status:
+- ✅ Translated: `README.md`, `GETTING_STARTED.md`, `USER_GUIDE.md`, `CONNECTORS.md`
+- 🔄 In progress: `ARCHITECTURE.md`, `QUALITY_GATES.md`, `DEPLOY.md`, `TROUBLESHOOTING.md`
+- ⏳ Planned (index only): `DECISOES_DE_ARQUITETURA.md`
+- 🇵🇹 Portuguese only (study/reference material): `MANUAL.md`, `TUTORIAL_ARQUITETURA_DEBUG.md`, `TUTORIAL_ACESSIBILIDADE_MULTIVENDOR.md`, `TUTORIAL_FASE9_MULTIVENDOR_GRAPHRAG_A2A.md`, `TCO_SAP_AI_CORE_VS_SELF_HOSTED.md`, `AVALIACAO_MODELOS_LOCAIS.md`, `RERANKER_BENCHMARK.md`, `COVERAGE_MAP.md`, `DEPLOYMENT.md`, `CUSTOMIZACAO.md`, `ROTEIRO_DE_AVALIACAO.md`, `TUTORIAL_K3D_KUBERNETES_LOCAL.md`, `EVIDENCIA_K3D_2026-10-18.md`
+
+For the English version of this index, see [`docs/en/README.md`](en/README.md).
+
 ---
 
 ## Comece por aqui
@@ -18,8 +33,12 @@ automaticamente a cada build.
 | Você quer… | Leia, nesta ordem |
 |---|---|
 | **Aprender o projeto inteiro, acompanhando a aplicação no debugger** | [`MANUAL.md`](MANUAL.md) — fonte única didática, 17 capítulos, cada um com uma sessão de debug |
+| Avaliar se o produto serve ao seu ambiente | [`ROTEIRO_DE_AVALIACAO.md`](ROTEIRO_DE_AVALIACAO.md) |
 | Rodar pela primeira vez | [`GETTING_STARTED.md`](GETTING_STARTED.md) → [`USER_GUIDE.md`](USER_GUIDE.md) |
+| Escolher como implantar | [`DEPLOYMENT.md`](DEPLOYMENT.md) |
+| Adaptar às suas necessidades | [`CUSTOMIZACAO.md`](CUSTOMIZACAO.md) |
 | Levar para um ambiente novo | [`DEPLOY.md`](DEPLOY.md) → [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) |
+| Reproduzir a validação em Kubernetes (k3d) | [`TUTORIAL_K3D_KUBERNETES_LOCAL.md`](TUTORIAL_K3D_KUBERNETES_LOCAL.md) → [`EVIDENCIA_K3D_2026-10-18.md`](EVIDENCIA_K3D_2026-10-18.md) |
 | Entender o que existe hoje | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
 | Entender *por que* foi feito assim | [`DECISOES_DE_ARQUITETURA.md`](DECISOES_DE_ARQUITETURA.md) (índice das 50 DAs registradas, numeradas de DA-1 a DA-60) |
 | Debugar um incidente real | [`TUTORIAL_ARQUITETURA_DEBUG.md`](TUTORIAL_ARQUITETURA_DEBUG.md) |
@@ -38,7 +57,11 @@ deste documento.
 | [`MANUAL.md`](MANUAL.md) | **Manual didático único**: do ambiente ao Kyma, na ordem em que os dados atravessam o sistema; cada capítulo fecha com breakpoint, comando e saída esperada. Apêndices: as 14 configurações do `launch.json`, mapa sintoma → breakpoint, e os números do projeto com o comando que os reconfere |
 | [`GETTING_STARTED.md`](GETTING_STARTED.md) | Do zero ao primeiro diagnóstico em menos de 10 minutos |
 | [`USER_GUIDE.md`](USER_GUIDE.md) | Guia de operação: autenticação, todas as superfícies (REST, UI, CLI, MCP, A2A, eventos), leitura do resultado, loop de verificação e onde ficam os logs por camada |
+| [`ROTEIRO_DE_AVALIACAO.md`](ROTEIRO_DE_AVALIACAO.md) | Avaliar o produto em ~30 minutos: o que rodar, observar e interpretar |
+| [`DEPLOYMENT.md`](DEPLOYMENT.md) | **Documento único de implantação**: cenários A a I (local, container, produção, Kyma, Kubernetes, nuvem, on-premise) com o status do que foi validado |
 | [`DEPLOY.md`](DEPLOY.md) | Caminho Docker Compose |
+| [`CUSTOMIZACAO.md`](CUSTOMIZACAO.md) | Adaptar ao seu ambiente: LLM, soberania, orçamento, base de conhecimento, regras, roteamento, prompt, conectores, busca web, limiares |
+| [`EVIDENCIA_K3D_2026-10-18.md`](EVIDENCIA_K3D_2026-10-18.md) | Evidência da validação em Kubernetes real (k3d) |
 | [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) | Diagnóstico de falha por sintoma (startup, AMQP, RAG, LLM, Kyma) |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Visão técnica do que existe no código, com os diagramas (C4, grafo gerado, estado, segurança, implantação). Local alternativo declarado para a prosa das DA-32/33/34/35 |
 | [`DECISOES_DE_ARQUITETURA.md`](DECISOES_DE_ARQUITETURA.md) | Índice e prosa das decisões de arquitetura (DA-1 a DA-60): problema, solução, validação e limitações |
@@ -66,6 +89,7 @@ atual está no código, no `ARCHITECTURE.md` e nos testes.
 | [`TUTORIAL_ARQUITETURA_DEBUG.md`](TUTORIAL_ARQUITETURA_DEBUG.md) | Da requisição ao relatório, com breakpoints no VS Code |
 | [`TUTORIAL_ACESSIBILIDADE_MULTIVENDOR.md`](TUTORIAL_ACESSIBILIDADE_MULTIVENDOR.md) | LLM Gateway e conector multi-vendor, passo a passo (Fase 8) |
 | [`TUTORIAL_FASE9_MULTIVENDOR_GRAPHRAG_A2A.md`](TUTORIAL_FASE9_MULTIVENDOR_GRAPHRAG_A2A.md) | Complementar ao anterior: GraphRAG e A2A (Fase 9) |
+| [`TUTORIAL_K3D_KUBERNETES_LOCAL.md`](TUTORIAL_K3D_KUBERNETES_LOCAL.md) | Reproduzir a validação do deploy em Kubernetes real (k3d), para usuários administrativos |
 | [`TCO_SAP_AI_CORE_VS_SELF_HOSTED.md`](TCO_SAP_AI_CORE_VS_SELF_HOSTED.md) | SAP AI Core vs. IA local sob medida — comparação de custo para conversa com cliente |
 | [`AVALIACAO_MODELOS_LOCAIS.md`](AVALIACAO_MODELOS_LOCAIS.md) | Avaliação empírica dos modelos locais (harness de refactoring) e ajuste do ambiente OpenCode — método, resultados e proveniência (2026-10-11) |
 

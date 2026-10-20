@@ -158,7 +158,7 @@ Só o que o projeto **realmente usa** — não a API inteira de cada lib.
 | **Langfuse** | Observabilidade de agentes/LLM | Visibilidade de tempo/tokens/payload de cada etapa, sem isso o sistema era uma caixa-preta | `@observe` (decorator), `CallbackHandler` (LangChain), `get_client().flush()` |
 | **pytest** | Framework de testes | Padrão de mercado Python; `conftest.py` implementa skip automático de testes de integração se a stack estiver fora do ar | `@pytest.mark.parametrize`, `@pytest.mark.integration`, fixtures |
 | **promptfoo** | Comparação/regressão de prompt e modelo | Usado *fora* do código de produção — ferramenta de decisão, não dependência do Copilot em si | `providers` (exec customizado chamando `run_diagnosis` de verdade), `tests`/`assert` |
-| **pyRFC** | Binding Python pro SAP NetWeaver RFC SDK | O `RFCConnector` ja tem `use_real=True` implementado e pronto, mas **`pyrfc` foi arquivado pela propria SAP** (mai/2026) - bloqueio persiste, agora por falta de binding mantido, alem do SDK licenciado (que e gratuito pra cliente real com S-user, so nao pra este portfolio) | Ver `app/connectors/rfc_connector.py`, docstring atualizada |
+| **pyRFC** | Binding Python pro SAP NetWeaver RFC SDK | O `RFCConnector` ja tem `use_real=True` implementado e pronto, mas **`pyrfc` foi arquivado pela propria SAP** (mai/2026) - bloqueio persiste, agora por falta de binding mantido, alem do SDK licenciado (que e gratuito pra cliente real com S-user, so nao para o ambiente de desenvolvimento deste produto) | Ver `app/connectors/rfc_connector.py`, docstring atualizada |
 
 ### Analogia ABAP
 

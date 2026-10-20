@@ -146,7 +146,7 @@ def test_run_diagnosis_propaga_sensibilidade_do_request(monkeypatch):
 
     capturado = {}
 
-    def fake_invoke(initial_state):
+    def fake_invoke(initial_state, timeout_seconds=None, thread_id=None):
         capturado.update(initial_state)
         raise RuntimeError("parar aqui")
 
@@ -160,9 +160,11 @@ def test_run_diagnosis_propaga_sensibilidade_do_request(monkeypatch):
 
 def test_registry_com_destino_remoto_e_barrado_para_confidential(monkeypatch):
     """GOV-01: no modo gerenciado o base_url do registro (texto livre do
-    admin) e reavaliado. Ollama do .env em loopback, registro apontando
-    para host remoto: dado confidencial nao sai."""
-    from app.llm import factory, gateway
+    admin) e reavaliado. Desde a DA-72 o candidato e' o proprio modelo do
+    registro: origem em loopback com base_url remoto e' barrado antes de
+    qualquer chamada (destino fora da origem + soberania)."""
+    from app.llm import gateway
+    from app.llm.registry_routing import RegistryModel, RegistrySnapshot
 
     cfg = Settings(
         _env_file=None,
@@ -171,17 +173,21 @@ def test_registry_com_destino_remoto_e_barrado_para_confidential(monkeypatch):
         ollama_host="http://127.0.0.1:11434",
         llm_registry_db=True,
     )
-    monkeypatch.setattr(
-        "app.admin.runtime.resolve_runtime_model",
-        lambda provider, model, c: {
-            "model_id": "m",
-            "base_url": "https://gpu.terceiro.example.com",
-        },
+    snapshot = RegistrySnapshot(
+        models=(
+            RegistryModel(
+                id="1",
+                provider_origin="http://127.0.0.1:11434",
+                model_id="m",
+                base_url="https://gpu.terceiro.example.com",
+                transport="ollama",
+            ),
+        )
     )
+    monkeypatch.setattr(gateway, "load_registry_snapshot", lambda: snapshot)
     chamado = []
     monkeypatch.setattr(gateway, "get_chat_model", lambda **kw: chamado.append(kw))
-    monkeypatch.setattr(factory, "get_chat_model", lambda **kw: chamado.append(kw))
-    with pytest.raises(PolicyViolationError, match="destino resolvido pelo registro"):
+    with pytest.raises(PolicyViolationError, match="destino_fora_da_origem.*soberania_bloqueada"):
         gateway.invoke_via_gateway(
             lambda llm: None, state={"description": "x"}, prompt_text="x", config=cfg
         )
@@ -356,6 +362,60 @@ def test_budget_rejection_skips_call_without_invoking_provider(public_default):
             prompt_text="x" * 40_000,  # texto grande o suficiente pra estourar o teto minusculo
             config=cfg,
         )
+
+
+def test_budget_rejection_com_tokenizer_real(public_default):
+    """Teste de orçamento usando tokenizer real (tiktoken) para contagem precisa."""
+    cfg = Settings(llm_provider="openai", openai_api_key="fake", llm_gateway_max_cost_usd=0.01)
+
+    def fake_build_and_invoke(llm):
+        raise AssertionError("nao deveria ser chamado - orcamento estourado antes")
+
+    # Estimar tokens com tokenizer real
+    # ~40000 chars ≈ 5000 tokens (tiktoken cl100k_base)
+    # 5000 tokens * 1.5 (completion ratio) * $0.01/1k ≈ $0.075 > $0.01
+    with pytest.raises(PolicyViolationError, match="custo"):
+        invoke_via_gateway(
+            fake_build_and_invoke,
+            state={"description": "x"},
+            prompt_text="x" * 40_000,
+            config=cfg,
+        )
+
+
+def test_budget_rejection_com_orcamento_muito_baixo(public_default):
+    """Teste de orçamento com valor muito baixo para garantir rejeição."""
+    cfg = Settings(llm_provider="openai", openai_api_key="fake", llm_gateway_max_cost_usd=0.00001)
+
+    def fake_build_and_invoke(llm):
+        raise AssertionError("nao deveria ser chamado - orcamento estourado antes")
+
+    # Qualquer texto grande o suficiente deve ser rejeitado
+    with pytest.raises(PolicyViolationError, match="custo"):
+        invoke_via_gateway(
+            fake_build_and_invoke,
+            state={"description": "x"},
+            prompt_text="x" * 10_000,  # ~1250 tokens, custo estimado > orçamento
+            config=cfg,
+        )
+
+
+def test_budget_rejection_com_ollama_zero_cost(public_default):
+    """Teste de orçamento com ollama (custo zero) - nunca deve ser rejeitado por orçamento."""
+    cfg = Settings(llm_provider="ollama", llm_gateway_max_cost_usd=0.00001)
+
+    def fake_build_and_invoke(llm):
+        # Deve ser chamado porque ollama tem custo zero
+        return "ok"
+
+    result, provider = invoke_via_gateway(
+        fake_build_and_invoke,
+        state={"description": "x"},
+        prompt_text="x" * 100_000,  # texto grande, mas custo zero
+        config=cfg,
+    )
+    assert result == "ok"
+    assert provider == "ollama"
 
 
 def test_open_circuit_skips_provider_without_invoking_it(public_default):

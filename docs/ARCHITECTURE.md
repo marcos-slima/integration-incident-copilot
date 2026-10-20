@@ -198,7 +198,7 @@ duplicada.
 | Servicos | `app/services/` | gravacao de incidentes (`incident_recorder.py`, `incident_repository.py`) e fontes de busca aprovadas (`web_search_sources.py`) |
 | Admin | `app/admin/` | registro de modelos e credenciais cifradas, uso, sistemas, usuarios, correlacao (DA-46 a DA-50) |
 | Contratos | `app/contracts/` | drift de contrato OData (DA-52) |
-| Config e modelos | `app/config.py`, `app/models.py` | `Settings` como fonte unica; contratos Pydantic da API |
+| Config e modelos | `app/config.py`, `app/models/models.py` | `Settings` como fonte unica; contratos Pydantic da API |
 
 ## Contrato de estado e memoria
 
@@ -209,7 +209,7 @@ guardrail sobrescrevendo a evidencia que o rule engine tinha escrito.
 ```mermaid
 flowchart LR
     subgraph entrada["Entrada: run_diagnosis"]
-        e1["description, logs, payload<br/>interface_type, identifier<br/>connector_source_system<br/>sensitivity_level, pii_detected<br/>llm_model, incident_id, debug"]
+        e1["description, logs, payload<br/>interface_type, identifier<br/>connector_source_system<br/>sensitivity_level, pii_detected<br/>locale, llm_model, incident_id, debug"]
     end
     subgraph nos["Campo escrito por cada no"]
         sup["supervisor"] --> s1["agent_domain"]
@@ -217,12 +217,12 @@ flowchart LR
         ret["retrieve"] --> s3["retrieved_context"]
         gen["graph_enrich"] --> s4["graph_history"]
         dia["sap / saas / generic_diagnose"] --> s5["diagnosis"]
-        rep["report"] --> s6["report_markdown"]
+        rep["report"] --> s6["report_markdown, explanation"]
         gw["graph_write"] --> n4j[("Neo4j: efeito colateral,<br/>nao escreve no estado")]
     end
     morto["web_search_results<br/>(nenhum no do grafo escreve)"]
     ont["ontology_enrich"] --> s7["ontology_candidates"]
-    hitl["hitl_review"] --> s8["hitl_request, hitl_response, confidence_adjustment"]
+    hitl["hitl_review"] --> s8["hitl_request, hitl_response,<br/>hitl_interrupt_enabled, hitl_reviewed,<br/>confidence_adjustment"]
     risk["risk_assessment"] --> s9["risk_level, risk_confidence, risk_factors"]
     entrada --> nos
     ont --> s7
@@ -280,7 +280,7 @@ flowchart LR
     pr -->|"tool do ReAct, so com fonte aprovada"| q
     q --> ddg
     ddg --> wb
-    wb -.->|"volta ao LLM como observacao<br/>SEM sanitize_untrusted_input"| pr
+    wb -.->|"volta ao LLM sanitizado<br/>e delimitado (DA-71)"| pr
     ev2 --> enc --> db
     pr --> lf
 ```
@@ -289,21 +289,22 @@ flowchart LR
 
 | Controle | Codigo | Observacao |
 |---|---|---|
-| Neutralizacao de *prompt injection* e redacao de PII na entrada | `app/agent/nodes.py::sanitize_untrusted_input` | aplicado a descricao, logs, payload, dado de conector, trecho do RAG e historico do grafo; **nao** ao retorno da ferramenta de busca web (achado 1 abaixo) |
+| Neutralizacao de *prompt injection* e redacao de PII na entrada | `app/agent/nodes.py::sanitize_untrusted_input` | aplicado a descricao, logs, payload, dado de conector, trecho do RAG, historico do grafo e, desde a DA-71, ao retorno da busca web (`format_untrusted_web_hits`) |
 | Classificacao de sensibilidade | `app/llm/gateway.py::classify_sensitivity` | conector real ou `pii_detected` tornam o dado confidencial; o default e confidencial (B-04) |
-| Politica de destino | `app/llm/gateway.py::_provider_allows_sensitivity` | decidida pela **origem real**, nao pelo rotulo do provider (DA-43) |
+| Politica de destino | `app/llm/routing.py::_provider_allows_sensitivity` | decidida pela **origem real**, nao pelo rotulo do provider (DA-43, DA-66) |
 | Consulta de busca web | `app/agent/nodes.py::_sanitize_web_search_query` | redige URLs, IDocs, GUIDs, tokens e trunca |
 | Capacidades MCP | `app/mcp/policy.py` | ferramenta sem entrada no registro e negada (DA-27) |
 | Cifragem em repouso | `app/admin/crypto.py::encrypt_evidence` | redige antes de cifrar (DA-60) |
 
-> **Achados da validacao de 2026-10-07 (abertos).**
+> **Achados da validacao de 2026-10-07.**
 >
-> 1. O texto que a ferramenta de busca web do agente ReAct devolve
->    (`app/agent/nodes.py::_make_web_search_tool`) volta ao LLM como
->    observacao **sem** passar por `sanitize_untrusted_input`. Isso deixa
->    aberta a injecao indireta por pagina web. A seta tracejada do diagrama
->    marca o ponto.
-> 2. `app/agent/nodes.py::web_search_node` existe, mas **nao esta no grafo**:
+> 1. **Fechado (DA-71).** O texto que a ferramenta de busca web do agente
+>    ReAct devolve (`app/agent/nodes.py::_make_web_search_tool`) voltava ao
+>    LLM sem `sanitize_untrusted_input`. Agora passa por
+>    `format_untrusted_web_hits`: sanitizado, limitado, URL reduzida e
+>    bloco delimitado como dado nao confiavel. A neutralizacao e por
+>    padroes - reduz o risco de injecao indireta, nao o elimina.
+> 2. (Aberto.) `app/agent/nodes.py::web_search_node` existe, mas **nao esta no grafo**:
 >    nenhum no escreve `web_search_results`. O trecho do prompt que sanitiza
 >    "resultado de busca web" le um campo que fica sempre vazio. A unica busca
 >    web real e a ferramenta do ReAct do item 1.
@@ -517,6 +518,10 @@ flowchart LR
 | conector devolveu dado de fallback (identificador nao reconhecido) | 0,4 | prefixo `[confianca limitada - identificador nao reconhecido…]` |
 | sem documento, sem conector e sem regra | 0,3 | `matched_source` anulado |
 | `matched_source` citado pelo LLM nao esta entre os documentos recuperados | 0,3 | `matched_source` anulado; o escalonamento marca `abstained` |
+
+Os prefixos acrescentados a causa raiz saem no idioma do `locale` do pedido
+(`app/i18n/locales/content.<idioma>.json`, chaves `diagnosis.*`); o texto
+pt-BR e o mesmo de antes da DA-74.
 
 `diagnosis_confidence` e uma heuristica para ordenar diagnosticos, nao uma
 probabilidade calibrada. O `web_untrusted` so apareceria a partir de
@@ -975,7 +980,7 @@ nativo). `data` carrega exatamente os mesmos campos de
 `IncidentRequest` (a informacao e a MESMA que um humano digitaria em
 `/diagnose`, so que originada automaticamente). Hoje so um `type` e
 reconhecido - `com.sap.integration.incident.detected.v1` - modelado
-como `Literal` em `IncidentEventEnvelope` (`app/models.py`): qualquer
+como `Literal` em `IncidentEventEnvelope` (`app/models/models.py`): qualquer
 outro valor e rejeitado com `422` automaticamente pelo Pydantic, em
 vez de tentar interpretar silenciosamente um payload de formato
 desconhecido.
@@ -1069,6 +1074,14 @@ ambiente); Qdrant e Neo4j (GraphRAG, que continua opt-in) não são
 implantados por este bundle - são pré-requisitos externos, documentados
 em `deploy/kyma/README.md`.
 
+> **Atualização (2026-10-18).** O registro acima é do momento em que a DA-24
+> foi escrita. Desde então a imagem foi construída (cenário Compose) e o bundle
+> foi aplicado num Kubernetes real (k3d) pelo overlay `deploy/local/`, com
+> rollout, probes, ingest no Pod, `/diagnose` pelo rule engine e pelo LLM local
+> e HPA escalando. Evidência: `docs/EVIDENCIA_K3D_2026-10-18.md`; reprodução:
+> `docs/TUTORIAL_K3D_KUBERNETES_LOCAL.md`. Segue sem validação o que é
+> específico do Kyma gerenciado: `APIRule`, Istio e OIDC do BTP.
+
 **Validação:** `tests/test_kyma_manifests.py` (11 testes) garante que
 todo YAML do bundle é sintaticamente válido e internamente consistente
 - mesmo namespace em todos os recursos namespaced, probes de saúde sem
@@ -1161,7 +1174,7 @@ dense + sparse -> RRF -> candidate pool -> cross encoder -> evidence threshold -
   rejeitado) e os dois ramos do fallback de `reference_library`.
 
 **2. Evidence/Trust Layer.** A resposta do diagnostico (`DiagnosisResponse`)
-ganhou um campo `evidence: list[Evidence]` (`app/models.py`) - uma
+ganhou um campo `evidence: list[Evidence]` (`app/models/models.py`) - uma
 entrada por fonte REAL consultada nesta execucao (conector, RAG,
 GraphRAG, busca web, descricao do usuario), cada uma com um
 `trust_level` decidido pelo TIPO da fonte:
@@ -1285,6 +1298,50 @@ Validado com `tests/test_llm_gateway.py` (20 testes) - policy de
 roteamento, circuit breaker (abre/fecha/expira cooldown, isolado por
 provider) e budget, sem depender de nenhum provider real (mesmo padrao
 ja usado em `test_llm_factory.py` para `invoke_with_hybrid_fallback`).
+
+## AI Gateway v2 - Token budgeting e orçamento por tarefa (DA-67)
+
+Quarto item da evolucao planejada do AI Gateway (apos DA-26). A v1
+(DA-26) usa heuristica simples (`len(text) // 4`) para estimar tokens e
+custo. Isso e impreciso e nao usa preços reais do registry. A DA-67
+substitui essa heurística por:
+
+1. **Tokenizer real**: usar `tiktoken` (cl100k_base) para contar tokens
+   exatos, com fallback para heurística se `tiktoken` não estiver
+   disponível (`app/llm/gateway.py::_estimate_tokens`)
+
+2. **Preços reais**: usar `app/admin/repository.py::registry_prices()`
+   para obter `price_in_per_1m` e `price_out_per_1m` do registry, com
+   fallback para tabela interna se registry não disponível
+   (`app/llm/routing.py::_estimate_cost_usd`)
+
+3. **Budget ledger**: registrar estimado × real por diagnóstico
+   (`app/admin/models.py::LlmBudgetLedger`, `app/admin/repository.py::record_budget_ledger`).
+   Calcular `desvio_ratio = (actual - estimated) / estimated`. Best-effort:
+   sem DATABASE_URL ou erro, não bloqueia diagnóstico.
+
+4. **Métrica Prometheus**: expor desvio estimado/real como métrica
+   (`app/metrics.py::LLM_BUDGET_DEVIATION`, `LLM_BUDGET_EXCEEDED_TOTAL`,
+   `observe_budget_ledger()`)
+
+**Implementação.**
+- `app/llm/gateway.py`: substituir `_estimate_tokens()` por tokenizer real
+- `app/llm/routing.py`: usar `registry_prices()` em vez de tabela interna
+- `app/admin/models.py`: adicionar `LlmBudgetLedger` ORM
+- `app/admin/repository.py`: adicionar `record_budget_ledger()`
+- `app/metrics.py`: adicionar métricas de desvio estimado/real
+- `tests/test_llm_gateway.py`: testes de orçamento com tokenizer real
+- `tests/test_admin_repository.py`: testes de budget ledger
+
+**Validação.**
+- `tests/test_llm_gateway.py`: 34 testes (inclui 3 novos de orçamento)
+- `tests/test_admin_repository.py`: 13 testes (inclui 4 de budget ledger)
+- Quality gate: `llm_baseline` valida que estimativa é mais precisa
+
+**Limitações (registradas de propósito).**
+- Tokenizer real requer `tiktoken` (já está nas dependências)
+- Preços do registry requerem `DATABASE_URL` configurada
+- Budget ledger já existe (DA-48), falta apenas expor desvio
 
 ## Capability Registry + Agent Execution Policy (DA-27)
 
@@ -1447,7 +1504,7 @@ correct informados E (desde a DA-50) nao houver linha gravavel na tabela
 `incidents` (sem `DATABASE_URL` ou incidente inexistente) - nada para
 registrar em lugar nenhum; GraphRAG
 ligado com incident_id inexistente continua 404. Ver
-`app/models.py::VerifyIncidentRequest` (campos `correct`/`trace_id`
+`app/models/models.py::VerifyIncidentRequest` (campos `correct`/`trace_id`
 novos) e `app/main.py::verify_incident_endpoint`.
 
 ## Benchmark cientifico de rerankers (DA-29)
@@ -1493,6 +1550,21 @@ metricas e testada automaticamente, mesmo tratamento dado a
 
 Com isso, TODOS os itens do backlog priorizado pela segunda revisao
 arquitetural externa (P0/P1/P2) estao fechados.
+
+## Idioma das interfaces e do conteudo (DA-73/74)
+
+| O que | Decide o idioma | Onde |
+|---|---|---|
+| Telas da Web UI | `?lng` → cookie `iic_locale` → `navigator.languages` → `en` | `frontend/src/i18n/` (`react-i18next`) |
+| Telas da Admin UI | `?lng` → cookie `iic_locale` → `Accept-Language` → `en` | `app/i18n/__init__.py::negotiate`, catalogo embutido como JSON (CSP intacta) |
+| Mensagens de erro da API nas telas | `code` estavel do backend | `app/api_errors.py::CodedHTTPException` |
+| Conteudo do diagnostico (regras, avisos, relatorio, texto do LLM) | `IncidentRequest.locale` (`pt-BR` default · `en`) | `app/i18n/content.py`, `app/agent/prompts.py::OUTPUT_LANGUAGE_INSTRUCTIONS` |
+| E-mail e SMS de ativacao | `web_users.locale` (idioma de quem cadastrou) | `app/webusers.py::activation_email_text` |
+| Motivos de soberania, roteamento e conectores exibidos nas telas | codigo + parametros, montados pela tela | `app/llm/routing.py::sovereignty_decision`, `Candidate.detail_items`, `/health` (`setting`) |
+
+O pt-BR do conteudo e a fonte (regras no TTL e em `rules.py`) e o prompt
+medido; o `en` tem digest de prompt proprio, medido em 2026-10-20
+(`locales.en` no baseline). Gates: `ui_i18n` e `content_i18n`.
 
 ## Testes
 
@@ -1856,6 +1928,11 @@ incidentes. A solução tem que ser:
 - Sem versãoamento: TTL é "latest", não snapshot; para rolling back, restaurar TTL anterior.
 - Fallback não grava log de erro (silencioso), exige monitoramento manual de `error_codes.ttl`.
 - Mapeamento TTL/hardcoded manual (não inferência automática).
+- DA-74: conceito do TTL sem `ex:probableRootCause` (ou sem passos) herda o
+  texto da regra em código de mesma categoria
+  (`app/agent/ontology_loader.py::_fill_from_hardcoded`); passos separados por
+  `;`. A tradução `en` de cada categoria fica em `content.en.json`
+  (`rules.<categoria>`), cobrada pelo gate `content_i18n`.
 
 ### Próximos passos (DA-61 Fases 2/3)
 

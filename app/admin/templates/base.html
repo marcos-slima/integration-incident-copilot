@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="{{ html_lang }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}Admin · Integration Copilot{% endblock %}</title>
+<title>{% block title %}{{ t('base.title') }}{% endblock %}</title>
 <style>
   :root { color-scheme: light dark; --bg: #f8fafc; --card: #ffffff; --text: #1e293b; --border: #e2e8f0; --accent: #3b82f6; --success: #10b981; --warning: #f59e0b; --error: #ef4444; }
   @media (prefers-color-scheme: dark) { :root { --bg: #0f172a; --card: #1e293b; --text: #f1f5f9; --border: #334155; --accent: #60a5fa; } }
@@ -59,44 +59,53 @@
   .key-container { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; }
   .alert { background: #fff3cd; border: 1px solid #ffeeba; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; color: #856404; }
   .alert strong { display: block; margin-bottom: 0.25rem; }
+  .lang-select { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--text); }
+  .lang-select select { padding: 0.25rem 0.4rem; font-size: 0.85rem; }
 </style>
 </head>
 <body>
 <header>
-  <h1>Integration Copilot · Admin</h1>
+  <h1>{{ t('base.header') }}</h1>
   <nav>
-    <a href="/admin" {% if request.url.path == '/admin' %}class="active"{% endif %}>🏠 Início</a>
-    <a href="/admin/models" {% if request.url.path.startswith('/admin/models') %}class="active"{% endif %}>🤖 Modelos</a>
-    <a href="/admin/usage" {% if request.url.path.startswith('/admin/usage') %}class="active"{% endif %}>📊 Metering</a>
-    <a href="/admin/systems" {% if request.url.path.startswith('/admin/systems') %}class="active"{% endif %}>🔗 Sistemas</a>
-    <a href="/admin/incidents" {% if request.url.path.startswith('/admin/incidents') %}class="active"{% endif %}>⚠️ Incidentes</a>
-    <a href="/admin/users" {% if request.url.path.startswith('/admin/users') %}class="active"{% endif %}>👥 Usuários</a>
-    <a href="/admin/web-search" {% if request.url.path.startswith('/admin/web-search') %}class="active"{% endif %}>🔍 Busca web</a>
-    <a href="/docs" target="_blank" style="margin-left: auto;">📄 API Docs</a>
+    <a href="/admin" {% if request.url.path == '/admin' %}class="active"{% endif %}>🏠 {{ t('nav.home') }}</a>
+    <a href="/admin/models" {% if request.url.path.startswith('/admin/models') %}class="active"{% endif %}>🤖 {{ t('nav.models') }}</a>
+    <a href="/admin/usage" {% if request.url.path.startswith('/admin/usage') %}class="active"{% endif %}>📊 {{ t('nav.usage') }}</a>
+    <a href="/admin/systems" {% if request.url.path.startswith('/admin/systems') %}class="active"{% endif %}>🔗 {{ t('nav.systems') }}</a>
+    <a href="/admin/incidents" {% if request.url.path.startswith('/admin/incidents') %}class="active"{% endif %}>⚠️ {{ t('nav.incidents') }}</a>
+    <a href="/admin/users" {% if request.url.path.startswith('/admin/users') %}class="active"{% endif %}>👥 {{ t('nav.users') }}</a>
+    <a href="/admin/web-search" {% if request.url.path.startswith('/admin/web-search') %}class="active"{% endif %}>🔍 {{ t('nav.webSearch') }}</a>
+    <a href="/docs" target="_blank" style="margin-left: auto;">📄 {{ t('nav.apiDocs') }}</a>
+    <label class="lang-select">
+      <span>{{ t('common.language') }}</span>
+      <select id="lang-select" aria-label="{{ t('common.language') }}">
+        {% for code, label in supported_locales %}<option value="{{ code }}" {% if code == locale %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </label>
   </nav>
 </header>
 
 {% if not db_configured %}
 <div class="alert" style="background: #fee2e2; border-color: #fecaca; color: #991b1b;">
-  <strong>⚠️ Persistência não configurada</strong>
-  DATABASE_URL ausente no .env. As operações de dados retornarão 503. A API de diagnóstico continua funcionando.
+  <strong>⚠️ {{ t('base.noDbTitle') }}</strong>
+  {{ t('base.noDbText') }}
 </div>
 {% endif %}
 
 <div class="key-container">
-  <h3 style="margin-top: 0; color: var(--text);">🔐 Chave Admin</h3>
+  <h3 style="margin-top: 0; color: var(--text);">🔐 {{ t('base.keyTitle') }}</h3>
   <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
-    <label style="margin: 0; font-weight: 500; color: var(--text);">ADMIN_API_KEY (salva no sessionStorage):</label>
-    <input id="adminkey" type="password" size="50" placeholder="cole a chave admin" autocomplete="off" style="flex: 1; min-width: 200px;">
-    <button class="btn btn-primary" data-click="saveKey">💾 Salvar</button>
+    <label style="margin: 0; font-weight: 500; color: var(--text);">{{ t('base.keyLabel') }}</label>
+    <input id="adminkey" type="password" size="50" placeholder="{{ t('base.keyPlaceholder') }}" autocomplete="off" style="flex: 1; min-width: 200px;">
+    <button class="btn btn-primary" data-click="saveKey">💾 {{ t('common.save') }}</button>
   </div>
-  <p style="margin-top: 0.75rem; margin-bottom: 0; color: var(--text); opacity: 0.7; font-size: 0.9rem;">Enviar como <code>X-API-Admin-Key</code>. Nada é salvo no servidor.</p>
+  <p style="margin-top: 0.75rem; margin-bottom: 0; color: var(--text); opacity: 0.7; font-size: 0.9rem;">{{ t_html('base.keyHint') }}</p>
 </div>
 
 <main>
 {% block content %}{% endblock %}
 </main>
 
+<script type="application/json" id="i18n-catalog">{{ i18n_catalog }}</script>
 <script src="/admin/static/admin.js" defer></script>
 {% block scripts %}{% endblock %}
 </body>

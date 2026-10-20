@@ -7,9 +7,11 @@
 // derivado do .env atual do backend) ao montar o componente.
 
 import { useEffect, useState } from 'react';
-import { callHealth } from '../api/health';
+import { useTranslation } from 'react-i18next';
+import { formatUSD } from '../i18n/format';
+import { callHealth, callLlmPolicy } from '../api/health';
 import { ApiError } from '../api/diagnose';
-import type { ConnectorHealthStatus, HealthResponse, InterfaceType } from '../types/models';
+import type { ConnectorHealthStatus, HealthResponse, InterfaceType, LlmPolicy } from '../types/models';
 
 // Nome de exibicao de cada conector - so rotulagem, o estado vem do backend
 const CONNECTOR_LABELS: Record<InterfaceType, string> = {
@@ -60,12 +62,29 @@ function boolTagColor(v: boolean): string {
 }
 
 export function StatusView() {
+  const { t } = useTranslation();
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [policy, setPolicy] = useState<LlmPolicy | null>(null);
+  const [policyError, setPolicyError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
+
+    // DA-43/DA-66: independente do /health - uma falha aqui nao esconde o resto
+    callLlmPolicy()
+      .then((p) => {
+        if (!cancelled) setPolicy(p);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setPolicyError(
+          e instanceof ApiError
+            ? t('common.errorStatus', { status: e.status, message: e.message })
+            : t('status.policyError'),
+        );
+      });
 
     callHealth()
       .then((res) => {
@@ -73,8 +92,8 @@ export function StatusView() {
       })
       .catch((e) => {
         if (cancelled) return;
-        if (e instanceof ApiError) setError(`Erro ${e.status}: ${e.message}`);
-        else setError('Falha ao consultar o backend. Verifique se a API está ativa.');
+        if (e instanceof ApiError) setError(t('common.errorStatus', { status: e.status, message: e.message }));
+        else setError(t('status.backendError'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -83,24 +102,21 @@ export function StatusView() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   return (
     <div className="view">
-      <h1 className="page-title">Status da stack</h1>
-      <p className="page-sub">
-        Estado atual dos conectores e serviços de infraestrutura, consultado ao vivo em
-        GET /health.
-      </p>
+      <h1 className="page-title">{t('status.title')}</h1>
+      <p className="page-sub">{t('status.subtitle')}</p>
 
-      {loading && <p className="page-sub">Consultando /health…</p>}
+      {loading && <p className="page-sub">{t('status.loading')}</p>}
       {error && <p className="page-sub" style={{ color: '#EF4444' }}>{error}</p>}
 
       {health && (
         <>
           <div className="status-section">
             <div className="status-section-label">
-              Conectores ({Object.keys(health.connectors).length})
+              {t('status.connectors', { count: Object.keys(health.connectors).length })}
             </div>
             {/* FE-01: a lista vem do /health; CONNECTOR_ORDER so define a ordem.
                 Conector novo no backend aparece mesmo sem rotulo aqui. */}
@@ -117,9 +133,13 @@ export function StatusView() {
                   <span className="status-name" style={{ width: 210 }}>
                     {CONNECTOR_LABELS[name] ?? name}
                   </span>
-                  <span className="status-note">{info.note}</span>
+                  <span className="status-note">
+                    {info.setting
+                      ? t(`status.connectorNote.${info.status}`, { setting: info.setting })
+                      : info.note}
+                  </span>
                   <span className="status-tag" style={{ color: tagColor(info.status) }}>
-                    {info.status}
+                    {t(`status.connectorStatus.${info.status}`)}
                   </span>
                 </div>
               );
@@ -127,11 +147,11 @@ export function StatusView() {
           </div>
 
           <div className="status-section">
-            <div className="status-section-label">Infraestrutura</div>
+            <div className="status-section-label">{t('status.infra')}</div>
             <div className="status-row">
               <span className="status-dot status-dot-ok" />
               <span className="status-name" style={{ width: 150 }}>
-                LLM Provider
+                {t('status.llmProvider')}
               </span>
               <span
                 className="status-note"
@@ -143,80 +163,129 @@ export function StatusView() {
             <div className="status-row">
               <span className={`status-dot ${boolDotClass(health.infra.graph_rag_enabled)}`} />
               <span className="status-name" style={{ width: 150 }}>
-                GraphRAG (Neo4j)
+                {t('status.graphrag')}
               </span>
               <span
                 className="status-note"
                 style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10 }}
               >
-                {health.infra.graph_rag_enabled ? 'ligado' : 'desligado (opt-in)'}
+                {health.infra.graph_rag_enabled ? t('status.enabled') : t('status.disabledOptIn')}
               </span>
               <span
                 className="status-tag"
                 style={{ color: boolTagColor(health.infra.graph_rag_enabled) }}
               >
-                {health.infra.graph_rag_enabled ? 'on' : 'off'}
+                {health.infra.graph_rag_enabled ? t('status.on') : t('status.off')}
               </span>
             </div>
             <div className="status-row">
               <span className={`status-dot ${boolDotClass(health.infra.langfuse_enabled)}`} />
               <span className="status-name" style={{ width: 150 }}>
-                Observabilidade (Langfuse)
+                {t('status.langfuse')}
               </span>
               <span
                 className="status-note"
                 style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10 }}
               >
-                {health.infra.langfuse_enabled ? 'credenciais configuradas' : 'sem credenciais no .env'}
+                {health.infra.langfuse_enabled ? t('status.credsConfigured') : t('status.noCreds')}
               </span>
               <span
                 className="status-tag"
                 style={{ color: boolTagColor(health.infra.langfuse_enabled) }}
               >
-                {health.infra.langfuse_enabled ? 'on' : 'off'}
+                {health.infra.langfuse_enabled ? t('status.on') : t('status.off')}
               </span>
             </div>
             <div className="status-row">
               <span className={`status-dot ${boolDotClass(health.infra.async_queue_enabled)}`} />
               <span className="status-name" style={{ width: 150 }}>
-                Fila assíncrona (RQ)
+                {t('status.queue')}
               </span>
               <span
                 className="status-note"
                 style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10 }}
               >
                 {health.infra.async_queue_enabled
-                  ? 'REDIS_URL configurada'
-                  : '/diagnose/async indisponível (sem REDIS_URL)'}
+                  ? t('status.redisConfigured')
+                  : t('status.asyncUnavailable')}
               </span>
               <span
                 className="status-tag"
                 style={{ color: boolTagColor(health.infra.async_queue_enabled) }}
               >
-                {health.infra.async_queue_enabled ? 'on' : 'off'}
+                {health.infra.async_queue_enabled ? t('status.on') : t('status.off')}
               </span>
             </div>
             <div className="status-row">
               <span className={`status-dot ${boolDotClass(health.infra.auth_required)}`} />
               <span className="status-name" style={{ width: 150 }}>
-                Autenticação (X-API-Key)
+                {t('status.auth')}
               </span>
               <span
                 className="status-note"
                 style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10 }}
               >
-                {health.infra.auth_required ? 'exigida em /diagnose e /a2a' : 'desligada'}
+                {health.infra.auth_required ? t('status.authRequired') : t('status.authOff')}
               </span>
               <span
                 className="status-tag"
                 style={{ color: boolTagColor(health.infra.auth_required) }}
               >
-                {health.infra.auth_required ? 'on' : 'off'}
+                {health.infra.auth_required ? t('status.on') : t('status.off')}
               </span>
             </div>
           </div>
         </>
       )}
+
+      <div className="status-section">
+        <div className="status-section-label">{t('status.sovereignty')}</div>
+        {policyError && <p className="page-sub" style={{ color: '#EF4444' }}>{policyError}</p>}
+        {policy && (
+          <>
+            <div className="status-row">
+              <span className="status-dot status-dot-ok" />
+              <span className="status-name" style={{ width: 150 }}>{t('status.mode')}</span>
+              <span className="status-note">
+                {t('status.modeLine', {
+                  mode: policy.data_sovereignty_mode,
+                  sensitivity: policy.sensitivity_default,
+                  cap: formatUSD(policy.limits.max_cost_usd),
+                })}
+              </span>
+            </div>
+            {Object.entries(policy.providers).map(([name, p]) => (
+              <div key={name} className="status-row">
+                <span className={`status-dot ${p.may_receive_confidential ? 'status-dot-ok' : p.may_receive_public ? 'status-dot-warn' : 'status-dot-mock'}`} />
+                <span className="status-name" style={{ width: 150 }}>
+                  {name}
+                  {name === policy.routing.primary ? ` ${t('status.primary')}` : ''}
+                  {name === policy.routing.fallback ? ` ${t('status.fallback')}` : ''}
+                </span>
+                <span
+                  className="status-note"
+                  style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10 }}
+                  title={
+                    p.confidential_reason_code
+                      ? t(`sovereigntyReason.${p.confidential_reason_code}`, p.confidential_reason_params)
+                      : p.confidential_reason
+                  }
+                >
+                  {t(`status.locality.${p.locality}`)} · {p.origin ?? t('status.noOrigin')}
+                </span>
+                <span className="status-tag" style={{ color: p.may_receive_confidential ? '#10B981' : '#F59E0B' }}>
+                  {p.may_receive_confidential ? t('status.confidentialOk') : p.may_receive_public ? t('status.publicOnly') : t('status.blocked')}
+                </span>
+              </div>
+            ))}
+            <p className="status-note" style={{ marginTop: 8 }}>
+              {t('status.confidentialTo', {
+                list: policy.routing.allowed_for_confidential.join(', ') || t('status.noProvider'),
+              })}
+            </p>
+          </>
+        )}
+      </div>
     </div>
   );
 }

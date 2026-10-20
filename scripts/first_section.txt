@@ -1,0 +1,13 @@
+## Decisões
+
+### 1. Alucinação por mistura de contexto (DA-1)
+
+**Problema:** ao passar os 3 documentos mais relevantes (RAG top-3)
+inteiros no prompt, o LLM ocasionalmente combinava causa raiz de
+documentos diferentes (ex: misturava conceitos de IDoc e OData numa
+única resposta), mesmo com instrução explícita para não fazer isso.
+
+**Solução:** restringir o contexto passado ao LLM a apenas o
+**documento mais relevante** (texto completo), citando os demais só
+pelo nome, sem conteúdo. Eliminou a possibilidade de mistura na raiz,
+por design, em vez de depender de instrução de prompt.

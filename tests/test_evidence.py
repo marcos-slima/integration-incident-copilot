@@ -3,7 +3,7 @@ evidencias de forma inteiramente DETERMINISTICA a partir do que o
 pipeline realmente consultou (state) - nunca a partir de autoavaliacao
 ou citacao do LLM. Estes testes cobrem cada fonte isoladamente e a
 combinacao delas, alem da validacao do modelo Evidence/DiagnosisResponse
-(app/models.py)."""
+(app/models/models.py)."""
 
 from app.agent.nodes import _assemble_evidence, report_node
 from app.connectors.base import ConnectorResult
@@ -162,7 +162,7 @@ def test_all_sources_combine_in_one_evidence_list():
 
 def test_evidence_model_validates_assembled_dicts():
     """Cada dict montado por _assemble_evidence precisa validar como
-    Evidence - garante que o contrato entre nodes.py e models.py nao
+    Evidence - garante que o contrato entre nodes.py e models/models.py nao
     se desalinha silenciosamente."""
     hits = [{"source": "doc.md", "text": "x", "score": 0.5, "rerank_score": 1.2}]
     evidence = _assemble_evidence({"retrieved_context": hits, "description": "incidente"})

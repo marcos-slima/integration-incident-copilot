@@ -3,6 +3,7 @@
 import logging
 import secrets
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -23,6 +24,7 @@ from app.admin.routes import router as admin_router  # DA-46/47/48
 from app.admin.security import ensure_admin_key_configured
 from app.admin.ui import ui_router as admin_ui_router
 from app.agent.graph import run_diagnosis
+from app.api_errors import CodedHTTPException, coded_http_exception_handler
 from app.auth import ensure_session_secret_configured, verify_session_cookie
 from app.auth import router as auth_router
 from app.config import settings
@@ -31,7 +33,8 @@ from app.events import idempotency
 from app.events.amqp_consumer import amqp_consumer  # DA-32
 from app.events.consumer import handle_incident_event_async
 from app.exceptions import ConfigurationError, DiagnosisOverloadedError, DiagnosisTimeoutError
-from app.llm.gateway import describe_effective_policy
+from app.llm.budget import BudgetExhaustedError
+from app.llm.gateway import PolicyViolationError, describe_effective_policy
 from app.mcp.server import build_mcp_asgi_app
 from app.mcp.server import mcp as mcp_server
 from app.metrics import setup_metrics
@@ -39,6 +42,7 @@ from app.models import (
     DiagnosisResponse,
     IncidentEventEnvelope,
     IncidentRequest,
+    ReviewIncidentRequest,
     VerifyIncidentRequest,
 )
 from app.queue import AsyncQueueUnavailableError, enqueue_diagnosis, get_job_status
@@ -171,22 +175,19 @@ def _ensure_api_keys_configured() -> None:
         settings.api_key = secrets.token_urlsafe(32)
         logger.warning(
             "API_KEY nao configurada no .env - chave gerada automaticamente "
-            "para esta execucao (header X-API-Key): %s",
-            "*" * len(settings.api_key),
+            "para esta execucao (header X-API-Key): gerada",
         )
     if not settings.a2a_api_key:
         settings.a2a_api_key = secrets.token_urlsafe(32)
         logger.warning(
             "A2A_API_KEY nao configurada no .env - chave gerada automaticamente "
-            "para esta execucao (header X-A2A-Api-Key): %s",
-            "*" * len(settings.a2a_api_key),
+            "para esta execucao (header X-A2A-Api-Key): gerada",
         )
     if not settings.event_mesh_api_key:
         settings.event_mesh_api_key = secrets.token_urlsafe(32)
         logger.warning(
             "EVENT_MESH_API_KEY nao configurada no .env - chave gerada "
-            "automaticamente para esta execucao (header X-Event-Mesh-Api-Key): %s",
-            "*" * len(settings.event_mesh_api_key),
+            "automaticamente para esta execucao (header X-Event-Mesh-Api-Key): gerada",
         )
     # DA-46/47/48: superficie admin (registro de modelos/credenciais/metering)
     # com chave DEDICADA. Mesmo contrato DA-18: nunca auth desabilitada.
@@ -301,6 +302,8 @@ app = FastAPI(
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# DA-73: erros com `code` estavel (app/api_errors.py) - as UIs traduzem pelo code
+app.add_exception_handler(CodedHTTPException, coded_http_exception_handler)
 # Avaliacao externa (medio prazo, item 1): sem este middleware,
 # "default_limits" do Limiter (app/rate_limit.py) so valia para rotas
 # com "@limiter.limit(...)" explicito - /a2a, /mcp e /health ficavam
@@ -391,7 +394,7 @@ def _unhandled_error_handler(request: Request, exc: Exception):
     )
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": "erro interno", "error_id": error_id},
+        content={"detail": "erro interno", "code": "internal_error", "error_id": error_id},
     )
 
 
@@ -401,8 +404,53 @@ def _diagnosis_overloaded_handler(request: Request, exc: DiagnosisOverloadedErro
     reenviar), em vez do 504 que o handler de DiagnosisTimeoutError daria."""
     return JSONResponse(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        content={"detail": str(exc)},
+        content={"detail": str(exc), "code": "overloaded"},
         headers={"Retry-After": "10"},
+    )
+
+
+def _gateway_refusal(request: Request, exc: Exception, code: str, detail: str) -> JSONResponse:
+    """DA-67/DA-66: recusa previsivel do AI Gateway nao e erro interno.
+    A mensagem da excecao cita origens (URLs internas) e motivos por
+    candidato - vai so para o log, com o error_id; o cliente recebe um
+    texto fixo e um `code` estavel para a UI e integracoes decidirem."""
+    error_id = uuid4().hex
+    logger.warning(
+        "[gateway_refusal] code=%s error_id=%s %s %s: %s",
+        code,
+        error_id,
+        request.method,
+        request.url.path,
+        exc,
+    )
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": detail, "code": code, "error_id": error_id},
+    )
+
+
+@app.exception_handler(BudgetExhaustedError)
+def _budget_exhausted_handler(request: Request, exc: BudgetExhaustedError):
+    """Sem Retry-After: reenviar o mesmo incidente abre um orcamento novo
+    com o mesmo limite e os mesmos precos - so muda com DIAGNOSIS_BUDGET_USD
+    ou com um provider mais barato elegivel."""
+    return _gateway_refusal(
+        request,
+        exc,
+        "budget_exhausted",
+        "Orcamento do diagnostico esgotado: nenhum provider elegivel cabe no "
+        "limite configurado (DIAGNOSIS_BUDGET_USD).",
+    )
+
+
+@app.exception_handler(PolicyViolationError)
+def _policy_violation_handler(request: Request, exc: PolicyViolationError):
+    return _gateway_refusal(
+        request,
+        exc,
+        "policy_violation",
+        "Nenhum provider permitido pela policy de soberania para a "
+        "sensibilidade deste incidente. Consulte GET /llm/policy.",
     )
 
 
@@ -416,7 +464,9 @@ def _diagnosis_timeout_handler(request: Request, exc: DiagnosisTimeoutError):
     /events/incident (ambos chamam run_diagnosis diretamente); o A2A
     (app/a2a/task_manager.py) ja captura Exception por conta propria e
     marca a task como failed, sem passar por aqui."""
-    return JSONResponse(status_code=status.HTTP_504_GATEWAY_TIMEOUT, content={"detail": str(exc)})
+    return JSONResponse(
+        status_code=status.HTTP_504_GATEWAY_TIMEOUT, content={"detail": str(exc), "code": "timeout"}
+    )
 
 
 # Avaliacao externa (nova revisao, P0 - "CI e a API nao sobem sem o
@@ -880,6 +930,79 @@ def verify_incident_endpoint(
         "graph_updated": graph_updated,
         "langfuse_scored": langfuse_scored,
         "sql_updated": sql_updated,
+    }
+
+
+# DA-75: endpoint para revisao humana de diagnostico interrompido
+@app.post(
+    "/incidents/{incident_id}/review",
+    dependencies=[Depends(verify_session_or_api_key)],
+)
+@limiter.limit("10/minute")
+def review_incident_endpoint(
+    request: Request, incident_id: str, body: ReviewIncidentRequest
+) -> dict[str, str | bool]:
+    """DA-75: revisao humana de diagnostico interrompido por escalonamento.
+
+    Quando o sinal de escalonamento (escalation.should_escalate) pede revisao,
+    o node de diagnostico chama interrupt() e o grafo pausa. Este endpoint
+    recupera o checkpoint, valida que ha um interrupt pendente e retoma o
+    grafo com Command(resume=...), sem reexecutar connector/RAG/LLM.
+
+    404 se o incidente nao tem checkpoint.
+    400 se nao ha interrupt pendente (nunca interrompido ou ja revisado).
+    """
+    from langgraph.types import Command
+
+    from app.agent.graph import get_graph
+
+    if not settings.checkpointing_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="DA-75 exige CHECKPOINTING_ENABLED=true para retomar o grafo",
+        )
+    if body.action == "edit" and not (body.edit or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="action='edit' exige o campo edit com a nova causa raiz",
+        )
+
+    graph = get_graph()
+    if getattr(graph, "checkpointer", None) is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Checkpointer indisponivel - nao ha diagnostico pausado",
+        )
+
+    thread_id = {"configurable": {"thread_id": incident_id}}
+    snapshot = graph.get_state(thread_id)
+    if not snapshot.values:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Incidente '{incident_id}' nao encontrado no checkpoint",
+        )
+    if not snapshot.interrupts:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incidente nao esta em estado de revisao (nenhum interrupt pendente)",
+        )
+
+    graph.invoke(
+        Command(
+            resume={
+                "action": body.action,
+                "edited_cause": body.edit if body.action == "edit" else None,
+                "reviewed_by": body.reviewed_by,
+                "reviewed_at": datetime.now(UTC).isoformat(),
+            }
+        ),
+        thread_id,
+    )
+
+    return {
+        "incident_id": incident_id,
+        "status": "reviewed",
+        "graph_updated": True,
     }
 
 

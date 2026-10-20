@@ -1,114 +1,224 @@
 {% extends "base.html" %}
-{% block title %}Modelos · Admin{% endblock %}
+{% block title %}{{ t('nav.models') }} · Admin{% endblock %}
 {% block content %}
 <main>
-  <h2>Configuração de Runtime</h2>
+  <h2>{{ t('models.runtimeTitle') }}</h2>
   <p style="color: var(--text); margin-bottom: 1.5rem;">
-    Overrides de infraestrutura — substituem variáveis do .env em tempo real.
-    Sem banco: mostra o valor atual do .env (somente leitura).
+    {{ t('models.runtimeIntro') }}
   </p>
 
   <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-      <h3 style="margin: 0; color: var(--text);">Overrides de Runtime</h3>
-      <button class="btn btn-primary" data-click="loadRuntimeConfig">🔄 Recarregar</button>
+      <h3 style="margin: 0; color: var(--text);">{{ t('models.runtimeOverrides') }}</h3>
+      <button class="btn btn-primary" data-click="loadRuntimeConfig">🔄 {{ t('common.reload') }}</button>
     </div>
 
     <!-- Banner quando DB != .env -->
     <div id="runtime-diff-banner" style="display:none; padding: 0.75rem 1rem; margin-bottom: 1rem; background: #fff3cd; border-radius: 6px; font-size: 0.9rem;">
-      ⚠️ Valores do banco diferem do .env — algumas mudanças podem exigir restart do processo.
+      ⚠️ {{ t('models.diffBanner') }}
     </div>
 
     <table id="runtime-config-table" style="width: 100%;">
       <thead>
         <tr>
-          <th style="width: 220px;">Variável</th>
-          <th>Valor atual</th>
-          <th style="width: 180px;">Ações</th>
+          <th style="width: 220px;">{{ t('models.variable') }}</th>
+          <th>{{ t('models.currentValue') }}</th>
+          <th style="width: 180px;">{{ t('common.actions') }}</th>
         </tr>
       </thead>
       <tbody id="runtime-config-body">
-        <tr><td colspan="3" style="text-align: center; padding: 2rem;">Carregando...</td></tr>
+        <tr><td colspan="3" style="text-align: center; padding: 2rem;">{{ t('common.loading') }}</td></tr>
       </tbody>
     </table>
   </div>
 
+  <!-- GAP-A: Exportar config efetiva -->
+  <div class="card" style="margin-top: 2rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3 style="margin: 0; color: var(--text);">{{ t('models.effectiveTitle') }}</h3>
+      <button class="btn btn-primary" data-click="exportEffectiveConfig">📥 {{ t('models.exportJson') }}</button>
+    </div>
+    <p style="color: var(--text); font-size: 0.9rem;">
+      {{ t('models.effectiveIntro') }}
+    </p>
+    <pre id="effective-config-preview" style="background: #f8f9fa; padding: 1rem; border-radius: 6px; font-size: 0.85rem; overflow: auto; max-height: 400px; display: none;"></pre>
+  </div>
+
   <p class="alert" id="msg" style="background: #fee2e2; border-color: #fecaca; color: #991b1b; display: none;"></p>
 
-  <h2 style="margin-top: 3rem;">Modelos registrados (por origem)</h2>
-  <p style="color: var(--text); margin-bottom: 1.5rem;">Gerencie chaves, preços e limites de uso</p>
+  <h2 style="margin-top: 3rem;">{{ t('models.registeredTitle') }}</h2>
+  <p style="color: var(--text); margin-bottom: 1.5rem;">{{ t('models.registeredIntro') }}</p>
 
   <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-      <h3 style="margin: 0; color: var(--text);">Lista de Modelos</h3>
-      <button class="btn btn-primary" data-click="loadModels">🔄 Recarregar</button>
+      <h3 style="margin: 0; color: var(--text);">{{ t('models.listTitle') }}</h3>
+      <button class="btn btn-primary" data-click="loadModels">🔄 {{ t('common.reload') }}</button>
     </div>
 
     <div style="overflow-x: auto;">
       <table id="models">
         <thead>
           <tr>
-            <th style="width: 120px;">Origem</th>
-            <th>Modelo</th>
+            <th style="width: 120px;">{{ t('common.origin') }}</th>
+            <th>{{ t('common.model') }}</th>
             <th>base_url</th>
-            <th style="width: 80px;">$ in/1M</th>
-            <th style="width: 80px;">$ out/1M</th>
-            <th style="width: 90px;">Limite/mês</th>
+            <th style="width: 80px;">{{ t('models.priceIn') }}</th>
+            <th style="width: 80px;">{{ t('models.priceOut') }}</th>
+            <th style="width: 90px;">{{ t('common.monthlyLimit') }}</th>
             <th style="width: 60px;">%</th>
-            <th style="width: 60px;">Padrão</th>
-            <th style="width: 60px;">Ativo</th>
-            <th style="width: 100px;">Ações</th>
+            <th style="width: 60px;">{{ t('models.default') }}</th>
+            <th style="width: 60px;">{{ t('common.activeCol') }}</th>
+            <th style="min-width: 220px;">{{ t('models.routingCol') }}</th>
+            <th style="width: 130px;">{{ t('common.actions') }}</th>
           </tr>
         </thead>
         <tbody id="models-body">
-          <tr><td colspan="10" style="text-align: center; padding: 2rem;">Carregando...</td></tr>
+          <tr><td colspan="11" style="text-align: center; padding: 2rem;">{{ t('common.loading') }}</td></tr>
         </tbody>
       </table>
     </div>
   </div>
 
-  <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--text);">Novo Modelo</h3>
+  <h3 id="model-form-title" style="margin-top: 2rem; margin-bottom: 1rem; color: var(--text);">{{ t('models.newTitle') }}</h3>
   <div class="card">
-    <form id="newmodel" data-submit="addModel">
+    <form id="newmodel" data-submit="saveModel">
+      <input type="hidden" name="id" value="">
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
         <div class="form-group">
-          <label>Origem *</label>
-          <input name="provider_origin" placeholder="Ex: api.groq.com" required>
+          <label>{{ t('models.fOrigin') }}</label>
+          <input name="provider_origin" placeholder="{{ t('models.phOrigin') }}" required>
         </div>
         <div class="form-group">
-          <label>Modelo *</label>
-          <input name="model_id" placeholder="Ex: openai/gpt-oss-120b" required>
+          <label>{{ t('models.fModel') }}</label>
+          <input name="model_id" placeholder="{{ t('models.phModel') }}" required>
         </div>
         <div class="form-group">
-          <label>base_url</label>
-          <input name="base_url" placeholder="Vazio = padrão do provider">
+          <label>{{ t('models.fBaseUrl') }}</label>
+          <input name="base_url" placeholder="{{ t('models.phBaseUrl') }}">
         </div>
         <div class="form-group">
-          <label>$ in/1M</label>
-          <input name="price_in_per_1m" type="number" step="0.0001" placeholder="Preço de input">
+          <label>{{ t('models.priceIn') }}</label>
+          <input name="price_in_per_1m" type="number" step="0.0001" placeholder="{{ t('models.phPriceIn') }}">
         </div>
         <div class="form-group">
-          <label>$ out/1M</label>
-          <input name="price_out_per_1m" type="number" step="0.0001" placeholder="Preço de output">
+          <label>{{ t('models.priceOut') }}</label>
+          <input name="price_out_per_1m" type="number" step="0.0001" placeholder="{{ t('models.phPriceOut') }}">
         </div>
         <div class="form-group">
-          <label>Limite/mês</label>
-          <input name="monthly_limit_tokens" type="number" placeholder="Tokens/mês">
+          <label>{{ t('common.monthlyLimit') }}</label>
+          <input name="monthly_limit_tokens" type="number" placeholder="{{ t('models.phLimit') }}">
+        </div>
+      </div>
+
+      <h4 style="margin: 1rem 0 0.5rem; color: var(--text);">{{ t('models.routingTitle') }}</h4>
+      <p style="color: var(--text); font-size: 0.85rem; opacity: 0.8; margin-bottom: 1rem;">
+        {{ t('models.routingIntro') }}
+      </p>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+        <div class="form-group">
+          <label>{{ t('models.transport') }}</label>
+          <select name="transport">
+            <option value="">{{ t('models.derivedFromOrigin') }}</option>
+            <option value="ollama">ollama</option>
+            <option value="openai_compatible">openai_compatible</option>
+            <option value="azure_openai">azure_openai</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>{{ t('models.contextWindow') }}</label>
+          <input name="context_window_tokens" type="number" min="256" placeholder="{{ t('models.phContext') }}">
+        </div>
+        <div class="form-group">
+          <label>{{ t('models.tier') }}</label>
+          <select name="tier">
+            <option value="">{{ t('models.tierDerived') }}</option>
+            <option value="local">local</option>
+            <option value="standard">standard</option>
+            <option value="premium">{{ t('models.tierPremium') }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>{{ t('models.priority') }}</label>
+          <input name="priority" type="number" min="0" max="10000" placeholder="100">
+        </div>
+        <div class="form-group">
+          <label>tools</label>
+          <select name="supports_tools"><option value="">{{ t('models.inherit') }}</option><option value="false">{{ t('models.unsupported') }}</option></select>
+        </div>
+        <div class="form-group">
+          <label>response_format</label>
+          <select name="supports_response_format"><option value="">{{ t('models.inherit') }}</option><option value="false">{{ t('models.unsupported') }}</option></select>
+        </div>
+        <div class="form-group">
+          <label>seed</label>
+          <select name="supports_seed"><option value="">{{ t('models.inherit') }}</option><option value="false">{{ t('models.unsupported') }}</option></select>
+        </div>
+        <div class="form-group">
+          <label>{{ t('models.domains') }}</label>
+          <div style="display: flex; gap: 1rem; padding: 0.5rem 0;">
+            <label style="display: flex; gap: 0.3rem; align-items: center;"><input type="checkbox" name="domains" value="sap" style="width: auto;">sap</label>
+            <label style="display: flex; gap: 0.3rem; align-items: center;"><input type="checkbox" name="domains" value="saas" style="width: auto;">saas</label>
+            <label style="display: flex; gap: 0.3rem; align-items: center;"><input type="checkbox" name="domains" value="generic" style="width: auto;">generic</label>
+          </div>
         </div>
       </div>
 
       <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; padding: 1rem; background: var(--border); border-radius: 8px;">
         <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
           <input name="is_default" type="checkbox" style="width: auto;">
-          <span style="color: var(--text);">Definir como padrão para esta origem</span>
+          <span style="color: var(--text);">{{ t('models.setDefault') }}</span>
         </label>
       </div>
 
-      <button type="submit" class="btn btn-primary">➕ Adicionar modelo</button>
+      <button type="submit" class="btn btn-primary" id="model-submit">➕ {{ t('models.add') }}</button>
+      <button type="button" class="btn" id="model-cancel" data-click="resetModelForm" style="display: none; background: var(--border);">{{ t('models.cancelEdit') }}</button>
     </form>
   </div>
 
-  <p class="alert" id="msg" style="background: #fee2e2; border-color: #fecaca; color: #991b1b; display: none;"></p>
+  <h2 style="margin-top: 3rem;">{{ t('models.simTitle') }}</h2>
+  <p style="color: var(--text); margin-bottom: 1.5rem;">
+    {{ t('models.simIntro') }}
+  </p>
+  <div class="card">
+    <form id="routing-preview" data-submit="previewRouting">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; align-items: end;">
+        <div class="form-group">
+          <label>{{ t('models.simSensitivity') }}</label>
+          <select name="sensitivity"><option value="confidential">confidential</option><option value="public">public</option></select>
+        </div>
+        <div class="form-group">
+          <label>{{ t('models.simDomain') }}</label>
+          <select name="domain"><option value="">{{ t('models.simAny') }}</option><option value="sap">sap</option><option value="saas">saas</option><option value="generic">generic</option></select>
+        </div>
+        <div class="form-group">
+          <label>{{ t('models.simTokens') }}</label>
+          <input name="tokens" type="number" min="1" value="4000">
+        </div>
+        <div class="form-group">
+          <button type="submit" class="btn btn-primary">▶ {{ t('models.simRun') }}</button>
+        </div>
+      </div>
+    </form>
+    <p id="preview-summary" style="color: var(--text); margin: 1rem 0 0.5rem;"></p>
+    <div style="overflow-x: auto;">
+      <table id="preview-table" style="display: none;">
+        <thead>
+          <tr>
+            <th style="width: 50px;">#</th>
+            <th>{{ t('common.model') }}</th>
+            <th>{{ t('common.origin') }}</th>
+            <th style="width: 70px;">{{ t('models.tier') }}</th>
+            <th style="width: 90px;">{{ t('models.simCost') }}</th>
+            <th style="width: 90px;">{{ t('models.simLatency') }}</th>
+            <th style="width: 70px;">{{ t('models.simScore') }}</th>
+            <th>{{ t('models.simStatus') }}</th>
+          </tr>
+        </thead>
+        <tbody id="preview-body"></tbody>
+      </table>
+    </div>
+  </div>
+
 </main>
 
 {% endblock %}

@@ -8,6 +8,73 @@
 // Somente funcoes globais declaradas pelos scripts da propria pagina sao
 // chamadas (nome validado como identificador).
 
+// ---------------------------------------------------------------------------
+// DA-73: i18n. O catalogo do idioma resolvido pelo servidor (cookie
+// iic_locale -> Accept-Language -> en) vem embutido em
+// <script type="application/json" id="i18n-catalog"> (dado, nao script: a
+// CSP script-src 'self' continua valendo). Mesma sintaxe do i18next:
+// {{var}}, plural por sufixo _zero/_one/_other.
+// ---------------------------------------------------------------------------
+
+const I18N = (function () {
+  try { return JSON.parse(document.getElementById('i18n-catalog').textContent); }
+  catch (e) { return {}; }
+})();
+const I18N_LANG = document.documentElement.lang || 'en';
+
+function _i18nLookup(key) {
+  return key.split('.').reduce((node, part) => (node && typeof node === 'object' ? node[part] : undefined), I18N);
+}
+
+function t(key, vars) {
+  vars = vars || {};
+  let text;
+  if (typeof vars.count === 'number') {
+    if (vars.count === 0) text = _i18nLookup(key + '_zero');
+    if (text == null) text = _i18nLookup(key + '_' + new Intl.PluralRules(I18N_LANG).select(vars.count));
+    if (text == null) text = _i18nLookup(key + '_other');
+  }
+  if (text == null) text = _i18nLookup(key);
+  if (typeof text !== 'string') return key;
+  return text.replace(/\{\{\s*(\w+)\s*\}\}/g, (m, name) => (name in vars ? String(vars[name]) : m));
+}
+
+// Erro da API: `code` estavel (DA-73, F5) vira texto do catalogo; sem code
+// conhecido, o `detail` do backend como esta.
+function apiErrorText(body, status) {
+  if (body && body.code && typeof _i18nLookup('errors.' + body.code) === 'string') {
+    return t('errors.' + body.code, Object.assign({}, body.params || {}));
+  }
+  if (body && typeof body.detail === 'string') return body.detail;
+  if (body && body.detail) return JSON.stringify(body.detail);
+  return t('common.httpError', {status: status});
+}
+
+function fmtNumber(n, digits) {
+  return new Intl.NumberFormat(I18N_LANG, {maximumFractionDigits: digits == null ? 2 : digits}).format(n);
+}
+
+function fmtUSD(n, digits) {
+  const d = digits == null ? 2 : digits;
+  return new Intl.NumberFormat(I18N_LANG, {style: 'currency', currency: 'USD', minimumFractionDigits: d, maximumFractionDigits: d}).format(n);
+}
+
+function fmtDateTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return isNaN(d) ? iso : new Intl.DateTimeFormat(I18N_LANG, {dateStyle: 'short', timeStyle: 'medium'}).format(d);
+}
+
+// Seletor de idioma do cabecalho: grava o cookie compartilhado com a UI web.
+document.addEventListener('change', function (ev) {
+  if (ev.target && ev.target.id === 'lang-select') {
+    document.cookie = 'iic_locale=' + encodeURIComponent(ev.target.value) + '; path=/; max-age=31536000; SameSite=Lax';
+    const url = new URL(location.href);
+    url.searchParams.delete('lng');
+    location.replace(url.toString());
+  }
+});
+
 function saveKey() {
   const v = document.getElementById('adminkey').value.trim();
   if (!v) { sessionStorage.removeItem('adminKey'); return; }
@@ -43,9 +110,15 @@ function escapeAttr(s) {
     .replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// Rotulo de um codigo de status (active, degraded...) no idioma da pagina;
+// codigo desconhecido aparece como veio.
+function statusLabel(code) {
+  return typeof _i18nLookup('statusLabel.' + code) === 'string' ? t('statusLabel.' + code) : code;
+}
+
 function pill(status) {
   const cls = status === 'active' ? 'status-active' : (status === 'degraded' ? 'status-degraded' : 'status-offline');
-  return `<span class="status-badge ${cls}">${escapeHtml(status)}</span>`;
+  return `<span class="status-badge ${cls}" title="${escapeAttr(status)}">${escapeHtml(statusLabel(status))}</span>`;
 }
 
 // Botao que dispara `fnName` (para feedback "Carregando..."). Devolve um

@@ -14,6 +14,7 @@ from app.evaluation.gates import (
     check_connector_validation_matrix,
     check_corpus_coverage,
     check_da_registered,
+    check_da_table_unique,
     check_difficulty_mix,
     check_docs_code_references,
     check_docs_markup_integrity,
@@ -71,7 +72,7 @@ class TestRealRepository:
         falhas = [f"{f.check}: {f.message}" for f in findings if f.is_failure]
         assert not falhas, falhas
 
-    def test_reranker_em_producao_e_o_vencedor_medido(self):
+    def test_reranker_em_producao_nao_e_significativamente_pior(self):
         findings = check_reranker_invariant(REAL_ROOT)
         assert not [f for f in findings if f.is_failure]
 
@@ -169,52 +170,94 @@ class TestRerankerInvariant:
             },
         ]
 
-    def test_codigo_divergente_do_vencedor_falha(self, tmp_path):
-        root = _minimal_root(tmp_path)
-        (root / "app/rag/retriever.py").write_text(
-            'RERANKER_MODEL = "cross-encoder/outro-modelo"\n', encoding="utf-8"
-        )
-        (root / "data/eval/reranker_benchmark_results.json").write_text(
-            json.dumps(self._benchmark("cross-encoder/mmarco-mMiniLMv2-L12-H384-v1", 0.95)),
-            encoding="utf-8",
-        )
-        findings = check_reranker_invariant(root)
-        assert any("vencedor medido" in f.message for f in findings if f.is_failure)
+    MMARCO = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
 
-    def test_hit_at_1_abaixo_do_piso_falha(self, tmp_path):
-        root = _minimal_root(tmp_path)
+    def _write(self, root, results, model=None):
         (root / "app/rag/retriever.py").write_text(
-            'RERANKER_MODEL = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"\n', encoding="utf-8"
-        )
-        (root / "data/eval/reranker_benchmark_results.json").write_text(
-            json.dumps(self._benchmark("cross-encoder/mmarco-mMiniLMv2-L12-H384-v1", 0.80)),
-            encoding="utf-8",
-        )
-        findings = check_reranker_invariant(root, Thresholds(min_hit_at_1=0.90))
-        assert any("abaixo do piso" in f.message for f in findings if f.is_failure)
-
-    def test_margem_sobre_o_baseline_insuficiente_falha(self, tmp_path):
-        root = _minimal_root(tmp_path)
-        results = [
-            {
-                "key": "mmarco",
-                "hf_id": "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
-                "hit_at_1": 0.92,
-            },
-            {
-                "key": "ms-marco-L6",
-                "hf_id": "cross-encoder/ms-marco-MiniLM-L-6-v2",
-                "hit_at_1": 0.91,
-            },
-        ]
-        (root / "app/rag/retriever.py").write_text(
-            'RERANKER_MODEL = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"\n', encoding="utf-8"
+            f'RERANKER_MODEL = "{model or self.MMARCO}"\n', encoding="utf-8"
         )
         (root / "data/eval/reranker_benchmark_results.json").write_text(
             json.dumps(results), encoding="utf-8"
         )
+
+    @staticmethod
+    def _pq(hits: list[int]) -> list[dict]:
+        return [{"hit_at_1": h} for h in hits]
+
+    def test_modelo_de_producao_fora_do_benchmark_falha(self, tmp_path):
+        root = _minimal_root(tmp_path)
+        self._write(root, self._benchmark(self.MMARCO, 0.95), model="cross-encoder/outro-modelo")
+        findings = check_reranker_invariant(root)
+        assert any("nao foi medido" in f.message for f in findings if f.is_failure)
+
+    def test_hit_at_1_abaixo_do_piso_falha(self, tmp_path):
+        root = _minimal_root(tmp_path)
+        self._write(root, self._benchmark(self.MMARCO, 0.80))
+        findings = check_reranker_invariant(root, Thresholds(min_hit_at_1=0.90))
+        assert any("abaixo do piso" in f.message for f in findings if f.is_failure)
+
+    def test_candidato_significativamente_melhor_falha(self, tmp_path):
+        """30 consultas: candidato acerta 12 que producao erra, nenhuma ao contrario."""
+        root = _minimal_root(tmp_path)
+        prod = [1] * 18 + [0] * 12
+        cand = [1] * 30
+        self._write(
+            root,
+            [
+                {"key": "prod", "hf_id": self.MMARCO, "hit_at_1": 0.6, "per_query": self._pq(prod)},
+                {
+                    "key": "melhor",
+                    "hf_id": "x/melhor",
+                    "hit_at_1": 1.0,
+                    "per_query": self._pq(cand),
+                },
+            ],
+        )
+        findings = check_reranker_invariant(root, Thresholds(min_hit_at_1=0.5))
+        assert any("significativamente melhor" in f.message for f in findings if f.is_failure)
+
+    def test_vantagem_pontual_nao_significativa_so_avisa(self, tmp_path):
+        """Caso real de 2026-10-18: uma consulta de diferenca (McNemar p=1,0)."""
+        root = _minimal_root(tmp_path)
+        prod = [1] * 88 + [0] * 2
+        cand = [1] * 89 + [0]
+        self._write(
+            root,
+            [
+                {
+                    "key": "prod",
+                    "hf_id": self.MMARCO,
+                    "hit_at_1": 88 / 90,
+                    "per_query": self._pq(prod),
+                },
+                {
+                    "key": "bge",
+                    "hf_id": "BAAI/bge",
+                    "hit_at_1": 89 / 90,
+                    "per_query": self._pq(cand),
+                },
+            ],
+        )
+        findings = check_reranker_invariant(root)
+        assert not [f for f in findings if f.is_failure]
+        assert any("NAO significativa" in f.message for f in findings)
+
+    def test_sem_dados_por_consulta_usa_margem(self, tmp_path):
+        root = _minimal_root(tmp_path)
+        self._write(
+            root,
+            [
+                {"key": "prod", "hf_id": self.MMARCO, "hit_at_1": 0.90},
+                {"key": "outro", "hf_id": "x/outro", "hit_at_1": 0.96},
+            ],
+        )
         findings = check_reranker_invariant(root, Thresholds(min_benchmark_margin=0.05))
-        assert any("margem" in f.message for f in findings if f.is_failure)
+        assert any("supera producao" in f.message for f in findings if f.is_failure)
+
+    def test_producao_e_o_melhor_passa(self, tmp_path):
+        root = _minimal_root(tmp_path)
+        self._write(root, self._benchmark(self.MMARCO, 0.95))
+        assert not [f for f in check_reranker_invariant(root) if f.is_failure]
 
     def test_sem_baseline_no_benchmark_vira_aviso(self, tmp_path):
         root = _minimal_root(tmp_path)
@@ -569,6 +612,45 @@ class TestDocumentedDas:
         assert len(falhas) == 1
         assert "DA-1 rotulada ARCHITECTURE" in falhas[0].message
 
+    def test_secao_com_numero_duplicado_reprova(self, tmp_path):
+        """IIC-AUD-010: duas secoes `### 75.` no documento de DAs."""
+        _decisoes(tmp_path).write_text(
+            "## Decisões de Arquitetura\n\n"
+            "| DA | Seção | O que é |\n|---|---|---|\n"
+            "| 1 | [75](#a) | a |\n| 2 | [75](#b) | b |\n\n"
+            "### 75. Coisa (DA-1)\n### 75. Outra (DA-2)\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "CLAUDE.md").write_text(
+            "| DA | O que é |\n|---|---|\n| DA-1 | a |\n| DA-2 | b |\n", encoding="utf-8"
+        )
+        (tmp_path / "docs").mkdir(exist_ok=True)
+        (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
+        falhas = [f for f in check_index_current(tmp_path) if f.is_failure]
+        assert len(falhas) == 1
+        assert "duplicada" in falhas[0].message
+        assert "§75" in falhas[0].message
+
+
+class TestDaTableUnique:
+    """IIC-AUD-009: a tabela de DAs cresceu por colagem e duplicou linhas."""
+
+    def test_linha_duplicada_reprova(self, tmp_path):
+        (tmp_path / "CLAUDE.md").write_text(
+            "| DA | O que é |\n|---|---|\n| DA-83 | a |\n| DA-88 | b |\n| DA-83 | a de novo |\n",
+            encoding="utf-8",
+        )
+        falhas = [f for f in check_da_table_unique(tmp_path) if f.is_failure]
+        assert len(falhas) == 1
+        assert "DA-83" in falhas[0].message
+
+    def test_linha_unica_passa(self, tmp_path):
+        (tmp_path / "CLAUDE.md").write_text(
+            "| DA | O que é |\n|---|---|\n| DA-83 | a |\n| DA-88 | b |\n",
+            encoding="utf-8",
+        )
+        assert not [f for f in check_da_table_unique(tmp_path) if f.is_failure]
+
 
 # ---------------------------------------------------------------------------
 # Gates de integridade da documentacao e de alcancabilidade dos conectores.
@@ -700,6 +782,27 @@ def test_docs_code_references_acusa_md_fantasma(tmp_path: Path) -> None:
     assert "nao existe em lugar nenhum" in falha.message
 
 
+def test_docs_code_references_acusa_caminho_cru_inexistente(tmp_path: Path) -> None:
+    """IIC-AUD-009: `scripts/load_test.py` (real em `app/scripts/`) passava
+    porque o regex antigo so' cobria `arquivo.py::simbolo` e `:linha`."""
+    root = _docs_root(tmp_path)
+    (root / "CLAUDE.md").write_text(
+        "ver `scripts/load_test.py` e `app/models/fantasma.py`\n", encoding="utf-8"
+    )
+    falhas = [f for f in check_docs_code_references(root) if f.is_failure]
+    mensagem = " ".join(f.message for f in falhas)
+    assert "scripts/load_test.py nao existe" in mensagem
+    assert "app/models/fantasma.py nao existe" in mensagem
+
+
+def test_docs_code_references_nao_cobra_caminho_cru_em_auditoria_historica(tmp_path: Path) -> None:
+    root = _docs_root(tmp_path)
+    (root / "docs/AUDITORIA_ANTIGA.md").write_text(
+        "citava `scripts/sumiu.py` no commit auditado\n", encoding="utf-8"
+    )
+    assert not [f for f in check_docs_code_references(root) if f.is_failure]
+
+
 def test_docs_code_references_aceita_corpus_citado_cru(tmp_path: Path) -> None:
     """Nome cru de doc do corpus RAG (`odata_timeout_cpi.md`) resolve em
     data/sample_docs/ — citar pelo nome crus e' o costume dos tutoriais,
@@ -767,9 +870,10 @@ def _connector_root(
     (tmp_path / "app/connectors").mkdir(parents=True)
     (tmp_path / "app/agent").mkdir(parents=True)
     (tmp_path / "app/admin").mkdir(parents=True)
+    (tmp_path / "app/models").mkdir(parents=True)
     (tmp_path / "frontend/src/components").mkdir(parents=True)
     (tmp_path / "app/connectors/__init__.py").write_text(registry, encoding="utf-8")
-    (tmp_path / "app/models.py").write_text(literal, encoding="utf-8")
+    (tmp_path / "app/models/models.py").write_text(literal, encoding="utf-8")
     # O catalogo admin (DA-49) tem a PROPRIA tupla `CONNECTOR_TYPES` — e' a
     # sexta superficie do gate. O fixture precisa fornecer uma de verdade:
     # o arquivo do admin nao e' o Literal do pipeline.
@@ -840,7 +944,7 @@ _SANE_REGISTRY = (
     "_REAL_MODE_SETTING = {\n    'odata': 'odata_service_url',\n"
     "    'successfactors': 'sfsf_base_url',\n    'apim': 'apim_analytics_url',\n}\n"
 )
-# O gate ancora no nome do campo (`interface_type:`) de proposito: app/models.py
+# O gate ancora no nome do campo (`interface_type:`) de proposito: app/models/models.py
 # tem outros Literals (sensitivity_level, trust_level) e ancorar no Literal
 # "qualquer um" trazia sensitivity_level junto.
 

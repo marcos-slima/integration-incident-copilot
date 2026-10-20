@@ -155,10 +155,39 @@ origem com os 10 conectores, identificador opcional), com anexo de arquivo
 `payload`) e campos avançados `logs`/`payload` — credencial nenhuma na mão
 do usuário; o cookie de sessão HttpOnly flui sozinho.
 
-**Histórico** — diagnósticos da sessão atual, com confiança e causa raiz.
+O resultado mostra, além da causa raiz e dos próximos passos:
 
-**Status da stack** — estado dos conectores (real vs. demo/mock) e da
-infraestrutura (provider LLM, GraphRAG, Langfuse e fila RQ).
+- **Sinal de escalonamento** (DA-44): "Evidência suficiente" ou "Revisão
+  humana recomendada", com o motivo. É informativo: nenhum modelo pago é
+  acionado por causa dele.
+- **Evidências**, cada uma com o `trust_level` (tabela em "Evidência e níveis
+  de confiança"). Dado `simulated` (conector em demonstração) e
+  `web_untrusted` (busca web, DA-71) ganham um aviso.
+- **Proveniência** (DA-53): "Regra determinística · sem LLM · custo zero" ou
+  provedor, modelo, versão e digest do prompt.
+
+Recusas do AI Gateway aparecem com a causa, não como "erro interno":
+orçamento do diagnóstico esgotado (`budget_exhausted`, DA-67) ou nenhum
+provedor permitido pela política de soberania (`policy_violation`). Erros
+inesperados mostram a referência (`error_id`) que localiza o log no servidor.
+
+**Idioma** — a interface abre no idioma do navegador (português do Brasil ou
+inglês; outros idiomas abrem em inglês). O seletor na barra lateral e na tela
+de login troca o idioma, e a escolha vale também para a Admin UI (cookie
+`iic_locale`). Datas, números e valores em USD seguem o idioma escolhido. O
+diagnóstico também: a UI pede o conteúdo (causa raiz, próximos passos,
+relatório) no idioma da tela. Um diagnóstico já exibido não muda ao trocar o
+idioma — rode-o de novo. Em inglês, a resposta do LLM usa um prompt que ainda
+não foi medido pelo promptfoo (os números de qualidade valem para o
+português).
+
+**Histórico** — diagnósticos da sessão atual, com confiança, causa raiz e a
+marca "revisão humana" quando o sinal pediu.
+
+**Status da stack** — estado dos conectores (real vs. demo/mock), da
+infraestrutura (provider LLM, GraphRAG, Langfuse e fila RQ) e a **soberania do
+dado** (`GET /llm/policy`): modo, origem de cada provedor e se ele pode receber
+dado público ou confidencial.
 
 ### API REST
 
@@ -210,7 +239,10 @@ Campos que merecem atenção:
   não libera provider cloud para dado que o gateway trata como
   `confidential` (GOV-01, DA-43),
   `connector_source_system` (`system_key` do catálogo admin, melhora a
-  correlação do incidente, DA-50).
+  correlação do incidente, DA-50), `locale` (`pt-BR` ou `en`, aceita a tag do
+  navegador como `en-US`; idioma do conteúdo do diagnóstico, default `pt-BR`;
+  outro idioma devolve 422 — DA-74). A resposta traz o `locale` em que o
+  conteúdo foi produzido.
 
 **Diagnóstico assíncrono** — mesmo corpo, resposta imediata com `job_id`.
 Exige `REDIS_URL` e um worker RQ (profile `async`); sem isso, 503:
@@ -292,7 +324,14 @@ informado.
 
 A UI admin (`/admin`; dados via `/admin/api/*` com `X-API-Admin-Key`) expõe:
 
-- **Models** — registro de modelos/credenciais por ORIGEM, com status
+- **Models** — registro de modelos/credenciais por ORIGEM, com status. Com
+  `LLM_REGISTRY_DB=true`, cada modelo ativo é candidato do agente (DA-72) e a
+  tela define os parâmetros que a decisão usa: transporte, janela de contexto,
+  capacidades (só restringem a origem), domínios atendidos, nível, prioridade e
+  limite mensal (bloqueia ao chegar a 100%). Também ficam ali o orçamento por
+  diagnóstico, o teto por chamada e os pesos custo × latência, e o
+  **simulador de roteamento**, que mostra para cada modelo a posição na lista
+  ou o motivo da rejeição, sem chamar o LLM
 - **Usage** — metering de tokens **reais** (usage_metadata), não estimativa
 - **Systems** — catálogo de sistemas integrados e sua correlação com
   incidentes (DA-49/50)
@@ -577,6 +616,22 @@ item com um `trust_level`:
 Um diagnóstico com evidência só `user_reported` está dizendo "estou
 trabalhando com o que você me contou, nada mais".
 
+### Erros da API: `code` e `error_id`
+
+Os erros de `/diagnose` trazem `detail` e um `code` estável:
+
+| HTTP | `code` | Significado | Reenviar? |
+|---|---|---|---|
+| 503 | `budget_exhausted` | Orçamento do diagnóstico (`DIAGNOSIS_BUDGET_USD`, DA-67) não cobre nenhum provedor elegível | Não muda sozinho: ajuste o orçamento ou habilite um provedor mais barato |
+| 503 | `policy_violation` | Nenhum provedor permitido pela política de soberania para a sensibilidade do incidente (`GET /llm/policy`) | Não: ajuste a política ou o provedor local |
+| 503 | `overloaded` | Capacidade esgotada | Sim, após `Retry-After` |
+| 504 | `timeout` | O pipeline excedeu `DIAGNOSIS_TIMEOUT_SECONDS` | Sim |
+| 500 | `internal_error` | Falha inesperada | Reporte o `error_id` |
+
+`budget_exhausted`, `policy_violation` e `internal_error` trazem `error_id`:
+o mesmo id está no log da API, junto do motivo completo (que cita origens
+internas e por isso não vai na resposta).
+
 ### Documento de referência
 
 O campo `matched_source` indica qual documento da base de conhecimento foi
@@ -641,7 +696,7 @@ Não é log bruto: é o histórico **consultável** de cada diagnóstico.
 - **Metering de tokens reais** por origem/modelo (DA-46/48, sem estimativa).
   Tela: `/admin/usage`.
 - **`system_contracts`** — baseline de contrato SAP e drift (DA-52).
-- **Grafana** (profile `observability`): `http://localhost:3001` — 4
+- **Grafana** (profile `observability`): `http://localhost:3002` — 4
   dashboards (SOC, iPaaS, COI, Systems); as 45 queries são validadas
   contra o Postgres real no CI.
 

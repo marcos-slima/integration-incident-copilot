@@ -14,6 +14,9 @@ from fastapi.testclient import TestClient
 from app.config import settings
 from app.main import app
 
+# DA-73: a Admin UI segue o idioma do navegador; estes testes conferem o texto pt-BR.
+_PT_BR = {"Accept-Language": "pt-BR"}
+
 client = TestClient(app)
 
 ADMIN_KEY = "admin-test-key-01"
@@ -79,7 +82,7 @@ def test_credentials_put_sem_banco_503():
 
 
 def test_ui_index_ok():
-    r = client.get("/admin")
+    r = client.get("/admin", headers=_PT_BR)  # DA-73: textos conferidos em pt-BR
     assert r.status_code == 200
     assert "Dashboard" in r.text
     assert "Modelos" in r.text
@@ -87,12 +90,12 @@ def test_ui_index_ok():
 
 
 def test_ui_models_ok():
-    r = client.get("/admin/models")
+    r = client.get("/admin/models", headers=_PT_BR)  # DA-73: textos conferidos em pt-BR
     assert r.status_code == 200
     assert "Modelos registrados" in r.text
 
 
 def test_ui_usage_ok():
-    r = client.get("/admin/usage")
+    r = client.get("/admin/usage", headers=_PT_BR)  # DA-73: textos conferidos em pt-BR
     assert r.status_code == 200
     assert "Consumo real de tokens" in r.text

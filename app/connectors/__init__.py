@@ -61,7 +61,7 @@ def connector_status() -> dict[str, dict[str, str]]:
     de verdade), "mock" (setting vazio, usa cenarios de demonstracao) ou
     "misconfigured" (setting configurado, mas falta alguma dependencia
     para o modo real funcionar - hoje so o RFC/pyrfc)."""
-    result: dict[str, dict[str, str]] = {}
+    result: dict[str, dict[str, str]] = {}  # status, note, setting
     for name, setting_attr in _REAL_MODE_SETTING.items():
         configured = bool(getattr(settings, setting_attr))
         if name == "rfc" and configured and not HAS_PYRFC:
@@ -73,7 +73,9 @@ def connector_status() -> dict[str, dict[str, str]]:
         else:
             status = "mock"
             note = f"{setting_attr.upper()} nao configurado"
-        result[name] = {"status": status, "note": note}
+        # DA-74: `note` segue para clientes da API; `setting` deixa a UI
+        # montar o texto no idioma dela (status + variavel).
+        result[name] = {"status": status, "note": note, "setting": setting_attr.upper()}
     return result
 
 

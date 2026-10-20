@@ -6,6 +6,10 @@
 //   onChange: (v: string) => void → função que recebe string, sem retorno
 //   onFetch: () => Promise<Data>  → função assíncrona que retorna Data
 
+import { useTranslation } from 'react-i18next';
+import type { DiagnosisResponse } from '../types/models';
+import { LanguageSelect } from './LanguageSelect';
+
 type ViewId = 'diagnose' | 'history' | 'status';
 
 interface SidebarProps {
@@ -14,6 +18,7 @@ interface SidebarProps {
   historyCount: number;            // badge do histórico
   username?: string;               // DA-54: quem está logado
   onLogout?: () => void;           // DA-54: volta para a tela de login
+  lastResult?: DiagnosisResponse;  // DA-53: quem respondeu o último diagnóstico
 }
 
 interface NavItem {
@@ -23,11 +28,12 @@ interface NavItem {
   icon: React.ReactNode;           // qualquer JSX válido
 }
 
-export function Sidebar({ view, setView, historyCount, username, onLogout }: SidebarProps) {
+export function Sidebar({ view, setView, historyCount, username, onLogout, lastResult }: SidebarProps) {
+  const { t } = useTranslation();
   const items: NavItem[] = [
     {
       id: 'diagnose',
-      label: 'Diagnóstico',
+      label: t('nav.diagnose'),
       icon: (
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
           <polygon points="7.5,1.5 13,5 13,11 7.5,14 2,11 2,5"
@@ -39,7 +45,7 @@ export function Sidebar({ view, setView, historyCount, username, onLogout }: Sid
     },
     {
       id: 'history',
-      label: 'Histórico',
+      label: t('nav.history'),
       badge: historyCount,
       icon: (
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
@@ -52,7 +58,7 @@ export function Sidebar({ view, setView, historyCount, username, onLogout }: Sid
     },
     {
       id: 'status',
-      label: 'Stack',
+      label: t('nav.status'),
       icon: (
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
           <circle cx="7.5" cy="7.5" r="5.5"
@@ -76,8 +82,8 @@ export function Sidebar({ view, setView, historyCount, username, onLogout }: Sid
           </svg>
         </div>
         <div>
-          <div className="brand-name">Incident Copilot</div>
-          <div className="brand-sub">SAP Integration · AI</div>
+          <div className="brand-name">{t('common.appName')}</div>
+          <div className="brand-sub">{t('common.appSub')}</div>
         </div>
       </div>
 
@@ -99,21 +105,35 @@ export function Sidebar({ view, setView, historyCount, username, onLogout }: Sid
         ))}
       </nav>
 
-      {/* Modelo ativo */}
+      {/* DA-53: o modelo vem da proveniência do último diagnóstico. Antes era
+          um nome fixo ("qwen3.8 · 27B") que não refletia o backend. */}
       <div className="model-info">
-        <div className="model-label">modelo ativo</div>
-        <div className="model-name">qwen3.8</div>
-        <div className="model-meta">27B · 17.7 GB</div>
+        <div className="model-label">{t('sidebar.lastDiagnosis')}</div>
+        {!lastResult && <div className="model-meta">{t('sidebar.noneThisSession')}</div>}
+        {lastResult && lastResult.llm_provider_used === 'rule_engine' && (
+          <>
+            <div className="model-name">{t('sidebar.ruleEngine')}</div>
+            <div className="model-meta">{t('sidebar.noLlmZeroCost')}</div>
+          </>
+        )}
+        {lastResult && lastResult.llm_provider_used !== 'rule_engine' && (
+          <>
+            <div className="model-name">{lastResult.llm_model ?? lastResult.llm_provider_used ?? '—'}</div>
+            <div className="model-meta">{lastResult.llm_provider_used ?? t('sidebar.unknownProvider')}</div>
+          </>
+        )}
       </div>
+
+      <div className="sidebar-lang"><LanguageSelect compact /></div>
 
       {/* DA-54: sessão — quem está logado e saída */}
       {username && (
         <div className="session-info">
-          <div className="model-label">sessão</div>
+          <div className="model-label">{t('sidebar.session')}</div>
           <div className="session-user">{username}</div>
           {onLogout && (
             <button className="session-logout" onClick={onLogout}>
-              Sair
+              {t('sidebar.logout')}
             </button>
           )}
         </div>

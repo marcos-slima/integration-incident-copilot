@@ -107,6 +107,15 @@ class IncidentSQLite(SqliteBase):
     evidence_strength: Mapped[float | None] = mapped_column(Float, nullable=True)
     llm_provider_used: Mapped[str | None] = mapped_column(String(64), nullable=True)
     agent_domain: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # migration 006 (DA-53) e 019 (DA-44/DA-67)
+    llm_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    prompt_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    prompt_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    should_escalate: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    escalation_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    llm_calls: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    locale: Mapped[str | None] = mapped_column(String(8), nullable=True)  # 021 (DA-74)
     evidence_json: Mapped[Any | None] = mapped_column(SA_JSON, nullable=True)
     sensitivity_level: Mapped[str | None] = mapped_column(String(32), nullable=True)
     pii_detected: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -529,7 +538,7 @@ def test_rotas_de_incidentes_sem_banco_503(_no_db):
 
 
 def test_ui_incidents_ok():
-    r = client.get("/admin/incidents")
+    r = client.get("/admin/incidents", headers={"Accept-Language": "pt-BR"})  # DA-73
     assert r.status_code == 200
     assert "Incidentes diagnosticados" in r.text
     # a nav traz a tela nova e o link morto de /diagnose foi trocado por /docs
@@ -768,7 +777,7 @@ def test_run_diagnosis_propaga_connector_source_system_ao_state(monkeypatch):
 
     captured: dict[str, Any] = {}
 
-    def _fake_invoke(initial_state):
+    def _fake_invoke(initial_state, timeout_seconds=None, thread_id=None):
         captured.update(initial_state)
         return {
             "diagnosis": {"probable_root_cause": "lock", "model_confidence": 0.8},

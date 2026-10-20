@@ -72,6 +72,10 @@ class CopilotState(TypedDict, total=False):
     # estao no schema, e classify_sensitivity() le estes dois campos.
     sensitivity_level: str | None
     pii_detected: bool | None
+    # DA-74: idioma do conteudo do diagnostico ("pt-BR" | "en"). Fica no
+    # schema pelo mesmo motivo de sensitivity_level: o StateGraph descarta
+    # chaves fora dele.
+    locale: str
     llm_model: str
     # DA-22: dominio do sub-agente especialista que vai tratar o
     # diagnostico ("sap" | "saas" | "generic"), decidido pelo
@@ -91,6 +95,15 @@ class CopilotState(TypedDict, total=False):
     diagnosis: dict
     hitl_request: dict
     hitl_response: dict
+    # DA-75: true quando o grafo foi compilado com checkpointer e o node
+    # pode usar interrupt() nativo do LangGraph. Sem isso o node devolve
+    # hitl_request no estado e o diagnostico fica pendente (sem retomada).
+    hitl_interrupt_enabled: bool
+    # DA-75: marca que a revisao humana ja foi aplicada (`approve`/`edit`/
+    # `reject`), para relatorios/auditoria distinguirem o estado pendente.
+    hitl_reviewed: bool
+    # DA-83: explicabilidade XAI produzida por report_node.
+    explanation: str | None
     confidence_adjustment: float
     risk_level: str
     risk_confidence: float

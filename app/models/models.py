@@ -2,13 +2,36 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.i18n import normalize_locale
+from app.i18n.content import CONTENT_LOCALES, DEFAULT_CONTENT_LOCALE
 
 # Limites generosos - rejeitam entrada absurda (ex: 1MB de log colado
 # por engano) com 422 claro, sem impedir uso legitimo de logs longos.
 MAX_DESCRIPTION_LENGTH = 5_000
 MAX_LOGS_LENGTH = 50_000
 MAX_PAYLOAD_LENGTH = 50_000
+
+#: DA-74: idioma do conteudo do diagnostico (texto do LLM, regras, relatorio).
+#: Ausente = "pt-BR", o comportamento de antes (prompt medido em pt-BR).
+DIAGNOSIS_LOCALES = CONTENT_LOCALES
+DEFAULT_DIAGNOSIS_LOCALE = DEFAULT_CONTENT_LOCALE
+
+_LOCALE_DESCRIPTION = (
+    "DA-74: idioma do conteudo do diagnostico ('pt-BR' ou 'en'; aceita a tag "
+    "do navegador, ex: 'en-US' -> 'en', 'pt-PT' -> 'pt-BR'). Ausente = 'pt-BR'."
+)
+
+
+def _coerce_locale(value: object) -> str | None:
+    """Tag BCP 47 -> locale suportado; desconhecido -> ValueError (422)."""
+    if value is None or value == "":
+        return None
+    loc = normalize_locale(str(value))
+    if loc not in DIAGNOSIS_LOCALES:
+        raise ValueError(f"locale nao suportado: {value!r} (use {', '.join(DIAGNOSIS_LOCALES)})")
+    return loc
 
 
 class IncidentRequest(BaseModel):
@@ -31,6 +54,11 @@ class IncidentRequest(BaseModel):
         | None
     ) = None
     identifier: str | None = None  # ex: nome do iFlow, RFC destination, numero de IDoc/incidente
+    # DA-79: tenant identifier for multi-tenancy isolation
+    tenant_id: str | None = Field(
+        default=None,
+        description="DA-79: tenant identifier. Quando None, usa tenant_id do usuario autenticado.",
+    )
     # A-05: campos SOC/iPaaS — opcionais, permitem que clientes informem contexto de seguranca
     # diretamente (ex: sistemas de monitoracao que ja classificaram o incidente).
     # Sem esses campos, o pipeline deriva classificacao por heuristicas internas (gateway.py).
@@ -60,6 +88,9 @@ class IncidentRequest(BaseModel):
         default=None,
         description="Redacao ja aplicada ao payload/logs antes do envio? None = nao informado.",
     )
+    locale: str | None = Field(default=None, description=_LOCALE_DESCRIPTION)
+
+    _normalize_locale = field_validator("locale", mode="before")(_coerce_locale)
 
 
 # DA-23 (Event Mesh): formato CloudEvents, o mesmo usado pelo SAP
@@ -97,11 +128,19 @@ class IncidentEventData(BaseModel):
         | None
     ) = None
     identifier: str | None = None
+    # DA-79: tenant identifier for multi-tenancy isolation
+    tenant_id: str | None = Field(
+        default=None,
+        description="DA-79: tenant identifier. Quando None, usa tenant_id do usuario autenticado.",
+    )
     # A-05: mesmos campos SOC/iPaaS de IncidentRequest para consistencia
     connector_source_system: str | None = None
     sensitivity_level: Literal["public", "internal", "confidential", "secret"] | None = None
     pii_detected: bool | None = None
     redaction_applied: bool | None = None
+    locale: str | None = Field(default=None, description=_LOCALE_DESCRIPTION)
+
+    _normalize_locale = field_validator("locale", mode="before")(_coerce_locale)
 
 
 class IncidentEventEnvelope(BaseModel):
@@ -281,6 +320,13 @@ class DiagnosisResponse(BaseModel):
             "foi usado. Ver DA-53."
         ),
     )
+    locale: str = Field(
+        default=DEFAULT_DIAGNOSIS_LOCALE,
+        description=(
+            "DA-74: idioma em que o conteudo deste diagnostico foi produzido "
+            "(causa raiz, proximos passos, relatorio)."
+        ),
+    )
     evidence: list[Evidence] = Field(
         default_factory=list,
         description=(
@@ -325,6 +371,27 @@ class DiagnosisResponse(BaseModel):
             "app/agent/escalation.py): should_escalate, reason, tier, "
             "abstained, top_evidence, connector_real. Informativo - o "
             "pipeline nao escala sozinho para um modelo pago."
+        ),
+    )
+    # DA-83 (2026-10-19): Explicabilidade XAI - campo explanation para highlight de chunks usados
+    explanation: str | None = Field(
+        default=None,
+        description=(
+            "Explicacao estruturada do diagnostico em linguagem natural, "
+            "com highlight dos chunks de contexto mais relevantes e por que foram escolhidos. "
+            "Formato: markdown com chunks em bloco de codigo ou destaque em negrito. "
+            "Ajuda usuario final entender por que o modelo chegou a aquela conclusao."
+        ),
+    )
+    # DA-76: aviso obrigatorio em toda resposta de diagnostico. Vive aqui
+    # (e nao em VerifyIncidentRequest, onde nunca era lido) porque e um
+    # campo do RESULTADO, nao do corpo de verificacao.
+    ai_warning: str = Field(
+        default="",
+        description=(
+            "Aviso de IA que deve ser exibido ao usuario: o conteudo foi "
+            "gerado por inteligencia artificial e pode conter imprecisoes. "
+            "Em pt-BR e en, vem do catalogo de conteudo (content.pt-BR.json / content.en.json)."
         ),
     )
 
@@ -378,4 +445,38 @@ class VerifyIncidentRequest(BaseModel):
             "score de feedback no Langfuse. Sem isso, o feedback so "
             "afeta o grafo (Neo4j), quando GraphRAG estiver ligado."
         ),
+    )
+
+
+class ReviewIncidentRequest(BaseModel):
+    """DA-75: corpo de POST /incidents/{incident_id}/review.
+
+    Quando o sinal de escalonamento (escalation.should_escalate) pede revisao,
+    o grafo pausa e grava hitl_request no checkpoint. Este endpoint permite
+    ao usuario aprovar, editar ou rejeitar o diagnostico e retomar o grafo.
+    """
+
+    action: Literal["approve", "edit", "reject"] = Field(
+        description="Acao do usuario: aprovar (continua com o diagnostico), "
+        "edit (substitui a causa raiz), ou reject (descarta o diagnostico)."
+    )
+    edit: str | None = Field(
+        default=None,
+        description="Nova causa raiz quando action='edit'. Ignorado para outras acoes.",
+    )
+    reviewed_by: Literal["human", "system"] = Field(
+        default="human",
+        description="Quem revisou - 'human' (padrao) ou 'system' (ex: outra automacao).",
+    )
+
+
+# DA-82: RollbackRequest para endpoint /admin/deploy/rollback
+class RollbackRequest(BaseModel):
+    """Corpo de POST /admin/deploy/rollback."""
+
+    target_schema_hash: str = Field(
+        description="Hash do schema para o qual deve-se fazer rollback."
+    )
+    user_id: str | None = Field(
+        default=None, description="ID do usuario solicitante (para log de auditoria)."
     )

@@ -17,6 +17,7 @@ from fastapi import APIRouter, Request
 from fastapi.templating import Jinja2Templates
 
 from app.config import settings
+from app.i18n import template_context
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
@@ -34,7 +35,14 @@ def _ctx() -> dict:
 
 def _render(request: Request, name: str) -> object:
     # Starlette moderno: TemplateResponse(request, name, context)
-    return templates.TemplateResponse(request, name, {**_ctx()})
+    # DA-73: idioma pelo cookie/navegador; `Vary` porque a mesma URL muda de
+    # texto conforme o Accept-Language.
+    response = templates.TemplateResponse(
+        request, name, {**_ctx(), **template_context(request, "admin")}
+    )
+    response.headers["Vary"] = "Accept-Language, Cookie"
+    response.headers["Content-Language"] = response.context["html_lang"]
+    return response
 
 
 @ui_router.get("", include_in_schema=False)

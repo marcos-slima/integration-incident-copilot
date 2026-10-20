@@ -49,6 +49,11 @@ Três modos de leitura:
   envelhece e símbolo não.
 - Blocos marcados **Veja executar** são a parte prática. Pressupõem o Capítulo 0 feito.
 - `[DA-N]` remete a `DECISOES_DE_ARQUITETURA.md`.
+- **Material local, não publicado.** Nomes de arquivo em texto simples, sem link
+  (as aulas `DA_AULA_*.md`, a trilha de estudos e o processo de desenvolvimento),
+  são material de estudo do mantenedor e **não estão neste repositório**. Tudo o
+  que é necessário para instalar, avaliar, operar e customizar está nos documentos
+  com link — o ponto de partida é [`README.md`](README.md).
 
 ### Mapa dos capítulos
 
@@ -326,17 +331,17 @@ e por que mexer na descrição de um campo pode reprovar o build.
 
 ```mermaid
 flowchart LR
-    REQ["IncidentRequest<br/>app/models.py:14<br/>entrada validada"] -->|"run_diagnosis()"| ST["CopilotState<br/>app/agent/state.py:59<br/>TypedDict compartilhado"]
-    ST -->|"report_node"| RES["DiagnosisResponse<br/>app/models.py:180<br/>saída + evidência"]
+    REQ["IncidentRequest<br/>app/models/models.py:14<br/>entrada validada"] -->|"run_diagnosis()"| ST["CopilotState<br/>app/agent/state.py:59<br/>TypedDict compartilhado"]
+    ST -->|"report_node"| RES["DiagnosisResponse<br/>app/models/models.py:180<br/>saída + evidência"]
     ST -.->|"with_structured_output"| DM["DiagnosisModel<br/>app/agent/state.py:14<br/>saída do LLM"]
     DM -.-> ST
 ```
 
 | Objeto | Papel | Detalhe que importa |
 |---|---|---|
-| `IncidentRequest` | o que o cliente manda | `interface_type` é um `Literal` **fechado**; limites de tamanho em `MAX_DESCRIPTION_LENGTH`, `MAX_LOGS_LENGTH`, `MAX_PAYLOAD_LENGTH` |
+| `IncidentRequest` | o que o cliente manda | `interface_type` é um `Literal` **fechado**; limites de tamanho em `MAX_DESCRIPTION_LENGTH`, `MAX_LOGS_LENGTH`, `MAX_PAYLOAD_LENGTH`; `locale` (`pt-BR` default ou `en`, tag do navegador normalizada, outro idioma = 422) decide o idioma do conteúdo [DA-74] |
 | `CopilotState` | estado do grafo | `TypedDict, total=False` — o `StateGraph` **descarta chave fora do schema**. Campo novo que não entra aqui simplesmente desaparece no meio do pipeline |
-| `DiagnosisResponse` | o que o cliente recebe | inclui `evidence`, `escalation`, `matched_source` e a procedência (`llm_model`, `prompt_version`, `prompt_digest`) |
+| `DiagnosisResponse` | o que o cliente recebe | inclui `evidence`, `escalation`, `matched_source`, a procedência (`llm_model`, `prompt_version`, `prompt_digest`) e o `locale` em que o conteúdo foi produzido |
 | `DiagnosisModel` | o que o **LLM** devolve | validado na origem: `confidence` tem `ge=0.0, le=1.0` |
 
 ### 2.2 `Field(description=)` não é comentário
@@ -419,6 +424,12 @@ flowchart TB
 
 Três chaves **distintas** de propósito: um agente externo com a chave de A2A
 não ganha a superfície de administração, e vice-versa [DA-18/19/23/54].
+
+**Idioma.** As telas (Web UI e `/admin`) seguem o idioma do navegador, com
+seletor e cookie `iic_locale` compartilhado [DA-73]. O conteúdo do diagnóstico
+segue o `locale` do pedido, em qualquer superfície: REST e eventos no corpo,
+MCP como argumento da tool, A2A nos campos estruturados; a Web UI envia o
+idioma da tela [DA-74].
 
 ### 3.2 O boot que falha de propósito
 
@@ -620,8 +631,8 @@ de um jeito diferente, e quase sempre em silêncio:
 | # | Superfície | Onde | Se faltar |
 |---|---|---|---|
 | 1 | registro e variável de modo real | `app/connectors/__init__.py::_REGISTRY`, `::_REAL_MODE_SETTING` | não existe |
-| 2 | `Literal` da requisição | `IncidentRequest.interface_type` em `app/models.py` | 422 em toda chamada |
-| 3 | `Literal` do evento | `IncidentEventData.interface_type` em `app/models.py` | evento rejeitado |
+| 2 | `Literal` da requisição | `IncidentRequest.interface_type` em `app/models/models.py` | 422 em toda chamada |
+| 3 | `Literal` do evento | `IncidentEventData.interface_type` em `app/models/models.py` | evento rejeitado |
 | 4 | domínio de roteamento | `domains` em `data/skills/diagnose_incident.yaml` | cai em `generic` |
 | 5 | CLI | `choices` de `--interface` em `app/agent/graph.py` | só por HTTP |
 | 6 | catálogo admin | `app/admin/models.py::CONNECTOR_TYPES` | invisível na tela que responde "qual sistema é" |
@@ -759,8 +770,9 @@ print(retrieve('qual a receita de pão de queijo', top_k=3))
 ```
 
 Esperado: lista vazia ou candidato com calibrado muito baixo — a admissão
-rejeita. É essa diferença que o job `rag-quality` do CI mede (Hit@1 94,4 %,
-MRR 0,972; 9 de 10 consultas fora de escopo rejeitadas).
+rejeita. É essa diferença que o job `rag-quality` do CI mede (medição de
+2026-10-18 com 110 casos: Hit@1 95,6 %, MRR 0,967; 19 de 20 consultas fora
+de escopo rejeitadas).
 
 | # | Breakpoint em | Linha (commit `79510c0`) | O que inspecionar |
 |---|---|---|---|
@@ -785,8 +797,10 @@ chegam ao modelo.
 
 `app/agent/rules.py::ErrorRule` é um `dataclass` com `patterns` (regex),
 `probable_root_cause`, `next_steps`, `category` e `confidence` (default `0.90`).
-`match_known_error(text, has_connector_data)` percorre as regras e, no primeiro
-casamento não negado, devolve um `dict` **já compatível com `DiagnosisModel`**.
+`match_known_error(text, has_connector_data, locale)` percorre as regras e, no
+primeiro casamento não negado, devolve um `dict` **já compatível com
+`DiagnosisModel`**. Os padrões casam em qualquer idioma; o `locale` só muda o
+texto devolvido (`app/i18n/content.py::localize_rule`) [DA-74].
 
 ```mermaid
 flowchart LR
@@ -820,13 +834,27 @@ código de erro capturado do sistema de origem.
 
 ### 7.3 Regras e taxonomia SKOS
 
-`KNOWN_ERROR_RULES` tem **22** regras hardcoded (conferido neste checkout). Com
-`app/agent/ontology_loader.py::load_error_rules_combined`, as regras passam a
-vir de `app/ontology/error_codes.ttl` (SKOS) e as hardcoded entram como
-complemento das categorias ausentes [DA-61] — o [`README.md`](../README.md)
-registra **28** no total (22 + 6 da taxonomia). Se o TTL faltar ou não parsear,
-o carregador cai nas hardcoded; o fallback é silencioso (limitação aceita e
-registrada).
+`KNOWN_ERROR_RULES` tem **22** regras em código. Com
+`app/agent/ontology_loader.py::load_error_rules_combined`, as regras vêm de
+`app/ontology/error_codes.ttl` (SKOS) e as em código entram como complemento
+das categorias ausentes [DA-61]. Neste checkout o TTL tem **28** regras, que
+cobrem as 22 categorias em código mais 6 próprias — a carga combinada dá 28.
+
+Três detalhes do carregador [DA-74]:
+
+- **Causa e passos ausentes no TTL vêm da regra em código** de mesma categoria
+  (`::_fill_from_hardcoded`). Antes, o conceito sem `ex:probableRootCause`
+  devolvia "Erro conhecido detectado via taxonomia SKOS." e escondia a causa
+  curada — o IDoc status 51 respondia com o texto genérico.
+- **Passos separados por `;`** (`skos:note "next_steps: passo 1; passo 2"`).
+  Com `,`, "Validar credenciais (token, API key, Basic Auth)" virava três
+  passos.
+- **Idioma:** o texto da regra é o pt-BR; o `en` vem de `rules.<categoria>` em
+  `app/i18n/locales/content.en.json`. Regra nova sem essa entrada reprova o
+  gate `content_i18n`.
+
+Se o TTL faltar ou não parsear, o carregador cai nas regras em código; o
+fallback é silencioso (limitação aceita e registrada).
 
 Invariante: `RULE_ENGINE_ENABLED` é `True` por default e só se desliga em teste
 que precise forçar o LLM.
@@ -925,6 +953,14 @@ O prompt é **artefato de governança** [DA-53]: a resposta, o relatório e a
 tabela `incidents` carregam `llm_model`, `prompt_version` e `prompt_digest`. O
 gate `prompt_digest_measured` reprova o build se o digest do código divergir do
 baseline medido em `data/eval/prompt_baseline.json`.
+
+**Um digest por idioma** [DA-74]. O pt-BR é o prompt medido; o `en` é o mesmo
+prompt com uma instrução de idioma no fim
+(`app/agent/prompts.py::OUTPUT_LANGUAGE_INSTRUCTIONS`) e digest próprio
+(`::compute_digest("en")`), que é o gravado na resposta. Enquanto o `en` não
+estiver medido (`locales.en` no baseline), o gate **avisa** que o placar vale
+só para o pt-BR; medido e alterado, reprova. Para gravar depois de medir:
+`scripts/quality_gate.py --write-prompt-baseline --prompt-locale en`.
 
 ### 8.4 Fallback híbrido
 
@@ -1043,7 +1079,9 @@ Mais três guardrails em `::_apply_confidence_guardrails`:
 
 1. **Identificador não reconhecido** (`is_fallback`): confiança limitada a
    `0.4` e a causa raiz ganha o prefixo
-   `[confianca limitada - identificador nao reconhecido pelo sistema]`.
+   `[confianca limitada - identificador nao reconhecido pelo sistema]` (em
+   `en`, `[limited confidence - identifier not recognized by the system]`; os
+   avisos vêm de `content.<idioma>.json` [DA-74]).
 2. **`matched_source` alucinado é anulado.** Documento que o LLM cita mas que o
    retrieval nunca devolveu some da resposta e a confiança cai para `0.3` — e
    essa anulação é o que o capítulo 10 lê como abstenção. A checagem antes só
@@ -1347,6 +1385,10 @@ desenho:
   de gravar em claro [DA-60].
 - **Metering real** [DA-48]: tokens vêm de `usage_metadata` da resposta, não de
   estimativa (`app/admin/metering.py`).
+- **Ativação no idioma de quem cadastrou** [DA-74]: `web_users.locale` guarda o
+  idioma da Admin UI no cadastro (ou o `locale` do payload); e-mail e SMS saem
+  nesse idioma (`app/webusers.py::activation_email_text`). Linha antiga, sem
+  idioma, recebe o texto em pt-BR.
 
 ### 13.3 Correlação é fail-closed
 
@@ -1529,7 +1571,7 @@ uv run uvicorn app.main:app
 curl -s -H "Authorization: Bearer $METRICS_TOKEN" http://127.0.0.1:8000/metrics | grep '^iic_'
 
 # Grafana
-curl -sf http://localhost:3001/api/health
+curl -sf http://localhost:3002/api/health
 
 # as 45 queries contra o Postgres real
 uv run python scripts/validate_dashboards.py --dsn "$DATABASE_URL"
@@ -1569,7 +1611,7 @@ uv run pytest tests/ -m "not integration" --collect-only -q | tail -1   # total 
 ```
 
 O CI roda `-m "not integration"` com `--cov-fail-under=80`. No último build
-registrado no [`README.md`](../README.md): **1525 testes, 82 % de cobertura**.
+registrado no [`README.md`](../README.md): **1888 testes, 82 % de cobertura**.
 O número muda a cada commit — use o `--collect-only` acima em vez de confiar em
 qualquer documento, inclusive este.
 
@@ -1578,7 +1620,7 @@ Marcadores (`pyproject.toml`): `integration` (stack viva), `browser`
 automaticamente** quando a infra não está lá; os 9 e2e da DA-52 só rodam com
 `IIC_TEST_DATABASE_URL`.
 
-### 16.2 Os 20 gates determinísticos
+### 16.2 Os 23 gates determinísticos
 
 `app/evaluation/gates.py::GATES` — sem LLM, sem infra, rodam em qualquer CI:
 
@@ -1594,6 +1636,7 @@ uv run python scripts/quality_gate.py --json quality-gate.json
 | Livro-razão das DAs | `implemented_das_documented`, `da_registered`, `das_index_current`, `candidate_das_fresh` |
 | **Integridade da documentação** | `docs_markup_integrity`, `docs_code_references`, `docs_env_vars` |
 | Conectores | `connector_reachable`, `connector_validation_matrix`, `connector_coverage` |
+| Idioma (i18n, DA-73/74) | `ui_i18n`, `content_i18n` |
 
 Os três gates de documentação são o motivo de este manual citar código como
 app/arquivo.py::simbolo entre backticks: `docs_code_references` confere que o símbolo existe
@@ -1703,15 +1746,33 @@ consciente ao modelo canônico, registrada no próprio arquivo. O gate
 baseline de qualidade medido: os únicos números do projeto vêm de modelos
 locais. O aviso existe para a lacuna ficar visível, não para ser silenciado.
 
-**Limite honesto:** os manifests demonstram artefatos declarativos. Não há
-evidência de execução em cluster, e por isso isto **não** é apresentado como
-implantação validada. A **DA-31** (registrar o copiloto no SAP AI Agent Hub via
-MCP + A2A) está **bloqueada** exatamente por isso: exige um tenant Kyma
-provisionado. As duas superfícies locais (MCP e A2A) já existem; o que falta é
+**Limite honesto:** os manifests foram aplicados num Kubernetes real (k3d,
+§17.3), mas não num Kyma gerenciado: `APIRule`, Istio e OIDC do BTP seguem sem
+validação. A **DA-31** (registrar o copiloto no SAP AI Agent Hub via MCP + A2A)
+está **bloqueada** por isso: exige um tenant Kyma provisionado. As duas superfícies locais (MCP e A2A) já existem; o que falta é
 só o cadastro externo.
 
 `tests/test_kyma_manifests.py` valida os manifests, e o gate `index_manifest`
 amarra o `configmap` ao manifesto de índice.
+
+### 17.3 Kubernetes local (k3d)
+
+`deploy/local/` aplica o **mesmo** bundle de `deploy/kyma/` num k3s local, sem
+cópia: remove o `APIRule`, inclui Qdrant e Redis, usa o Ollama do host com
+soberania `strict`. `scripts/k3d-validate.sh` cria o cluster, aplica, indexa
+dentro do Pod e roda o smoke test, gravando a evidência em `reports/`.
+
+```bash
+scripts/k3d-validate.sh            # 1ª vez
+scripts/k3d-validate.sh --skip-build
+scripts/k3d-validate.sh --delete
+```
+
+A validação de 2026-10-18 achou dois bugs que o Compose não mostrava: `/app/data`
+sem escrita para o `appuser` (o ingest falhava dentro do Pod) e o Secret regerado
+a cada execução (senha do Redis divergente). O passo a passo, a leitura da
+evidência e os sintomas estão em
+[`TUTORIAL_K3D_KUBERNETES_LOCAL.md`](TUTORIAL_K3D_KUBERNETES_LOCAL.md).
 
 ### Veja executar — a stack inteira, e a saída de dentro do container
 
@@ -1729,7 +1790,8 @@ com os segredos mascarados por `::_mask`. A configuração do `launch.json`
 primeiro comando a rodar quando o sintoma é "mas eu configurei".
 
 **Aprofundar:** [`DEPLOY.md`](DEPLOY.md) (caminho Compose) ·
-DEPLOYMENT.md (cenários completos) ·
+[`TUTORIAL_K3D_KUBERNETES_LOCAL.md`](TUTORIAL_K3D_KUBERNETES_LOCAL.md) (Kubernetes local) ·
+[`DEPLOYMENT.md`](DEPLOYMENT.md) (cenários completos) ·
 DA_AULA_18_CONTAINERS.md ·
 DA_AULA_19_KYMA.md ·
 DA_AULA_XX_DEPLOY.md.
@@ -1802,8 +1864,8 @@ este manual"); os entre colchetes são documentos do repositório.
 | 4 · Supervisor | DA_AULA_9_LANGGRAPH.md | DA-22/63 |
 | 5 · Conectores | [`CONNECTORS.md`](CONNECTORS.md) | DA-34/41/56/59 |
 | 6 · RAG | [`RERANKER_BENCHMARK.md`](RERANKER_BENCHMARK.md) | DA-1/17/25/29/38/42/45 |
-| 7 · Rule Engine | DA_AULA_11_RULES.md | DA-33/61/62 |
-| 8 · LLM e gateway | DA_AULA_8_LLMS.md | DA-2/20/26/39/43/45/53 |
+| 7 · Rule Engine | DA_AULA_11_RULES.md | DA-33/61/62/74 |
+| 8 · LLM e gateway | DA_AULA_8_LLMS.md | DA-2/20/26/39/43/45/53/66/67/68/72/74 |
 | 9 · Evidência | DA_AULA_10_NODES.md | DA-3/15/16/25/30 |
 | 10 · Escalonamento | DA_AULA_12_ESCALATION.md | DA-42/44 |
 | 11 · GraphRAG | [`TUTORIAL_FASE9_MULTIVENDOR_GRAPHRAG_A2A.md`](TUTORIAL_FASE9_MULTIVENDOR_GRAPHRAG_A2A.md) | DA-21/28 |
@@ -1812,8 +1874,8 @@ este manual"); os entre colchetes são documentos do repositório.
 | 14 · Drift de contrato | [`DECISOES_DE_ARQUITETURA.md`](DECISOES_DE_ARQUITETURA.md) | DA-52 |
 | 15 · Observabilidade | DA_AULA_6_MONITORING.md, DA_AULA_16_OPERATIONAL.md, DA_AULA_20_MONITORING.md | DA-30/35/48 |
 | 16 · Testes e gates | [`QUALITY_GATES.md`](QUALITY_GATES.md), DA_AULA_15_TESTS.md, DA_AULA_22_TESTING.md | DA-29/51/58 |
-| 17 · Deploy | DA_AULA_18_CONTAINERS.md, DA_AULA_19_KYMA.md, DA_AULA_XX_DEPLOY.md | DA-24, DA-31 (bloqueada) |
-| UI (transversal) | DA_AULA_23_UI.md, DA_AULA_17_FRONTEND.md | DA-54/55 |
+| 17 · Deploy | DA_AULA_18_CONTAINERS.md, DA_AULA_19_KYMA.md, DA_AULA_25_K3D.md, DA_AULA_XX_DEPLOY.md, [`TUTORIAL_K3D_KUBERNETES_LOCAL.md`](TUTORIAL_K3D_KUBERNETES_LOCAL.md) | DA-24, DA-31 (bloqueada) |
+| UI (transversal) | DA_AULA_23_UI.md, DA_AULA_17_FRONTEND.md | DA-54/55/73/74 |
 | Debug (transversal) | DA_AULA_23_DEBUG.md, [`TUTORIAL_ARQUITETURA_DEBUG.md`](TUTORIAL_ARQUITETURA_DEBUG.md) | — |
 
 ---
@@ -1826,12 +1888,12 @@ deste manual precisa de confiança: cada um tem um comando.
 | Afirmação | Valor | Comando que reconfere |
 |---|---|---|
 | versão do projeto | 1.2.0 | `grep -m1 '^version' pyproject.toml` |
-| regras hardcoded | 22 | `uv run python -c "from app.agent.rules import KNOWN_ERROR_RULES as r; print(len(r))"` |
-| regras com taxonomia SKOS | 28 no total, segundo o README | `uv run python -c "from app.agent.ontology_loader import load_error_rules_combined as f; print(len(f()))"` |
+| regras em código | 22 | `uv run python -c "from app.agent.rules import KNOWN_ERROR_RULES as r; print(len(r))"` |
+| regras com taxonomia SKOS | 28 no total (o TTL cobre as 22 em código + 6) | `uv run python -c "from app.agent.ontology_loader import load_error_rules_combined as f; print(len(f()))"` |
 | conectores registrados | 10 | `uv run python -c "from app.connectors import _REGISTRY as r; print(len(r), sorted(r))"` |
-| migrations | 13 (head `013`) | `uv run alembic heads` |
-| gates de qualidade | 20 | `uv run python -c "from app.evaluation.gates import GATES; print(len(GATES))"` |
-| testes | 1525 no último build de CI | `uv run pytest tests/ -m "not integration" --collect-only -q \| tail -1` |
+| migrations | 21 (head `021`) | `uv run alembic heads` |
+| gates de qualidade | 22 | `uv run python -c "from app.evaluation.gates import GATES; print(len(GATES))"` |
+| testes | 1764 coletados (2026-10-18) | `uv run pytest tests/ -m "not integration" --collect-only -q \| tail -1` |
 | configurações de debug | 14 | contar `"name"` em `.vscode/launch.json` |
 | playbooks RAG curados | 15 | `ls data/sample_docs/*.md \| wc -l` |
 | limiares de escalonamento | 0.62 / 0.45 | `app/agent/escalation.py::FLOOR_TIER_MIN_EVIDENCE`, `::CURATED_TIER_MIN_EVIDENCE` |
@@ -1850,7 +1912,7 @@ atualizado.
 ## Apêndice E — O que este projeto não garante
 
 Limites aceitos e registrados. Lê-los é parte de usar o sistema com honestidade
-— e é o que separa um portfólio técnico de uma peça de marketing.
+— e é o que separa um produto técnico de uma peça de marketing.
 
 1. **Implementado não é validado.** RFC (logon), ServiceNow, Salesforce e CAP
    foram exercitados contra instância real; OData, Workday, Ariba,
@@ -1873,6 +1935,9 @@ Limites aceitos e registrados. Lê-los é parte de usar o sistema com honestidad
    anotação, versão e namespace).
 9. **O placar do LLM precisa ser re-medido** quando o modelo canônico muda:
    casos resolvidos pelo rule engine não medem o modelo.
+10. **O prompt em inglês não foi medido** [DA-74]: o placar descreve o pt-BR. O
+    LLM lê contexto e persona em português e escreve em inglês por instrução;
+    documentos da base e dados do usuário não são traduzidos.
 
 ---
 

@@ -50,7 +50,7 @@ BASE_STATE: dict[str, Any] = {
     "interface_type": "odata",
     "identifier": "I_Message/001",
     "retrieved_context": [
-        {"source": "cpi_http_401.md", "text": "conteudo", "score": 0.9},
+        {"source": "cpi_http_401.md", "text": "conteudo", "score": 0.9, "collection": "other"},
         {"source": "b.md", "text": "outro", "score": 0.5},
     ],
     "graph_history": [],
@@ -300,7 +300,7 @@ class TestProvenienciaNoState:
         monkeypatch.setattr(
             nodes,
             "match_known_error",
-            lambda text, has_connector_data=False: {
+            lambda text, has_connector_data=False, locale=None: {
                 "probable_root_cause": "regra deterministica",
                 "model_confidence": 0.9,
                 "diagnosis_confidence": 0.9,
@@ -396,12 +396,48 @@ class TestGate:
     def test_passa_com_digest_igual(self, tmp_path: Any):
         from app.evaluation.gates import check_prompt_digest
 
+        # DA-74: cada idioma com instrucao propria tem digest proprio, medido
+        # em `locales.<idioma>`.
+        root = self._root(
+            tmp_path,
+            {
+                "prompt_version": prompts.PROMPT_VERSION,
+                "prompt_digest": prompts.compute_digest(),
+                "locales": {
+                    loc: {"prompt_digest": prompts.compute_digest(loc)}
+                    for loc in prompts.prompt_locales()
+                    if loc != "pt-BR"
+                },
+            },
+        )
+        findings = check_prompt_digest(root)
+        assert [f.severity for f in findings] == ["pass"]
+
+    def test_idioma_nao_medido_avisa_sem_reprovar(self, tmp_path: Any):
+        """DA-74: o pt-BR medido continua passando; o `en` sem medicao vira
+        aviso que diz que o placar nao vale para ele."""
+        from app.evaluation.gates import check_prompt_digest
+
         root = self._root(
             tmp_path,
             {"prompt_version": prompts.PROMPT_VERSION, "prompt_digest": prompts.compute_digest()},
         )
         findings = check_prompt_digest(root)
-        assert [f.severity for f in findings] == ["pass"]
+        assert [f.severity for f in findings] == ["warn"]
+        assert "'en'" in findings[0].message and "nao foi medido" in findings[0].message
+
+    def test_idioma_medido_e_alterado_reprova(self, tmp_path: Any):
+        from app.evaluation.gates import check_prompt_digest
+
+        root = self._root(
+            tmp_path,
+            {
+                "prompt_version": prompts.PROMPT_VERSION,
+                "prompt_digest": prompts.compute_digest(),
+                "locales": {"en": {"prompt_digest": "b" * 64}},
+            },
+        )
+        assert [f.severity for f in check_prompt_digest(root)] == ["fail"]
 
     def test_falha_quando_o_prompt_muda(self, tmp_path: Any):
         from app.evaluation.gates import check_prompt_digest

@@ -21,11 +21,14 @@ def main() -> None:
     description = parts[0] if len(parts) > 0 else ""
     interface_type = parts[1] if len(parts) > 1 and parts[1] != "none" else None
     identifier = parts[2] if len(parts) > 2 and parts[2] != "none" else None
+    # DA-74: 4a parte opcional = idioma do conteudo (ex.: "...|||none|||en")
+    locale = parts[3] if len(parts) > 3 and parts[3] != "none" else None
 
     request = IncidentRequest(
         description=description,
         interface_type=interface_type,
         identifier=identifier,
+        locale=locale,
     )
     result = run_diagnosis(request, llm_model=model)
 

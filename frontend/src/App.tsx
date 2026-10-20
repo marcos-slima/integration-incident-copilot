@@ -11,6 +11,7 @@
 // válido); a checagem é o GET /auth/session.
 
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { DiagnoseView } from './components/DiagnoseView';
 import { HistoryView } from './components/HistoryView';
 import { LoginView } from './components/LoginView';
@@ -23,6 +24,7 @@ import type { HistoryItem } from './types/models';
 type ViewId = 'diagnose' | 'history' | 'status';
 
 function App() {
+  const { t } = useTranslation();
   const [view, setView]       = useState<ViewId>('diagnose');
   const [history, setHistory] = useState<HistoryItem[]>([]);
   // null = checando sessão; {authenticated:false} = sem sessão (login)
@@ -54,7 +56,7 @@ function App() {
 
   function handleSessionExpired() {
     setSession({ authenticated: false });
-    setNotice('Sua sessão expirou — faça login novamente.');
+    setNotice(t('common.sessionExpired'));
   }
 
   // Checando sessão: loading mínimo, sem flash da tela de login
@@ -68,7 +70,7 @@ function App() {
             animation: 'spin .9s linear infinite',
           }} />
           <div style={{ marginTop: 12, fontSize: 12, color: '#94A3B8' }}>
-            Verificando sessão…
+            {t('common.checkingSession')}
           </div>
         </div>
       </div>
@@ -88,6 +90,7 @@ function App() {
         historyCount={history.length}
         username={session.username}
         onLogout={handleLogout}
+        lastResult={history.at(-1)?.result}
       />
       <main className="main">
         {view === 'diagnose' && (

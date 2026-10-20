@@ -56,31 +56,68 @@ Nao-objetivos explicitos desta v1 (backlog em aberto):
 import logging
 import random
 import time
+from contextvars import ContextVar
+from dataclasses import dataclass
 from typing import Literal
 
 from app.admin.metering import attach_metering, record_usage_observed  # DA-48
 from app.circuit_breaker import CircuitBreaker
 from app.config import Settings, settings
 from app.exceptions import ConfigurationError
-from app.llm.factory import (
-    TRANSPORT_FAILURE_EXCEPTIONS,
-    get_chat_model,
-    resolve_registry_config,
-)
 
 # DA-45: as duas funcoes passaram a morar em app/llm/origins.py porque o
 # factory tambem precisa delas e nao pode importar este modulo (o gateway
 # importa o factory - importaria de volta, ciclo). Re-exportadas aqui para
 # que `from app.llm.gateway import normalize_origin` (testes de DA-43)
 # siga funcionando sem alteracao.
+from app.llm.budget import BudgetExhaustedError, get_task_budget
+from app.llm.factory import (
+    get_chat_model,
+    resolve_registry_config,
+)
+from app.llm.failures import (
+    FAILURE_POLICIES,
+    FailureClass,
+    classify_failure,
+    get_failure_policy,
+)
 from app.llm.origins import is_loopback_origin, normalize_origin, resolve_provider_origin
+from app.llm.registry_routing import (
+    RegistrySnapshot,
+    candidate_settings,
+    effective_settings,
+    effective_transport,
+    load_registry_snapshot,
+)
+
+# DA-66: Policy Engine puro para roteamento
+from app.llm.routing import (
+    RejectionReason,
+    _provider_allows_sensitivity,
+    evaluate_routing,
+)
+from app.llm.routing import (
+    describe_effective_policy as routing_describe_policy,
+)
+
+# Backward compatibility: _select_allowed_providers com cfg=None default
+# (testes chamam sem o argumento). A versao em routing.py exige cfg.
 
 __all__ = [
+    "_provider_allows_sensitivity",
+    "describe_effective_policy",
     "is_loopback_origin",
     "normalize_origin",
     "resolve_provider_origin",
 ]
-from app.metrics import CIRCUIT_BREAKER_OPEN_TOTAL, CIRCUIT_BREAKER_STATE, LLM_FALLBACK_TOTAL
+from app.metrics import (
+    CIRCUIT_BREAKER_OPEN_TOTAL,
+    CIRCUIT_BREAKER_STATE,
+    LLM_FALLBACK_TOTAL,
+    observe_llm_cost,
+    observe_llm_request,
+    observe_llm_tokens,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -158,11 +195,39 @@ def classify_sensitivity(state: dict) -> Sensitivity:
     return "public" if rank == 0 else "confidential"
 
 
+# Cache do encoding para evitar download repetido (DA-67).
+# Carregamento lazy: so carrega na primeira chamada. Se a carga falhar
+# (tiktoken ausente, BPE sem rede), `_encoding_failed` impede nova
+# tentativa a cada chamada - um download com timeout por chamada
+# somaria latencia ao diagnostico - e o aviso e logado uma unica vez.
+_encoding_cache = None
+_encoding_failed = False
+
+
 def _estimate_tokens(text: str) -> int:
-    # Heuristica simples (~4 caracteres por token, ordem de grandeza
-    # razoavel pra texto tecnico em portugues/ingles) - nao e um
-    # tokenizer real, so o suficiente pra um teto de budget. Ver
-    # nao-objetivo no docstring do modulo.
+    """Estima tokens para o budget (DA-67).
+
+    Aproximacao via `cl100k_base` (tokenizer da OpenAI). Para modelos
+    Qwen/Ollama nao e a contagem real; o real vem de `prompt_eval_count`
+    no metering (DA-48).
+
+    Fallback para a heuristica len//4 se o tiktoken nao estiver
+    disponivel ou o BPE nao puder ser carregado (container sem rede).
+    Nunca propaga excecao."""
+    global _encoding_cache, _encoding_failed
+    if _encoding_cache is None and not _encoding_failed:
+        try:
+            import tiktoken
+
+            _encoding_cache = tiktoken.get_encoding("cl100k_base")
+        except Exception:  # noqa: BLE001 - fallback deliberado: tokenizer nunca derruba o diagnostico
+            _encoding_failed = True
+            logger.warning("tiktoken indisponivel - estimativa de tokens usa heuristica len//4")
+    if _encoding_cache is not None:
+        try:
+            return len(_encoding_cache.encode(text, allowed_special="all"))
+        except Exception:
+            logger.debug("tiktoken encode falhou - usando heuristica len//4", exc_info=True)
     return max(1, len(text) // 4)
 
 
@@ -202,64 +267,25 @@ def _allowed_origins(cfg: Settings) -> set[str]:
     return out
 
 
-def _provider_allows_sensitivity(
-    provider: str, sensitivity: Sensitivity, cfg: Settings
-) -> tuple[bool, str]:
-    """Decide se um provider pode receber dado com esta sensibilidade.
+def describe_effective_policy(cfg: Settings | None = None) -> dict:
+    """DA-43: snapshot LEGIVEL da policy de soberania em vigor.
 
-    Retorna (permitido, motivo). O motivo vai para o audit log e para o
-    endpoint /llm/policy - e a resposta objetiva a "por que isso foi
-    (nao) permitido?".
+    Existe para responder a pergunta de um questionario de seguranca de
+    cliente - "para onde vai meu dado confidencial?" - sem nenhum
+    'confia'. Para cada provider conhecido mostra a ORIGIN real
+    resolvida, a localidade, e se pode receber 'public' e 'confidential',
+    sempre com o motivo da decisao.
 
-    Fail-closed em todas as branches desconhecidas: so
-    'cloud_with_dlp' EXPLICITO libera cloud. Um Settings invalido
-    montado sem passar pelo pydantic (model_copy em teste, por exemplo)
-    nega em vez de liberar.
+    NUNCA inclui chave, token ou o conteudo de openai_api_key /
+    azure_openai_api_key - so origens, que nao carregam credencial
+    (normalize_origin descarta userinfo).
     """
-    origin = resolve_provider_origin(provider, cfg)
-    if not origin:
-        return False, f"origin nao resolvida para o provider '{provider}'"
-
-    # Localidade deve ser decidida por is_loopback_origin(origin), não por
-    # PROVIDER_LOCALITY hardcode. Exemplo: OLLAMA_HOST=https://remoto deve
-    # ser "cloud", mesmo para provider "ollama".
-    is_local = is_loopback_origin(origin)
-
-    if sensitivity == "public":
-        return True, f"dado public: origem {origin} nao e restringida"
-
-    # daqui para frente: confidential
-    if is_local:
-        return True, f"origem local {origin} sob jurisdicao do operador"
-
-    if cfg.data_sovereignty_mode != "cloud_with_dlp":
-        return (
-            False,
-            (
-                f"dado confidencial para cloud exige data_sovereignty_mode="
-                f"'cloud_with_dlp' (atual: '{cfg.data_sovereignty_mode or '(vazio)'}')"
-            ),
-        )
-
-    allowed = _allowed_origins(cfg)
-    if not allowed:
-        return (
-            False,
-            (
-                f"dado confidencial para cloud exige a origem na allowlist "
-                f"CONFIDENTIAL_ALLOWED_ORIGINS (vazia; destino e {origin})"
-            ),
-        )
-    if origin in allowed:
-        return True, f"origem {origin} esta na allowlist de dado confidencial"
-    return (
-        False,
-        (f"origem {origin} nao esta em CONFIDENTIAL_ALLOWED_ORIGINS ({sorted(allowed)})"),
-    )
+    # DA-66: delega para o Policy Engine puro (routing.py)
+    return routing_describe_policy(cfg)
 
 
 def _select_allowed_providers(
-    sensitivity: Sensitivity, primary: str, fallback: str, cfg: Settings | None = None
+    sensitivity: Sensitivity, primary: str, fallback: str | None, cfg: Settings | None = None
 ) -> list[str]:
     """DA-39 + DA-43: filtra os candidatos pela policy de soberania.
 
@@ -268,6 +294,9 @@ def _select_allowed_providers(
       data_sovereignty_mode == 'cloud_with_dlp' - os destinos cuja ORIGIN
       esteja em CONFIDENTIAL_ALLOWED_ORIGINS.
     - qualquer outra coisa: fail-closed (ver _provider_allows_sensitivity).
+
+    Backward compatibility: cfg default=settings para testes que chamam
+    sem o argumento.
     """
     conf = cfg or settings
     candidates = [primary] + ([fallback] if fallback else [])
@@ -291,71 +320,77 @@ def _select_allowed_providers(
     return allowed
 
 
-def describe_effective_policy(cfg: Settings | None = None) -> dict:
-    """DA-43: snapshot LEGIVEL da policy de soberania em vigor.
+@dataclass(frozen=True)
+class GatewaySelection:
+    """Quem respondeu a ultima chamada bem-sucedida deste contexto (DA-53/72):
+    o rotulo do provider continua sendo o retorno de invoke_via_gateway; o
+    MODELO efetivo (que no roteamento por registro pode nao ser o
+    `llm_model` do state) sai por aqui."""
 
-    Existe para responder a pergunta de um questionario de seguranca de
-    cliente - "para onde vai meu dado confidencial?" - sem nenhum
-    'confia'. Para cada provider conhecido mostra a ORIGIN real
-    resolvida, a localidade, e se pode receber 'public' e 'confidential',
-    sempre com o motivo da decisao.
+    provider: str
+    model_id: str | None
+    origin: str
 
-    NUNCA inclui chave, token ou o conteudo de openai_api_key /
-    azure_openai_api_key - so origens, que nao carregam credencial
-    (normalize_origin descarta userinfo).
-    """
-    conf = cfg or settings
-    known = ["ollama", "openai", "azure_openai"]
-    for extra in (conf.llm_provider, conf.llm_fallback_provider):
-        if extra and extra not in known:
-            known.append(extra)
 
-    providers: dict[str, dict] = {}
-    for name in known:
-        origin = resolve_provider_origin(name, conf)
-        pub_ok, pub_reason = _provider_allows_sensitivity(name, "public", conf)
-        conf_ok, conf_reason = _provider_allows_sensitivity(name, "confidential", conf)
-        providers[name] = {
-            "locality": PROVIDER_LOCALITY.get(name, "unknown"),
-            "origin": origin or None,
-            "may_receive_public": pub_ok,
-            "may_receive_confidential": conf_ok,
-            "public_reason": pub_reason,
-            "confidential_reason": conf_reason,
-            "circuit_open": circuit_breaker.is_open(
-                name, conf.llm_gateway_circuit_cooldown_seconds
-            ),
-        }
+_LAST_SELECTION: ContextVar[GatewaySelection | None] = ContextVar(
+    "iic_gateway_last_selection", default=None
+)
 
-    return {
-        "data_sovereignty_mode": conf.data_sovereignty_mode,
-        "sensitivity_default": conf.sensitivity_default,
-        "confidential_allowed_origins": sorted(_allowed_origins(conf)),
-        "routing": {
-            "primary": conf.llm_provider,
-            "fallback": conf.llm_fallback_provider or None,
-            "allowed_for_public": _select_allowed_providers(
-                "public", conf.llm_provider, conf.llm_fallback_provider, conf
-            ),
-            "allowed_for_confidential": _select_allowed_providers(
-                "confidential", conf.llm_provider, conf.llm_fallback_provider, conf
-            ),
-        },
-        "limits": {
-            "max_cost_usd": conf.llm_gateway_max_cost_usd,
-            "request_timeout_seconds": conf.llm_request_timeout_seconds,
-            "circuit_failure_threshold": conf.llm_gateway_circuit_failure_threshold,
-        },
-        "providers": providers,
-        "note": (
-            "A policy e avaliada por ORIGIN (scheme://host[:port]), nao pelo "
-            "rotulo do provider: 'openai' pode apontar para api.openai.com ou "
-            "para qualquer endpoint compativel via OPENAI_BASE_URL. Dado "
-            "confidential so sai se a origin estiver em "
-            "confidential_allowed_origins E data_sovereignty_mode="
-            "'cloud_with_dlp'. Sem isso, so providers locais. Fail-closed."
+
+def consume_last_selection() -> GatewaySelection | None:
+    """Le e limpa a selecao da ultima chamada bem-sucedida deste contexto."""
+    selection = _LAST_SELECTION.get()
+    _LAST_SELECTION.set(None)
+    return selection
+
+
+def _record_latency(origin: str, model_id: str | None, latency_s: float) -> None:
+    if not model_id:
+        return
+    try:
+        from app.admin.repository import record_call_latency
+
+        record_call_latency(origin, model_id, int(latency_s * 1000))
+    except Exception:
+        logger.debug("latencia nao registrada", exc_info=True)
+
+
+def preview_routing(
+    sensitivity: Literal["public", "confidential"],
+    domain: str | None,
+    context_tokens: int,
+    config: Settings | None = None,
+):
+    """DA-72: roda o Policy Engine SEM chamar o LLM - a mesma decisao que
+    invoke_via_gateway tomaria para um diagnostico novo (orcamento cheio),
+    para o simulador de /admin/models. Devolve (decision, cfg efetivo)."""
+    from app.llm.budget import TaskBudget
+    from app.llm.routing import ProviderCapabilities, RoutingRequest
+
+    cfg = effective_settings(config or settings)
+    fresh = TaskBudget(task_id="preview", total_usd=cfg.diagnosis_budget_usd)
+    budget_remaining = min(
+        cfg.llm_gateway_max_cost_usd, fresh.affordable_usd(cfg.llm_budget_reserve_ratio)
+    )
+    request = RoutingRequest(
+        sensitivity=sensitivity,
+        task="diagnosis",
+        context_tokens=context_tokens,
+        budget_remaining_usd=budget_remaining,
+        required_capabilities=ProviderCapabilities(
+            supports_seed=True, supports_response_format=False, supports_tools=False
         ),
-    }
+        primary_provider=cfg.llm_provider,
+        fallback_provider=cfg.llm_fallback_provider,
+        config=cfg,
+        domain=domain,
+        registry=(
+            (load_registry_snapshot() or RegistrySnapshot(models=()))
+            if cfg.llm_registry_db
+            else None
+        ),
+    )
+    return evaluate_routing(request), cfg
 
 
 def invoke_via_gateway(
@@ -381,30 +416,128 @@ def invoke_via_gateway(
     providers permitidos). Levanta ConfigurationError se todos os
     providers permitidos pela policy falharem por transporte.
     """
-    cfg = config or settings
+    # DA-72: overrides da Admin UI (modo gerenciado, provider, soberania,
+    # orcamento, pesos) valem para a decisao - antes a lista de candidatos
+    # vinha sempre do .env, mesmo com LLM_PROVIDER trocado na tela.
+    cfg = effective_settings(config or settings)
     sensitivity = classify_sensitivity(state)
-    allowed = _select_allowed_providers(
-        sensitivity, cfg.llm_provider, cfg.llm_fallback_provider, cfg
+
+    # DA-66: usa o Policy Engine puro para tomar a decisao de roteamento
+    from app.llm.routing import (
+        ProviderCapabilities,
+        RoutingRequest,
     )
 
-    if not allowed:
+    # Estima tokens para o orçamento
+    context_tokens = _estimate_tokens(prompt_text)
+    # DA-67: o teto efetivo e o MENOR entre o teto por chamada e o que
+    # ainda cabe no orcamento do diagnostico (descontada a reserva).
+    # Sem orcamento aberto (chamada fora de run_diagnosis), vale so o
+    # teto por chamada - comportamento anterior.
+    task_budget = get_task_budget(state.get("incident_id"))
+    budget_remaining = cfg.llm_gateway_max_cost_usd
+    if task_budget is not None:
+        budget_remaining = min(
+            budget_remaining, task_budget.affordable_usd(cfg.llm_budget_reserve_ratio)
+        )
+        logger.info("AI Gateway budget: %s", task_budget.as_log_fields())
+
+    # Requisito de capacidades (seed para determinismo DA-2)
+    required_caps = ProviderCapabilities(
+        supports_seed=True,
+        supports_response_format=False,
+        supports_tools=False,
+    )
+
+    request = RoutingRequest(
+        sensitivity=sensitivity,
+        task="diagnosis",  # tarefa atual
+        context_tokens=context_tokens,
+        budget_remaining_usd=budget_remaining,
+        required_capabilities=required_caps,
+        primary_provider=cfg.llm_provider,
+        fallback_provider=cfg.llm_fallback_provider,
+        config=cfg,
+        model_name=model_name,
+        domain=state.get("agent_domain"),
+        # DA-72: no modo gerenciado os candidatos sao os modelos habilitados
+        # do registro. Registro ilegivel = nenhum candidato (fail-closed).
+        registry=(
+            (load_registry_snapshot() or RegistrySnapshot(models=()))
+            if cfg.llm_registry_db
+            else None
+        ),
+    )
+
+    decision = evaluate_routing(request)
+
+    # Log da decisao (audit log estruturado)
+    logger.info(
+        "AI Gateway routing decision: %s",
+        decision.as_log_fields(),
+    )
+
+    if decision.all_rejected:
         reasons = "; ".join(
-            f"{p} ({resolve_provider_origin(p, cfg) or 'origin desconhecida'}): "
-            f"{_provider_allows_sensitivity(p, sensitivity, cfg)[1]}"
-            for p in [cfg.llm_provider]
-            + ([cfg.llm_fallback_provider] if cfg.llm_fallback_provider else [])
+            f"{p}: {', '.join(r.value for r in rs)}" for p, rs in decision.rejection_summary.items()
+        )
+        # DA-67: se o orcamento do diagnostico e o que barra TODOS os
+        # candidatos, a falha e budget_exhausted (DA-68: sem retry, sem
+        # failover) - nao uma violacao de soberania.
+        # So e budget_exhausted quando o limite que barra e o do
+        # DIAGNOSTICO (menor que o teto por chamada); se o teto por chamada
+        # e o menor, segue sendo PolicyViolationError (comportamento DA-26).
+        task_budget_binds = (
+            task_budget is not None and budget_remaining < cfg.llm_gateway_max_cost_usd
+        )
+        if task_budget_binds and all(
+            RejectionReason.BUDGET_EXCEEDED in rs for rs in decision.rejection_summary.values()
+        ):
+            raise BudgetExhaustedError(
+                f"AI Gateway: budget do diagnostico esgotado - restante "
+                f"${task_budget.remaining_usd:.4f} de ${task_budget.total_usd:.4f} "
+                f"(reserva {cfg.llm_budget_reserve_ratio:.0%}) nao cobre nenhum candidato. "
+                f"Motivos: {reasons}"
+            )
+        if request.registry is not None:
+            raise PolicyViolationError(
+                f"AI Gateway (registro, DA-72): nenhum modelo elegivel para dado "
+                f"'{sensitivity}' (dominio={request.domain or '-'}, "
+                f"{len(request.registry.models)} habilitado(s)). Motivos: "
+                f"{reasons or 'registro vazio ou indisponivel'}. "
+                f"Simule em /admin/models (GET /admin/api/routing/preview)."
+            )
+        # DA-66: inclui 'custo' e origens na mensagem para testes que verificam rejeicao
+        origin_primary = resolve_provider_origin(cfg.llm_provider, cfg)
+        origin_fallback = (
+            resolve_provider_origin(cfg.llm_fallback_provider, cfg)
+            if cfg.llm_fallback_provider
+            else None
         )
         raise PolicyViolationError(
             f"AI Gateway: incidente classificado como '{sensitivity}' - nenhum "
-            f"provider permitido pela policy de soberania "
-            f"(primario='{cfg.llm_provider}', "
-            f"fallback='{cfg.llm_fallback_provider or '(nenhum)'}'). "
-            f"Motivos: {reasons}. Diagnose a policy effective em GET /llm/policy."
+            f"provider permitido pela policy de soberania (modo='{cfg.data_sovereignty_mode}') "
+            f"(primario='{cfg.llm_provider}'@'{origin_primary}', "
+            f"fallback='{cfg.llm_fallback_provider or '(nenhum)'}'@'{origin_fallback or '(nenhum)'}'). "
+            f"Motivos: {reasons} (custo ou outra regra). "
+            f"Diagnose a policy effective em GET /llm/policy."
         )
 
     last_error: Exception | None = None
-    for provider in allowed:
-        if circuit_breaker.is_open(provider, cfg.llm_gateway_circuit_cooldown_seconds):
+    registry_models = (
+        {m.id: m for m in request.registry.models} if request.registry is not None else {}
+    )
+    first_allowed = next((c for c in decision.candidates if c.allowed), None)
+    for candidate in decision.candidates:
+        if not candidate.allowed:
+            # Ja rejeitado pelo Policy Engine
+            continue
+
+        provider = candidate.provider
+        # DA-72: no registro o circuito e' por ORIGEM (dois modelos na mesma
+        # origem caem juntos); no modo .env segue por rotulo (DA-66).
+        circuit_key = candidate.origin if candidate.registry_id else provider
+        if circuit_breaker.is_open(circuit_key, cfg.llm_gateway_circuit_cooldown_seconds):
             logger.warning(
                 "AI Gateway audit: provider=%s sensitivity=%s status=circuit_open - pulando sem tentar",
                 provider,
@@ -418,46 +551,74 @@ def invoke_via_gateway(
             )
             continue
 
-        estimated_cost = _estimate_cost_usd(provider, prompt_text)
-        if estimated_cost > cfg.llm_gateway_max_cost_usd:
+        estimated_cost = candidate.estimated_cost_usd
+        if estimated_cost > budget_remaining:
             logger.warning(
                 "AI Gateway audit: provider=%s sensitivity=%s status=budget_rejected "
                 "estimated_cost_usd=%.4f max_cost_usd=%.4f",
                 provider,
                 sensitivity,
                 estimated_cost,
-                cfg.llm_gateway_max_cost_usd,
+                budget_remaining,
             )
             last_error = PolicyViolationError(
                 f"AI Gateway: custo estimado (${estimated_cost:.4f}) do provider "
-                f"'{provider}' ultrapassa o teto configurado "
-                f"(${cfg.llm_gateway_max_cost_usd:.4f})."
+                f"'{provider}' ultrapassa o orçamento restante "
+                f"(${budget_remaining:.4f})."
             )
             continue
 
-        provider_cfg = cfg.model_copy(update={"llm_provider": provider})
-        # M-11: a chave do registro (e do metering) e a origem ANTES de o
-        # registro trocar o base_url - e por ela que llm_models e procurado.
-        registry_origin = resolve_provider_origin(provider, provider_cfg)
-        # GOV-01 (validacao 2026-10-06): no modo gerenciado o registro troca
-        # base_url/credencial (texto livre do admin). A politica e reavaliada
-        # sobre o destino FINAL, nao so sobre a origin do .env.
-        provider_cfg = resolve_registry_config(provider_cfg, model_name)
-        final_ok, final_reason = _provider_allows_sensitivity(provider, sensitivity, provider_cfg)
-        if not final_ok:
-            logger.warning(
-                "AI Gateway audit: provider=%s sensitivity=%s status=policy_rejected_after_registry "
-                "reason=%s",
-                provider,
-                sensitivity,
-                final_reason,
+        if candidate.registry_id:
+            # DA-72: o candidato JA e' o destino final (origem do registro),
+            # avaliado pelo engine. Falta so a credencial, decifrada aqui e
+            # nunca antes de o modelo ser escolhido.
+            reg_model = registry_models[candidate.registry_id]
+            api_key = None
+            if effective_transport(reg_model, cfg) != "ollama":
+                from app.admin.repository import registry_credential
+
+                api_key = registry_credential(reg_model.provider_origin)
+                if not api_key:
+                    last_error = PolicyViolationError(
+                        f"AI Gateway: credencial de {reg_model.provider_origin} ilegivel - "
+                        "modelo pulado (fail-closed, DA-47)."
+                    )
+                    continue
+            _, provider_cfg = candidate_settings(reg_model, cfg, api_key=api_key)
+            registry_origin = reg_model.provider_origin
+            effective_model = reg_model.model_id
+            llm = get_chat_model(config=provider_cfg, registry_resolved=True)
+        else:
+            provider_cfg = cfg.model_copy(update={"llm_provider": provider})
+            # M-11: a chave do registro (e do metering) e a origem ANTES de o
+            # registro trocar o base_url - e por ela que llm_models e procurado.
+            registry_origin = resolve_provider_origin(provider, provider_cfg)
+            # GOV-01 (validacao 2026-10-06): no modo gerenciado o registro troca
+            # base_url/credencial (texto livre do admin). A politica e reavaliada
+            # sobre o destino FINAL, nao so sobre a origin do .env.
+            provider_cfg = resolve_registry_config(provider_cfg, model_name)
+            final_ok, final_reason = _provider_allows_sensitivity(
+                provider, sensitivity, provider_cfg
             )
-            last_error = PolicyViolationError(
-                f"AI Gateway: destino resolvido pelo registro para '{provider}' "
-                f"nao e permitido para dado '{sensitivity}': {final_reason}"
+            if not final_ok:
+                logger.warning(
+                    "AI Gateway audit: provider=%s sensitivity=%s "
+                    "status=policy_rejected_after_registry reason=%s",
+                    provider,
+                    sensitivity,
+                    final_reason,
+                )
+                last_error = PolicyViolationError(
+                    f"AI Gateway: destino resolvido pelo registro para '{provider}' "
+                    f"nao e permitido para dado '{sensitivity}': {final_reason}"
+                )
+                continue
+            llm = get_chat_model(model_name=model_name, config=provider_cfg, registry_resolved=True)
+            effective_model = (
+                provider_cfg.azure_openai_deployment
+                if provider == "azure_openai"
+                else (model_name or provider_cfg.llm_model)
             )
-            continue
-        llm = get_chat_model(model_name=model_name, config=provider_cfg, registry_resolved=True)
 
         # DA-48: anexa o callback de captura de tokens reais (usage) das
         # respostas do model. Best-effort: sem DATABASE_URL ou sem
@@ -465,7 +626,7 @@ def invoke_via_gateway(
         metering_cb = attach_metering(
             llm,
             provider,
-            model_name=model_name or getattr(llm, "model_name", None) or cfg.llm_model,
+            model_name=effective_model or getattr(llm, "model_name", None) or cfg.llm_model,
             enabled=bool(cfg.metering_enabled and cfg.database_url),
             # M-11: grava sob a origem real (a mesma chave do registro).
             origin=registry_origin,
@@ -474,35 +635,47 @@ def invoke_via_gateway(
         started_at = time.monotonic()
         try:
             result = build_and_invoke(llm)
-        except TRANSPORT_FAILURE_EXCEPTIONS as exc:
+        except Exception as exc:
+            # DA-68: classificar falha e aplicar política
+            try:
+                failure_class = classify_failure(exc)
+                policy = get_failure_policy(exc)
+            except ValueError:
+                # Falha não classificável -> tratada como transient
+                failure_class = FailureClass.TRANSIENT
+                policy = FAILURE_POLICIES[FailureClass.TRANSIENT]
+
             latency = time.monotonic() - started_at
-            circuit_breaker.record_failure(
-                provider,
-                cfg.llm_gateway_circuit_failure_threshold,
-                cfg.llm_gateway_circuit_cooldown_seconds,
-            )
-            CIRCUIT_BREAKER_STATE.labels(target=provider).set(
-                1
-                if circuit_breaker.is_open(provider, cfg.llm_gateway_circuit_cooldown_seconds)
-                else 0
-            )
-            # DA-30 — backoff exponencial com jitter antes de tentar o
-            # proximo provider. Evita bombardear um provider degradado
-            # com retentativas imediatas e reduz thundering herd em
-            # deploy multi-instancia (o jitter dispersa as janelas).
-            # base=0.0 desabilita (ex.: testes de velocidade).
+
+            # DA-68: abrir circuito se a política determinar
+            if policy.open_circuit:
+                circuit_breaker.record_failure(
+                    circuit_key,
+                    cfg.llm_gateway_circuit_failure_threshold,
+                    cfg.llm_gateway_circuit_cooldown_seconds,
+                )
+                CIRCUIT_BREAKER_STATE.labels(target=provider).set(
+                    1
+                    if circuit_breaker.is_open(
+                        circuit_key, cfg.llm_gateway_circuit_cooldown_seconds
+                    )
+                    else 0
+                )
+
+            # DA-68: backoff exponencial com jitter se a política determinar
             _backoff_base = cfg.llm_gateway_backoff_base_seconds
-            if _backoff_base > 0.0:
-                _attempt = circuit_breaker.consecutive_failures(provider)
+            if policy.backoff and _backoff_base > 0.0:
+                _attempt = circuit_breaker.consecutive_failures(circuit_key)
                 _raw_delay = _backoff_base * (2 ** min(_attempt - 1, 6))
                 _capped = min(_raw_delay, cfg.llm_gateway_backoff_max_seconds)
                 _jitter = _capped * random.uniform(-0.2, 0.2)
                 _delay = max(0.0, _capped + _jitter)
                 logger.debug(
-                    "AI Gateway backoff: provider=%s attempt=%d delay_s=%.2f",
+                    "AI Gateway backoff: provider=%s attempt=%d delay_s=%.2f failure_class=%s",
                     provider,
                     _attempt,
                     _delay,
+                    failure_class.name,
                 )
                 # LIMITACAO CONHECIDA: time.sleep() bloqueia a thread do
                 # uvicorn (FastAPI e WSGI por default, nao async). Para
@@ -514,41 +687,138 @@ def invoke_via_gateway(
                 # uvicorn --workers); para async completo, migrar
                 # invoke_via_gateway para async def + asyncio.sleep.
                 time.sleep(_delay)
+
             logger.warning(
                 "AI Gateway audit: provider=%s sensitivity=%s status=failure "
-                "latency_s=%.2f error=%s",
+                "failure_class=%s latency_s=%.2f error=%s",
                 provider,
                 sensitivity,
+                failure_class.name,
                 latency,
                 exc,
             )
             record_usage_observed(metering_cb, successful=False)
-            last_error = exc
-            continue
+
+            # DA-68: decidir se tenta o próximo provider (failover)
+            if policy.failover:
+                last_error = exc
+                continue
+            else:
+                # Não deve tentar outro provider -> parar o loop
+                raise
         else:
             latency = time.monotonic() - started_at
-            circuit_breaker.record_success(provider)
+            circuit_breaker.record_success(circuit_key)
             CIRCUIT_BREAKER_STATE.labels(target=provider).set(0)
             record_usage_observed(metering_cb, successful=True)
+            # DA-72: latencia por (origem, modelo) - base do score
+            _record_latency(registry_origin, effective_model, latency)
+            _LAST_SELECTION.set(
+                GatewaySelection(
+                    provider=provider, model_id=effective_model, origin=registry_origin
+                )
+            )
+
+            # DA-70: incrementar métricas FinOps
+            try:
+                # Contagem de chamadas LLM
+                observe_llm_request(provider=provider, model=effective_model or cfg.llm_model)
+
+                # Tokens e custo (se disponíveis)
+                if metering_cb and metering_cb.has_usage:
+                    observe_llm_tokens(
+                        provider=provider,
+                        model=effective_model or cfg.llm_model,
+                        input_tokens=metering_cb.tokens_in,
+                        output_tokens=metering_cb.tokens_out,
+                    )
+                    # Custo real (já calculado no record_usage_observed)
+                    actual_cost = metering_cb.cost_usd if hasattr(metering_cb, "cost_usd") else None
+                    if actual_cost is not None:
+                        observe_llm_cost(
+                            provider=provider,
+                            model=effective_model or cfg.llm_model,
+                            cost_usd=actual_cost,
+                        )
+            except Exception:
+                logger.debug("metricas FinOps nao registradas", exc_info=True)
+            # DA-67: registrar budget ledger (estimado × real)
+            actual_cost = None
+            if metering_cb and metering_cb.has_usage:
+                from app.admin.repository import record_budget_ledger
+
+                # Tokens reais capturados pelo callback
+                tokens_actual_in = metering_cb.tokens_in
+                tokens_actual_out = metering_cb.tokens_out
+                # Estimativa de tokens (prompt + completion)
+                tokens_estimated = request.context_tokens
+                # Estimativa de custo (já calculada no routing)
+                estimated_cost = candidate.estimated_cost_usd
+                # Custo real (já calculado no record_usage_observed)
+                # Precisamos recuperar o custo real do metering_cb
+                # Para isso, vamos calcular o custo real usando os tokens reais
+                from app.admin.metering import _cost_usd
+                from app.admin.repository import registry_prices
+
+                prices = (
+                    registry_prices(metering_cb.origin, metering_cb.model_name)
+                    if metering_cb.origin
+                    else None
+                )
+                actual_cost = _cost_usd(
+                    metering_cb.provider, tokens_actual_in, tokens_actual_out, prices
+                )
+                # Gravar ledger (best-effort, não bloqueia o diagnóstico)
+                record_budget_ledger(
+                    incident_id=state.get("incident_id"),
+                    origin=metering_cb.origin or provider,
+                    model_id=metering_cb.model_name,
+                    estimated_cost_usd=estimated_cost,
+                    actual_cost_usd=actual_cost,
+                    tokens_estimated=tokens_estimated,
+                    tokens_actual_in=tokens_actual_in,
+                    tokens_actual_out=tokens_actual_out,
+                )
+            # DA-67: debita do orcamento do diagnostico o custo REAL
+            # (metering) ou, sem ele, o estimado.
+            if task_budget is not None:
+                task_budget.charge(actual_cost if actual_cost is not None else estimated_cost)
             # Registra fallback quando o provider usado não é o primário
-            if provider != cfg.llm_provider and cfg.llm_provider:
+            if candidate.registry_id:
+                if first_allowed is not None and candidate is not first_allowed:
+                    LLM_FALLBACK_TOTAL.labels(
+                        primary_provider=first_allowed.provider,
+                        fallback_provider=provider,
+                    ).inc()
+            elif provider != cfg.llm_provider and cfg.llm_provider:
                 LLM_FALLBACK_TOTAL.labels(
                     primary_provider=cfg.llm_provider,
                     fallback_provider=provider,
                 ).inc()
-            logger.info(
-                "AI Gateway audit: provider=%s sensitivity=%s status=success "
-                "latency_s=%.2f estimated_cost_usd=%.4f",
-                provider,
-                sensitivity,
-                latency,
-                estimated_cost,
-            )
+            if actual_cost is not None:
+                logger.info(
+                    "AI Gateway audit: provider=%s sensitivity=%s status=success "
+                    "latency_s=%.2f estimated_cost_usd=%.4f actual_cost_usd=%.4f",
+                    provider,
+                    sensitivity,
+                    latency,
+                    estimated_cost,
+                    actual_cost,
+                )
+            else:
+                logger.info(
+                    "AI Gateway audit: provider=%s sensitivity=%s status=success "
+                    "latency_s=%.2f estimated_cost_usd=%.4f actual_cost_usd=unavailable",
+                    provider,
+                    sensitivity,
+                    latency,
+                    estimated_cost,
+                )
             return result, provider
 
     if isinstance(last_error, PolicyViolationError):
         raise last_error
     raise ConfigurationError(
-        f"AI Gateway: todos os providers permitidos pela policy ({allowed}) "
+        f"AI Gateway: todos os providers permitidos pela policy ({[c.provider for c in decision.candidates if c.allowed]}) "
         f"falharam ou foram rejeitados. Ultimo erro: {last_error}"
     )

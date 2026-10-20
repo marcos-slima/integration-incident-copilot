@@ -1,46 +1,43 @@
 {% extends "base.html" %}
-{% block title %}Fontes de busca web · Admin{% endblock %}
+{% block title %}{{ t('nav.webSearch') }} · Admin{% endblock %}
 {% block content %}
 <main>
-  <h2>Fontes de busca web aprovadas (DA-57)</h2>
+  <h2>{{ t('web.title') }}</h2>
   <p style="color: var(--text); margin-bottom: 1.5rem; line-height: 1.6;">
-    Uma linha por <code>interface_type</code>. É esta lista que monta a query de
-    busca web (termo técnico + filtro de site). A resolução é
-    <strong>fail-closed</strong>: conector <em>sem linha aqui</em> não tem busca
-    web — não existe filtro genérico em código.
+    {{ t_html('web.intro') }}
   </p>
 
   <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-      <h3 style="margin: 0; color: var(--text);">Fontes Aprovadas</h3>
-      <button class="btn btn-primary" data-click="loadSources">🔄 Recarregar</button>
+      <h3 style="margin: 0; color: var(--text);">{{ t('web.listTitle') }}</h3>
+      <button class="btn btn-primary" data-click="loadSources">🔄 {{ t('common.reload') }}</button>
     </div>
 
     <div style="overflow-x: auto;">
       <table id="sources">
         <thead>
           <tr>
-            <th style="width: 100px;">Interface</th>
-            <th style="min-width: 150px;">Termo técnico</th>
-            <th style="min-width: 200px;">Filtro site</th>
-            <th style="width: 80px;">Ativo</th>
-            <th style="min-width: 120px;">Notas</th>
-            <th style="width: 140px;">Ações</th>
+            <th style="width: 100px;">{{ t('common.interface') }}</th>
+            <th style="min-width: 150px;">{{ t('web.techTerm') }}</th>
+            <th style="min-width: 200px;">{{ t('web.siteFilter') }}</th>
+            <th style="width: 80px;">{{ t('common.activeCol') }}</th>
+            <th style="min-width: 120px;">{{ t('common.notes') }}</th>
+            <th style="width: 140px;">{{ t('common.actions') }}</th>
           </tr>
         </thead>
         <tbody id="sources-body">
-          <tr><td colspan="6" style="text-align: center; padding: 2rem;">Carregando...</td></tr>
+          <tr><td colspan="6" style="text-align: center; padding: 2rem;">{{ t('common.loading') }}</td></tr>
         </tbody>
       </table>
     </div>
   </div>
 
-  <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--text);">Nova Fonte</h3>
+  <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--text);">{{ t('web.newTitle') }}</h3>
   <div class="card">
     <form id="newsource" data-submit="addSource">
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
         <div class="form-group">
-          <label>Interface *</label>
+          <label>{{ t('web.fInterface') }}</label>
           <select name="interface_type">
             <option value="odata">odata</option>
             <option value="rfc">rfc</option>
@@ -55,45 +52,45 @@
           </select>
         </div>
         <div class="form-group">
-          <label>Termo técnico *</label>
-          <input name="tech_term" placeholder="Ex: OData SAP Gateway" required>
+          <label>{{ t('web.fTechTerm') }}</label>
+          <input name="tech_term" placeholder="{{ t('web.phTechTerm') }}" required>
         </div>
         <div class="form-group">
-          <label>Filtro site *</label>
-          <input name="site_filter" placeholder="Ex: site:help.sap.com OR site:community.sap.com" required>
+          <label>{{ t('web.fSiteFilter') }}</label>
+          <input name="site_filter" placeholder="{{ t('web.phSiteFilter') }}" required>
         </div>
         <div class="form-group">
-          <label>Notas</label>
-          <input name="notes" placeholder="Opcional">
+          <label>{{ t('common.notes') }}</label>
+          <input name="notes" placeholder="{{ t('common.optional') }}">
         </div>
       </div>
-      <button type="submit" class="btn btn-primary">➕ Adicionar fonte</button>
+      <button type="submit" class="btn btn-primary">➕ {{ t('web.add') }}</button>
     </form>
   </div>
 
-  <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--text);">Editar Fonte <span id="edit-id"></span></h3>
+  <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--text);">{{ t('web.editTitle') }} <span id="edit-id"></span></h3>
   <div class="card">
     <form id="edit-form" data-submit="saveEdit">
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
         <div class="form-group">
-          <label>Termo técnico</label>
-          <input name="tech_term" placeholder="Vazio mantém o atual">
+          <label>{{ t('web.techTerm') }}</label>
+          <input name="tech_term" placeholder="{{ t('web.phKeep') }}">
         </div>
         <div class="form-group">
-          <label>Filtro site</label>
-          <input name="site_filter" placeholder="Vazio mantém o atual">
+          <label>{{ t('web.siteFilter') }}</label>
+          <input name="site_filter" placeholder="{{ t('web.phKeep') }}">
         </div>
         <div class="form-group">
-          <label>Notas</label>
-          <input name="notes" placeholder="Vazio mantém as atuais">
+          <label>{{ t('common.notes') }}</label>
+          <input name="notes" placeholder="{{ t('web.phKeepNotes') }}">
         </div>
       </div>
       <div style="display: flex; gap: 0.5rem; align-items: center;">
-        <button type="submit" class="btn btn-primary">💾 Salvar</button>
-        <button type="button" data-click="cancelEdit" class="btn btn-secondary">✕ Cancelar</button>
+        <button type="submit" class="btn btn-primary">💾 {{ t('common.save') }}</button>
+        <button type="button" data-click="cancelEdit" class="btn btn-secondary">✕ {{ t('common.cancel') }}</button>
       </div>
       <p style="margin-top: 1rem; padding: 0.75rem; background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; color: #856404;">
-        <strong>Aviso:</strong> <code>interface_type</code> não é editável: trocar o conector de uma linha deixaria a linha antiga servindo o conector errado.
+        {{ t_html('web.editWarning') }}
       </p>
     </form>
   </div>

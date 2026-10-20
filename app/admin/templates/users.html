@@ -1,68 +1,66 @@
 {% extends "base.html" %}
-{% block title %}Usuários da UI · Admin{% endblock %}
+{% block title %}{{ t('nav.users') }} · Admin{% endblock %}
 {% block content %}
 <main>
-  <h2>Usuários da UI web (DA-55)</h2>
+  <h2>{{ t('users.title') }}</h2>
   <p style="color: var(--text); margin-bottom: 1.5rem; line-height: 1.6;">
-    Ativação em duas etapas: token por e-mail → código por telefone → login.
-    Sem SMTP/SMS configurados (<strong>out-of-band</strong>), o token/código aparece abaixo —
-    entregue ao usuário pelo canal que você controlar.
+    {{ t_html('users.intro') }}
   </p>
 
   <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-      <h3 style="margin: 0; color: var(--text);">Lista de Usuários</h3>
-      <button data-click="loadUsers" class="btn btn-primary">🔄 Recarregar</button>
+      <h3 style="margin: 0; color: var(--text);">{{ t('users.listTitle') }}</h3>
+      <button data-click="loadUsers" class="btn btn-primary">🔄 {{ t('common.reload') }}</button>
     </div>
 
     <div style="overflow-x: auto;">
       <table id="users">
         <thead>
           <tr>
-            <th style="width: 120px;">Usuário</th>
-            <th style="width: 200px;">E-mail</th>
-            <th style="width: 140px;">Telefone</th>
-            <th style="width: 100px;">Status</th>
-            <th style="width: 100px;">E-mail verif.</th>
-            <th style="width: 100px;">Telefone verif.</th>
-            <th style="width: 120px;">Criado por</th>
-            <th style="width: 120px;">Ações</th>
+            <th style="width: 120px;">{{ t('users.username') }}</th>
+            <th style="width: 200px;">{{ t('users.email') }}</th>
+            <th style="width: 140px;">{{ t('users.phone') }}</th>
+            <th style="width: 100px;">{{ t('common.status') }}</th>
+            <th style="width: 100px;">{{ t('users.emailVerified') }}</th>
+            <th style="width: 100px;">{{ t('users.phoneVerified') }}</th>
+            <th style="width: 120px;">{{ t('users.createdBy') }}</th>
+            <th style="width: 120px;">{{ t('common.actions') }}</th>
           </tr>
         </thead>
         <tbody id="users-body">
-          <tr><td colspan="8" style="text-align: center; padding: 2rem;">Carregando...</td></tr>
+          <tr><td colspan="8" style="text-align: center; padding: 2rem;">{{ t('common.loading') }}</td></tr>
         </tbody>
       </table>
     </div>
   </div>
 
-  <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--text);">Novo Usuário</h3>
+  <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--text);">{{ t('users.newTitle') }}</h3>
   <div class="card">
     <form id="newuser" data-submit="addUser">
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
         <div class="form-group">
-          <label>Usuário *</label>
-          <input name="username" placeholder="a-z, 0-9, . _ -" required>
+          <label>{{ t('users.fUsername') }}</label>
+          <input name="username" placeholder="a-z, 0-9, . _ -" required>{# i18n-ignore: formato aceito #}
         </div>
         <div class="form-group">
-          <label>E-mail *</label>
-          <input name="email" type="email" placeholder="example@domain.com" required>
+          <label>{{ t('users.fEmail') }}</label>
+          <input name="email" type="email" placeholder="example@domain.com" required>{# i18n-ignore: exemplo de formato #}
         </div>
         <div class="form-group">
-          <label>Telefone *</label>
+          <label>{{ t('users.fPhone') }}</label>
           <input name="phone" placeholder="+55 11 9..." required>
         </div>
         <div class="form-group">
-          <label>Senha inicial *</label>
-          <input name="password" type="password" placeholder="Mín. 10 caracteres" required>
+          <label>{{ t('users.fPassword') }}</label>
+          <input name="password" type="password" placeholder="{{ t('users.phPassword') }}" required>
         </div>
       </div>
-      <button type="submit" class="btn btn-primary">➕ Criar usuário</button>
+      <button type="submit" class="btn btn-primary">➕ {{ t('users.create') }}</button>
     </form>
   </div>
 
   <div class="card" style="display: none;" id="handoff-container">
-    <h3 style="margin-top: 0; color: var(--text);">Entrega Out-of-Band</h3>
+    <h3 style="margin-top: 0; color: var(--text);">{{ t('users.handoffTitle') }}</h3>
     <pre id="handoff" style="background: #1e293b; color: #f1f5f9; padding: 1rem; border-radius: 8px; overflow-x: auto; margin-bottom: 0;"></pre>
   </div>
 

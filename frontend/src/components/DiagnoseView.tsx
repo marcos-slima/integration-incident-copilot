@@ -370,6 +370,19 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
             <div className="section-label">{t('diagnose.rootCause')}</div>
             <p className="root-cause">{result.probable_root_cause}</p>
 
+            {result.explanation && (
+              <div className="explanation-section">
+                <div className="section-label">{t('diagnose.explanation')}</div>
+                <p className="explanation-text">{result.explanation}</p>
+              </div>
+            )}
+
+            {result.ai_warning && (
+              <p className="ai-warning" role="note">
+                {result.ai_warning}
+              </p>
+            )}
+
             <div className="section-label">{t('diagnose.nextSteps')}</div>
             <ol className="steps-list">
               {result.next_steps.map((step, i) => (

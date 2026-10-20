@@ -153,6 +153,13 @@ textarea.field-input{resize:vertical;line-height:1.6}
   letter-spacing:.06em;text-transform:uppercase;margin-bottom:9px
 }
 .root-cause{font-size:14px;line-height:1.7;color:#F8FAFC;margin-bottom:20px}
+.ai-warning{
+  font-size:11px;line-height:1.6;color:#FBBF24;
+  background:#FBBF240D;border:1px solid #FBBF2433;
+  border-radius:6px;padding:9px 12px;margin-bottom:20px
+}
+.explanation-section{margin-bottom:20px}
+.explanation-text{font-size:12px;line-height:1.7;color:#CBD5E1}
 .steps-list{list-style:none;display:flex;flex-direction:column;gap:6px;margin-bottom:20px}
 .step-item{
   display:flex;gap:10px;align-items:flex-start;

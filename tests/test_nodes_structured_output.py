@@ -67,7 +67,9 @@ def test_structured_response_used_directly_when_present(monkeypatch):
     result = sap_diagnosis_node(
         {
             "description": "IDoc travado",
-            "retrieved_context": [{"source": "idoc_status_51.md", "score": 0.0, "text": "t"}],
+            "retrieved_context": [
+                {"source": "idoc_status_51.md", "score": 0.0, "text": "t", "collection": "other"}
+            ],
         }
     )
 
@@ -173,7 +175,9 @@ def test_missing_structured_response_key_falls_back_to_regex(monkeypatch):
     result = sap_diagnosis_node(
         {
             "description": "IDoc travado",
-            "retrieved_context": [{"source": "doc.md", "score": 0.0, "text": "t"}],
+            "retrieved_context": [
+                {"source": "doc.md", "score": 0.0, "text": "t", "collection": "other"}
+            ],
         }
     )
 

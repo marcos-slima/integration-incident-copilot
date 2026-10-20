@@ -3247,26 +3247,27 @@ Na mesma investigação apareceram dois defeitos do rule engine: (1) a regra do 
 
 **A solução.** Interrupt no node de diagnóstico (`_run_diagnosis_agent`), com checkpointing (DA-69) para retomada:
 
-- **Interrupt no node:** `_run_diagnosis_agent` verifica `escalation.should_escalate` **antes** de chamar o LLM. Quando verdadeiro, grava `hitl_request` no estado e **não chama o LLM**. O estado é persistido no checkpoint.
-- **Endpoint de revisão:** `POST /incidents/{id}/review` recupera o checkpoint, atualiza `hitl_response` com a decisão do operador (`approve`/`edit`/`reject`) e resume o grafo com `invoke(new_state, thread_id)`.
-- **Report especial:** `report_node` verifica `hitl_request` e devolve `report_markdown` indicando que o diagnóstico está pendente de aprovação humana.
+- **Interrupt no node:** `_run_diagnosis_agent` verifica `escalation.should_escalate` **antes** de chamar o LLM. Quando verdadeiro, chama `interrupt(hitl_request)`; o payload fica no checkpoint e **o LLM não é chamado**. Sem checkpointer (`CHECKPOINTING_ENABLED=false`), o node devolve `hitl_request` no topo do estado e o diagnóstico fica pendente, sem retomada.
+- **Endpoint de revisão:** `POST /incidents/{id}/review` recupera o checkpoint com `graph.get_state(thread_id)`, valida que há um `interrupt` pendente e retoma o grafo com `Command(resume={"action": ..., "edited_cause": ..., "reviewed_by": ..., "reviewed_at": ...})`.
+- **Report especial:** `report_node` verifica `hitl_request` **sem** `hitl_response` e devolve `report_markdown` indicando que o diagnóstico está pendente de aprovação humana; depois da retomada, renderiza o relatório final.
 - **Modelo de requisição:** `ReviewIncidentRequest` com `action` (`approve`/`edit`/`reject`), `edit` (nova causa raiz quando `action='edit'`) e `reviewed_by` (`human`/`system`).
 
 **Implementação.**
-- `app/agent/nodes.py::_run_diagnosis_agent`: verifica `escalation.should_escalate` antes de chamar LLM; grava `hitl_request` com `incident_id`, `escalation.as_log_fields()`, `prompt` e `locale`.
-- `app/agent/nodes.py::report_node`: verifica `hitl_request` e devolve `report_markdown` com `content_text(locale, "report.hitlPending")`.
-- `app/main.py::review_incident_endpoint`: endpoint `POST /incidents/{id}/review` com rate limit 10/min; usa `PostgresSaver` para recuperar checkpoint; atualiza `hitl_response` e resume grafo.
+- `app/agent/nodes.py::_run_diagnosis_agent`: verifica `escalation.should_escalate` antes de chamar LLM; com `hitl_interrupt_enabled` chama `interrupt()` com `incident_id`, `escalation.as_log_fields()`, `prompt`, `locale`, `probable_root_cause`, `matched_source` e `evidence_strength`. A retomada reentra no node, consome o `Command(resume=...)` e aplica approve/edit/reject sem chamar o LLM.
+- `app/agent/nodes.py::_wrap_diagnosis_result`: promove `hitl_request`/`hitl_response` ao TOPO do `CopilotState` (antes ficavam aninhados em `diagnosis` e o `report_node` nunca os via).
+- `app/agent/nodes.py::report_node`: devolve o relatório pendente somente quando há `hitl_request` e ainda não há `hitl_response`.
+- `app/main.py::review_incident_endpoint`: valida `CHECKPOINTING_ENABLED`, usa `graph.get_state()`/`snapshot.interrupts` e retoma com `Command(resume=...)` — sem abrir uma conexão `psycopg` própria por requisição.
 - `app/models/models.py::ReviewIncidentRequest`: modelo Pydantic com `action`, `edit` e `reviewed_by`.
 
 **Validação.**
-- `tests/test_hitl.py` (novo): testes de interrupt, endpoint de revisão e retomada.
+- `tests/test_hitl.py` (novo): escalonamento antes do LLM, `hitl_request` no topo, `interrupt()`/`Command(resume=...)`, endpoint de revisão e ausência de chamada ao LLM.
 - Quality gate: `da_registered` e `docs_code_references` validam a DA.
 
 **Limitações (registradas de propósito).**
-- O interrupt **não chama o LLM** quando `escalation.should_escalate == True`. O diagnóstico é baseado apenas em `evidence_strength`, `matched_source` e `rerank_score_calibrated`.
-- A retomada **reexecuta o grafo completo** com o novo estado. Não há continuação parcial (LangGraph v1.2.12 não tem `interrupt()` nativo).
-- O `hitl_request` é gravado no checkpoint, não na tabela `incidents`. A tabela só recebe o resultado final após a retomada.
+- No caminho com checkpointer, o `hitl_request` fica no payload do `interrupt` até a retomada; depois dela, `hitl_request` e `hitl_response` ficam no estado. O `report_markdown` pendente é montado por `run_diagnosis` a partir do payload.
+- O `hitl_request` não é gravado na tabela `incidents`. A tabela só recebe o resultado final (pendente ou revisado).
 - O endpoint `/incidents/{id}/review` usa o mesmo `thread_id` (incident_id) do checkpoint. Não há suporte para retomada com novo `incident_id`.
+- Com `CHECKPOINTING_ENABLED=false` não há `interrupt()`: o diagnóstico fica pendente e o endpoint devolve 400, porque não existe checkpoint para retomar.
 
 **Próximos passos.**
 - DA-76 implementada → ver §71 abaixo (aviso de IA, não escalonamento tier 3).

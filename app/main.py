@@ -945,74 +945,60 @@ def review_incident_endpoint(
     """DA-75: revisao humana de diagnostico interrompido por escalonamento.
 
     Quando o sinal de escalonamento (escalation.should_escalate) pede revisao,
-    o grafo pausa e grava hitl_request no checkpoint. Este endpoint permite
-    ao usuario aprovar, editar ou rejeitar o diagnostico e retomar o grafo.
+    o node de diagnostico chama interrupt() e o grafo pausa. Este endpoint
+    recupera o checkpoint, valida que ha um interrupt pendente e retoma o
+    grafo com Command(resume=...), sem reexecutar connector/RAG/LLM.
 
-    Efeitos:
-    - Recupera o checkpoint interrompido via get_state(thread_id)
-    - Atualiza hitl_response com a resposta humana
-    - Resume o grafo com invoke(new_state, thread_id)
-
-    404 se o incidente nao estiver em estado de revisao (hitl_request ausente)
-    400 se o incidente ja foi revisado ou nunca foi interrompido
+    404 se o incidente nao tem checkpoint.
+    400 se nao ha interrupt pendente (nunca interrompido ou ja revisado).
     """
-    from psycopg import Connection
-    from psycopg.rows import dict_row
+    from langgraph.types import Command
 
-    from app.agent.checkpointing import libpq_url
     from app.agent.graph import get_graph
 
-    # Recupera o checkpointer (mesmo usado no grafo)
-    if not settings.database_url:
+    if not settings.checkpointing_enabled:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="CHECKPOINTING_ENABLED=true exige DATABASE_URL configurada",
+            detail="DA-75 exige CHECKPOINTING_ENABLED=true para retomar o grafo",
+        )
+    if body.action == "edit" and not (body.edit or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="action='edit' exige o campo edit com a nova causa raiz",
         )
 
-    conn = Connection.connect(
-        libpq_url(settings.database_url),
-        autocommit=True,
-        prepare_threshold=0,
-        row_factory=dict_row,
-    )
-
-    from langgraph.checkpoint.postgres import PostgresSaver
-
-    checkpointer = PostgresSaver(conn)
-    checkpointer.setup()
+    graph = get_graph()
+    if getattr(graph, "checkpointer", None) is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Checkpointer indisponivel - nao ha diagnostico pausado",
+        )
 
     thread_id = {"configurable": {"thread_id": incident_id}}
-
-    # Recupera o checkpoint
-    checkpoint = checkpointer.get_tuple(thread_id)
-    if not checkpoint or not checkpoint.checkpoint:
+    snapshot = graph.get_state(thread_id)
+    if not snapshot.values:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Incidente '{incident_id}' nao encontrado no checkpoint",
         )
-
-    # Verifica se hitl_request existe no checkpoint
-    checkpoint_values = checkpoint.checkpoint.get("channel_values", {})
-    hitl_request = checkpoint_values.get("hitl_request")
-    if not hitl_request:
+    if not snapshot.interrupts:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Incidente nao esta em estado de revisao (hitl_request ausente)",
+            detail="Incidente nao esta em estado de revisao (nenhum interrupt pendente)",
         )
 
-    # Atualiza o estado com a resposta humana
-    new_state = checkpoint_values.copy()
-    new_state["hitl_response"] = {
-        "action": body.action,
-        "edited_cause": body.edit if body.action == "edit" else None,
-        "reviewed_by": body.reviewed_by,
-        "reviewed_at": datetime.now(UTC).isoformat(),
-    }
+    graph.invoke(
+        Command(
+            resume={
+                "action": body.action,
+                "edited_cause": body.edit if body.action == "edit" else None,
+                "reviewed_by": body.reviewed_by,
+                "reviewed_at": datetime.now(UTC).isoformat(),
+            }
+        ),
+        thread_id,
+    )
 
-    # Resume o grafo com o novo estado
-    get_graph().invoke(new_state, thread_id)
-
-    # Retorna o resultado final
     return {
         "incident_id": incident_id,
         "status": "reviewed",

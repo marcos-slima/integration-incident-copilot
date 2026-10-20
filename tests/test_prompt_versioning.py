@@ -50,7 +50,7 @@ BASE_STATE: dict[str, Any] = {
     "interface_type": "odata",
     "identifier": "I_Message/001",
     "retrieved_context": [
-        {"source": "cpi_http_401.md", "text": "conteudo", "score": 0.9},
+        {"source": "cpi_http_401.md", "text": "conteudo", "score": 0.9, "collection": "other"},
         {"source": "b.md", "text": "outro", "score": 0.5},
     ],
     "graph_history": [],

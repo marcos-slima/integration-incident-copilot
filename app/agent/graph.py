@@ -40,6 +40,7 @@ from app.agent.state import CopilotState
 from app.agent.supervisor import supervisor_node
 from app.config import settings
 from app.exceptions import DiagnosisOverloadedError, DiagnosisTimeoutError
+from app.i18n.content import content_text
 from app.models import DEFAULT_DIAGNOSIS_LOCALE, DiagnosisResponse, IncidentRequest
 
 _logger = logging.getLogger(__name__)
@@ -267,6 +268,10 @@ def run_diagnosis(
         "llm_model": llm_model or settings.llm_model,
         "debug": debug,
         "incident_id": incident_id,
+        # DA-75: so usa interrupt() quando o grafo foi compilado com
+        # checkpointer (settings.checkpointing_enabled). Sem isso, o node
+        # devolve hitl_request no estado e o diagnostico fica pendente.
+        "hitl_interrupt_enabled": settings.checkpointing_enabled,
     }
     started_at = time.monotonic()
     # DA-69: thread_id para checkpointing (usa incident_id para unicidade)
@@ -291,6 +296,38 @@ def run_diagnosis(
         if spent is not None:
             _logger.info("[budget] %s", spent.as_log_fields())
     latency_ms = int((time.monotonic() - started_at) * 1000)
+
+    # DA-75: quando o node de diagnostico chama interrupt(), o invoke
+    # devolve os valores do checkpoint + __interrupt__ e o node NAO
+    # retorna - portanto nao ha `diagnosis` nem `report_markdown` no
+    # state. Monta a resposta pendente a partir do payload do interrupt
+    # (nenhuma chamada ao LLM aconteceu).
+    interrupts = final_state.get("__interrupt__") or ()
+    if interrupts:
+        payload = getattr(interrupts[0], "value", None) or {}
+        locale = final_state.get("locale") or DEFAULT_DIAGNOSIS_LOCALE
+        pending_diagnosis = {
+            "probable_root_cause": payload.get("probable_root_cause")
+            or content_text(
+                locale,
+                "diagnosis.hitlPendingCause",
+                source=payload.get("matched_source")
+                or content_text(locale, "report.noMatchedSource"),
+            ),
+            "model_confidence": 0.0,
+            "diagnosis_confidence": 0.0,
+            "next_steps": [content_text(locale, "diagnosis.hitlPendingStep")],
+            "matched_source": payload.get("matched_source"),
+            "evidence_strength": payload.get("evidence_strength", 0.0),
+            "prompt_digest": None,
+            "prompt_version": None,
+            "llm_model": final_state.get("llm_model"),
+        }
+        final_state = {
+            **final_state,
+            "diagnosis": pending_diagnosis,
+            "report_markdown": content_text(locale, "report.hitlPending"),
+        }
     diagnosis = final_state.get("diagnosis", {})
 
     # Avaliacao externa (medio prazo, item 5): captura o trace_id do
@@ -351,6 +388,15 @@ def run_diagnosis(
         trace_id=trace_id,
         escalation=escalation,
         locale=final_state.get("locale") or DEFAULT_DIAGNOSIS_LOCALE,
+        # DA-83: report_node grava a explicacao XAI no state; sem isso o
+        # campo existia no modelo mas nunca era preenchido na resposta.
+        explanation=final_state.get("explanation"),
+        # DA-76: aviso obrigatorio em todo diagnostico, no idioma do
+        # conteudo (pt-BR/en). Antes vivia em VerifyIncidentRequest, onde
+        # nunca era lido.
+        ai_warning=content_text(
+            final_state.get("locale") or DEFAULT_DIAGNOSIS_LOCALE, "ai_warning"
+        ),
     )
     # M-14: metricas de negocio (antes nunca incrementadas).
     from app.llm.gateway import classify_sensitivity

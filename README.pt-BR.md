@@ -9,6 +9,8 @@
 
 [English](README.md) · Português (Brasil)
 
+English translation of the documentation is available in `docs/en/` for the most important documents (getting started, user guide, connectors, architecture, quality gates). Study/reference material remains in Portuguese only.
+
 Um IDoc travado em status 51, um token OAuth que expirou num iFlow do CPI, um
 chamado do ServiceNow sobre uma sincronização do Salesforce que falhou: o
 Copilot lê o incidente, busca os fatos no sistema de origem, consulta a base
@@ -42,7 +44,7 @@ confidencial pode ir. A comparação de custo está em
 | **Multiagente com roteamento determinístico** | Um supervisor encaminha cada incidente para um especialista SAP, SaaS ou genérico com código, não com LLM. |
 | **Feito para outros agentes** | REST, **MCP** (Streamable HTTP), **A2A 0.3** (JSON-RPC 2.0) e **CloudEvents 1.0** (webhook e AMQP 1.0 para SAP Event Mesh / Solace) executam o mesmo pipeline. |
 | **Detecção de drift de contrato** | Observa o `$metadata` OData, classifica a mudança como breaking ou aditiva e abre incidente antes que o consumidor quebre em produção. |
-| **Medido e com gates** | A qualidade da busca roda no CI contra um conjunto de avaliação versionado; 20 quality gates conferem o que a documentação afirma, e os diagramas de arquitetura são gerados do código ou testados contra ele. |
+| **Medido e com gates** | A qualidade da busca roda no CI contra um conjunto de avaliação versionado; 23 quality gates conferem o que a documentação afirma, e os diagramas de arquitetura são gerados do código ou testados contra ele. |
 
 ## Arquitetura
 
@@ -194,8 +196,8 @@ Variáveis, identificadores de demonstração e como adicionar um conector:
 
 | O quê | Resultado | Onde |
 |---|---|---|
-| Busca no conjunto de avaliação versionado (18 consultas no escopo, 10 fora) | Hit@1 94,4 %, Hit@3 100 %, MRR 0,972; 9 de 10 consultas fora de escopo rejeitadas | job de CI `rag-quality` |
-| Quality gates | 20 verificações determinísticas: dataset, invariante do reranker, digest do prompt contra o prompt medido, links, símbolos e variáveis de ambiente da documentação, alcance dos conectores | job de CI `deterministic` |
+| Busca no conjunto de avaliação versionado (90 consultas no escopo, 20 fora) | Hit@1 95,6 % (86/90, IC95% 89,1–98,3 %), Hit@3 97,8 %, MRR 0,967; 19 de 20 consultas fora de escopo rejeitadas | `scripts/eval_rag.py`, fastembed, execução local em 2026-10-18; o job de CI `rag-quality` re-mede |
+| Quality gates | 22 verificações determinísticas: dataset, invariante do reranker, digest do prompt contra o prompt medido, links, símbolos e variáveis de ambiente da documentação, alcance dos conectores, i18n das UIs e do conteúdo | job de CI `deterministic` |
 | Banco de dados | migrations aplicadas e conferidas; as 45 consultas dos dashboards e os testes ponta a ponta de drift de contrato rodam contra PostgreSQL real | job de CI `migrations_and_dashboards` |
 | Casos de uso | nove cenários com os números medidos por testes | [`docs/CASOS_DE_USO.md`](docs/CASOS_DE_USO.md) |
 
@@ -210,10 +212,9 @@ O projeto está em desenvolvimento ativo. Em outubro de 2026 passou por uma
 auditoria completa, seguida de correções verificadas, e estes limites
 continuam em aberto:
 
-- **Kyma:** os manifests de `deploy/kyma/` nunca foram aplicados num cluster real.
+- **Kyma gerenciado:** os manifests de `deploy/kyma/` foram validados num Kubernetes real (k3d, overlay `deploy/local`, ver `docs/EVIDENCIA_K3D_2026-10-18.md`); falta o que é específico do Kyma: `APIRule`, Istio e OIDC do BTP.
 - **Conectores:** seis dos dez não foram validados contra instância real (tabela acima).
 - **Queda do banco vetorial:** com o Qdrant fora do ar, o `/diagnose` responde 500 mesmo quando uma regra resolveria.
-- **Brecha de prompt injection:** o resultado da busca web devolvido ao agente ReAct ainda não é sanitizado.
 
 Cada um está documentado em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
@@ -221,7 +222,10 @@ Cada um está documentado em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 | Se você quer… | Leia |
 |---|---|
+| Avaliar o produto em ~30 minutos | [Roteiro de avaliação](docs/ROTEIRO_DE_AVALIACAO.md) |
 | Rodar pela primeira vez | [Primeiros passos](docs/GETTING_STARTED.md) → [Guia de uso](docs/USER_GUIDE.md) |
+| Implantar (local, container, Kubernetes, Kyma, on-premise) | [Implantação](docs/DEPLOYMENT.md) → [Tutorial k3d](docs/TUTORIAL_K3D_KUBERNETES_LOCAL.md) |
+| Adaptar às suas necessidades | [Customização](docs/CUSTOMIZACAO.md) |
 | Ver como funciona, com diagramas | [Arquitetura](docs/ARCHITECTURE.md) |
 | Entender *por que* foi feito assim | [Decisões de arquitetura](docs/DECISOES_DE_ARQUITETURA.md) (50 decisões registradas) |
 | Acompanhar cenários reais de ponta a ponta | [Casos de uso](docs/CASOS_DE_USO.md) |

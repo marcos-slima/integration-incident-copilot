@@ -55,8 +55,13 @@ def build_incident_row(
     response: DiagnosisResponse,
     final_state: dict[str, Any],
     latency_ms: int,
+    budget: Any | None = None,
 ) -> dict[str, Any]:
-    """Monta as colunas do registro - funcao pura, testavel sem banco."""
+    """Monta as colunas do registro - funcao pura, testavel sem banco.
+
+    `budget`: o TaskBudget fechado do diagnostico (DA-67,
+    app/llm/budget.py::close_task_budget). None = sem orcamento aberto ->
+    custo desconhecido, nao zero."""
     from app.llm.gateway import classify_sensitivity
 
     connector = final_state.get("connector_data")
@@ -98,6 +103,12 @@ def build_incident_row(
         "llm_model": response.llm_model,
         "prompt_version": response.prompt_version,
         "prompt_digest": response.prompt_digest,
+        # DA-44 / DA-67 (migration 019)
+        "should_escalate": (response.escalation or {}).get("should_escalate"),
+        "escalation_reason": (response.escalation or {}).get("escalation"),
+        "cost_usd": round(budget.spent_usd, 6) if budget is not None else None,
+        "llm_calls": budget.calls if budget is not None else None,
+        "locale": response.locale,  # DA-74 (migration 021)
         # DA-60: redigido e cifrado (app/admin/crypto.py::encrypt_evidence)
         "evidence_json": encrypt_evidence(
             [e.model_dump(mode="json") for e in response.evidence] or None

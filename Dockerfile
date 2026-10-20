@@ -120,6 +120,12 @@ COPY --chown=appuser:appuser scripts/ scripts/
 COPY --chown=appuser:appuser alembic/ alembic/
 COPY --chown=appuser:appuser alembic.ini ./
 
+# /app/data precisa ser do appuser: o ingest grava ali o estado
+# (.ingest_state_*.json) e o manifesto do indice (index_manifest.json).
+# Sem isto o COPY abaixo cria /app/data como root e `python -m
+# app.rag.ingest` dentro do Pod falha com PermissionError (achado na
+# validacao em k3d, cenario G).
+RUN install -d -o appuser -g appuser /app/data
 COPY --chown=appuser:appuser data/sample_docs/ data/sample_docs/
 # DA-63: skills declarativas (roteamento do supervisor + Capability Registry).
 # Sem elas o supervisor nao sobe (indice de dominios vazio).

@@ -187,15 +187,16 @@ def check_key(
     conta a falha quando a chave nao confere."""
     import secrets as _secrets
 
-    from fastapi import HTTPException, status
+    from app.api_errors import api_error
 
     ip = request.client.host if request is not None and request.client else None
     if too_many_failures(scope, ip):
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="muitas tentativas de autenticacao invalidas; aguarde um minuto",
+        raise api_error(
+            429,
+            "too_many_attempts",
+            "muitas tentativas de autenticacao invalidas; aguarde um minuto",
             headers={"Retry-After": str(_WINDOW_SECONDS)},
         )
     if not _secrets.compare_digest(provided or "", configured or ""):
         register_failure(scope, ip)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail)
+        raise api_error(401, "invalid_key", detail)

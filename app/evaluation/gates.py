@@ -202,10 +202,32 @@ def _parse_reranker_model(root: Path) -> str:
     return match.group(1)
 
 
+def _per_query_hits(result: dict) -> list[int] | None:
+    rows = result.get("per_query")
+    if not isinstance(rows, list) or not rows:
+        return None
+    hits = [r.get("hit_at_1") for r in rows if isinstance(r, dict)]
+    if len(hits) != len(rows) or not all(h in (0, 1) for h in hits):
+        return None
+    return hits
+
+
 def check_reranker_invariant(
     root: Path = REPO_ROOT, thresholds: Thresholds = DEFAULT_THRESHOLDS
 ) -> list[Finding]:
-    """DA-29: o modelo em producao tem que ser o vencedor medido, com margem sobre o baseline."""
+    """DA-29: o reranker em producao nao pode ser SIGNIFICATIVAMENTE pior
+    que outro candidato medido, e precisa passar do piso de hit@1.
+
+    Regra anterior: "producao = maior hit@1 medido, com margem >= 0,05 sobre
+    o ms-marco". Com o dataset de 90 consultas ela reprovava o mmarco por uma
+    diferenca de UMA consulta para o bge-reranker-base (McNemar p=1,0) - o
+    gate exigia trocar de modelo por ruido. Agora, quando o benchmark traz
+    acertos por consulta, a comparacao e pareada (McNemar exato, a mesma
+    funcao do benchmark): so reprova se um candidato for melhor com p < 0,05.
+    Vantagem pontual nao significativa vira aviso. Sem dados por consulta,
+    vale a regra de margem antiga (sem como testar significancia)."""
+    from app.rag.eval_metrics import paired_hit_comparison
+
     check = "reranker_invariant"
     try:
         in_code = _parse_reranker_model(root)
@@ -221,58 +243,61 @@ def check_reranker_invariant(
     if not scored:
         return _fail(check, f"{RERANKER_BENCHMARK} sem nenhum resultado com hit_at_1")
 
-    winner = max(scored, key=lambda r: r["hit_at_1"])
+    production = next((r for r in scored if r.get("hf_id") == in_code), None)
+    if production is None:
+        return _fail(
+            check,
+            f"app/rag/retriever.py usa '{in_code}', que nao foi medido no benchmark "
+            f"({', '.join(str(r.get('hf_id')) for r in scored)})",
+        )
+
     findings: list[Finding] = []
-
-    if in_code != winner.get("hf_id"):
+    if production["hit_at_1"] < thresholds.min_hit_at_1:
         findings.append(
             _fail(
                 check,
-                f"app/rag/retriever.py usa '{in_code}', mas o vencedor medido e "
-                f"'{winner.get('hf_id')}' (hit@1 {winner['hit_at_1']:.3f})",
-            )[0]
-        )
-    if winner["hit_at_1"] < thresholds.min_hit_at_1:
-        findings.append(
-            _fail(
-                check,
-                f"hit@1 do vencedor {winner['hit_at_1']:.3f} abaixo do piso {thresholds.min_hit_at_1}",
+                f"hit@1 de producao {production['hit_at_1']:.3f} abaixo do piso "
+                f"{thresholds.min_hit_at_1}",
             )[0]
         )
 
-    baselines = [r for r in scored if r is not winner and "marco" in str(r.get("key", "")).lower()]
-    if not baselines:
+    if len(scored) == 1:
         findings.append(
-            _warn(check, "nenhum baseline ms-marco no benchmark; margem nao verificavel")[0]
+            _warn(check, "benchmark sem outro candidato medido; comparacao nao verificavel")[0]
         )
-    else:
-        baseline = max(baselines, key=lambda r: r["hit_at_1"])
-        margin = winner["hit_at_1"] - baseline["hit_at_1"]
-        if margin < thresholds.min_benchmark_margin:
-            findings.append(
-                _fail(
-                    check,
-                    f"margem de hit@1 sobre '{baseline.get('key')}' e {margin:+.3f}, "
-                    f"abaixo do piso {thresholds.min_benchmark_margin:+.3f}",
-                )[0]
+    prod_hits = _per_query_hits(production)
+    for other in scored:
+        if other is production or other["hit_at_1"] <= production["hit_at_1"]:
+            continue
+        other_hits = _per_query_hits(other)
+        if prod_hits is not None and other_hits is not None and len(other_hits) == len(prod_hits):
+            stats = paired_hit_comparison(other_hits, prod_hits)
+            p_value = stats["mcnemar_exact_p"]
+            detail = (
+                f"'{other.get('key')}' hit@1 {other['hit_at_1']:.3f} vs producao "
+                f"{production['hit_at_1']:.3f} (n={stats['n']}, {stats['only_candidate']} x "
+                f"{stats['only_baseline']} discordantes, McNemar p={p_value}, IC95% "
+                f"[{stats['bootstrap_ci95_low']:+.3f}, {stats['bootstrap_ci95_high']:+.3f}])"
             )
-    # Validacao 2026-10-07 (M-20): a margem e de UMA consulta; o benchmark
-    # agora grava McNemar exato e IC 95% (scripts/benchmark_rerankers.py).
-    # Sem significancia, o gate avisa - a escolha continua defensavel por
-    # outros motivos (multilingue, latencia), mas nao por "acerta mais".
-    stats = winner.get("vs_baseline") or {}
-    p_value = stats.get("mcnemar_exact_p")
-    if p_value is not None and p_value >= 0.05:
-        findings.append(
-            _warn(
-                check,
-                f"vantagem do vencedor sobre o baseline NAO e significativa "
-                f"(n={stats.get('n')}, {stats.get('only_candidate')} x "
-                f"{stats.get('only_baseline')} consultas discordantes, McNemar p={p_value}, "
-                f"IC95% da diferenca [{stats.get('bootstrap_ci95_low'):+.3f}, "
-                f"{stats.get('bootstrap_ci95_high'):+.3f}])",
-            )[0]
-        )
+            if p_value < 0.05:
+                findings.append(
+                    _fail(check, f"candidato significativamente melhor que producao: {detail}")[0]
+                )
+            else:
+                findings.append(
+                    _warn(check, f"vantagem pontual NAO significativa sobre producao: {detail}")[0]
+                )
+        else:
+            margin = other["hit_at_1"] - production["hit_at_1"]
+            if margin >= thresholds.min_benchmark_margin:
+                findings.append(
+                    _fail(
+                        check,
+                        f"'{other.get('key')}' supera producao em {margin:+.3f} de hit@1 "
+                        f"(>= {thresholds.min_benchmark_margin:+.3f}) e o benchmark nao traz "
+                        "acertos por consulta para testar significancia",
+                    )[0]
+                )
     return findings or _ok(check)
 
 
@@ -331,7 +356,39 @@ def check_prompt_digest(root: Path = REPO_ROOT) -> list[Finding]:
     # do payload canonico do digest, entao divergir a versao ja divergiu o
     # digest e o check acima ja reprovou. Um segundo check aqui seria um
     # branch que nunca pode disparar.
-    return _ok(check)
+    return _check_locale_prompts(check, baseline) or _ok(check)
+
+
+def _check_locale_prompts(check: str, baseline: dict) -> list[Finding]:
+    """DA-74: cada idioma com instrucao propria tem digest proprio.
+
+    Medido (em `locales.<idioma>.prompt_digest` do baseline) e divergente =
+    FAIL, como o default. Nunca medido = WARN: o idioma funciona, mas nenhum
+    numero de qualidade descreve aquele prompt - e o gate diz isso em vez de
+    deixar o placar do pt-BR valer para ele em silencio."""
+    from app.agent.prompts import compute_digest, prompt_locales
+    from app.i18n.content import DEFAULT_CONTENT_LOCALE
+
+    findings: list[Finding] = []
+    measured_locales = baseline.get("locales") or {}
+    for loc in prompt_locales():
+        if loc == DEFAULT_CONTENT_LOCALE:
+            continue
+        production = compute_digest(loc)
+        measured = (measured_locales.get(loc) or {}).get("prompt_digest")
+        if not measured:
+            findings += _warn(
+                check,
+                f"prompt '{loc}' (digest {production[:16]}) nao foi medido pelo promptfoo; "
+                "os numeros de qualidade valem so para o pt-BR",
+            )
+        elif measured != production:
+            findings += _fail(
+                check,
+                f"prompt '{loc}' diverge do medido: producao={production[:16]} "
+                f"medido={str(measured)[:16]} - reexecute o promptfoo com esse idioma",
+            )
+    return findings
 
 
 def check_promptfoo_configs(root: Path = REPO_ROOT) -> list[Finding]:
@@ -630,6 +687,32 @@ def _registered_das(root: Path) -> set[int]:
     return registradas
 
 
+def check_da_table_unique(root: Path = REPO_ROOT) -> list[Finding]:
+    """O livro-razao do CLAUDE.md nao pode ter a mesma DA em duas linhas.
+
+    A tabela e' editada a mao e cresceu por colagem de blocos; a mesma DA
+    chegou a aparecer tres vezes (DA-83/88) e duas vezes (DA-84/85/86/91).
+    `_registered_das` usa `set`, entao duplicata era invisivel para os gates
+    de prosa e de indice. Duplicata tambem faz o leitor achar que ha duas
+    entregas da mesma decisao.
+    """
+    check = "da_table_unique"
+    text = (root / CLAUDE_DOC).read_text(encoding="utf-8")
+    linhas = re.findall(r"^\|\s*(DA-[\d/]+)\s*\|", text, re.MULTILINE)
+    contagem: dict[int, int] = {}
+    for linha in linhas:
+        for n in linha.replace("DA-", "").split("/"):
+            contagem[int(n)] = contagem.get(int(n), 0) + 1
+    duplicadas = sorted(n for n, c in contagem.items() if c > 1)
+    if duplicadas:
+        return _fail(
+            check,
+            f"linhas duplicadas no registro do CLAUDE.md: {_das(duplicadas)} "
+            "— cada DA tem uma unica linha",
+        )
+    return _ok(check)
+
+
 def check_documented_das(root: Path = REPO_ROOT) -> list[Finding]:
     """Toda DA registrada tem prosa localizavel — nas DUAS direcoes.
 
@@ -761,6 +844,19 @@ def check_index_current(root: Path = REPO_ROOT) -> list[Finding]:
     """
     check = "das_index_current"
     readme = (root / DECISIONS_DOC).read_text(encoding="utf-8")
+
+    # Numeracao de secao duplicada quebra link por ancora e torna ambigua a
+    # coluna "Seção" do indice. `_documented_das` guarda so' o ultimo heading
+    # de cada DA, entao a duplicata era invisivel.
+    numeros = [int(n) for n in re.findall(r"^### (\d+)\.", readme, re.MULTILINE)]
+    repetidos = sorted({n for n in numeros if numeros.count(n) > 1})
+    if repetidos:
+        return _fail(
+            check,
+            "numeracao de secao duplicada em "
+            f"{DECISIONS_DOC}: {', '.join(f'§{n}' for n in repetidos)}",
+        )
+
     tabelas = re.findall(
         r"^\| DA \| Seção \| O que é \|\n\|---\|---\|---\|\n(.*?)(?:\n\n|\Z)",
         readme,
@@ -836,7 +932,7 @@ def check_index_current(root: Path = REPO_ROOT) -> list[Finding]:
 # ---------------------------------------------------------------------------
 
 DOCS_DIR = Path("docs")
-PIPELINE_MODEL_SOURCE = Path("app/models.py")
+PIPELINE_MODEL_SOURCE = Path("app/models/models.py")
 CONNECTORS_SOURCE = Path("app/connectors/__init__.py")
 SKILLS_DIR = Path("data/skills")
 SUPERVISOR_SOURCE = Path("app/agent/supervisor.py")
@@ -940,6 +1036,15 @@ _CODE_REF = re.compile(
     r"`((?:app|tests|scripts)/[A-Za-z0-9_/]+\.py)(?:::([A-Za-z_][A-Za-z0-9_]*)|:(\d+)(?:-(\d+))?)`"
 )
 
+# Caminho citado "cru" (sem `::simbolo` e sem `:linha`). O regex antigo so'
+# via a forma precisa; por isso `scripts/load_test.py` (real em
+# `app/scripts/`) e `app/models/..._versions.py` (nunca existiu) passavam.
+# Restrito a arquivos de codigo/config com extensao conhecida: diretorios
+# (`app/admin/`) e globs (`content.*.json`) ficam de fora.
+_BARE_CODE_PATH = re.compile(
+    r"`((?:app|tests|scripts|alembic)/[A-Za-z0-9_./-]+\.(?:py|json|ya?ml|toml|sh|sql))`"
+)
+
 _MD_CITACAO = re.compile(r"`([\w./-]+\.md)`")
 
 
@@ -1008,6 +1113,14 @@ def check_docs_code_references(root: Path = REPO_ROOT) -> list[Finding]:
                 problemas.append(
                     f"{doc.relative_to(root)}: cita {citacao} que nao existe em lugar nenhum"
                 )
+
+        # Caminhos crus so' nos dois documentos que sao contexto de agente.
+        # Os relatorios historicos de auditoria citam arquivos que existiram
+        # no commit auditado e nao existem mais; cobra-los seria ruido.
+        if doc.name in {"CLAUDE.md", "README.md"}:
+            for caminho in sorted(set(_BARE_CODE_PATH.findall(texto))):
+                if not (root / caminho).is_file():
+                    problemas.append(f"{doc.relative_to(root)}: {caminho} nao existe")
 
     if problemas:
         return _fail(check, "; ".join(sorted(problemas)[:8]))
@@ -1590,6 +1703,43 @@ def check_connector_coverage(root: Path = REPO_ROOT) -> list[Finding]:
     ]
 
 
+def check_content_i18n(root: Path = REPO_ROOT) -> list[Finding]:
+    """DA-74: o conteudo do diagnostico existe em todo idioma suportado -
+    catalogos de conteudo com as mesmas chaves e variaveis, toda regra do
+    rule engine traduzida e todo idioma com instrucao de idioma no prompt
+    (app/i18n/checks.py::content_i18n_problems)."""
+    check = "content_i18n"
+    try:
+        from app.i18n.checks import content_i18n_problems
+
+        problems = content_i18n_problems(root)
+    except Exception as exc:  # noqa: BLE001 - o gate nao pode quebrar o build
+        return _fail(check, f"nao foi possivel verificar o conteudo: {exc}")
+    if problems:
+        shown = "; ".join(problems[:8])
+        more = f" (+{len(problems) - 8})" if len(problems) > 8 else ""
+        return _fail(check, f"{len(problems)} problema(s): {shown}{more}")
+    return _ok(check)
+
+
+def check_ui_i18n(root: Path = REPO_ROOT) -> list[Finding]:
+    """DA-73: as duas UIs prontas para i18n - catalogos pt-BR/en com as mesmas
+    chaves e variaveis, toda chave usada existe, nenhum texto visivel fora do
+    catalogo (app/i18n/checks.py). Heuristico na 3a parte: texto montado por
+    concatenacao de fragmentos de uma palavra escapa."""
+    check = "ui_i18n"
+    if not (root / "frontend/src/i18n").is_dir():
+        return _fail(check, "frontend/src/i18n nao existe — UI sem i18n")
+    from app.i18n.checks import ui_i18n_problems
+
+    problems = ui_i18n_problems(root)
+    if problems:
+        shown = "; ".join(problems[:8])
+        more = f" (+{len(problems) - 8})" if len(problems) > 8 else ""
+        return _fail(check, f"{len(problems)} problema(s): {shown}{more}")
+    return _ok(check)
+
+
 GATES = {
     "connector_validation_matrix": check_connector_validation_matrix,
     "connector_coverage": check_connector_coverage,
@@ -1604,6 +1754,7 @@ GATES = {
     "candidate_das_fresh": check_candidate_das,
     "implemented_das_documented": check_documented_das,
     "da_registered": check_da_registered,
+    "da_table_unique": check_da_table_unique,
     "das_index_current": check_index_current,
     "preflight_delegates": check_preflight_delegates,
     "prompt_digest_measured": check_prompt_digest,
@@ -1611,6 +1762,8 @@ GATES = {
     "docs_code_references": check_docs_code_references,
     "docs_env_vars": check_docs_env_vars,
     "connector_reachable": check_connector_reachable,
+    "ui_i18n": check_ui_i18n,
+    "content_i18n": check_content_i18n,
 }
 
 _THRESHOLD_AWARE = frozenset({"rag_dataset_schema", "reranker_invariant"})

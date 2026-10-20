@@ -29,7 +29,7 @@ jobs:
           cache-dependency-glob: "uv.lock"
 
       - name: Instalar Python
-        # Lê a versão de .python-version (3.12.13), a mesma do ambiente local
+        # Lê a versão de .python-version (3.12.15), a mesma do ambiente local
         run: uv python install
 
 
@@ -40,7 +40,10 @@ jobs:
             cmake make gcc libssl-dev libffi-dev libsasl2-dev libsasl2-2
 
       - name: Sincronizar dependências
-        run: uv sync --dev
+        # `--extra prometheus`: os testes de app/metrics.py (DA-70) sao
+        # pulados sem prometheus_client/instrumentator. Sem o extra, o
+        # caminho nunca roda no CI (IIC-AUD-017).
+        run: uv sync --dev --extra prometheus
 
       - name: Ruff — lint
         run: uv run ruff check .
@@ -144,12 +147,29 @@ jobs:
     name: compose smoke — API /health
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # `docker compose` interpola TODOS os servicos ao carregar o arquivo,
+    # inclusive os de profile inativo. Sem estas variaveis o job falhava
+    # antes de subir qualquer container (POSTGRES/GRAFANA/NEO4J password).
+    env:
+      POSTGRES_PASSWORD: ci-smoke-test-password
+      GRAFANA_PASSWORD: ci-smoke-test-password
+      NEO4J_PASSWORD: ci-smoke-test-password
     # §3.10: smoke test que sobe o stack real via docker compose.
     # Valida que a API sobe e responde /health sem LLM (OLLAMA_HOST
     # aponta para host inexistente — intencional, so testa o startup).
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Criar .env mínimo para o bind mount
+        # O compose monta ./.env em /app/.env; num checkout limpo o
+        # arquivo nao existe e o Docker criaria um DIRETORIO no lugar.
+        # Com DATABASE_URL definida pelo compose, o boot exige
+        # LLM_CREDENTIALS_MASTER_KEY (DA-47/DA-60); geramos uma chave
+        # efemera so para o smoke, sem persistir segredo no repo.
+        run: |
+          key="$(python3 -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')"
+          printf 'LLM_CREDENTIALS_MASTER_KEY=%s\n' "$key" > .env
 
       - name: Subir stack (api + qdrant)
         run: docker compose up -d api qdrant
@@ -195,7 +215,7 @@ jobs:
          ports:
            - 6333:6333
          options: >-
-           --health-cmd "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:6333/healthz')\""
+           --health-cmd "bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333'"
            --health-interval 10s
            --health-timeout 5s
            --health-retries 10
@@ -280,14 +300,14 @@ jobs:
         # O healthcheck HTTP acima (porta 7474) so garante que o
         # processo subiu - a porta Bolt (7687, usada pelo driver
         # app/rag/graph_store.py) pode demorar mais alguns segundos.
+        # O `python -c` fica em UMA linha de proposito: o bloco YAML
+        # `run: |` preserva a indentacao, e a versao multi-linha antiga
+        # virava `IndentationError` no runner.
+        env:
+          NEO4J_PASSWORD: ${{ secrets.NEO4J_PASSWORD_TEST || 'smoke-test-password' }}
         run: |
           for i in $(seq 1 30); do
-            if uv run python -c "
-          from neo4j import GraphDatabase
-           driver = GraphDatabase.driver('bolt://127.0.0.1:7687', auth=('neo4j', '${{ secrets.NEO4J_PASSWORD_TEST || 'smoke-test-password' }}'))
-          driver.verify_connectivity()
-          driver.close()
-          "; then
+            if uv run python -c "from neo4j import GraphDatabase; import os; d = GraphDatabase.driver('bolt://127.0.0.1:7687', auth=('neo4j', os.environ['NEO4J_PASSWORD'])); d.verify_connectivity(); d.close()"; then
               echo "Neo4j pronto."
               exit 0
             fi

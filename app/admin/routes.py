@@ -1,10 +1,13 @@
-"""Rotas /admin/api/* — CRUD do registro de modelos + metering (DA-46/47/48).
+"""Rotas /admin/* — CRUD do registro de modelos + metering + dashboards (DA-46/47/48/87/89).
 
 Autenticacao: ADMIN_API_KEY dedicada (header X-API-Admin-Key,
-app/admin/security.py) em TODAS as rotas deste router. A separacao
-`/admin/api/*` (JSON, protegido) de `/admin/*` (paginas Jinja2 finas,
-sem dado sensivel — os dados so chegam via API com a chave) e intencional:
-a UI admin e a shell; o detalhe do que existe no banco exige auth.
+app/admin/security.py) em TODAS as rotas deste router.
+
+Separacao de rotas:
+- `/admin/api/*` - Endpoints JSON para CRUD e operações administrativas
+- `/admin/metrics/*` - Métricas e dashboards (DA-87)
+- `/admin/reports/*` - Relatórios compliance (DA-89)
+- `/admin/dashboard/compliance` - Dados para o dashboard de compliance (DA-89)
 
 Sem DATABASE_URL → HTTP 503 "Persistencia nao configurada" (fail-closed:
 nenhuma rota admin finge sucesso sem banco por tras).
@@ -13,18 +16,21 @@ nenhuma rota admin finge sucesso sem banco por tras).
 from __future__ import annotations
 
 import logging
-from typing import Annotated, Any
+from datetime import UTC, datetime, timedelta
+from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin.correlation import build_system_index, correlate
 from app.admin.crypto import decrypt_evidence
-from app.admin.models import WebUser
+from app.admin.models import KnowledgeDocumentVersion, WebUser
 from app.admin.repository import AdminRepository
 from app.admin.security import verify_admin_key
+from app.api_errors import api_error
 from app.config import settings
 from app.db import get_db_session
 from app.llm.origins import canonical_origin
@@ -33,7 +39,7 @@ from app.services.incident_repository import IncidentRepository
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/admin/api", dependencies=[Depends(verify_admin_key)])
+router = APIRouter(prefix="/admin", dependencies=[Depends(verify_admin_key)])
 
 SessionDep = Annotated[AsyncSession | None, Depends(get_db_session)]
 
@@ -47,12 +53,12 @@ def _origin_or_422(raw: str) -> str:
     """M-11: origem sempre na forma canonica (app/llm/origins.py)."""
     origin = canonical_origin(raw)
     if not origin:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"'{raw}' nao e uma origem: use a URL ou o host do provider "
-                "(ex.: api.groq.com, https://<recurso>.openai.azure.com, http://127.0.0.1:11434)"
-            ),
+        raise api_error(
+            422,
+            "invalid_origin",
+            f"'{raw}' nao e uma origem: use a URL ou o host do provider "
+            "(ex.: api.groq.com, https://<recurso>.openai.azure.com, http://127.0.0.1:11434)",
+            value=raw,
         )
     return origin
 
@@ -76,6 +82,22 @@ class ModelCreate(BaseModel):
     enabled: bool = True
     is_default: bool = False
     notes: str | None = None
+    # DA-72: parametros de roteamento (nulo = derivado/herdado)
+    transport: Literal["ollama", "openai_compatible", "azure_openai"] | None = None
+    context_window_tokens: int | None = Field(default=None, ge=256)
+    supports_tools: bool | None = None
+    supports_response_format: bool | None = None
+    supports_seed: bool | None = None
+    domains: list[Literal["sap", "saas", "generic"]] | None = None
+    tier: Literal["local", "standard", "premium"] | None = None
+    priority: int = Field(default=100, ge=0, le=10_000)
+
+    @field_validator("domains")
+    @classmethod
+    def _domains(cls, value: list[str] | None) -> list[str] | None:
+        # lista vazia = "nenhum dominio" seria um modelo inalcancavel;
+        # o operador quer dizer "todos" -> nulo.
+        return sorted(set(value)) or None if value is not None else None
 
 
 class ModelPatch(BaseModel):
@@ -86,6 +108,20 @@ class ModelPatch(BaseModel):
     enabled: bool | None = None
     is_default: bool | None = None
     notes: str | None = None
+    # DA-72 (null explicito no PATCH volta ao derivado/herdado)
+    transport: Literal["ollama", "openai_compatible", "azure_openai"] | None = None
+    context_window_tokens: int | None = Field(default=None, ge=256)
+    supports_tools: bool | None = None
+    supports_response_format: bool | None = None
+    supports_seed: bool | None = None
+    domains: list[Literal["sap", "saas", "generic"]] | None = None
+    tier: Literal["local", "standard", "premium"] | None = None
+    priority: int | None = Field(default=None, ge=0, le=10_000)
+
+    @field_validator("domains")
+    @classmethod
+    def _domains(cls, value: list[str] | None) -> list[str] | None:
+        return sorted(set(value)) or None if value is not None else None
 
 
 class CredentialIn(BaseModel):
@@ -135,6 +171,19 @@ class RuntimeConfigPatch(BaseModel):
     llm_provider: str | None = None
     llm_route: str | None = None
     llm_fallback_provider: str | None = None
+    llm_credentials_master_key: str | None = None
+    data_sovereignty_mode: str | None = None
+    confidential_allowed_origins: str | None = None
+    require_auth: bool | None = None
+    rule_engine_enabled: bool | None = None
+    diagnosis_timeout_seconds: float | None = None
+    llm_request_timeout_seconds: float | None = None
+    # DA-72: orcamento (DA-67) e pesos do score de roteamento
+    diagnosis_budget_usd: float | None = Field(default=None, gt=0)
+    llm_budget_reserve_ratio: float | None = Field(default=None, ge=0, le=1)
+    llm_gateway_max_cost_usd: float | None = Field(default=None, gt=0)
+    llm_routing_cost_weight: float | None = Field(default=None, ge=0)
+    llm_routing_latency_weight: float | None = Field(default=None, ge=0)
 
 
 # Validacao de provider — Literal do .env (invariante: so esses tres sao possiveis)
@@ -143,10 +192,7 @@ _VALID_PROVIDERS = frozenset({"ollama", "openai", "azure_openai", ""})
 
 def _require_session(session: SessionDep) -> AsyncSession:
     if session is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Persistencia nao configurada",
-        )
+        raise api_error(503, "db_not_configured", "Persistencia nao configurada")
     return session
 
 
@@ -169,6 +215,15 @@ def _model_out(model: Any, usage: Any | None) -> dict[str, Any]:
         "enabled": model.enabled,
         "is_default": model.is_default,
         "notes": model.notes,
+        # DA-72: parametros de roteamento
+        "transport": model.transport,
+        "context_window_tokens": model.context_window_tokens,
+        "supports_tools": model.supports_tools,
+        "supports_response_format": model.supports_response_format,
+        "supports_seed": model.supports_seed,
+        "domains": model.domains,
+        "tier": model.tier,
+        "priority": model.priority,
         "created_at": model.created_at.isoformat() if model.created_at else None,
         "usage": {
             "tokens_in": tokens_in,
@@ -192,19 +247,34 @@ def _model_out(model: Any, usage: Any | None) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/registry/status")
+@router.get("/api/registry/status")
 async def registry_status(
     session: SessionDep,
 ) -> dict[str, Any]:
-    """Estado do registro: flags de config e, se banco vivo, contagem."""
+    """Estado do registro: flags de config e, se banco vivo, contagem.
+
+    Adiciona `runtime_config_source` indicando se os valores de runtime
+    vem do banco (override) ou do .env (default)."""
     from app.admin.crypto import master_key_configured
+    from app.admin.repository import get_runtime_config as _get
     from app.config import settings
+
+    db = session.get_bind() if hasattr(session, "get_bind") else None
+    db_available = db is not None or bool(settings.database_url)
+
+    # Determinar fonte dos valores de runtime
+    runtime_source = "env"
+    if db_available:
+        overrides = _get()
+        if overrides and any(v is not None for v in overrides.values()):
+            runtime_source = "db"
 
     result: dict[str, Any] = {
         "managed": settings.llm_registry_db,
         "db_configured": bool(settings.database_url),
         "master_key_configured": master_key_configured(),
         "metering_enabled": settings.metering_enabled,
+        "runtime_config_source": runtime_source,
         "models_count": None,
         "systems_count": None,
         "incidents_count": None,
@@ -231,59 +301,31 @@ async def registry_status(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/runtime-config")
+def _env_runtime_values() -> dict[str, Any]:
+    """Valores do .env para cada chave editavel (banner DB != .env)."""
+    from app.admin.repository import RUNTIME_CONFIG_KEYS
+
+    return {key: getattr(settings, key, None) for key in RUNTIME_CONFIG_KEYS}
+
+
+@router.get("/api/runtime-config")
 async def get_runtime_config(session: SessionDep) -> dict[str, Any]:
     """Overrides de runtime armazenados no banco.
 
-    Retorna valores do banco quando disponivel; senao, retorna None para
-    cada campo (sinaliza que o .env e' a fonte de verdade).
-
-    Tambem retorna `env_values` com os valores atuais do .env para
-    comparacao visual na UI (banner quando DB != .env)."""
+    Com linha no banco, devolve os valores dela e `env_values` (os do .env)
+    para a UI comparar. Sem banco ou sem linha (migration nao aplicada),
+    devolve os valores do .env e `env_values=None` (nao ha diferenca
+    possivel). DA-72 acrescentou orcamento e pesos de roteamento."""
     from app.admin.repository import get_runtime_config as _get
-    from app.config import settings
-
-    db = await session.get_bind() if hasattr(session, "get_bind") else None
-    if db is None:
-        # SessionDep sem banco real → melhor-effort sync path
-        result = _get()
-        if result is not None:
-            result["env_values"] = {
-                "llm_registry_db": settings.llm_registry_db,
-                "llm_provider": settings.llm_provider,
-                "llm_route": settings.llm_route,
-                "llm_fallback_provider": settings.llm_fallback_provider,
-            }
-            return result
-        # Sem banco: retorna defaults que refletem o .env atual
-        return {
-            "llm_registry_db": settings.llm_registry_db,
-            "llm_provider": settings.llm_provider,
-            "llm_route": settings.llm_route,
-            "llm_fallback_provider": settings.llm_fallback_provider,
-            "env_values": None,  # sem banco = nao ha diferenca possivel
-        }
 
     result = _get()
     if result is not None:
-        result["env_values"] = {
-            "llm_registry_db": settings.llm_registry_db,
-            "llm_provider": settings.llm_provider,
-            "llm_route": settings.llm_route,
-            "llm_fallback_provider": settings.llm_fallback_provider,
-        }
+        result["env_values"] = _env_runtime_values()
         return result
-    # Sem linha no banco (migration nao aplicada): retorna .env
-    return {
-        "llm_registry_db": settings.llm_registry_db,
-        "llm_provider": settings.llm_provider,
-        "llm_route": settings.llm_route,
-        "llm_fallback_provider": settings.llm_fallback_provider,
-        "env_values": None,  # sem linha = nao ha diferenca possivel
-    }
+    return {**_env_runtime_values(), "env_values": None}
 
 
-@router.patch("/runtime-config")
+@router.patch("/api/runtime-config")
 async def patch_runtime_config(
     payload: RuntimeConfigPatch,
     session: SessionReq,
@@ -293,33 +335,139 @@ async def patch_runtime_config(
     Campos nao enviados ficam inalterados. Retorna o estado apos a atualizacao."""
     updates = {k: v for k, v in payload.model_dump(exclude_unset=True).items()}
     if not updates:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Envie pelo menos um campo: llm_registry_db, llm_provider ou llm_route",
+        raise api_error(
+            422,
+            "empty_update",
+            "Envie pelo menos um campo: " + ", ".join(RuntimeConfigPatch.model_fields),
         )
 
     # GAP-8: validar provider antes de salvar — evita erro genérico em runtime
     if "llm_provider" in updates and updates["llm_provider"] not in _VALID_PROVIDERS:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=(
-                f"llm_provider invalido: '{updates['llm_provider']}'. "
-                "Valores possiveis: ollama, openai, azure_openai (ou vazio)."
-            ),
+        raise api_error(
+            422,
+            "invalid_provider",
+            f"llm_provider invalido: '{updates['llm_provider']}'. "
+            "Valores possiveis: ollama, openai, azure_openai (ou vazio).",
+            value=updates["llm_provider"],
         )
 
     from app.admin.repository import update_runtime_config as _update
 
     result = _update(updates)
     if result is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Persistencia nao configurada — impossivel salvar overrides de runtime",
+        raise api_error(
+            503,
+            "db_not_configured",
+            "Persistencia nao configurada — impossivel salvar overrides de runtime",
         )
     return result
 
 
-@router.get("/runtime-config/check-activate")
+@router.get("/api/effective-config")
+async def effective_config(session: SessionDep) -> dict[str, Any]:
+    """GAP de usabilidade: exportar configuracao efetiva via UI.
+
+    Combina overrides do banco (llm_runtime_config) com valores atuais do
+    .env (mascarados para campos sensiveis). Cada campo mostra sua fonte
+    ("db" ou "env") e o valor efetivo (override DB quando presente, senao .env).
+
+    Retorna tambem `sensitive_fields` com a lista de nomes de campos que sao
+    tratados como sensiveis (mascarados na saida).
+    """
+    from app.admin.repository import get_runtime_config as _get
+    from app.config import settings
+
+    db = await session.get_bind() if hasattr(session, "get_bind") else None
+    db_available = db is not None or bool(settings.database_url)
+
+    # Ler overrides do banco (best-effort)
+    overrides: dict[str, Any] | None = _get() if db_available else None
+
+    # Campos sensiveis que devem ser mascarados na saida
+    sensitive_fields = frozenset(
+        {
+            "llm_credentials_master_key",
+            "openai_api_key",
+            "azure_openai_api_key",
+            "sap_password",
+            "odata_client_secret",
+            "salesforce_client_secret",
+            "workday_client_secret",
+            "sfsf_client_secret",
+            "po_password",
+            "po_oauth_client_secret",
+            "ariba_client_secret",
+            "cap_client_secret",
+            "apim_client_secret",
+            "admin_api_key",
+            "a2a_api_key",
+            "event_mesh_api_key",
+            "smtp_password",
+            "amqp_password",
+        }
+    )
+
+    # Campos que o runtime_config pode sobrescrever
+    config_fields = [
+        "llm_registry_db",
+        "llm_provider",
+        "llm_route",
+        "llm_fallback_provider",
+        "llm_credentials_master_key",
+        "data_sovereignty_mode",
+        "confidential_allowed_origins",
+        "require_auth",
+        "rule_engine_enabled",
+        "diagnosis_timeout_seconds",
+        "llm_request_timeout_seconds",
+    ]
+
+    # Montar a lista de campos com fonte e valor efetivo
+    effective: list[dict[str, Any]] = []
+    for field in config_fields:
+        db_val = overrides.get(field) if overrides else None
+        env_val = getattr(settings, field, None)
+
+        # Fonte: "db" se o override existe e nao e' None, senao "env"
+        source = "db" if (overrides and db_val is not None) else "env"
+        effective_value = db_val if source == "db" else env_val
+
+        # Mascara valores sensiveis
+        is_sensitive = field in sensitive_fields
+        display_value = _mask_sensitive(effective_value, is_sensitive)
+
+        effective.append(
+            {
+                "field": field,
+                "source": source,
+                "value": display_value,
+                "raw_db": db_val,  # sempre cru (para comparacao na UI)
+                "raw_env": env_val,
+                "is_sensitive": is_sensitive,
+            }
+        )
+
+    return {
+        "effective": effective,
+        "sensitive_fields": list(sensitive_fields),
+        "db_available": db_available,
+        "overrides_count": len(overrides) if overrides else 0,
+    }
+
+
+def _mask_sensitive(value: Any, is_sensitive: bool) -> str:
+    """Mascara valores sensiveis para exibicao na UI."""
+    if not is_sensitive:
+        return str(value) if value is not None else "(vazio)"
+    s = str(value) if value is not None else ""
+    if not s:
+        return "(vazio)"
+    if len(s) <= 6:
+        return "*" * len(s)
+    return f"{s[:3]}...{s[-3:]}"
+
+
+@router.get("/api/runtime-config/check-activate")
 async def check_activate_registry(session: SessionDep) -> dict[str, Any]:
     """GAP-2: pré-check antes de ativar LLM_REGISTRY_DB.
 
@@ -397,7 +545,7 @@ async def check_activate_registry(session: SessionDep) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/models")
+@router.get("/api/models")
 async def list_models(session: SessionReq) -> list[dict[str, Any]]:
     repo = AdminRepository(session)
     models = await repo.list_models()
@@ -408,7 +556,7 @@ async def list_models(session: SessionReq) -> list[dict[str, Any]]:
     return out
 
 
-@router.post("/models", status_code=status.HTTP_201_CREATED)
+@router.post("/api/models", status_code=status.HTTP_201_CREATED)
 async def create_model(
     payload: ModelCreate,
     session: SessionReq,
@@ -420,15 +568,18 @@ async def create_model(
         if m.provider_origin == payload.provider_origin and m.model_id == payload.model_id
     ]
     if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Modelo '{payload.model_id}' ja registrado na origem '{payload.provider_origin}'",
+        raise api_error(
+            409,
+            "model_exists",
+            f"Modelo '{payload.model_id}' ja registrado na origem '{payload.provider_origin}'",
+            model=payload.model_id,
+            origin=payload.provider_origin,
         )
     model = await repo.create_model(**payload.model_dump())
     return _model_out(model, None)
 
 
-@router.get("/models/{model_id}")
+@router.get("/api/models/{model_id}")
 async def get_model(
     model_id: str,
     session: SessionReq,
@@ -436,12 +587,12 @@ async def get_model(
     repo = AdminRepository(session)
     model = await repo.get_model(model_id)
     if model is None:
-        raise HTTPException(status_code=404, detail="Modelo nao encontrado")
+        raise api_error(404, "model_not_found", "Modelo nao encontrado")
     usage = await repo.get_open_usage(model.provider_origin, model.model_id)
     return _model_out(model, usage)
 
 
-@router.patch("/models/{model_id}")
+@router.patch("/api/models/{model_id}")
 async def patch_model(
     model_id: str,
     payload: ModelPatch,
@@ -450,12 +601,12 @@ async def patch_model(
     repo = AdminRepository(session)
     model = await repo.update_model(model_id, payload.model_dump(exclude_unset=True))
     if model is None:
-        raise HTTPException(status_code=404, detail="Modelo nao encontrado")
+        raise api_error(404, "model_not_found", "Modelo nao encontrado")
     usage = await repo.get_open_usage(model.provider_origin, model.model_id)
     return _model_out(model, usage)
 
 
-@router.delete("/models/{model_id}")
+@router.delete("/api/models/{model_id}")
 async def delete_model(
     model_id: str,
     session: SessionReq,
@@ -463,8 +614,58 @@ async def delete_model(
     repo = AdminRepository(session)
     deleted = await repo.delete_model(model_id)
     if not deleted:
-        raise HTTPException(status_code=404, detail="Modelo nao encontrado")
+        raise api_error(404, "model_not_found", "Modelo nao encontrado")
     return {"status": "deleted", "id": model_id}
+
+
+@router.get("/api/routing/preview")
+async def routing_preview(
+    session: SessionDep,
+    sensitivity: Literal["public", "confidential"] = "confidential",
+    domain: Literal["sap", "saas", "generic"] | None = None,
+    tokens: int = Query(default=4000, ge=1, le=2_000_000),
+) -> dict[str, Any]:
+    """DA-72: simula a decisao do Policy Engine para um diagnostico novo, sem
+    chamar o LLM. Mesma funcao que o gateway usa (app/llm/gateway.py::
+    preview_routing). Nao decifra credencial nenhuma."""
+    from app.llm.gateway import preview_routing
+
+    decision, cfg = preview_routing(sensitivity, domain, tokens)
+    weights = {
+        "cost": cfg.llm_routing_cost_weight,
+        "latency": cfg.llm_routing_latency_weight,
+    }
+    return {
+        "mode": "registry" if decision.request.registry is not None else "env",
+        "sensitivity": sensitivity,
+        "domain": domain,
+        "context_tokens": tokens,
+        "budget_remaining_usd": round(decision.request.budget_remaining_usd, 6),
+        "weights": weights,
+        "selected_provider": decision.selected_provider,
+        "selected_reason": decision.selected_reason,
+        "all_rejected": decision.all_rejected,
+        "candidates": [
+            {
+                "rank": i + 1 if c.allowed else None,
+                "provider": c.provider,
+                "model_id": c.model_id,
+                "origin": c.origin,
+                "locality": c.locality,
+                "tier": c.tier,
+                "allowed": c.allowed,
+                "reasons": [r.value for r in c.rejection_reasons],
+                "detail": list(c.detail),
+                "detail_items": list(c.detail_items),  # DA-74: para a UI traduzir
+                "estimated_cost_usd": round(c.estimated_cost_usd, 6),
+                "latency_ms": c.latency_ms,
+                "score": c.score,
+                "priority": c.priority,
+                "is_default": c.is_default,
+            }
+            for i, c in enumerate(decision.candidates)
+        ],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -472,7 +673,7 @@ async def delete_model(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/credentials")
+@router.get("/api/credentials")
 async def list_credentials(session: SessionReq) -> list[dict[str, Any]]:
     repo = AdminRepository(session)
     out: list[dict[str, Any]] = []
@@ -493,7 +694,7 @@ async def list_credentials(session: SessionReq) -> list[dict[str, Any]]:
     return out
 
 
-@router.put("/credentials/{provider_origin:path}")
+@router.put("/api/credentials/{provider_origin:path}")
 async def set_credential(
     provider_origin: str,
     payload: CredentialIn,
@@ -502,12 +703,11 @@ async def set_credential(
     from app.admin.crypto import master_key_configured
 
     if not master_key_configured():
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=(
-                "LLM_CREDENTIALS_MASTER_KEY nao configurada — impossivel cifrar "
-                "a credencial (DA-47). Configure a master key no .env."
-            ),
+        raise api_error(
+            503,
+            "master_key_missing",
+            "LLM_CREDENTIALS_MASTER_KEY nao configurada — impossivel cifrar "
+            "a credencial (DA-47). Configure a master key no .env.",
         )
     provider_origin = _origin_or_422(provider_origin)
     repo = AdminRepository(session)
@@ -519,7 +719,7 @@ async def set_credential(
     }
 
 
-@router.delete("/credentials/{provider_origin:path}")
+@router.delete("/api/credentials/{provider_origin:path}")
 async def delete_credential(
     provider_origin: str,
     session: SessionReq,
@@ -528,7 +728,7 @@ async def delete_credential(
     repo = AdminRepository(session)
     deleted = await repo.delete_credential(provider_origin)
     if not deleted:
-        raise HTTPException(status_code=404, detail="Credencial nao encontrada")
+        raise api_error(404, "credential_not_found", "Credencial nao encontrada")
     return {"status": "deleted", "provider_origin": provider_origin}
 
 
@@ -537,13 +737,13 @@ async def delete_credential(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/usage")
+@router.get("/api/usage")
 async def usage_summary(session: SessionReq) -> list[dict[str, Any]]:
     repo = AdminRepository(session)
     return await repo.usage_summary()
 
 
-@router.post("/usage/{provider_origin:path}/{model_id}/reset")
+@router.post("/api/usage/{provider_origin:path}/{model_id}/reset")
 async def reset_usage(
     provider_origin: str,
     model_id: str,
@@ -553,11 +753,12 @@ async def reset_usage(
     repo = AdminRepository(session)
     new_period = await repo.reset_usage_period(provider_origin, model_id)
     if new_period is None:
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                f"Nenhum periodo aberto de uso para '{model_id}' na origem '{provider_origin}'"
-            ),
+        raise api_error(
+            404,
+            "usage_period_not_found",
+            f"Nenhum periodo aberto de uso para '{model_id}' na origem '{provider_origin}'",
+            model=model_id,
+            origin=provider_origin,
         )
     return {"status": "reset", "provider_origin": provider_origin, "model_id": model_id}
 
@@ -602,18 +803,16 @@ def _validate_system_values(
     if system_status is not None and system_status not in SYSTEM_STATUSES:
         bad.append(f"status invalido: {system_status!r} (aceita: {', '.join(SYSTEM_STATUSES)})")
     if bad:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="; ".join(bad)
-        )
+        raise api_error(422, "invalid_system_fields", "; ".join(bad), details="; ".join(bad))
 
 
-@router.get("/systems")
+@router.get("/api/systems")
 async def list_systems(session: SessionReq) -> list[dict[str, Any]]:
     repo = AdminRepository(session)
     return [_system_out(s) for s in await repo.list_systems()]
 
 
-@router.post("/systems", status_code=status.HTTP_201_CREATED)
+@router.post("/api/systems", status_code=status.HTTP_201_CREATED)
 async def create_system(
     payload: SystemCreate,
     session: SessionReq,
@@ -621,15 +820,17 @@ async def create_system(
     _validate_system_values(payload.connector_type, payload.environment, payload.status)
     repo = AdminRepository(session)
     if await repo.get_system(key=payload.system_key) is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"system_key '{payload.system_key}' ja registrado",
+        raise api_error(
+            409,
+            "system_exists",
+            f"system_key '{payload.system_key}' ja registrado",
+            key=payload.system_key,
         )
     system = await repo.create_system(**payload.model_dump())
     return _system_out(system)
 
 
-@router.get("/systems/{system_id}")
+@router.get("/api/systems/{system_id}")
 async def get_system(
     system_id: str,
     session: SessionReq,
@@ -637,11 +838,11 @@ async def get_system(
     repo = AdminRepository(session)
     system = await repo.get_system(system_id)
     if system is None:
-        raise HTTPException(status_code=404, detail="Sistema nao encontrado")
+        raise api_error(404, "system_not_found", "Sistema nao encontrado")
     return _system_out(system)
 
 
-@router.patch("/systems/{system_id}")
+@router.patch("/api/systems/{system_id}")
 async def patch_system(
     system_id: str,
     payload: SystemPatch,
@@ -656,11 +857,11 @@ async def patch_system(
     repo = AdminRepository(session)
     system = await repo.update_system(system_id, updates)
     if system is None:
-        raise HTTPException(status_code=404, detail="Sistema nao encontrado")
+        raise api_error(404, "system_not_found", "Sistema nao encontrado")
     return _system_out(system)
 
 
-@router.delete("/systems/{system_id}")
+@router.delete("/api/systems/{system_id}")
 async def delete_system(
     system_id: str,
     session: SessionReq,
@@ -668,7 +869,7 @@ async def delete_system(
     repo = AdminRepository(session)
     deleted = await repo.delete_system(system_id)
     if not deleted:
-        raise HTTPException(status_code=404, detail="Sistema nao encontrado")
+        raise api_error(404, "system_not_found", "Sistema nao encontrado")
     return {"status": "deleted", "id": system_id}
 
 
@@ -707,13 +908,13 @@ def _validate_source_interface_type(interface_type: str) -> None:
         )
 
 
-@router.get("/web-search-sources")
+@router.get("/api/web-search-sources")
 async def list_web_search_sources(session: SessionReq) -> list[dict[str, Any]]:
     repo = AdminRepository(session)
     return [_source_out(s) for s in await repo.list_web_search_sources()]
 
 
-@router.post("/web-search-sources", status_code=status.HTTP_201_CREATED)
+@router.post("/api/web-search-sources", status_code=status.HTTP_201_CREATED)
 async def create_web_search_source(
     payload: WebSearchSourceCreate,
     session: SessionReq,
@@ -721,9 +922,11 @@ async def create_web_search_source(
     _validate_source_interface_type(payload.interface_type)
     repo = AdminRepository(session)
     if await repo.get_web_search_source(interface_type=payload.interface_type) is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"interface_type '{payload.interface_type}' ja tem fonte cadastrada",
+        raise api_error(
+            409,
+            "source_exists",
+            f"interface_type '{payload.interface_type}' ja tem fonte cadastrada",
+            interface=payload.interface_type,
         )
     try:
         source = await repo.create_web_search_source(**payload.model_dump())
@@ -733,23 +936,25 @@ async def create_web_search_source(
         # interface_type ao mesmo tempo passam os dois. Quem decide e' a
         # constraint UNIQUE — sem este catch a segunda viraria 500.
         await session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"interface_type '{payload.interface_type}' ja tem fonte cadastrada",
+        raise api_error(
+            409,
+            "source_exists",
+            f"interface_type '{payload.interface_type}' ja tem fonte cadastrada",
+            interface=payload.interface_type,
         ) from None
     return _source_out(source)
 
 
-@router.get("/web-search-sources/{source_id}")
+@router.get("/api/web-search-sources/{source_id}")
 async def get_web_search_source(source_id: str, session: SessionReq) -> dict[str, Any]:
     repo = AdminRepository(session)
     source = await repo.get_web_search_source(source_id)
     if source is None:
-        raise HTTPException(status_code=404, detail="Fonte de busca nao encontrada")
+        raise api_error(404, "source_not_found", "Fonte de busca nao encontrada")
     return _source_out(source)
 
 
-@router.patch("/web-search-sources/{source_id}")
+@router.patch("/api/web-search-sources/{source_id}")
 async def patch_web_search_source(
     source_id: str,
     payload: WebSearchSourcePatch,
@@ -761,29 +966,31 @@ async def patch_web_search_source(
     updates = payload.model_dump(exclude_unset=True)
     for key, value in updates.items():
         if key in {"site_filter", "tech_term"} and not (value or "").strip():
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=f"{key} nao pode ficar vazio: sem ele a linha e' ignorada "
+            raise api_error(
+                422,
+                "source_field_empty",
+                f"{key} nao pode ficar vazio: sem ele a linha e' ignorada "
                 "pela resolucao fail-closed",
+                field=key,
             )
     repo = AdminRepository(session)
     source = await repo.update_web_search_source(source_id, updates)
     if source is None:
-        raise HTTPException(status_code=404, detail="Fonte de busca nao encontrada")
+        raise api_error(404, "source_not_found", "Fonte de busca nao encontrada")
     await session.commit()
     return _source_out(source)
 
 
-@router.delete("/web-search-sources/{source_id}")
+@router.delete("/api/web-search-sources/{source_id}")
 async def delete_web_search_source(source_id: str, session: SessionReq) -> dict[str, Any]:
     repo = AdminRepository(session)
     if not await repo.delete_web_search_source(source_id):
-        raise HTTPException(status_code=404, detail="Fonte de busca nao encontrada")
+        raise api_error(404, "source_not_found", "Fonte de busca nao encontrada")
     await session.commit()
     return {"status": "deleted", "id": source_id}
 
 
-@router.get("/systems/{system_id}/incidents")
+@router.get("/api/systems/{system_id}/incidents")
 async def list_system_incidents(
     system_id: str,
     session: SessionReq,
@@ -806,7 +1013,7 @@ async def list_system_incidents(
     admin_repo = AdminRepository(session)
     system = await admin_repo.get_system(system_id)
     if system is None:
-        raise HTTPException(status_code=404, detail="Sistema nao encontrado")
+        raise api_error(404, "system_not_found", "Sistema nao encontrado")
 
     index = build_system_index(await admin_repo.list_systems())
     incidents_repo = IncidentRepository(session)
@@ -841,6 +1048,15 @@ def _incident_out(
         "evidence_strength": incident.evidence_strength,
         "llm_provider_used": incident.llm_provider_used,
         "agent_domain": incident.agent_domain,
+        # DA-53: proveniencia; DA-44/DA-67: escalonamento e custo (migration 019)
+        "llm_model": incident.llm_model,
+        "prompt_version": incident.prompt_version,
+        "prompt_digest": incident.prompt_digest,
+        "should_escalate": incident.should_escalate,
+        "escalation_reason": incident.escalation_reason,
+        "cost_usd": incident.cost_usd,
+        "llm_calls": incident.llm_calls,
+        "locale": getattr(incident, "locale", None),  # DA-74 (migration 021)
         "latency_ms": incident.latency_ms,
         "is_mock": incident.is_mock,
         "sensitivity_level": incident.sensitivity_level,
@@ -860,7 +1076,7 @@ def _incident_out(
     return out
 
 
-@router.get("/incidents")
+@router.get("/api/incidents")
 async def list_incidents(
     session: SessionReq,
     limit: int = Query(default=50, ge=1, le=200),
@@ -888,12 +1104,12 @@ async def list_incidents(
     ]
 
 
-@router.get("/incidents/{incident_id}")
+@router.get("/api/incidents/{incident_id}")
 async def get_incident(incident_id: str, session: SessionReq) -> dict[str, Any]:
     index = build_system_index(await AdminRepository(session).list_systems())
     incident = await IncidentRepository(session).get_by_id(incident_id)
     if incident is None:
-        raise HTTPException(status_code=404, detail="Incidente nao encontrado")
+        raise api_error(404, "incident_not_found", "Incidente nao encontrado")
     return _incident_out(
         incident,
         correlate(incident.interface_type, incident.connector_source_system, index),
@@ -911,6 +1127,9 @@ class UserCreate(BaseModel):
     email: str = Field(min_length=3, max_length=256, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     phone: str = Field(min_length=8, max_length=32, pattern=r"^\+?[0-9\s-]{8,32}$")
     password: str = Field(min_length=10, max_length=256)
+    # DA-74: idioma das mensagens de ativacao. Ausente = o da Admin UI de
+    # quem cadastra (cookie iic_locale / Accept-Language).
+    locale: str | None = Field(default=None, max_length=16)
 
 
 class UserPatch(BaseModel):
@@ -943,14 +1162,14 @@ async def _get_user_or_404(session: AsyncSession, user_id: str) -> Any:
     try:
         uid = UUID(user_id)
     except ValueError:
-        raise HTTPException(status_code=404, detail="Usuario nao encontrado") from None
+        raise api_error(404, "user_not_found", "Usuario nao encontrado") from None
     user = await session.get(WebUser, uid)
     if user is None:
-        raise HTTPException(status_code=404, detail="Usuario nao encontrado")
+        raise api_error(404, "user_not_found", "Usuario nao encontrado")
     return user
 
 
-@router.get("/users")
+@router.get("/api/users")
 async def list_users(session: SessionReq) -> list[dict[str, Any]]:
     from sqlalchemy import select
 
@@ -958,8 +1177,8 @@ async def list_users(session: SessionReq) -> list[dict[str, Any]]:
     return [_user_out(u) for u in users]
 
 
-@router.post("/users", status_code=status.HTTP_201_CREATED)
-async def create_user(payload: UserCreate, session: SessionReq) -> dict[str, Any]:
+@router.post("/api/users", status_code=status.HTTP_201_CREATED)
+async def create_user(payload: UserCreate, session: SessionReq, request: Request) -> dict[str, Any]:
     """Cria usuario PENDENTE de e-mail. A senha inicial entra como PBKDF2
     (mesmo formato DA-54) — nunca em claro em lugar nenhum.
 
@@ -967,8 +1186,20 @@ async def create_user(payload: UserCreate, session: SessionReq) -> dict[str, Any
     na resposta de admin (canal X-API-Admin-Key), com WARNING no log.
     Entrega real: `deliver_email` em app/webusers.py — token sai da
     resposta sozinho quando o canal entrega de verdade."""
+    from app.i18n import locale_from_request, normalize_locale
+    from app.i18n.content import CONTENT_LOCALES
     from app.webusers import create_user as domain_create_user
 
+    locale = normalize_locale(payload.locale) if payload.locale else locale_from_request(request)
+    if locale not in CONTENT_LOCALES:
+        if payload.locale:
+            raise api_error(
+                422,
+                "invalid_locale",
+                f"locale nao suportado: {payload.locale}",
+                locale=payload.locale,
+            )
+        locale = None  # pseudo-locale de revisao: mensagens no default
     try:
         user, tokens = await domain_create_user(
             session,
@@ -977,9 +1208,10 @@ async def create_user(payload: UserCreate, session: SessionReq) -> dict[str, Any
             phone=payload.phone,
             password=payload.password,
             created_by="admin-api",
+            locale=locale,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from None
+        raise api_error(409, "user_exists", str(exc), username=payload.username) from None
     out = _user_out(user)
     out["activation"] = {
         "email_token": tokens.email_token,  # None quando entregue de verdade
@@ -989,19 +1221,27 @@ async def create_user(payload: UserCreate, session: SessionReq) -> dict[str, Any
     return out
 
 
-@router.post("/users/{user_id}/email-token")
+@router.post("/api/users/{user_id}/email-token")
 async def reissue_email_token(user_id: str, session: SessionReq) -> dict[str, Any]:
     """Reemite o token da etapa 1 (so' para pendentes de e-mail)."""
-    from app.webusers import EMAIL_TOKEN_TTL_SECONDS, deliver_email, sign_email_token
+    from app.webusers import (
+        EMAIL_TOKEN_TTL_SECONDS,
+        activation_email_text,
+        deliver_email,
+        sign_email_token,
+    )
 
     user = await _get_user_or_404(session, user_id)
     if user.status != "pending_email":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"reemissao de token de e-mail exige status pending_email (atual: {user.status})",
+        raise api_error(
+            409,
+            "reissue_requires_pending_email",
+            f"reemissao de token de e-mail exige status pending_email (atual: {user.status})",
+            status=user.status,
         )
     token = sign_email_token(user.username, EMAIL_TOKEN_TTL_SECONDS, settings.session_secret)
-    result = deliver_email(user.email, f"Token de ativacao: {token}")
+    subject, body = activation_email_text(token, user.locale)
+    result = deliver_email(user.email, body, subject)
     await session.commit()
     return {
         "id": str(user.id),
@@ -1014,7 +1254,7 @@ async def reissue_email_token(user_id: str, session: SessionReq) -> dict[str, An
     }
 
 
-@router.post("/users/{user_id}/phone-code")
+@router.post("/api/users/{user_id}/phone-code")
 async def reissue_phone_code(user_id: str, session: SessionReq) -> dict[str, Any]:
     """Reemite o codigo da etapa 2 (so' para pendentes de telefone).
 
@@ -1023,6 +1263,7 @@ async def reissue_phone_code(user_id: str, session: SessionReq) -> dict[str, Any
 
     from app.webusers import (
         PHONE_CODE_TTL_SECONDS,
+        activation_sms_text,
         deliver_sms,
         generate_phone_code,
         hash_phone_code,
@@ -1030,15 +1271,17 @@ async def reissue_phone_code(user_id: str, session: SessionReq) -> dict[str, Any
 
     user = await _get_user_or_404(session, user_id)
     if user.status != "pending_phone":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"reemissao de codigo exige status pending_phone (atual: {user.status})",
+        raise api_error(
+            409,
+            "reissue_requires_pending_phone",
+            f"reemissao de codigo exige status pending_phone (atual: {user.status})",
+            status=user.status,
         )
     code = generate_phone_code()
     user.phone_code_hash = hash_phone_code(code, settings.session_secret)
     user.phone_code_expires_at = datetime.now(UTC) + timedelta(seconds=PHONE_CODE_TTL_SECONDS)
     user.phone_code_attempts = 0
-    result = deliver_sms(user.phone, f"Codigo de ativacao: {code}")
+    result = deliver_sms(user.phone, activation_sms_text(code, user.locale))
     await session.commit()
     return {
         "id": str(user.id),
@@ -1051,7 +1294,7 @@ async def reissue_phone_code(user_id: str, session: SessionReq) -> dict[str, Any
     }
 
 
-@router.patch("/users/{user_id}")
+@router.patch("/api/users/{user_id}")
 async def patch_user(
     user_id: str,
     payload: UserPatch,
@@ -1063,14 +1306,12 @@ async def patch_user(
     user = await _get_user_or_404(session, user_id)
     if payload.status is not None:
         if payload.status not in ("active", "disabled"):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="status aceita: active, disabled",
-            )
+            raise api_error(422, "invalid_user_status", "status aceita: active, disabled")
         if user.status.startswith("pending") and payload.status != "disabled":
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="usuario pendente so pode ser desativado ou ter as etapas reemitidas",
+            raise api_error(
+                422,
+                "pending_user_change",
+                "usuario pendente so pode ser desativado ou ter as etapas reemitidas",
             )
         user.status = payload.status
         if payload.status == "disabled":
@@ -1089,7 +1330,7 @@ async def patch_user(
     return _user_out(user)
 
 
-@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/api/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(user_id: str, session: SessionReq) -> None:
     user = await _get_user_or_404(session, user_id)
     username = user.username
@@ -1145,4 +1386,268 @@ async def get_ontology_hierarchy(
         "uri": result[0]["root_uri"],
         "broader": result[0]["broader"],
         "narrower": result[0]["narrower"],
+    }
+
+
+# ---------------------------------------------------------------------------
+# DA-86: versionamento de documentos RAG (UI /admin/knowledge/documents)
+# ---------------------------------------------------------------------------
+
+
+class KnowledgeVersionCreate(BaseModel):
+    """Payload de criação de uma versão de documento (DA-86)."""
+
+    content: str = Field(min_length=1)
+    is_current: bool = False
+
+
+def _version_to_dict(version: KnowledgeDocumentVersion) -> dict[str, Any]:
+    return {
+        "id": version.id,
+        "document_id": version.document_id,
+        "version": version.version,
+        "content": version.content,
+        "created_at": version.created_at.isoformat() if version.created_at else None,
+        "is_current": version.is_current,
+    }
+
+
+async def _load_versions(session: AsyncSession, document_id: str) -> list[KnowledgeDocumentVersion]:
+    result = await session.execute(
+        select(KnowledgeDocumentVersion)
+        .where(KnowledgeDocumentVersion.document_id == document_id)
+        .order_by(KnowledgeDocumentVersion.version)
+    )
+    return list(result.scalars().all())
+
+
+@router.post("/api/knowledge/documents/{document_id}/versions", status_code=201)
+async def create_knowledge_version(
+    document_id: str, payload: KnowledgeVersionCreate, session: SessionDep
+) -> dict[str, Any]:
+    """DA-86: cria a próxima versão de um documento de conhecimento."""
+    if session is None:
+        raise api_error(503, "db_not_configured", "Persistencia nao configurada")
+
+    existing = await _load_versions(session, document_id)
+    next_version = (max((v.version for v in existing), default=0)) + 1
+
+    if payload.is_current:
+        for version in existing:
+            version.is_current = False
+
+    row = KnowledgeDocumentVersion(
+        document_id=document_id,
+        version=next_version,
+        content=payload.content,
+        is_current=payload.is_current,
+    )
+    session.add(row)
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise api_error(
+            409,
+            "version_exists",
+            f"versão {next_version} já existe para o documento {document_id}",
+        ) from None
+
+    await session.refresh(row)
+    return _version_to_dict(row)
+
+
+@router.get("/api/knowledge/documents/{document_id}/versions")
+async def list_knowledge_versions(document_id: str, session: SessionDep) -> dict[str, Any]:
+    """DA-86: lista as versões de um documento e qual está ativa."""
+    if session is None:
+        raise api_error(503, "db_not_configured", "Persistencia nao configurada")
+
+    versions = await _load_versions(session, document_id)
+    if not versions:
+        raise api_error(404, "document_not_found", f"documento {document_id} não encontrado")
+
+    current = next((v.version for v in versions if v.is_current), None)
+    return {
+        "document_id": document_id,
+        "versions": [_version_to_dict(v) for v in versions],
+        "current_version": current,
+    }
+
+
+@router.get("/api/knowledge/documents/{document_id}/history")
+async def knowledge_version_history(document_id: str, session: SessionDep) -> dict[str, Any]:
+    """DA-86: histórico completo de versões (somente leitura)."""
+    if session is None:
+        raise api_error(503, "db_not_configured", "Persistencia nao configurada")
+
+    versions = await _load_versions(session, document_id)
+    if not versions:
+        raise api_error(404, "document_not_found", f"documento {document_id} não encontrado")
+
+    return {
+        "document_id": document_id,
+        "versions": [_version_to_dict(v) for v in versions],
+    }
+
+
+@router.post("/api/knowledge/documents/{document_id}/rollback/{version}")
+async def rollback_knowledge_version(
+    document_id: str, version: int, session: SessionDep
+) -> dict[str, Any]:
+    """DA-86: marca uma versão anterior como ativa (rollback)."""
+    if session is None:
+        raise api_error(503, "db_not_configured", "Persistencia nao configurada")
+
+    versions = await _load_versions(session, document_id)
+    if not versions:
+        raise api_error(404, "document_not_found", f"documento {document_id} não encontrado")
+
+    if not any(v.version == version for v in versions):
+        raise api_error(
+            404, "version_not_found", f"versão {version} não encontrada para {document_id}"
+        )
+
+    for v in versions:
+        v.is_current = v.version == version
+    await session.commit()
+
+    return {"document_id": document_id, "current_version": version}
+
+
+# ---------------------------------------------------------------------------
+# DA-87: Métricas por domínio (dashboard)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/metrics/domains")
+async def get_domain_metrics(
+    session: SessionReq,
+    days: int = Query(default=30, ge=1, le=365, description="Janela em dias"),
+) -> dict[str, Any]:
+    """DA-87: Métricas por domínio (sap/saas/generic) para dashboards.
+
+    Janela: últimos ``days`` dias (default 30), limitada aos 1000 incidentes
+    mais recentes. Retorna count, hit@1, latência média e custo por domínio.
+    """
+
+    from app.admin.metrics import build_dashboard_data
+
+    repo = IncidentRepository(session)
+    since = datetime.now(UTC) - timedelta(days=days)
+    incidents = await repo.list_recent(limit=1000, since=since)
+
+    # Transforma em dicts
+    incidents_data = [
+        {
+            "agent_domain": i.agent_domain,
+            "diagnosis_correct": i.diagnosis_correct,
+            "latency_ms": i.latency_ms,
+            "cost_usd": i.cost_usd,
+        }
+        for i in incidents
+    ]
+
+    return build_dashboard_data(incidents_data)
+
+
+# ---------------------------------------------------------------------------
+# DA-89: Relatórios compliance export
+# ---------------------------------------------------------------------------
+
+
+@router.get("/reports/compliance/export")
+async def export_compliance_report(
+    session: SessionDep,
+    format: Literal["pdf", "xlsx"] = Query(..., description="Formato de exportação"),
+    days: int = Query(default=7, ge=1, le=365, description="Número de dias para filtro"),
+) -> Response:
+    """DA-89: Exportar relatório compliance (PDF ou XLSX).
+
+    Gera relatório com:
+        - Resumo de incidentes
+        - Métricas de qualidade (Hit@1, accuracy)
+        - Eventos auditáveis
+        - Custos por domínio
+
+    ``format`` é validado pelo FastAPI antes da dependency de banco, então
+    formatos inválidos retornam 422 mesmo sem DATABASE_URL configurado.
+    """
+    from app.admin.reports import (
+        PDF_MEDIA_TYPE,
+        XLSX_MEDIA_TYPE,
+        build_compliance_summary,
+        calculate_quality_metrics,
+        export_pdf,
+        export_xlsx,
+        extract_auditable_events,
+        get_compliance_data,
+    )
+
+    if session is None:
+        raise api_error(503, "db_not_configured", "Persistência não configurada")
+
+    # Busca dados do banco
+    compliance_data = await get_compliance_data(session, days=days)
+
+    if compliance_data.get("error"):
+        raise api_error(503, "db_error", f"Erro ao buscar dados: {compliance_data['error']}")
+
+    incidents = compliance_data.get("incidents", [])
+
+    # Constrói relatório
+    summary = build_compliance_summary(incidents)
+    metrics = calculate_quality_metrics(incidents)
+    auditable_events = extract_auditable_events(incidents)
+
+    report_data = {
+        "summary": summary,
+        "metrics": metrics,
+        "by_domain": summary["by_domain"],
+        "auditable_events": auditable_events,
+        "generated_at": compliance_data.get("generated_at"),
+    }
+
+    # Exporta no formato solicitado
+    if format == "pdf":
+        return Response(content=export_pdf(report_data), media_type=PDF_MEDIA_TYPE)
+
+    return Response(content=export_xlsx(report_data), media_type=XLSX_MEDIA_TYPE)
+
+
+@router.get("/dashboard/compliance")
+async def get_compliance_dashboard(session: SessionDep) -> dict[str, Any]:
+    """DA-89: Visualização HTML para dashboard de compliance.
+
+    Retorna dados estruturados para renderização no frontend.
+    """
+    from app.admin.reports import build_compliance_summary, calculate_quality_metrics
+
+    if session is None:
+        raise api_error(503, "db_not_configured", "Persistência não configurada")
+
+    repo = IncidentRepository(session)
+    incidents = await repo.list_recent(limit=1000)
+
+    incidents_data = [
+        {
+            "id": str(i.id),
+            "created_at": i.created_at,
+            "agent_domain": i.agent_domain,
+            "probable_root_cause": i.probable_root_cause,
+            "model_confidence": i.model_confidence,
+            "diagnosis_correct": i.diagnosis_correct,
+            "verified_at": i.verified_at,
+            "cost_usd": i.cost_usd,
+        }
+        for i in incidents
+    ]
+
+    summary = build_compliance_summary(incidents_data)
+    metrics = calculate_quality_metrics(incidents_data)
+
+    return {
+        "summary": summary,
+        "metrics": metrics,
+        "generated_at": datetime.now(UTC).isoformat(),
     }

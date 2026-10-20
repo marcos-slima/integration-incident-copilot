@@ -329,5 +329,979 @@
     "interface_type": null,
     "difficulty": "out_of_scope",
     "notes": "validacao 2026-10-07 (M-19): sem documento de licenciamento na base"
+  },
+  {
+    "query": "documento de aplicacao nao foi criado, IDoc parado na WE02",
+    "expected_sources": [
+      "idoc_status_51.md"
+    ],
+    "expected_keywords": [
+      "WE02",
+      "Status Records"
+    ],
+    "interface_type": "rfc",
+    "difficulty": "easy",
+    "notes": "sintoma descrito pelo usuario, sem o numero do status"
+  },
+  {
+    "query": "IDoc de fatura com erro de centro de custo inexistente no recebedor",
+    "expected_sources": [
+      "idoc_status_51.md"
+    ],
+    "expected_keywords": [
+      "centro de custo"
+    ],
+    "interface_type": "rfc",
+    "difficulty": "medium",
+    "notes": "causa especifica (dado mestre) em vez do status"
+  },
+  {
+    "query": "como reprocessar IDoc com erro em massa, job RBDAPP01",
+    "expected_sources": [
+      "idoc_status_51.md"
+    ],
+    "expected_keywords": [
+      "RBDAPP01",
+      "BD87"
+    ],
+    "interface_type": "rfc",
+    "difficulty": "medium",
+    "notes": "pergunta sobre a resolucao, nao o sintoma"
+  },
+  {
+    "query": "inbound IDoc stuck in status 51 application document not posted",
+    "expected_sources": [
+      "idoc_status_51.md"
+    ],
+    "expected_keywords": [
+      "Application Document Not Posted"
+    ],
+    "interface_type": "rfc",
+    "difficulty": "easy",
+    "notes": "consulta em ingles"
+  },
+  {
+    "query": "usuario tecnico do processamento em background sem autorizacao para postar o IDoc",
+    "expected_sources": [
+      "idoc_status_51.md"
+    ],
+    "expected_keywords": [
+      "Autorizacao insuficiente"
+    ],
+    "interface_type": "rfc",
+    "difficulty": "hard",
+    "notes": "causa menos citada; compete com 401/403 de outros docs"
+  },
+  {
+    "query": "Security Material com senha antiga, iFlow recebe Unauthorized",
+    "expected_sources": [
+      "cpi_http_401.md"
+    ],
+    "expected_keywords": [
+      "Security Material",
+      "Unauthorized"
+    ],
+    "interface_type": "odata",
+    "difficulty": "easy",
+    "notes": "termos do proprio CPI"
+  },
+  {
+    "query": "depois que trocaram a senha do sistema destino o iFlow comecou a falhar com 401",
+    "expected_sources": [
+      "cpi_http_401.md"
+    ],
+    "expected_keywords": [
+      "propagada"
+    ],
+    "interface_type": "odata",
+    "difficulty": "medium",
+    "notes": "causa por mudanca de credencial"
+  },
+  {
+    "query": "adapter do CPI nao renova o token OAuth2 automaticamente",
+    "expected_sources": [
+      "cpi_http_401.md"
+    ],
+    "expected_keywords": [
+      "renovacao",
+      "OAuth2"
+    ],
+    "interface_type": "odata",
+    "difficulty": "medium",
+    "notes": "token sem renovacao no adapter"
+  },
+  {
+    "query": "Cloud Integration iFlow gets HTTP 401 calling third-party REST API",
+    "expected_sources": [
+      "cpi_http_401.md"
+    ],
+    "expected_keywords": [
+      "Integration Suite",
+      "REST"
+    ],
+    "interface_type": "odata",
+    "difficulty": "easy",
+    "notes": "consulta em ingles"
+  },
+  {
+    "query": "401 no iFlow ao chamar endpoint externo: qual Credential Name conferir",
+    "expected_sources": [
+      "cpi_http_401.md"
+    ],
+    "expected_keywords": [
+      "Credential Name"
+    ],
+    "interface_type": "odata",
+    "difficulty": "hard",
+    "notes": "401 do CPI, nao do API Management nem do PO"
+  },
+  {
+    "query": "Partner not reached ao testar destino RFC",
+    "expected_sources": [
+      "rfc_connection_refused.md"
+    ],
+    "expected_keywords": [
+      "Partner not reached"
+    ],
+    "interface_type": "rfc",
+    "difficulty": "easy",
+    "notes": "mensagem literal do SAP"
+  },
+  {
+    "query": "ECONNREFUSED chamando RFC a partir de sistema externo",
+    "expected_sources": [
+      "rfc_connection_refused.md"
+    ],
+    "expected_keywords": [
+      "ECONNREFUSED"
+    ],
+    "interface_type": "rfc",
+    "difficulty": "easy",
+    "notes": "codigo de erro de socket"
+  },
+  {
+    "query": "depois do refresh de ambiente o destino RFC aponta para host errado",
+    "expected_sources": [
+      "rfc_connection_refused.md"
+    ],
+    "expected_keywords": [
+      "refresh de ambiente"
+    ],
+    "interface_type": "rfc",
+    "difficulty": "medium",
+    "notes": "causa pos-refresh"
+  },
+  {
+    "query": "firewall bloqueando a porta do gateway SAP entre os servidores",
+    "expected_sources": [
+      "rfc_connection_refused.md"
+    ],
+    "expected_keywords": [
+      "firewall",
+      "porta do gateway"
+    ],
+    "interface_type": "rfc",
+    "difficulty": "medium",
+    "notes": "causa de rede"
+  },
+  {
+    "query": "chamada RFC falha na hora, nem chega a conectar",
+    "expected_sources": [
+      "rfc_connection_refused.md"
+    ],
+    "expected_keywords": [
+      "IMEDIATA"
+    ],
+    "interface_type": "rfc",
+    "difficulty": "hard",
+    "notes": "falha imediata x timeout do pool (rfc_gateway_pool_timeout)"
+  },
+  {
+    "query": "RFC sincrona falha com SYSTEM_FAILURE depois de 60 segundos",
+    "expected_sources": [
+      "rfc_gateway_pool_timeout.md"
+    ],
+    "expected_keywords": [
+      "SYSTEM_FAILURE"
+    ],
+    "interface_type": "rfc",
+    "difficulty": "easy",
+    "notes": "sintoma literal"
+  },
+  {
+    "query": "integracao RFC cai toda noite no horario dos jobs batch",
+    "expected_sources": [
+      "rfc_gateway_pool_timeout.md"
+    ],
+    "expected_keywords": [
+      "batch"
+    ],
+    "interface_type": "rfc",
+    "difficulty": "medium",
+    "notes": "padrao temporal"
+  },
+  {
+    "query": "gwy/max_conn e rdisp/wp_no_dia esgotados no ECC",
+    "expected_sources": [
+      "rfc_gateway_pool_timeout.md"
+    ],
+    "expected_keywords": [
+      "gwy/max_conn",
+      "rdisp/wp_no_dia"
+    ],
+    "interface_type": "rfc",
+    "difficulty": "easy",
+    "notes": "parametros de perfil"
+  },
+  {
+    "query": "SM50 cheia de processos de dialogo ocupados durante o fechamento do mes",
+    "expected_sources": [
+      "rfc_gateway_pool_timeout.md"
+    ],
+    "expected_keywords": [
+      "SM50",
+      "fim de mes"
+    ],
+    "interface_type": "rfc",
+    "difficulty": "medium",
+    "notes": "diagnostico via SM50/SM66"
+  },
+  {
+    "query": "RFC conecta mas demora e da timeout sem erro de aplicacao",
+    "expected_sources": [
+      "rfc_gateway_pool_timeout.md"
+    ],
+    "expected_keywords": [
+      "processo de dialogo"
+    ],
+    "interface_type": "rfc",
+    "difficulty": "hard",
+    "notes": "timeout do pool x connection refused"
+  },
+  {
+    "query": "iFlow da timeout lendo OData do S/4HANA via SAP Gateway",
+    "expected_sources": [
+      "odata_timeout_cpi.md"
+    ],
+    "expected_keywords": [
+      "SAP Gateway",
+      "timeout"
+    ],
+    "interface_type": "odata",
+    "difficulty": "easy",
+    "notes": "sintoma direto"
+  },
+  {
+    "query": "como paginar a query OData no iFlow para nao estourar o tempo do adapter",
+    "expected_sources": [
+      "odata_timeout_cpi.md"
+    ],
+    "expected_keywords": [
+      "paginacao"
+    ],
+    "interface_type": "odata",
+    "difficulty": "medium",
+    "notes": "pergunta pela resolucao"
+  },
+  {
+    "query": "Cloud Connector com pool de conexoes HTTP esgotado no cenario hibrido",
+    "expected_sources": [
+      "odata_timeout_cpi.md"
+    ],
+    "expected_keywords": [
+      "Cloud Connector"
+    ],
+    "interface_type": "odata",
+    "difficulty": "medium",
+    "notes": "causa hibrida"
+  },
+  {
+    "query": "onde ver o Message Processing Log do iFlow que deu timeout",
+    "expected_sources": [
+      "odata_timeout_cpi.md"
+    ],
+    "expected_keywords": [
+      "Message Processing Log",
+      "MPL"
+    ],
+    "interface_type": "odata",
+    "difficulty": "medium",
+    "notes": "diagnostico via MPL"
+  },
+  {
+    "query": "timeout de 60s no adapter do CPI consumindo servico OData do ECC",
+    "expected_sources": [
+      "odata_timeout_cpi.md"
+    ],
+    "expected_keywords": [
+      "60s"
+    ],
+    "interface_type": "odata",
+    "difficulty": "hard",
+    "notes": "timeout do CPI x 55s do API Management x 60s do pool RFC"
+  },
+  {
+    "query": "429 too many requests na SAP API Management",
+    "expected_sources": [
+      "apim_gateway_auth_throttle.md"
+    ],
+    "expected_keywords": [
+      "429",
+      "throttling"
+    ],
+    "interface_type": "apim",
+    "difficulty": "easy",
+    "notes": "rate limit"
+  },
+  {
+    "query": "API Gateway corta a chamada em 55 segundos",
+    "expected_sources": [
+      "apim_gateway_auth_throttle.md"
+    ],
+    "expected_keywords": [
+      "55"
+    ],
+    "interface_type": "apim",
+    "difficulty": "easy",
+    "notes": "timeout do proxy"
+  },
+  {
+    "query": "certificado no Keystore com nome maior que 25 caracteres",
+    "expected_sources": [
+      "apim_gateway_auth_throttle.md"
+    ],
+    "expected_keywords": [
+      "Keystore",
+      "25 caracteres"
+    ],
+    "interface_type": "apim",
+    "difficulty": "medium",
+    "notes": "causa de certificado"
+  },
+  {
+    "query": "cliente sem SNI falha handshake TLS no API Management",
+    "expected_sources": [
+      "apim_gateway_auth_throttle.md"
+    ],
+    "expected_keywords": [
+      "SNI",
+      "TLS"
+    ],
+    "interface_type": "apim",
+    "difficulty": "medium",
+    "notes": "causa TLS"
+  },
+  {
+    "query": "401 vem do gateway de API ou do backend SAP? como separar a camada",
+    "expected_sources": [
+      "apim_gateway_auth_throttle.md"
+    ],
+    "expected_keywords": [
+      "Separar a camada"
+    ],
+    "interface_type": "apim",
+    "difficulty": "hard",
+    "notes": "401 do gateway x 401 do CPI/backend"
+  },
+  {
+    "query": "ANID do fornecedor desatualizado no mestre de fornecedor do S/4HANA",
+    "expected_sources": [
+      "ariba_po_supplier_mismatch.md"
+    ],
+    "expected_keywords": [
+      "ANID",
+      "LFA1"
+    ],
+    "interface_type": "ariba",
+    "difficulty": "easy",
+    "notes": "causa direta"
+  },
+  {
+    "query": "PO aparece como enviado no S/4HANA mas o fornecedor nunca recebe na Ariba Network",
+    "expected_sources": [
+      "ariba_po_supplier_mismatch.md"
+    ],
+    "expected_keywords": [
+      "Ariba Network"
+    ],
+    "interface_type": "ariba",
+    "difficulty": "easy",
+    "notes": "sintoma do comprador"
+  },
+  {
+    "query": "job de sincronizacao de dados mestre de fornecedor com a Ariba parado ha dias",
+    "expected_sources": [
+      "ariba_po_supplier_mismatch.md"
+    ],
+    "expected_keywords": [
+      "sincronizacao"
+    ],
+    "interface_type": "ariba",
+    "difficulty": "medium",
+    "notes": "replicacao parada"
+  },
+  {
+    "query": "fornecedor migrou de conta na Ariba depois de uma fusao",
+    "expected_sources": [
+      "ariba_po_supplier_mismatch.md"
+    ],
+    "expected_keywords": [
+      "fusao"
+    ],
+    "interface_type": "ariba",
+    "difficulty": "medium",
+    "notes": "troca de conta"
+  },
+  {
+    "query": "purchase order blocked on Ariba Network due to supplier routing",
+    "expected_sources": [
+      "ariba_po_supplier_mismatch.md"
+    ],
+    "expected_keywords": [
+      "roteamento"
+    ],
+    "interface_type": "ariba",
+    "difficulty": "hard",
+    "notes": "consulta em ingles, termo traduzido"
+  },
+  {
+    "query": "servico CAP rejeita aprovacao com 422 porque falta approverId",
+    "expected_sources": [
+      "cap_custom_purchase_approval_failure.md"
+    ],
+    "expected_keywords": [
+      "approverId",
+      "422"
+    ],
+    "interface_type": "cap",
+    "difficulty": "easy",
+    "notes": "causa e codigo"
+  },
+  {
+    "query": "anotacao @mandatory no CDS quebrou o consumidor externo",
+    "expected_sources": [
+      "cap_custom_purchase_approval_failure.md"
+    ],
+    "expected_keywords": [
+      "@mandatory",
+      "CDS"
+    ],
+    "interface_type": "cap",
+    "difficulty": "medium",
+    "notes": "anotacao CDS"
+  },
+  {
+    "query": "deploy novo do CAP adicionou validacao e o sistema que chama parou de funcionar",
+    "expected_sources": [
+      "cap_custom_purchase_approval_failure.md"
+    ],
+    "expected_keywords": [
+      "validacao nova"
+    ],
+    "interface_type": "cap",
+    "difficulty": "medium",
+    "notes": "regressao por deploy"
+  },
+  {
+    "query": "posso afrouxar o @assert.range para o erro sumir?",
+    "expected_sources": [
+      "cap_custom_purchase_approval_failure.md"
+    ],
+    "expected_keywords": [
+      "@assert.range"
+    ],
+    "interface_type": "cap",
+    "difficulty": "hard",
+    "notes": "pergunta de resolucao; doc desaconselha"
+  },
+  {
+    "query": "side-by-side extension on BTP returns 422 Unprocessable on OData v4",
+    "expected_sources": [
+      "cap_custom_purchase_approval_failure.md"
+    ],
+    "expected_keywords": [
+      "OData v4"
+    ],
+    "interface_type": "cap",
+    "difficulty": "hard",
+    "notes": "consulta em ingles; compete com odata_contract_drift"
+  },
+  {
+    "query": "incidente aberto automaticamente no ServiceNow para CI SAP S/4HANA",
+    "expected_sources": [
+      "servicenow_itsm_alert.md"
+    ],
+    "expected_keywords": [
+      "ServiceNow",
+      "CI"
+    ],
+    "interface_type": "servicenow",
+    "difficulty": "easy",
+    "notes": "sintoma direto"
+  },
+  {
+    "query": "como usar cmdb_ci e short_description para achar a interface SAP afetada",
+    "expected_sources": [
+      "servicenow_itsm_alert.md"
+    ],
+    "expected_keywords": [
+      "cmdb_ci",
+      "short_description"
+    ],
+    "interface_type": "servicenow",
+    "difficulty": "medium",
+    "notes": "diagnostico"
+  },
+  {
+    "query": "prioridade 1 - Critical no ServiceNow mas o problema tecnico e simples",
+    "expected_sources": [
+      "servicenow_itsm_alert.md"
+    ],
+    "expected_keywords": [
+      "Critical",
+      "SLA"
+    ],
+    "interface_type": "servicenow",
+    "difficulty": "medium",
+    "notes": "prioridade x complexidade"
+  },
+  {
+    "query": "ferramenta de APM correlacionou com o CMDB e abriu ticket antes do time SAP",
+    "expected_sources": [
+      "servicenow_itsm_alert.md"
+    ],
+    "expected_keywords": [
+      "APM",
+      "CMDB"
+    ],
+    "interface_type": "servicenow",
+    "difficulty": "hard",
+    "notes": "origem do alerta"
+  },
+  {
+    "query": "pedido criado no Salesforce nao aparece no SAP SD sem nenhum erro",
+    "expected_sources": [
+      "salesforce_case_sap_sync_failure.md"
+    ],
+    "expected_keywords": [
+      "Salesforce",
+      "SD"
+    ],
+    "interface_type": "salesforce",
+    "difficulty": "easy",
+    "notes": "falha silenciosa"
+  },
+  {
+    "query": "mensagem do Salesforce caiu na Dead Letter do middleware",
+    "expected_sources": [
+      "salesforce_case_sap_sync_failure.md"
+    ],
+    "expected_keywords": [
+      "Dead Letter"
+    ],
+    "interface_type": "salesforce",
+    "difficulty": "medium",
+    "notes": "fila de erro"
+  },
+  {
+    "query": "Flow ou Apex trigger do Salesforce nao disparou o envio para o SAP",
+    "expected_sources": [
+      "salesforce_case_sap_sync_failure.md"
+    ],
+    "expected_keywords": [
+      "Apex trigger",
+      "Flow"
+    ],
+    "interface_type": "salesforce",
+    "difficulty": "medium",
+    "notes": "causa no proprio Salesforce"
+  },
+  {
+    "query": "oportunidade sem organizacao de vendas preenchida falha no SAP",
+    "expected_sources": [
+      "salesforce_case_sap_sync_failure.md"
+    ],
+    "expected_keywords": [
+      "campo obrigatorio",
+      "centro"
+    ],
+    "interface_type": "salesforce",
+    "difficulty": "hard",
+    "notes": "mapeamento de campo obrigatorio"
+  },
+  {
+    "query": "Person_ID_External do SuccessFactors nao existe como Worker no Workday",
+    "expected_sources": [
+      "workday_successfactors_sync_error.md"
+    ],
+    "expected_keywords": [
+      "Person_ID_External",
+      "Worker"
+    ],
+    "interface_type": "workday",
+    "difficulty": "easy",
+    "notes": "identificador literal"
+  },
+  {
+    "query": "Job Profile do Employee Central sem equivalente mapeado no Workday",
+    "expected_sources": [
+      "workday_successfactors_sync_error.md"
+    ],
+    "expected_keywords": [
+      "Job Profile",
+      "Employee Central"
+    ],
+    "interface_type": "successfactors",
+    "difficulty": "medium",
+    "notes": "taxonomia de cargo"
+  },
+  {
+    "query": "eventos de contratacao processados fora de ordem entre SuccessFactors e Workday",
+    "expected_sources": [
+      "workday_successfactors_sync_error.md"
+    ],
+    "expected_keywords": [
+      "fora de sequencia"
+    ],
+    "interface_type": "workday",
+    "difficulty": "medium",
+    "notes": "ordem de eventos; compete com po_pi_message_ordering"
+  },
+  {
+    "query": "replicacao de desligamento de funcionario falha no Workday",
+    "expected_sources": [
+      "workday_successfactors_sync_error.md"
+    ],
+    "expected_keywords": [
+      "desligamento"
+    ],
+    "interface_type": "workday",
+    "difficulty": "medium",
+    "notes": "evento especifico"
+  },
+  {
+    "query": "HRIS hibrido pos-aquisicao: SuccessFactors mestre e Workday na unidade adquirida",
+    "expected_sources": [
+      "workday_successfactors_sync_error.md"
+    ],
+    "expected_keywords": [
+      "pos-aquisicao"
+    ],
+    "interface_type": "successfactors",
+    "difficulty": "hard",
+    "notes": "contexto de negocio, sem erro tecnico"
+  },
+  {
+    "query": "RABAX_STATE no monitor do SAP PO",
+    "expected_sources": [
+      "po_pi_stuck_message.md"
+    ],
+    "expected_keywords": [
+      "RABAX"
+    ],
+    "interface_type": "po",
+    "difficulty": "easy",
+    "notes": "estado literal"
+  },
+  {
+    "query": "mensagem fica in process no PI e nao avanca",
+    "expected_sources": [
+      "po_pi_stuck_message.md"
+    ],
+    "expected_keywords": [
+      "in process"
+    ],
+    "interface_type": "po",
+    "difficulty": "easy",
+    "notes": "sintoma no monitor"
+  },
+  {
+    "query": "onde fica o Message Monitor REST do PO, /pimon",
+    "expected_sources": [
+      "po_pi_stuck_message.md"
+    ],
+    "expected_keywords": [
+      "/pimon"
+    ],
+    "interface_type": "po",
+    "difficulty": "medium",
+    "notes": "diagnostico via URL"
+  },
+  {
+    "query": "canal SOAP do PO com 401 porque o usuario tecnico expirou",
+    "expected_sources": [
+      "po_pi_stuck_message.md"
+    ],
+    "expected_keywords": [
+      "usuario tecnico"
+    ],
+    "interface_type": "po",
+    "difficulty": "hard",
+    "notes": "401 no PO x 401 do CPI/APIM"
+  },
+  {
+    "query": "reprocessar mensagem no PO mantendo o ID original em vez de criar outra",
+    "expected_sources": [
+      "po_pi_stuck_message.md"
+    ],
+    "expected_keywords": [
+      "Restart"
+    ],
+    "interface_type": "po",
+    "difficulty": "medium",
+    "notes": "resolucao"
+  },
+  {
+    "query": "lote gravado pela metade no destino depois de falha no PO",
+    "expected_sources": [
+      "po_pi_message_ordering.md"
+    ],
+    "expected_keywords": [
+      "parcial"
+    ],
+    "interface_type": "po",
+    "difficulty": "medium",
+    "notes": "estado parcial"
+  },
+  {
+    "query": "canal com processamento paralelo grava o mesmo registro duas vezes",
+    "expected_sources": [
+      "po_pi_message_ordering.md"
+    ],
+    "expected_keywords": [
+      "paralelo"
+    ],
+    "interface_type": "po",
+    "difficulty": "medium",
+    "notes": "duplicidade por reentrega no PO"
+  },
+  {
+    "query": "receptor sem chave natural de negocio nao distingue atualizacao de duplicata",
+    "expected_sources": [
+      "po_pi_message_ordering.md"
+    ],
+    "expected_keywords": [
+      "chave natural",
+      "upsert"
+    ],
+    "interface_type": "po",
+    "difficulty": "hard",
+    "notes": "resolucao por upsert"
+  },
+  {
+    "query": "evento mais novo processado antes do antigo no PI",
+    "expected_sources": [
+      "po_pi_message_ordering.md"
+    ],
+    "expected_keywords": [
+      "Ordenacao"
+    ],
+    "interface_type": "po",
+    "difficulty": "hard",
+    "notes": "ordenacao; compete com workday fora de sequencia"
+  },
+  {
+    "query": "provedor de eventos reentrega o mesmo evento porque nao recebeu 2xx",
+    "expected_sources": [
+      "duplicate_incident_idempotency.md"
+    ],
+    "expected_keywords": [
+      "at-least-once",
+      "2xx"
+    ],
+    "interface_type": null,
+    "difficulty": "medium",
+    "notes": "semantica de entrega"
+  },
+  {
+    "query": "criamos dois tickets iguais para o mesmo erro",
+    "expected_sources": [
+      "duplicate_incident_idempotency.md"
+    ],
+    "expected_keywords": [
+      "dois tickets"
+    ],
+    "interface_type": null,
+    "difficulty": "easy",
+    "notes": "relato do usuario"
+  },
+  {
+    "query": "deduplicacao em memoria perde o controle quando o processo reinicia",
+    "expected_sources": [
+      "duplicate_incident_idempotency.md"
+    ],
+    "expected_keywords": [
+      "memoria",
+      "Redis"
+    ],
+    "interface_type": null,
+    "difficulty": "medium",
+    "notes": "dedup nao duravel"
+  },
+  {
+    "query": "handler de webhook lento demora mais de 10s e gera retry",
+    "expected_sources": [
+      "duplicate_incident_idempotency.md"
+    ],
+    "expected_keywords": [
+      "10s"
+    ],
+    "interface_type": null,
+    "difficulty": "hard",
+    "notes": "retry auto-gerado; compete com timeouts"
+  },
+  {
+    "query": "chave de idempotencia deve ter event id e tipo de evento",
+    "expected_sources": [
+      "duplicate_incident_idempotency.md"
+    ],
+    "expected_keywords": [
+      "idempotencia"
+    ],
+    "interface_type": null,
+    "difficulty": "hard",
+    "notes": "resolucao; compete com po_pi_message_ordering"
+  },
+  {
+    "query": "propriedade removida do servico OData depois do upgrade",
+    "expected_sources": [
+      "odata_contract_drift.md"
+    ],
+    "expected_keywords": [
+      "propriedade removida"
+    ],
+    "interface_type": "odata",
+    "difficulty": "easy",
+    "notes": "relato tipico"
+  },
+  {
+    "query": "EDMX republicado com namespace diferente quebrou o consumidor",
+    "expected_sources": [
+      "odata_contract_drift.md"
+    ],
+    "expected_keywords": [
+      "EDMX",
+      "namespace"
+    ],
+    "interface_type": "odata",
+    "difficulty": "medium",
+    "notes": "metadados republicados"
+  },
+  {
+    "query": "campo renomeado no OData conta como mudanca breaking?",
+    "expected_sources": [
+      "odata_contract_drift.md"
+    ],
+    "expected_keywords": [
+      "RENOMEADA",
+      "breaking"
+    ],
+    "interface_type": "odata",
+    "difficulty": "medium",
+    "notes": "classificacao de mudanca"
+  },
+  {
+    "query": "proxy gerado valida schema estritamente e quebra com propriedade nova",
+    "expected_sources": [
+      "odata_contract_drift.md"
+    ],
+    "expected_keywords": [
+      "proxies gerados"
+    ],
+    "interface_type": "odata",
+    "difficulty": "hard",
+    "notes": "mudanca aditiva que ainda quebra"
+  },
+  {
+    "query": "OData service returns 404 on property after SAP release",
+    "expected_sources": [
+      "odata_contract_drift.md"
+    ],
+    "expected_keywords": [
+      "404"
+    ],
+    "interface_type": "odata",
+    "difficulty": "hard",
+    "notes": "consulta em ingles"
+  },
+  {
+    "query": "senha do usuario dialog bloqueada na SU01",
+    "expected_sources": [],
+    "expected_keywords": [],
+    "interface_type": null,
+    "difficulty": "out_of_scope",
+    "notes": "administracao de usuarios, sem doc"
+  },
+  {
+    "query": "lentidao geral no SAP GUI de manha",
+    "expected_sources": [],
+    "expected_keywords": [],
+    "interface_type": null,
+    "difficulty": "out_of_scope",
+    "notes": "performance de GUI, sem doc"
+  },
+  {
+    "query": "ajuste de layout do Smartform da nota fiscal",
+    "expected_sources": [],
+    "expected_keywords": [],
+    "interface_type": null,
+    "difficulty": "out_of_scope",
+    "notes": "formulario, sem doc"
+  },
+  {
+    "query": "erro de calculo de imposto ICMS no pedido de venda",
+    "expected_sources": [],
+    "expected_keywords": [],
+    "interface_type": null,
+    "difficulty": "out_of_scope",
+    "notes": "regra fiscal, sem doc"
+  },
+  {
+    "query": "dump TIME_OUT em relatorio Z na ST22",
+    "expected_sources": [],
+    "expected_keywords": [],
+    "interface_type": null,
+    "difficulty": "out_of_scope",
+    "notes": "dump de programa, sem doc"
+  },
+  {
+    "query": "upgrade do kernel SAP falhou no SUM",
+    "expected_sources": [],
+    "expected_keywords": [],
+    "interface_type": null,
+    "difficulty": "out_of_scope",
+    "notes": "basis, sem doc"
+  },
+  {
+    "query": "email de workflow de aprovacao nao chega ao gestor",
+    "expected_sources": [],
+    "expected_keywords": [],
+    "interface_type": null,
+    "difficulty": "out_of_scope",
+    "notes": "workflow/SMTP, sem doc"
+  },
+  {
+    "query": "Fiori app retorna tela branca no navegador Safari",
+    "expected_sources": [],
+    "expected_keywords": [],
+    "interface_type": null,
+    "difficulty": "out_of_scope",
+    "notes": "frontend, sem doc"
+  },
+  {
+    "query": "variante de execucao do MRP gerou necessidades duplicadas",
+    "expected_sources": [],
+    "expected_keywords": [],
+    "interface_type": null,
+    "difficulty": "out_of_scope",
+    "notes": "planejamento; 'duplicadas' nao e duplicidade de integracao"
+  },
+  {
+    "query": "backup do HANA falhou por falta de espaco em disco",
+    "expected_sources": [],
+    "expected_keywords": [],
+    "interface_type": null,
+    "difficulty": "out_of_scope",
+    "notes": "infra de banco, sem doc"
   }
 ]

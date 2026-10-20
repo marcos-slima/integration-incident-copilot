@@ -49,11 +49,12 @@ import secrets
 import time
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api_errors import api_error
 from app.config import settings
 from app.db import get_db_session
 from app.rate_limit import limiter, request_client_identity_for_auth_endpoints
@@ -295,10 +296,7 @@ async def login(
             body.username[:64],
             request.client.host if request.client else "?",
         )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="usuario ou senha invalidos",
-        )
+        raise api_error(401, "invalid_credentials", "usuario ou senha invalidos")
     ttl = settings.session_ttl_hours * 3600
     token = sign_session(body.username, ttl, settings.session_secret)
     response.set_cookie(value=token, **session_cookie_kwargs())
@@ -366,17 +364,13 @@ async def verify_email(
     from app.webusers import confirm_email  # lazy: ciclo com app.auth
 
     if db is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="ativacao de conta exige persistencia configurada",
+        raise api_error(
+            503, "activation_requires_db", "ativacao de conta exige persistencia configurada"
         )
     try:
         tokens = await confirm_email(db, username=body.username, token=body.token)
     except LookupError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="token invalido ou usuario inexistente",
-        ) from None
+        raise api_error(401, "invalid_token", "token invalido ou usuario inexistente") from None
     # out-of-band: o codigo da etapa 2 volta SÓ na resposta de ADMIN
     # (regeneracao), nunca aqui — rota publica
     return {
@@ -396,17 +390,13 @@ async def verify_phone(
     from app.webusers import confirm_phone  # lazy: ciclo com app.auth
 
     if db is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="ativacao de conta exige persistencia configurada",
+        raise api_error(
+            503, "activation_requires_db", "ativacao de conta exige persistencia configurada"
         )
     try:
         user = await confirm_phone(db, username=body.username, code=body.code)
     except LookupError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="codigo invalido ou usuario inexistente",
-        ) from None
+        raise api_error(401, "invalid_code", "codigo invalido ou usuario inexistente") from None
     return {"ok": True, "username": user.username, "status": user.status}
 
 

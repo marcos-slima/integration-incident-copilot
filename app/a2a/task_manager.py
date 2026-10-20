@@ -57,6 +57,7 @@ _STRUCTURED_FIELDS = (
     "sensitivity_level",
     "pii_detected",
     "redaction_applied",
+    "locale",  # DA-74
 )
 
 

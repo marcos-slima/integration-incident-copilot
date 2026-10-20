@@ -2,7 +2,8 @@
 // Isola o fetch() do resto da aplicação —
 // se a URL ou o formato mudar, só este arquivo precisa mudar.
 
-import type { DiagnosisResponse, IncidentRequest } from '../types/models';
+import i18n from '../i18n';
+import type { ApiErrorCode, DiagnosisResponse, IncidentRequest } from '../types/models';
 
 // Em desenvolvimento, o Vite proxy redireciona /diagnose para localhost:8000
 // Em produção, usa a mesma origem (FastAPI serve o frontend)
@@ -16,11 +17,43 @@ const API_BASE = import.meta.env.VITE_API_URL ?? '';
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  code?: ApiErrorCode | string; // app/main.py: budget_exhausted, policy_violation...
+  errorId?: string; // liga a resposta ao log do servidor
+  constructor(status: number, message: string, code?: string, errorId?: string) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.code = code;
+    this.errorId = errorId;
   }
+}
+
+// Corpo de erro do FastAPI: `detail` e string nos handlers proprios e lista
+// no 422 de validacao (M-15). Nunca devolve o valor recebido.
+export async function apiErrorFrom(res: Response): Promise<ApiError> {
+  const err = await res.json().catch(() => ({}));
+  const detail = Array.isArray(err.detail)
+    ? err.detail.map((d: { msg?: string }) => d.msg).filter(Boolean).join('; ')
+    : err.detail;
+  return new ApiError(res.status, detail || `HTTP ${res.status}`, err.code, err.error_id);
+}
+
+// Mensagem para o usuario, por `code` quando existe e por status no resto.
+// DA-73: textos no catalogo; o `detail` do backend so entra como dado.
+export function describeApiError(e: ApiError): string {
+  const ref = e.errorId ? i18n.t('errors.ref', { id: e.errorId }) : '';
+  switch (e.code) {
+    case 'budget_exhausted':
+    case 'policy_violation':
+      return i18n.t(`errors.${e.code}`) + ref;
+    case 'overloaded':
+      return i18n.t('errors.overloaded');
+    case 'timeout':
+      return i18n.t('errors.timeout', { detail: e.message });
+  }
+  if (e.status === 422) return i18n.t('errors.validation', { message: e.message });
+  if (e.status === 429) return i18n.t('errors.rateLimited');
+  return i18n.t('errors.generic', { status: e.status, message: e.message }) + ref;
 }
 
 export async function callDiagnose(
@@ -33,10 +66,7 @@ export async function callDiagnose(
     body: JSON.stringify(payload),
   });
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new ApiError(res.status, err.detail ?? `HTTP ${res.status}`);
-  }
+  if (!res.ok) throw await apiErrorFrom(res);
 
   return res.json() as Promise<DiagnosisResponse>;
 }

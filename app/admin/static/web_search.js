@@ -2,18 +2,18 @@
 function loadSources() {
   const btn = actionButton('loadSources');
   const originalText = btn.textContent;
-  btn.textContent = 'Carregando...';
+  btn.textContent = t('common.loading');
   btn.disabled = true;
 
   adminFetch('/admin/api/web-search-sources').then(r => {
-    if (r.status === 401) throw new Error('Chave admin inválida — insira acima');
-    if (r.status === 503) throw new Error('DB não configurado (DATABASE_URL ausente)');
+    if (r.status === 401) throw new Error(t('common.invalidKey'));
+    if (r.status === 503) throw new Error(t('common.dbMissing'));
     return r.json();
   }).then(rows => {
     const tb = document.getElementById('sources-body');
     tb.innerHTML = '';
     if (!rows.length) {
-      tb.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem; color: var(--text); opacity: 0.7;">Nenhuma fonte cadastrada — rode <code>alembic upgrade head</code> para o seed dos 10 conectores</td></tr>';
+      tb.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem; color: var(--text); opacity: 0.7;">' + t('web.empty') + '</td></tr>';
       btn.textContent = originalText;
       btn.disabled = false;
       return;
@@ -24,12 +24,12 @@ function loadSources() {
         <td style="font-family: monospace; font-size: 0.9rem;">${escapeHtml(s.interface_type)}</td>
         <td style="font-family: sans-serif;">${escapeHtml(s.tech_term)}</td>
         <td style="font-family: monospace; font-size: 0.85rem;">${escapeHtml(s.site_filter)}</td>
-        <td>${s.enabled ? '<span class="status-badge status-active">Sim</span>' : '<span class="status-badge status-offline">Não</span>'}</td>
+        <td>${s.enabled ? `<span class="status-badge status-active">${escapeHtml(t('common.yes'))}</span>` : `<span class="status-badge status-offline">${escapeHtml(t('common.no'))}</span>`}</td>
         <td>${escapeHtml(s.notes || '—')}</td>
         <td>
-          <button data-click="editSource" data-args="${escapeAttr(JSON.stringify([s.id]))}" class="btn" style="padding: 0.4rem 0.8rem; background: var(--border);">✎</button>
-          <button data-click="toggleSource" data-args="${escapeAttr(JSON.stringify([s.id, !s.enabled]))}" class="btn" style="padding: 0.4rem 0.8rem; background: var(--border);">🔄</button>
-          <button data-click="delSource" data-args="${escapeAttr(JSON.stringify([s.id]))}" class="btn btn-danger" style="padding: 0.4rem 0.8rem;">🗑️</button>
+          <button data-click="editSource" data-args="${escapeAttr(JSON.stringify([s.id]))}" class="btn" style="padding: 0.4rem 0.8rem; background: var(--border);" title="${escapeAttr(t('common.edit'))}">✎</button>
+          <button data-click="toggleSource" data-args="${escapeAttr(JSON.stringify([s.id, !s.enabled]))}" class="btn" style="padding: 0.4rem 0.8rem; background: var(--border);" title="${escapeAttr(t('common.toggle'))}">🔄</button>
+          <button data-click="delSource" data-args="${escapeAttr(JSON.stringify([s.id]))}" class="btn btn-danger" style="padding: 0.4rem 0.8rem;" title="${escapeAttr(t('common.delete'))}">🗑️</button>
         </td>`;
       tb.appendChild(tr);
     }
@@ -67,7 +67,7 @@ function saveEdit(e) {
   if (!Object.keys(body).length) { cancelEdit(); return false; }
   adminFetch('/admin/api/web-search-sources/' + f.dataset.id,
     {method:'PATCH', body: JSON.stringify(body)})
-    .then(r => r.ok ? null : r.json().then(j => { throw new Error(j.detail); }))
+    .then(r => r.ok ? null : r.json().then(j => { throw new Error(apiErrorText(j, r.status)); }))
     .then(() => { cancelEdit(); return loadSources(); })
     .catch(err => {
       const msg = document.getElementById('msg');
@@ -87,7 +87,7 @@ function toggleSource(id, enabled) {
 }
 
 function delSource(id) {
-  if (!confirm('Remover esta fonte? O conector volta a ficar sem busca web (fail-closed).')) return;
+  if (!confirm(t('web.confirmDelete'))) return;
   adminFetch('/admin/api/web-search-sources/' + id, {method:'DELETE'})
     .then(() => loadSources()).catch(e => {
       const msg = document.getElementById('msg');
@@ -102,7 +102,7 @@ function addSource(e) {
   const body = Object.fromEntries([...f.entries()].map(([k,v]) => [k, v === '' ? null : v]));
   body.enabled = true;
   adminFetch('/admin/api/web-search-sources', {method:'POST', body: JSON.stringify(body)})
-    .then(r => r.ok ? loadSources() : r.json().then(j => { throw new Error(j.detail); }))
+    .then(r => r.ok ? loadSources() : r.json().then(j => { throw new Error(apiErrorText(j, r.status)); }))
     .then(() => e.target.reset())
     .catch(err => {
       const msg = document.getElementById('msg');

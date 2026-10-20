@@ -66,7 +66,7 @@ def _write_baseline(results_path: Path, destination: Path, model: str | None = N
     return 0
 
 
-def _write_prompt_baseline(root: Path) -> int:
+def _write_prompt_baseline(root: Path, locale: str | None = None) -> int:
     """Grava o digest corrente em `data/eval/prompt_baseline.json` (DA-53).
 
     Deliberadamente sem argumentos: nao existe "gravar digest de outra
@@ -76,7 +76,8 @@ def _write_prompt_baseline(root: Path) -> int:
     escrito a mao e' exatamente o artefato que o gate existe para nao
     confiar.
     """
-    from app.agent.prompts import PROMPT_VERSION, compute_digest
+    from app.agent.prompts import PROMPT_VERSION, compute_digest, prompt_locales
+    from app.i18n.content import DEFAULT_CONTENT_LOCALE
 
     target = root / PROMPT_BASELINE
     existing: dict[str, object] = {}
@@ -87,18 +88,25 @@ def _write_prompt_baseline(root: Path) -> int:
                 existing = loaded
         except json.JSONDecodeError:
             existing = {}
-    existing.update(
-        {
-            "prompt_name": "diagnosis",
-            "prompt_version": PROMPT_VERSION,
-            "prompt_digest": compute_digest(),
-        }
-    )
+    loc = locale or DEFAULT_CONTENT_LOCALE
+    if loc not in prompt_locales():
+        print(f"[FAIL] idioma sem prompt proprio: {loc} (use {', '.join(prompt_locales())})")
+        return 1
+    digest = compute_digest(loc)
+    if loc == DEFAULT_CONTENT_LOCALE:
+        existing.update(
+            {"prompt_name": "diagnosis", "prompt_version": PROMPT_VERSION, "prompt_digest": digest}
+        )
+    else:
+        # DA-74: digest medido de outro idioma, ao lado do default
+        locales = existing.get("locales") if isinstance(existing.get("locales"), dict) else {}
+        locales[loc] = {"prompt_version": PROMPT_VERSION, "prompt_digest": digest}
+        existing["locales"] = locales
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(
         json.dumps(existing, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
-    print(f"[OK] {PROMPT_BASELINE} gravado com digest {existing['prompt_digest'][:16]}")
+    print(f"[OK] {PROMPT_BASELINE} gravado ({loc}) com digest {digest[:16]}")
     return 0
 
 
@@ -136,11 +144,17 @@ def main(argv: list[str] | None = None) -> int:
             "o arquivo e' a declaracao de 'este texto foi o medido'."
         ),
     )
+    parser.add_argument(
+        "--prompt-locale",
+        default=None,
+        help="DA-74: com --write-prompt-baseline, grava o digest do prompt deste idioma "
+        "(default pt-BR). So depois de medir o promptfoo com esse idioma.",
+    )
     args = parser.parse_args(argv)
 
     root: Path = args.root.resolve()
     if args.write_prompt_baseline:
-        return _write_prompt_baseline(root)
+        return _write_prompt_baseline(root, args.prompt_locale)
     if args.write_promptfoo_baseline:
         return _write_baseline(
             args.write_promptfoo_baseline, root / PROMPTFOO_BASELINE, args.baseline_model

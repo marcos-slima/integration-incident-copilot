@@ -7,8 +7,9 @@
 // - FileReader API com TypeScript
 
 import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
-import { callDiagnose, ApiError } from '../api/diagnose';
+import { callDiagnose, ApiError, describeApiError } from '../api/diagnose';
 import type {
   DiagnosisResponse,
   HistoryItem,
@@ -16,6 +17,8 @@ import type {
   InterfaceType,
 } from '../types/models';
 import { Badge } from './Badge';
+import { EscalationBanner, EvidenceList, Provenance } from './DiagnosisDetails';
+import { diagnosisLocale } from '../i18n';
 
 // Props do componente
 interface DiagnoseViewProps {
@@ -26,18 +29,19 @@ interface DiagnoseViewProps {
 // Sistemas disponíveis no dropdown — os 9 conectores do pipeline
 // (app/connectors/__init__.py::_REGISTRY). O gate connector_reachable
 // reprova se um conector registrado faltar aqui.
+// DA-73: o segundo elemento e' a chave do rotulo no catalogo.
 const SYSTEMS: Array<[string, string]> = [
-  ['', 'Sem conector (texto livre)'],
-  ['odata', 'OData / SAP Gateway'],
-  ['rfc', 'RFC / SAP ABAP'],
-  ['servicenow', 'ServiceNow ITSM'],
-  ['salesforce', 'Salesforce CRM'],
-  ['workday', 'Workday HCM'],
-  ['ariba', 'SAP Ariba'],
-  ['successfactors', 'SAP SuccessFactors EC'],
-  ['cap', 'SAP CAP / BTP'],
-  ['apim', 'SAP API Management'],
-  ['po', 'SAP PO/PI (on-premise)'],
+  ['', 'systems.none'],
+  ['odata', 'systems.odata'],
+  ['rfc', 'systems.rfc'],
+  ['servicenow', 'systems.servicenow'],
+  ['salesforce', 'systems.salesforce'],
+  ['workday', 'systems.workday'],
+  ['ariba', 'systems.ariba'],
+  ['successfactors', 'systems.successfactors'],
+  ['cap', 'systems.cap'],
+  ['apim', 'systems.apim'],
+  ['po', 'systems.po'],
 ];
 
 // Limite de tamanho de arquivo p/ upload - alinhado ao limite do backend
@@ -50,10 +54,11 @@ const SYSTEMS: Array<[string, string]> = [
 const MAX_UPLOAD_BYTES = 50_000;
 
 // Identificadores de demonstração
+// (desc = chave do catalogo; o texto vai no idioma da UI)
 const DEMO_IDS = [
-  { id: 'CPI-401-DEMO',        sys: 'odata', desc: 'iFlow retornando HTTP 401 ao autenticar via OAuth2' },
-  { id: 'RFC-IDOC-51-DEMO',    sys: 'rfc',   desc: 'IDoc travado com status 51' },
-  { id: 'RFC-CONN-REFUSED-DEMO', sys: 'rfc', desc: 'SM59 não conecta no sistema de destino' },
+  { id: 'CPI-401-DEMO',          sys: 'odata', desc: 'demo.cpi401' },
+  { id: 'RFC-IDOC-51-DEMO',      sys: 'rfc',   desc: 'demo.idoc51' },
+  { id: 'RFC-CONN-REFUSED-DEMO', sys: 'rfc',   desc: 'demo.connRefused' },
 ];
 
 // Tipo do arquivo anexado
@@ -64,6 +69,7 @@ interface UploadedFile {
 }
 
 export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) {
+  const { t } = useTranslation();
   // Estado do formulário
   const [desc, setDesc]       = useState('');
   const [sys, setSys]         = useState('');
@@ -87,7 +93,7 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
   // Submete o formulário ao backend
   async function submit() {
     if (!desc.trim()) {
-      setError('Descreva o incidente para iniciar o diagnóstico.');
+      setError(t('diagnose.needDescription'));
       return;
     }
     setError('');
@@ -97,7 +103,7 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
 
     try {
       // Monta o payload — só inclui campos preenchidos
-      const body: IncidentRequest = { description: desc.trim() };
+      const body: IncidentRequest = { description: desc.trim(), locale: diagnosisLocale() };
       if (sys)           body.interface_type = sys as InterfaceType;
       if (ident.trim())  body.identifier     = ident.trim();
       if (logs.trim())   body.logs           = logs.trim();
@@ -112,15 +118,17 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
         if (e.status === 401) {
           // DA-54: sessão expirada em pleno uso — o App troca para a
           // tela de login com aviso; aqui só o rastro do motivo
-          setError('Sessão expirada (401) — entre novamente.');
+          setError(t('diagnose.sessionExpired401'));
           onSessionExpired();
         } else {
-          // Erro HTTP do backend (422, 429, 500)
-          setError(`Erro ${e.status}: ${e.message}`);
+          // Erro HTTP do backend: mensagem por `code` (budget_exhausted,
+          // policy_violation, overloaded, timeout) ou por status, com o
+          // error_id para achar o log
+          setError(describeApiError(e));
         }
       } else {
         // Erro de rede (servidor offline, timeout)
-        setError('Falha na comunicação com o servidor. Verifique se o backend está ativo.');
+        setError(t('common.networkError'));
       }
     } finally {
       setLoading(false);
@@ -135,14 +143,11 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
     const ALLOWED = ['.txt', '.log', '.xml', '.json', '.csv', '.md'];
     const ext = '.' + file.name.split('.').pop()!.toLowerCase();
     if (!ALLOWED.includes(ext)) {
-      setError(`Tipo não suportado. Use: ${ALLOWED.join(', ')}`);
+      setError(t('diagnose.unsupportedType', { types: ALLOWED.join(', ') }));
       return;
     }
     if (file.size > MAX_UPLOAD_BYTES) {
-      setError(
-        `Arquivo muito grande. Limite: ${MAX_UPLOAD_BYTES / 1000}KB (mesmo limite de ` +
-          'caracteres aceito pela API para logs/payload).',
-      );
+      setError(t('diagnose.fileTooLarge', { kb: MAX_UPLOAD_BYTES / 1000 }));
       return;
     }
 
@@ -165,27 +170,23 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
   }
 
   function fillDemo(id: string, s: string, d: string) {
-    setIdent(id); setSys(s); setDesc(d);
+    setIdent(id); setSys(s); setDesc(t(d));
     setResult(null); setError('');
   }
 
   return (
     <div className="view">
-      <h1 className="page-title">Diagnóstico de incidente</h1>
-      <p className="page-sub">
-        Descreva o incidente em linguagem natural. O agente recupera o contexto
-        via RAG, analisa com LLM e retorna a causa raiz provável com próximos
-        passos concretos.
-      </p>
+      <h1 className="page-title">{t('diagnose.title')}</h1>
+      <p className="page-sub">{t('diagnose.subtitle')}</p>
 
       <div className="form-card">
         {/* Descrição */}
         <div className="field-row">
-          <label className="field-label">Descrição do incidente *</label>
+          <label className="field-label">{t('diagnose.description')}</label>
           <textarea
             className="field-input"
             rows={4}
-            placeholder="Ex: IDoc travado com status 51 — material não encontrado no centro de produção."
+            placeholder={t('diagnose.descriptionPlaceholder')}
             value={desc}
             onChange={(e) => setDesc(e.target.value)}
           />
@@ -194,23 +195,23 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
         {/* Sistema + Identificador */}
         <div className="grid-2 field-row">
           <div>
-            <label className="field-label">Sistema de origem</label>
+            <label className="field-label">{t('diagnose.system')}</label>
             <select
               className="field-input"
               value={sys}
               onChange={(e) => setSys(e.target.value)}
             >
               {SYSTEMS.map(([v, l]) => (
-                <option key={v} value={v}>{l}</option>
+                <option key={v} value={v}>{t(l)}</option>
               ))}
             </select>
           </div>
           <div>
-            <label className="field-label">Identificador do incidente</label>
+            <label className="field-label">{t('diagnose.identifier')}</label>
             <input
               className="field-input mono-input"
               type="text"
-              placeholder="INC0010001 · CPI-401-DEMO · RFC-IDOC-51"
+              placeholder={'INC0010001 · CPI-401-DEMO · RFC-IDOC-51' /* i18n-ignore: identificadores */}
               value={ident}
               onChange={(e) => setIdent(e.target.value)}
             />
@@ -219,7 +220,7 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
 
         {/* Upload de arquivo */}
         <div className="field-row">
-          <label className="field-label">Anexar arquivo (opcional)</label>
+          <label className="field-label">{t('diagnose.attach')}</label>
           <div className="upload-zone" onClick={() => fileInputRef.current?.click()}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M8 2v8M5 5l3-3 3 3" stroke="#0EA5E9"
@@ -228,9 +229,9 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
                 stroke="#94A3B8" strokeWidth="1.4" strokeLinecap="round" />
             </svg>
             <label className="upload-zone-label">
-              <span>Clique para anexar</span> ou arraste um arquivo
+              <span>{t('diagnose.attachClick')}</span> {t('diagnose.attachDrag')}
               <div style={{ fontSize: 10, color: '#475569', marginTop: 2 }}>
-                .txt · .log · .xml · .json · .csv (máx. {MAX_UPLOAD_BYTES / 1000}KB)
+                {t('diagnose.attachHint', { types: '.txt · .log · .xml · .json · .csv', kb: MAX_UPLOAD_BYTES / 1000 })}
               </div>
             </label>
             <input
@@ -250,6 +251,8 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
                 </span>
                 <button
                   className="upload-chip-remove"
+                  aria-label={t('diagnose.removeAttachment')}
+                  title={t('diagnose.removeAttachment')}
                   onClick={(e) => { e.stopPropagation(); removeUpload(); }}
                 >
                   ×
@@ -259,7 +262,7 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
           )}
           <div className="upload-target-select">
             <span style={{ fontSize: 11, color: '#475569', alignSelf: 'center' }}>
-              Enviar como:
+              {t('diagnose.sendAs')}
             </span>
             {(['logs', 'payload'] as const).map((t) => (
               <button
@@ -281,27 +284,27 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
               stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"
             />
           </svg>
-          {showAdv ? 'Ocultar campos avançados' : 'Campos avançados (logs, payload)'}
+          {showAdv ? t('diagnose.advHide') : t('diagnose.advShow')}
         </button>
 
         {showAdv && (
           <>
             <div className="field-row">
-              <label className="field-label">Logs do sistema (opcional)</label>
+              <label className="field-label">{t('diagnose.logs')}</label>
               <textarea
                 className="field-input mono-input"
                 rows={4}
-                placeholder="Cole aqui os logs relevantes do iFlow, SM21, ST22, etc."
+                placeholder={t('diagnose.logsPlaceholder')}
                 value={logs}
                 onChange={(e) => setLogs(e.target.value)}
               />
             </div>
             <div className="field-row">
-              <label className="field-label">Payload / mensagem de erro (opcional)</label>
+              <label className="field-label">{t('diagnose.payload')}</label>
               <textarea
                 className="field-input mono-input"
                 rows={3}
-                placeholder="Payload XML, JSON de erro, mensagem de exceção ABAP, etc."
+                placeholder={t('diagnose.payloadPlaceholder')}
                 value={payload}
                 onChange={(e) => setPayload(e.target.value)}
               />
@@ -325,7 +328,7 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
                   <path d="M7 1.5a5.5 5.5 0 0 1 5.5 5.5"
                     stroke="white" strokeWidth="2" strokeLinecap="round" />
                 </svg>
-                Analisando…
+                {t('diagnose.analyzing')}
               </>
             ) : (
               <>
@@ -334,7 +337,7 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
                     stroke="white" strokeWidth="1.2" fill="none" />
                   <circle cx="7" cy="7" r="2" fill="white" />
                 </svg>
-                Iniciar diagnóstico
+                {t('diagnose.start')}
               </>
             )}
           </button>
@@ -349,8 +352,8 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
             border: '2px solid #1E3A5F', borderTopColor: '#0EA5E9',
             animation: 'spin .9s linear infinite',
           }} />
-          <div className="loading-title">Agente processando</div>
-          <div className="loading-sub">Conector → RAG híbrido → LLM → guardrails</div>
+          <div className="loading-title">{t('diagnose.processingTitle')}</div>
+          <div className="loading-sub">{t('diagnose.processingSub')}</div>
         </div>
       )}
 
@@ -358,14 +361,29 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
       {result && !loading && (
         <div className="result-card" ref={resultRef}>
           <div className="result-header">
-            <span className="result-header-title">Resultado do diagnóstico</span>
+            <span className="result-header-title">{t('diagnose.resultTitle')}</span>
             <Badge value={result.diagnosis_confidence} />
           </div>
           <div className="result-body">
-            <div className="section-label">Causa raiz provável</div>
+            <EscalationBanner signal={result.escalation} />
+
+            <div className="section-label">{t('diagnose.rootCause')}</div>
             <p className="root-cause">{result.probable_root_cause}</p>
 
-            <div className="section-label">Próximos passos</div>
+            {result.explanation && (
+              <div className="explanation-section">
+                <div className="section-label">{t('diagnose.explanation')}</div>
+                <p className="explanation-text">{result.explanation}</p>
+              </div>
+            )}
+
+            {result.ai_warning && (
+              <p className="ai-warning" role="note">
+                {result.ai_warning}
+              </p>
+            )}
+
+            <div className="section-label">{t('diagnose.nextSteps')}</div>
             <ol className="steps-list">
               {result.next_steps.map((step, i) => (
                 <li key={i} className="step-item">
@@ -377,10 +395,13 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
 
             {result.matched_source && (
               <div className="ref-doc">
-                <span className="ref-label">Documento de referência</span>
+                <span className="ref-label">{t('diagnose.referenceDoc')}</span>
                 <span className="ref-name">{result.matched_source}</span>
               </div>
             )}
+
+            <EvidenceList evidence={result.evidence} />
+            <Provenance result={result} />
 
             {result.report_markdown && (
               <div className="report-section">
@@ -394,7 +415,7 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
                       stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"
                     />
                   </svg>
-                  {showReport ? 'Ocultar relatório completo' : 'Ver relatório completo'}
+                  {showReport ? t('diagnose.reportHide') : t('diagnose.reportShow')}
                 </button>
                 {showReport && (
                   // Avaliacao externa (nova revisao, P1 - XSS): antes
@@ -422,7 +443,7 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
 
       {/* Demo IDs */}
       <div className="demo-ids">
-        <div className="demo-label">Identificadores de demonstração</div>
+        <div className="demo-label">{t('diagnose.demoIds')}</div>
         <div className="demo-chips">
           {DEMO_IDS.map((d) => (
             <button

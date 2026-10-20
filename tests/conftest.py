@@ -36,6 +36,13 @@ os.environ["ADMIN_API_KEY"] = ""  # DA-46/47/48: superficie admin no mesmo regim
 # compose — que nao resolve fora dele (socket.gaierror). Testes que
 # precisam de banco usam fixture SQLite em memoria (padrao test_admin_*).
 os.environ["DATABASE_URL"] = ""
+# Mesmo isolamento para as integracoes opcionais: um .env do desenvolvedor
+# com REDIS_URL/NEO4J_* fazia testes unitarios tentarem conectar em servicos
+# desligados (ConnectionError no A2A, SSLException no smoke do Neo4j).
+os.environ["REDIS_URL"] = ""
+os.environ["NEO4J_URI"] = ""
+os.environ["NEO4J_USER"] = ""
+os.environ["NEO4J_PASSWORD"] = ""
 
 import pytest
 
@@ -75,6 +82,15 @@ def _reset_rate_limiter():
     "aleatorio" dependendo da ordem em que os testes rodam. Reseta
     antes de cada teste para isolar a cota entre eles."""
     limiter.reset()
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _reset_auth_guard():
+    """Zera o contador de falhas de autenticacao por IP (SEC-03) entre
+    testes. Sem isso, uma suite com muitos requests sem chave pode
+    receber 429 no meio, mascarando o 401 esperado."""
+    auth_guard.reset_for_tests()
     yield
 
 

@@ -6,6 +6,7 @@
 // X-API-Key permanece como credencial de máquina (curl/MCP/A2A), na camada
 // dela — não mais na mão do usuário da UI.
 
+import i18n from '../i18n';
 import { ApiError } from './diagnose';
 
 export interface SessionState {
@@ -14,9 +15,25 @@ export interface SessionState {
   ttl_hours?: number;
 }
 
+// DA-73: mensagem pelo `code` estavel do backend; sem code, pelo status.
+async function authErrorMessage(res: Response, invalidKey: string, tooManyKey: string): Promise<string> {
+  const body = await res.json().catch(() => ({}));
+  switch (body.code) {
+    case 'too_many_attempts':
+      return i18n.t(tooManyKey);
+    case 'activation_requires_db':
+      return i18n.t('auth.activationRequiresDb');
+    case 'invalid_credentials':
+    case 'invalid_token':
+    case 'invalid_code':
+      return i18n.t(invalidKey);
+  }
+  return res.status === 429 ? i18n.t(tooManyKey) : i18n.t(invalidKey);
+}
+
 export async function getSession(): Promise<SessionState> {
   const res = await fetch('/auth/session', { headers: { Accept: 'application/json' } });
-  if (!res.ok) throw new ApiError(res.status, 'Falha ao consultar a sessão');
+  if (!res.ok) throw new ApiError(res.status, i18n.t('auth.sessionCheckFailed'));
   return res.json();
 }
 
@@ -27,11 +44,7 @@ export async function login(username: string, password: string): Promise<Session
     body: JSON.stringify({ username, password }),
   });
   if (!res.ok) {
-    const message =
-      res.status === 429
-        ? 'Muitas tentativas — aguarde um minuto e tente de novo'
-        : 'usuário ou senha inválidos';
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status, await authErrorMessage(res, 'auth.invalidCredentials', 'auth.tooManyLogin'));
   }
   return res.json();
 }
@@ -50,11 +63,7 @@ export async function verifyEmail(username: string, token: string) {
     body: JSON.stringify({ username, token }),
   });
   if (!res.ok) {
-    const message =
-      res.status === 429
-        ? 'Muitas tentativas — aguarde um minuto'
-        : 'token inválido ou usuário inexistente';
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status, await authErrorMessage(res, 'auth.invalidToken', 'auth.tooMany'));
   }
   return res.json();
 }
@@ -66,11 +75,7 @@ export async function verifyPhone(username: string, code: string) {
     body: JSON.stringify({ username, code }),
   });
   if (!res.ok) {
-    const message =
-      res.status === 429
-        ? 'Muitas tentativas — aguarde um minuto'
-        : 'código inválido ou usuário inexistente';
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status, await authErrorMessage(res, 'auth.invalidCode', 'auth.tooMany'));
   }
   return res.json();
 }

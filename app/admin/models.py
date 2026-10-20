@@ -51,6 +51,7 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Boolean,
     DateTime,
@@ -100,6 +101,19 @@ class LlmModel(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # DA-72 (migration 020): parametros que o Policy Engine usa para decidir.
+    # Nulo = derivado/herdado (comportamento anterior), nunca "permitido por
+    # omissao": capacidade nula herda a da ORIGEM (invariante 9 - o modelo so
+    # restringe), dominio nulo = todos, transporte/nivel nulos = derivados da
+    # origem (app/llm/registry_routing.py).
+    transport: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    context_window_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    supports_tools: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    supports_response_format: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    supports_seed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    domains: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    tier: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    priority: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_now
     )
@@ -123,15 +137,24 @@ class LlmModel(Base):
 
 
 class LlmCredential(Base):
-    """Credencial de um provider por ORIGEM, cifrada (DA-47).
+    """Credencial de um provider por ORIGEM, cifrada (DA-47, DA-79).
 
     Uma linha por provider_origin (chave primaria). `encrypted_key` e um
     token Fernet; `masked` guarda a representacao segura para a UI
     (prefixo 4 + '****' + sufixo 4) — a API nunca devolve plaintext.
+
+    DA-79: tenant_id opcional para isolation de credenciais por tenant.
+    Quando None, credencial é global. Quando preenchido, (tenant_id,
+    provider_origin) torna-se a chave única.
     """
 
     __tablename__ = "llm_credentials"
 
+    tenant_id: Mapped[str | None] = mapped_column(
+        String(128),
+        nullable=True,
+        comment="DA-79: tenant identifier for credential isolation. NULL = global credential",
+    )
     provider_origin: Mapped[str] = mapped_column(String(128), primary_key=True)
     encrypted_key: Mapped[str] = mapped_column(Text, nullable=False)
     key_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
@@ -143,6 +166,28 @@ class LlmCredential(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_now, onupdate=_now
+    )
+
+    __table_args__ = (
+        # DA-79: quando tenant_id não é NULL, (tenant_id, provider_origin) é único
+        # when tenant_id is NULL, only provider_origin needs to be unique (global cred)
+        # Para PostgreSQL: índice parcial único
+        Index(
+            "uq_llm_credentials_tenant_origin",
+            "tenant_id",
+            "provider_origin",
+            unique=True,
+            postgresql_where=text("tenant_id IS NOT NULL"),
+        ),
+        # Migration 023 cria este indice parcial para a credencial global.
+        # Sem ele no metadata, `alembic check` proporia DROP INDEX.
+        Index(
+            "uq_llm_credentials_global_origin",
+            "provider_origin",
+            unique=True,
+            postgresql_where=text("tenant_id IS NULL"),
+        ),
+        Index("ix_llm_credentials_tenant", "tenant_id"),
     )
 
     def __repr__(self) -> str:
@@ -203,6 +248,51 @@ class LlmUsage(Base):
         return (
             f"<LlmUsage origin={self.provider_origin} model={self.model_id} "
             f"in={self.tokens_in} out={self.tokens_out}>"
+        )
+
+
+# ---------------------------------------------------------------------------
+# llm_budget_ledger (DA-67: estimado × real por diagnóstico)
+# ---------------------------------------------------------------------------
+
+
+class LlmBudgetLedger(Base):
+    """Ledger de orçamento por diagnóstico (DA-67).
+
+    Registra o orçamento estimado vs real por diagnóstico (run_diagnosis),
+    permitindo métricas de desvio e ajuste de heurísticas.
+
+    `estimated_cost_usd`: custo estimado antes da chamada (gateway._estimate_cost_usd)
+    `actual_cost_usd`: custo real observado (metering._cost_usd)
+    `deviation_ratio`: (actual - estimated) / estimated (se estimated > 0)
+    """
+
+    __tablename__ = "llm_budget_ledger"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    incident_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    provider_origin: Mapped[str] = mapped_column(String(128), nullable=False)
+    model_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    estimated_cost_usd: Mapped[float] = mapped_column(Float, nullable=False)
+    actual_cost_usd: Mapped[float] = mapped_column(Float, nullable=False)
+    deviation_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    tokens_estimated: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    tokens_actual_in: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    tokens_actual_out: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_now
+    )
+
+    __table_args__ = (
+        Index("ix_llm_budget_ledger_incident", "incident_id"),
+        Index("ix_llm_budget_ledger_origin_created", "provider_origin", "created_at"),
+        Index("ix_llm_budget_ledger_provider_origin", "provider_origin"),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<LlmBudgetLedger incident={self.incident_id} origin={self.provider_origin} "
+            f"estimated={self.estimated_cost_usd:.4f} actual={self.actual_cost_usd:.4f}>"
         )
 
 
@@ -340,6 +430,10 @@ class WebUser(Base):
     phone_code_attempts: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
+    # DA-74 (migration 021): idioma dos e-mails/SMS de ativacao - o da Admin
+    # UI de quem cadastrou, ou o `locale` do payload. Nulo (linhas antigas) =
+    # pt-BR, o texto de antes da DA-74.
+    locale: Mapped[str | None] = mapped_column(String(8), nullable=True)
     created_by: Mapped[str] = mapped_column(String(64), nullable=False, default="bootstrap")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_now
@@ -421,10 +515,20 @@ class LlmRuntimeConfig(Base):
     """Overrides de runtime para o plano LLM (DA-XX).
 
     Colunas:
-        llm_registry_db  — liga o catalogo admin como fonte de verdade
-                           (substitui LLM_REGISTRY_DB do .env)
-        llm_provider     — provider atual (ollama/openai/azure_openai)
-        llm_route        — nome da rota auditada (vazio = desligado)
+        llm_registry_db              — liga o catalogo admin como fonte de
+                                       verdade (substitui LLM_REGISTRY_DB)
+        llm_provider                 — provider atual (ollama/openai/...)
+        llm_route                    — nome da rota auditada (vazio = desligado)
+        llm_fallback_provider        — provider de fallback em caso de falha
+        llm_credentials_master_key   — chave Fernet para cifrar credenciais
+                                       no registro (GAP critico)
+        data_sovereignty_mode        — politica de soberania ("strict" ou
+                                       "cloud_with_dlp")
+        confidential_allowed_origins — origens permitidas para dados confidenciais
+        require_auth                 — exige chave API para subir o processo
+        rule_engine_enabled          — liga/desliga o motor de regras (DA-33)
+        diagnosis_timeout_seconds    — timeout do grafo de diagnostico (seg.)
+        llm_request_timeout_seconds  — timeout de chamada LLM (seg.)
     """
 
     __tablename__ = "llm_runtime_config"
@@ -434,3 +538,218 @@ class LlmRuntimeConfig(Base):
     llm_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
     llm_route: Mapped[str | None] = mapped_column(String(64), nullable=True)
     llm_fallback_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    llm_credentials_master_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    data_sovereignty_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    confidential_allowed_origins: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    require_auth: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    rule_engine_enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    diagnosis_timeout_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    llm_request_timeout_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # DA-72 (migration 020): orcamento (DA-67) e pesos do score de roteamento
+    diagnosis_budget_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    llm_budget_reserve_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    llm_gateway_max_cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    llm_routing_cost_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
+    llm_routing_latency_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Colunas que existem no schema desde deploys anteriores, mas nao estao no
+    # conjunto editavel da Admin UI. O gateway usa Settings; manter no ORM
+    # alinha metadata e banco sem descartar valores ja persistidos.
+    llm_gateway_circuit_failure_threshold: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    llm_gateway_circuit_cooldown_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    llm_gateway_backoff_base_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    llm_gateway_backoff_max_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+# ---------------------------------------------------------------------------
+# llm_call_latency (DA-72: latencia por chamada para o score de roteamento)
+# ---------------------------------------------------------------------------
+
+
+class LlmCallLatency(Base):
+    """Uma linha por chamada LLM bem-sucedida. O score usa a mediana recente
+    por (origem, modelo); falhas ficam fora para nao premiar um destino que
+    responde rapido com erro."""
+
+    __tablename__ = "llm_call_latency"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_now
+    )
+    provider_origin: Mapped[str] = mapped_column(String(128), nullable=False)
+    model_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    latency_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    __table_args__ = (
+        Index("ix_llm_call_latency_model_created", "provider_origin", "model_id", "created_at"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# llm_metrics (DA-70: FinOps metrics)
+# ---------------------------------------------------------------------------
+
+
+class LlmRequests(Base):
+    """Contagem de chamadas LLM por provider/model (DA-70).
+
+    Tabela usada para dashboards Grafana. Usa upsert para evitar
+    duplicatas em caso de concorrência.
+    """
+
+    __tablename__ = "llm_requests"
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, primary_key=True
+    )
+    provider: Mapped[str] = mapped_column(String(50), nullable=False, primary_key=True)
+    model: Mapped[str] = mapped_column(String(100), nullable=False, primary_key=True)
+    count: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)
+
+    __table_args__ = (
+        Index("ix_llm_requests_created_at", "created_at"),
+        Index("ix_llm_requests_provider", "provider"),
+    )
+
+
+class LlmTokens(Base):
+    """Tokens LLM (input/output) por provider/model (DA-70).
+
+    Tabela usada para dashboards Grafana. Usa upsert para evitar
+    duplicatas em caso de concorrência.
+    """
+
+    __tablename__ = "llm_tokens"
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, primary_key=True
+    )
+    provider: Mapped[str] = mapped_column(String(50), nullable=False, primary_key=True)
+    model: Mapped[str] = mapped_column(String(100), nullable=False, primary_key=True)
+    token_type: Mapped[str] = mapped_column(
+        String(10), nullable=False, primary_key=True
+    )  # 'input' | 'output'
+    count: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)
+
+    __table_args__ = (
+        Index("ix_llm_tokens_created_at", "created_at"),
+        Index("ix_llm_tokens_provider", "provider"),
+    )
+
+
+class LlmCost(Base):
+    """Custo LLM em USD por provider/model (DA-70).
+
+    Tabela usada para dashboards Grafana. Usa upsert para evitar
+    duplicatas em caso de concorrência.
+    """
+
+    __tablename__ = "llm_cost"
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, primary_key=True
+    )
+    provider: Mapped[str] = mapped_column(String(50), nullable=False, primary_key=True)
+    model: Mapped[str] = mapped_column(String(100), nullable=False, primary_key=True)
+    cost_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    __table_args__ = (
+        Index("ix_llm_cost_created_at", "created_at"),
+        Index("ix_llm_cost_provider", "provider"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# knowledge_document_versions (DA-86: UI versionamento RAG)
+# ---------------------------------------------------------------------------
+class KnowledgeDocumentVersion(Base):
+    """Versão de documento de conhecimento para rollback (DA-86).
+
+    Permite manter histórico de versões de documentos RAG e fazer rollback
+    para versões anteriores. Um documento pode ter várias versões, sendo
+    exatamente uma marcada como `is_current=True`.
+
+    Campos:
+        document_id: UUID do documento (externo ao Qdrant, identifica o arquivo)
+        version: Número sequencial da versão (incremental por documento)
+        content: Conteúdo completo do documento naquela versão
+        created_at: Timestamp da criação da versão
+        is_current: Flag de qual versão está ativa (apenas uma por documento)
+    """
+
+    __tablename__ = "knowledge_document_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    document_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_now
+    )
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+
+    __table_args__ = (
+        UniqueConstraint("document_id", "version", name="uq_knowledge_document_version"),
+        # Migration 026 usa um indice unico parcial (nao UniqueConstraint:
+        # SQLAlchemy nao aceita postgresql_where em UniqueConstraint).
+        Index(
+            "uq_knowledge_document_current",
+            "document_id",
+            "is_current",
+            unique=True,
+            sqlite_where=text("is_current = 1"),
+            postgresql_where=text("is_current = true"),
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<KnowledgeDocumentVersion doc={self.document_id} v{self.version} "
+            f"current={self.is_current}>"
+        )
+
+
+# ---------------------------------------------------------------------------
+# snapshot_table / rollback_log (DA-82: rollback de deployment)
+# ---------------------------------------------------------------------------
+class Snapshot(Base):
+    """Snapshot de schema criado antes de um deploy (DA-82).
+
+    A tabela nasceu na migration aa5bc901f443 sem ORM. Sem o modelo aqui,
+    `Base.metadata` nao a conhecia e `alembic revision --autogenerate`
+    proporia DROP TABLE. O endpoint de rollback foi removido por nao ter
+    repositorio real; o schema permanece para a DA-82 (schema-only).
+    """
+
+    __tablename__ = "snapshot_table"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_now
+    )
+    schema_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    operation: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    __table_args__ = (Index("ix_snapshot_table_created", "created_at"),)
+
+
+class RollbackLog(Base):
+    """Registro de rollbacks executados (DA-82).
+
+    Mesmo caso do Snapshot: tabela criada por migration direta, agora
+    representada no metadata ORM para o `alembic check` nao enxergar drift.
+    """
+
+    __tablename__ = "rollback_log"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_now
+    )
+    target_schema_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+
+    __table_args__ = (Index("ix_rollback_log_created", "created_at"),)

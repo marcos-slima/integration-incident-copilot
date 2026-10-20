@@ -124,6 +124,39 @@ if _PROMETHEUS_AVAILABLE:
         labelnames=["rule_id"],
     )
 
+    # DA-67: Budget ledger metrics
+    LLM_BUDGET_DEVIATION = Histogram(
+        "iic_llm_budget_deviation_ratio",
+        "Desvio entre custo estimado e real (ratio = (actual - estimated) / estimated)",
+        labelnames=["provider", "model"],
+        buckets=(0.0, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, float("inf")),
+    )
+
+    LLM_BUDGET_EXCEEDED_TOTAL = Counter(
+        "iic_llm_budget_exceeded_total",
+        "Total de chamadas LLM que excederam o orçamento",
+        labelnames=["provider", "model"],
+    )
+
+    # DA-70: Métricas FinOps
+    LLM_REQUESTS_TOTAL = Counter(
+        "iic_llm_requests_total",
+        "Total de chamadas LLM por provider",
+        labelnames=["provider", "model"],
+    )
+
+    LLM_TOKENS_TOTAL = Counter(
+        "iic_llm_tokens_total",
+        "Total de tokens (input + output) por provider",
+        labelnames=["provider", "model", "token_type"],  # token_type: input | output
+    )
+
+    LLM_COST_USD_TOTAL = Counter(
+        "iic_llm_cost_usd_total",
+        "Custo total em USD por provider",
+        labelnames=["provider", "model"],
+    )
+
 else:
     # Stubs para quando prometheus_client não está instalado
     class _NullMetric:
@@ -151,6 +184,11 @@ else:
     CIRCUIT_BREAKER_STATE = _null  # type: ignore[assignment]
     LLM_FALLBACK_TOTAL = _null  # type: ignore[assignment]
     RULE_ENGINE_HIT_TOTAL = _null  # type: ignore[assignment]
+    LLM_BUDGET_DEVIATION = _null  # type: ignore[assignment]
+    LLM_BUDGET_EXCEEDED_TOTAL = _null  # type: ignore[assignment]
+    LLM_REQUESTS_TOTAL = _null  # type: ignore[assignment]
+    LLM_TOKENS_TOTAL = _null  # type: ignore[assignment]
+    LLM_COST_USD_TOTAL = _null  # type: ignore[assignment]
 
 
 # ---------------------------------------------------------------------------
@@ -258,3 +296,125 @@ def observe_diagnosis(
             SENSITIVE_INCIDENT_TOTAL.labels(sensitivity_level=level).inc()
     except Exception:
         logger.debug("metricas do diagnostico nao registradas", exc_info=True)
+
+
+def observe_budget_ledger(
+    *,
+    provider: str,
+    model: str,
+    deviation_ratio: float | None,
+    exceeded: bool,
+) -> None:
+    """DA-67: metricas de budget ledger.
+
+    Nunca levanta: metrica e observacao, nao pode derrubar o diagnostico."""
+    try:
+        if _PROMETHEUS_AVAILABLE and LLM_BUDGET_DEVIATION is not None:
+            if deviation_ratio is not None:
+                LLM_BUDGET_DEVIATION.labels(provider=provider, model=model).observe(deviation_ratio)
+            if exceeded:
+                LLM_BUDGET_EXCEEDED_TOTAL.labels(provider=provider, model=model).inc()
+    except Exception:
+        logger.debug("metricas de budget ledger nao registradas", exc_info=True)
+
+
+def observe_llm_request(
+    *,
+    provider: str,
+    model: str,
+) -> None:
+    """DA-70: metrica de chamadas LLM por provider/model.
+
+    Nunca levanta: metrica e observacao, nao pode derrubar o diagnostico."""
+    try:
+        if _PROMETHEUS_AVAILABLE and LLM_REQUESTS_TOTAL is not None:
+            LLM_REQUESTS_TOTAL.labels(provider=provider, model=model).inc()
+    except Exception:
+        logger.debug("metricas de llm_requests_total nao registradas", exc_info=True)
+
+
+def observe_llm_tokens(
+    *,
+    provider: str,
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+) -> None:
+    """DA-70: metrica de tokens LLM por provider/model.
+
+    Nunca levanta: metrica e observacao, nao pode derrubar o diagnostico."""
+    try:
+        if _PROMETHEUS_AVAILABLE and LLM_TOKENS_TOTAL is not None:
+            LLM_TOKENS_TOTAL.labels(provider=provider, model=model, token_type="input").inc(
+                input_tokens
+            )
+            LLM_TOKENS_TOTAL.labels(provider=provider, model=model, token_type="output").inc(
+                output_tokens
+            )
+    except Exception:
+        logger.debug("metricas de llm_tokens_total nao registradas", exc_info=True)
+
+
+def observe_llm_cost(
+    *,
+    provider: str,
+    model: str,
+    cost_usd: float,
+) -> None:
+    """DA-70: metrica de custo LLM por provider/model.
+
+    Nunca levanta: metrica e observacao, nao pode derrubar o diagnostico."""
+    try:
+        if _PROMETHEUS_AVAILABLE and LLM_COST_USD_TOTAL is not None:
+            LLM_COST_USD_TOTAL.labels(provider=provider, model=model).inc(cost_usd)
+    except Exception:
+        logger.debug("metricas de llm_cost_usd_total nao registradas", exc_info=True)
+
+
+def record_llm_request(provider: str, model: str) -> None:
+    """DA-70: Gravar chamada LLM no banco para dashboards Grafana.
+
+    Usa upsert para evitar duplicatas em caso de concorrência.
+    Best-effort: sem DATABASE_URL ou erro de DB, não bloqueia o diagnóstico."""
+    try:
+        from app.admin.repository import record_llm_request as _record_llm_request
+
+        _record_llm_request(provider=provider, model=model)
+    except Exception:
+        logger.debug("llm_requests nao gravadas no banco", exc_info=True)
+
+
+def record_llm_tokens(
+    provider: str,
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+) -> None:
+    """DA-70: Gravar tokens LLM no banco para dashboards Grafana.
+
+    Usa upsert para evitar duplicatas em caso de concorrência.
+    Best-effort: sem DATABASE_URL ou erro de DB, não bloqueia o diagnóstico."""
+    try:
+        from app.admin.repository import record_llm_tokens as _record_llm_tokens
+
+        _record_llm_tokens(
+            provider=provider,
+            model=model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+        )
+    except Exception:
+        logger.debug("llm_tokens nao gravadas no banco", exc_info=True)
+
+
+def record_llm_cost(provider: str, model: str, cost_usd: float) -> None:
+    """DA-70: Gravar custo LLM no banco para dashboards Grafana.
+
+    Usa upsert para evitar duplicatas em caso de concorrência.
+    Best-effort: sem DATABASE_URL ou erro de DB, não bloqueia o diagnóstico."""
+    try:
+        from app.admin.repository import record_llm_cost as _record_llm_cost
+
+        _record_llm_cost(provider=provider, model=model, cost_usd=cost_usd)
+    except Exception:
+        logger.debug("llm_cost nao gravado no banco", exc_info=True)

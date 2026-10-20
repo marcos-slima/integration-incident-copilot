@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Sistemas integrados · Admin{% endblock %}
+{% block title %}{{ t('systems.pageTitle') }} · Admin{% endblock %}
 {% block content %}
 <main>
-  <h2>Sistemas integrados (DA-49)</h2>
-  <p style="color: var(--text); margin-bottom: 1.5rem;">Catálogo de sistemas conectados ao Integration Copilot</p>
+  <h2>{{ t('systems.title') }}</h2>
+  <p style="color: var(--text); margin-bottom: 1.5rem;">{{ t('systems.intro') }}</p>
 
   <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-      <h3 style="margin: 0; color: var(--text);"> Lista de Sistemas</h3>
-      <button class="btn btn-primary" data-click="loadSystems">🔄 Recarregar lista</button>
+      <h3 style="margin: 0; color: var(--text);">{{ t('systems.listTitle') }}</h3>
+      <button class="btn btn-primary" data-click="loadSystems">🔄 {{ t('common.reload') }}</button>
     </div>
 
     <div style="overflow-x: auto;">
@@ -16,40 +16,40 @@
         <thead>
           <tr>
             <th style="width: 120px;">system_key</th>
-            <th>Nome</th>
-            <th style="width: 100px;">Vendor</th>
-            <th style="width: 100px;">Conector</th>
-            <th style="width: 80px;">Ambiente</th>
-            <th style="width: 80px;">Status</th>
+            <th>{{ t('systems.name') }}</th>
+            <th style="width: 100px;">{{ t('systems.vendor') }}</th>
+            <th style="width: 100px;">{{ t('systems.connector') }}</th>
+            <th style="width: 80px;">{{ t('systems.environment') }}</th>
+            <th style="width: 80px;">{{ t('common.status') }}</th>
             <th>base_url</th>
-            <th style="width: 120px;">Ações</th>
+            <th style="width: 120px;">{{ t('common.actions') }}</th>
           </tr>
         </thead>
         <tbody id="systems-body">
-          <tr><td colspan="8" style="text-align: center; padding: 2rem;">Carregando...</td></tr>
+          <tr><td colspan="8" style="text-align: center; padding: 2rem;">{{ t('common.loading') }}</td></tr>
         </tbody>
       </table>
     </div>
   </div>
 
-  <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--text);">Novo Sistema</h3>
+  <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--text);">{{ t('systems.newTitle') }}</h3>
   <div class="card">
     <form id="newsystem" data-submit="addSystem">
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
         <div class="form-group">
           <label>system_key *</label>
-          <input name="system_key" placeholder="Slug único (ex: sap_odata_prod)" required>
+          <input name="system_key" placeholder="{{ t('systems.phKey') }}" required>
         </div>
         <div class="form-group">
-          <label>Nome *</label>
-          <input name="name" placeholder="Nome exibido (ex: SAP OData — Produção)" required>
+          <label>{{ t('systems.fName') }}</label>
+          <input name="name" placeholder="{{ t('systems.phName') }}" required>
         </div>
         <div class="form-group">
-          <label>Vendor *</label>
-          <input name="vendor" placeholder="Ex: SAP, ServiceNow" required>
+          <label>{{ t('systems.fVendor') }}</label>
+          <input name="vendor" placeholder="{{ t('systems.phVendor') }}" required>
         </div>
         <div class="form-group">
-          <label>Conector *</label>
+          <label>{{ t('systems.fConnector') }}</label>
           <select name="connector_type">
             <option value="odata">odata</option>
             <option value="rfc">rfc</option>
@@ -64,7 +64,7 @@
           </select>
         </div>
         <div class="form-group">
-          <label>Ambiente *</label>
+          <label>{{ t('systems.fEnvironment') }}</label>
           <select name="environment">
             <option value="prod">prod</option>
             <option value="stage">stage</option>
@@ -73,7 +73,7 @@
           </select>
         </div>
         <div class="form-group">
-          <label>Status *</label>
+          <label>{{ t('systems.fStatus') }}</label>
           <select name="status">
             <option value="active">active</option>
             <option value="degraded">degraded</option>
@@ -85,15 +85,15 @@
 
       <div class="form-group">
         <label>base_url</label>
-        <input name="base_url" placeholder="URL do endpoint (opcional)">
+        <input name="base_url" placeholder="{{ t('systems.phBaseUrl') }}">
       </div>
 
       <div class="form-group">
-        <label>Notas</label>
-        <input name="notes" placeholder="Detalhes adicionais (opcional)">
+        <label>{{ t('common.notes') }}</label>
+        <input name="notes" placeholder="{{ t('systems.phNotes') }}">
       </div>
 
-      <button type="submit" class="btn btn-primary">➕ Adicionar sistema</button>
+      <button type="submit" class="btn btn-primary">➕ {{ t('systems.add') }}</button>
     </form>
   </div>
 

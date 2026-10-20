@@ -40,9 +40,11 @@ from app.agent.state import CopilotState
 from app.agent.supervisor import supervisor_node
 from app.config import settings
 from app.exceptions import DiagnosisOverloadedError, DiagnosisTimeoutError
-from app.models import DiagnosisResponse, IncidentRequest
+from app.i18n.content import content_text
+from app.models import DEFAULT_DIAGNOSIS_LOCALE, DiagnosisResponse, IncidentRequest
 
 _logger = logging.getLogger(__name__)
+from app.llm.budget import close_task_budget, open_task_budget
 from app.services.incident_recorder import record_incident
 
 if settings.langfuse_configured:
@@ -72,14 +74,18 @@ def _route_to_specialist(state: CopilotState) -> str:
     return "saas_diagnose"
 
 
-def build_graph():
+def build_graph(checkpointer=None):
     """O grafo tem duas formas: linear (default) ou com enriquecimento
     de GraphRAG intercalado, dependendo de `settings.graph_rag_enabled`
     - decidido uma vez na construcao, nao a cada execucao. Com
     GraphRAG desligado (default), o grafo e IDENTICO ao de antes desta
     fase - zero custo/comportamento novo (alem do roteamento multi-
     agente DA-22, que roda sempre, com ou sem GraphRAG). Ver
-    app/rag/graph_store.py para como ativar o GraphRAG de verdade."""
+    app/rag/graph_store.py para como ativar o GraphRAG de verdade.
+
+    checkpointer: opcional. Quando fornecido (PostgresSaver), o grafo
+    pode ser interrompido e retomado a partir do último nó concluído
+    (DA-69). Requer thread_id no config ao invocar o grafo."""
     graph = StateGraph(CopilotState)
     graph.add_node("supervisor", supervisor_node)
     graph.add_node("connector", connector_node)
@@ -130,16 +136,29 @@ def build_graph():
         graph.add_node("ontology_debug", ontology_enrich_node)
         graph.add_edge("report", "ontology_debug")
 
-    return graph.compile()
+    return graph.compile(checkpointer=checkpointer)
 
 
 _compiled_graph = None
+_checkpointer = None
 
 
 def get_graph():
-    global _compiled_graph
+    global _compiled_graph, _checkpointer
     if _compiled_graph is None:
-        _compiled_graph = build_graph()
+        # DA-69: criar checkpointer se checkpointing_enabled
+        if settings.checkpointing_enabled:
+            if not settings.database_url:
+                raise RuntimeError("CHECKPOINTING_ENABLED=true exige DATABASE_URL configurada")
+            # DA-69: import tardio (so quem liga a flag precisa de psycopg).
+            # build_postgres_checkpointer normaliza a URL SQLAlchemy para
+            # libpq, abre uma conexao de vida longa (from_conn_string e
+            # context manager) e usa o RedactingSerializer - o checkpoint
+            # nunca grava PII em claro.
+            from app.agent.checkpointing import build_postgres_checkpointer
+
+            _checkpointer = build_postgres_checkpointer(settings.database_url)
+        _compiled_graph = build_graph(checkpointer=_checkpointer)
     return _compiled_graph
 
 
@@ -162,7 +181,9 @@ _graph_invoke_semaphore = threading.Semaphore(4)
 
 
 def _invoke_graph_with_timeout(
-    initial_state: CopilotState, timeout_seconds: float | None = None
+    initial_state: CopilotState,
+    timeout_seconds: float | None = None,
+    thread_id: dict | None = None,
 ) -> CopilotState:
     """Roda get_graph().invoke(initial_state) com um teto de tempo
     (settings.diagnosis_timeout_seconds) para o pipeline INTEIRO -
@@ -184,7 +205,9 @@ def _invoke_graph_with_timeout(
             "Tente novamente em alguns segundos."
         )
     try:
-        future: Future[CopilotState] = _graph_invoke_pool.submit(get_graph().invoke, initial_state)
+        # DA-69: passar thread_id no config se checkpointing_enabled
+        invoke_args = (initial_state,) if thread_id is None else (initial_state, thread_id)
+        future: Future[CopilotState] = _graph_invoke_pool.submit(get_graph().invoke, *invoke_args)
     except BaseException:
         _graph_invoke_semaphore.release()
         raise
@@ -240,17 +263,71 @@ def run_diagnosis(
         # heuristica (app/llm/gateway.py::classify_sensitivity).
         "sensitivity_level": request.sensitivity_level,
         "pii_detected": request.pii_detected,
+        # DA-74: idioma do conteudo; ausente = pt-BR (prompt medido).
+        "locale": request.locale or DEFAULT_DIAGNOSIS_LOCALE,
         "llm_model": llm_model or settings.llm_model,
         "debug": debug,
         "incident_id": incident_id,
+        # DA-75: so usa interrupt() quando o grafo foi compilado com
+        # checkpointer (settings.checkpointing_enabled). Sem isso, o node
+        # devolve hitl_request no estado e o diagnostico fica pendente.
+        "hitl_interrupt_enabled": settings.checkpointing_enabled,
     }
     started_at = time.monotonic()
-    final_state = (
-        _invoke_graph_with_timeout(initial_state)
-        if timeout_seconds is None
-        else _invoke_graph_with_timeout(initial_state, timeout_seconds)
+    # DA-69: thread_id para checkpointing (usa incident_id para unicidade)
+    thread_id = (
+        {"configurable": {"thread_id": incident_id}} if settings.checkpointing_enabled else None
     )
+    # DA-69 (correcao): thread_id por NOME. Antes era posicional e, com
+    # timeout_seconds=None, caia no parametro timeout_seconds - o
+    # checkpointer nunca recebia o thread_id e min(limit, dict) quebrava.
+    # DA-67: orcamento do diagnostico, fechado mesmo em erro/timeout.
+    # DA-72: DIAGNOSIS_BUDGET_USD editavel na Admin UI (override de runtime)
+    from app.llm.registry_routing import effective_settings
+
+    open_task_budget(incident_id, effective_settings(settings).diagnosis_budget_usd)
+    spent = None
+    try:
+        final_state = _invoke_graph_with_timeout(
+            initial_state, timeout_seconds=timeout_seconds, thread_id=thread_id
+        )
+    finally:
+        spent = close_task_budget(incident_id)
+        if spent is not None:
+            _logger.info("[budget] %s", spent.as_log_fields())
     latency_ms = int((time.monotonic() - started_at) * 1000)
+
+    # DA-75: quando o node de diagnostico chama interrupt(), o invoke
+    # devolve os valores do checkpoint + __interrupt__ e o node NAO
+    # retorna - portanto nao ha `diagnosis` nem `report_markdown` no
+    # state. Monta a resposta pendente a partir do payload do interrupt
+    # (nenhuma chamada ao LLM aconteceu).
+    interrupts = final_state.get("__interrupt__") or ()
+    if interrupts:
+        payload = getattr(interrupts[0], "value", None) or {}
+        locale = final_state.get("locale") or DEFAULT_DIAGNOSIS_LOCALE
+        pending_diagnosis = {
+            "probable_root_cause": payload.get("probable_root_cause")
+            or content_text(
+                locale,
+                "diagnosis.hitlPendingCause",
+                source=payload.get("matched_source")
+                or content_text(locale, "report.noMatchedSource"),
+            ),
+            "model_confidence": 0.0,
+            "diagnosis_confidence": 0.0,
+            "next_steps": [content_text(locale, "diagnosis.hitlPendingStep")],
+            "matched_source": payload.get("matched_source"),
+            "evidence_strength": payload.get("evidence_strength", 0.0),
+            "prompt_digest": None,
+            "prompt_version": None,
+            "llm_model": final_state.get("llm_model"),
+        }
+        final_state = {
+            **final_state,
+            "diagnosis": pending_diagnosis,
+            "report_markdown": content_text(locale, "report.hitlPending"),
+        }
     diagnosis = final_state.get("diagnosis", {})
 
     # Avaliacao externa (medio prazo, item 5): captura o trace_id do
@@ -291,7 +368,8 @@ def run_diagnosis(
         # O modelo e' lido do state e nao do `diagnosis`: `llm_model` e'
         # definido no state inicial e nao muda durante o grafo, e fica
         # gravado mesmo quando o rule engine encerra.
-        llm_model=final_state.get("llm_model"),
+        # DA-72: o modelo efetivo (registro) quando houve LLM; senao o do state.
+        llm_model=diagnosis.get("llm_model") or final_state.get("llm_model"),
         # DA-25: mesma montagem deterministica usada no report_markdown
         # (ver report_node) - chamada de novo aqui sobre final_state
         # (nao guardada no state) porque e uma funcao pura e barata, e
@@ -309,6 +387,16 @@ def run_diagnosis(
         else None,
         trace_id=trace_id,
         escalation=escalation,
+        locale=final_state.get("locale") or DEFAULT_DIAGNOSIS_LOCALE,
+        # DA-83: report_node grava a explicacao XAI no state; sem isso o
+        # campo existia no modelo mas nunca era preenchido na resposta.
+        explanation=final_state.get("explanation"),
+        # DA-76: aviso obrigatorio em todo diagnostico, no idioma do
+        # conteudo (pt-BR/en). Antes vivia em VerifyIncidentRequest, onde
+        # nunca era lido.
+        ai_warning=content_text(
+            final_state.get("locale") or DEFAULT_DIAGNOSIS_LOCALE, "ai_warning"
+        ),
     )
     # M-14: metricas de negocio (antes nunca incrementadas).
     from app.llm.gateway import classify_sensitivity
@@ -331,6 +419,7 @@ def run_diagnosis(
         response=response,
         final_state=final_state,
         latency_ms=latency_ms,
+        budget=spent,
     )
     return response
 

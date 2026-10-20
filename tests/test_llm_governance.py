@@ -276,7 +276,7 @@ def test_policy_negada_nao_constroi_nenhum_llm(monkeypatch, origin):
     assert construidos == []
     # a mensagem precisa dizer ONDE o dado teria ido e POR QUE foi negado
     assert normalize_origin(origin) in str(exc.value)
-    assert "cloud_with_dlp" in str(exc.value)
+    assert "strict" in str(exc.value)
 
 
 def test_policy_permitida_constroi_o_llm(monkeypatch):

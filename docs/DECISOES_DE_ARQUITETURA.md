@@ -73,20 +73,45 @@ final.
 | 54 | [39](#39-login-de-sessão-para-a-ui-web--cada-credencial-na-camada-dela-da-54) | Login de sessão para a UI web (`/auth/login` + cookie HttpOnly; X-API-Key segue para máquinas) |
 | 55 | [40](#40-manutenção-de-usuários-pelo-admin-com-ativação-por-e-mail-e-telefone-da-55) | Manutenção de usuários pelo admin com ativação em duas etapas: token por e-mail → código por telefone (out-of-band até haver SMTP/SMS) |
 | 56 | [41](#41-conector-sap-popi-o-middleware-on-premise-que-não-é-rest-first-da-56) | Conector SAP PO/PI on-premise: Basic Auth nativo contra o Message Monitor, com OAuth2 opcional para quando há API Management na frente |
-| 57 | [48](#48-fontes-de-busca-web-como-configuração-e-approved-que-não-era-no-op-da-57) | Fontes de busca web como configuração (`web_search_sources`): `WEB_SEARCH_POLICY=approved` deixa de ser no-op |
-| 58 | [49](#49-mapa-de-cobertura-dedicated-generic-e-absent-da-58) | Mapa de cobertura produto SAP × mecanismo, calculado de dados versionados: 3 níveis (`dedicated` / `generic` / `absent`) em vez de um booleano |
-| 59 | [50](#50-conectores-multi-vendor-fluxo-completo-padrão-comum-e-documentação-da-59) | Conectores multi-vendor: fluxo completo, padrão comum, checklist de 8 superfícies ao adicionar conector, documento consolidado `/docs/CONNECTORS.md` |
 | 60 | [51](#51-criptografia-em-repouso-de-evidence_json-com-fernet-da-60) | Criptografia em repouso de `evidence_json` com Fernet (`LLM_CREDENTIALS_MASTER_KEY`) + migration idempotente `009_encrypt_evidence_json.py` |
 | 61 | [52](#52-taxonomia-de-erros-sap-com-ttl-rdflib-da-61) | Taxonomia de erros SAP com TTL/RDFLib (SKOS) para Rule Engine: carregamento dinâmico vs hardcoded, zero breaking changes (DA-61 Fase 1) |
 | 62 | [53](#53-neo4j-loader-para-skos-taxonomy-import-da-62) | Neo4j loader para SKOS taxonomy import (idempotent upsert, Cypher queries) |
-| 63 | [54](#54-skills-declarativas---yaml-como-fonte-de-verdade-para-capability-e-roteamento-da-63) | Skills declarativas — YAML como fonte de verdade para capability e roteamento (DA-63) |
-| 65 | [55](#55-degradação-graciosa-do-rag-quando-qdrant-cai-da-65) | Degradação graciosa do RAG: Qdrant cai → `_retrieve_hybrid` e `_retrieve_dense_only` retornam `[]` → rule engine ainda responde erros conhecidos; fluxo completo `/diagnose → run_diagnosis` pendente de teste de integração |
+| 57 | [61](#61-fontes-de-busca-web-como-configuração-e-approved-que-não-era-no-op-da-57) | Fontes de busca web como configuração (`web_search_sources`): `WEB_SEARCH_POLICY=approved` deixa de ser no-op |
+| 58 | [62](#62-mapa-de-cobertura-dedicated-generic-e-absent-da-58) | Mapa de cobertura produto SAP × mecanismo, calculado de dados versionados: 3 níveis (`dedicated` / `generic` / `absent`) em vez de um booleano |
+| 59 | [63](#63-conectores-multi-vendor-fluxo-completo-padrão-comum-e-documentação-da-59) | Conectores multi-vendor: fluxo completo, padrão comum, checklist de 8 superfícies ao adicionar conector, documento consolidado `/docs/CONNECTORS.md` |
+| 66 | [56](#56-policy-engine-puro-para-roteamento-llm-da-66) | Policy Engine puro para roteamento LLM: duas fases (elegibilidade rígida → scoring de preferências), decisão auditável |
+| 67 | [57](#57-token-budgeting-e-orçamento-por-tarefa-da-67) | Token budgeting e orçamento por tarefa: tokenizer real (tiktoken), preços reais do registry, estimado × real |
+| 68 | [58](#58-matriz-de-falhas-e-failover-tipado-da-68) | Matriz de falhas e failover tipado: taxonomia fechada, mapear exceções → classe, definir retry/backoff/circuit/failover/escala |
+| 69 | [59](#59-checkpointing-e-execução-resumível-da-69) | Checkpointing e execução resumível: `checkpointer=PostgresSaver`, `thread_id` = id do incidente, retomada a partir do último nó concluído |
+| 70 | [60](#60-métricas-e-finops-da-70) | Métricas e FinOps: Prometheus (`llm_requests_total`, `llm_tokens_total`, `llm_cost_usd_total`, `llm_budget_deviation_ratio`, `diagnosis_duration_seconds`) |
+| 63 | [64](#64-skills-declarativas---yaml-como-fonte-de-verdade-para-capability-e-roteamento-da-63) | Skills declarativas — YAML como fonte de verdade para capability e roteamento (DA-63) |
+| 65 | [65](#65-degradação-graciosa-do-rag-quando-qdrant-cai-da-65) | Degradação graciosa do RAG: Qdrant cai → `_retrieve_hybrid` e `_retrieve_dense_only` retornam `[]` → rule engine ainda responde erros conhecidos; fluxo completo `/diagnose → run_diagnosis` pendente de teste de integração |
+| 71 | [66](#66-sanitização-do-resultado-de-busca-web-devolvido-ao-llm-da-71) | Resultado de busca web sanitizado e delimitado antes de voltar ao LLM (tool do ReAct e `web_search_node`) |
+| 74 | [69](#69-conteúdo-do-diagnóstico-no-idioma-pedido-da-74) | Conteúdo do diagnóstico (rule engine, avisos, relatório, prompt, ativação) no idioma pedido; pt-BR intacto e medido, `en` com digest próprio; gate `content_i18n` |
+| 73 | [68](#68-interfaces-no-idioma-do-navegador-da-73) | UI web e Admin UI no idioma do navegador: catálogos pt-BR/en, cookie compartilhado, `Intl`, erros por `code`, gate `ui_i18n` |
+| 72 | [67](#67-roteamento-por-registro-de-modelos-da-72) | Roteamento por registro de modelos: cada modelo habilitado é candidato do Policy Engine, com parâmetros por modelo, score custo × latência e failover pela lista |
+| 75 | [70](#70-aprovação-humana-no-grafo-human-in-the-loop-da-75) | Human-in-the-Loop: interrupt no node de diagnóstico quando `escalation.should_escalate == True`, endpoint `/incidents/{id}/review` para retomada com `hitl_response` |
+| 76 | [71](#71-aviso-de-ia-no-relatório-e-api-da-76) | Aviso de IA — texto embutido no template do relatório, chave `ai_warning` no catálogo (pt-BR + en), campo `DiagnosisResponse.ai_warning` |
+| 82 | [72](#72-rollback-deployment-da-82) | Rollback de deployment — tabelas `snapshot_table`/`rollback_log` (schema apenas); endpoint removido até existir mecanismo real de rollback |
+| 83 | [74](#74-explicabilidade-xai-da-83) | Explicabilidade XAI — campo `explanation` em `DiagnosisResponse`, função `_build_xai_explanation` |
+| 86 | [77](#77-ui-versionamento-rag-da-86) | UI versionamento RAG: tabela `knowledge_document_versions`, endpoints `/admin/knowledge/documents/{id}/versions`, `/rollback/{version}`, `/history/{id}` |
+| 87 | [79](#79-dashboard-por-domínio-da-87) | Dashboard de Performance por Domínio: endpoint `/admin/metrics/domains` com janela `days` (default 30), métricas count/hit@1/latência/custo por domain (sap/saas/generic) |
+| 88 | [78](#78-testes-de-escalonamento-da-88) | Testes de escalonamento: script `app/scripts/load_test.py` com métricas p50/p95/p99 e TPS, config `tests/load_test_config.py`, 3 testes em `tests/test_load_testing.py` |
+| 89 | [80](#80-relatórios-compliance-da-89) | Relatórios automatizados de compliance export: endpoint `/admin/reports/compliance/export?format=pdf|xlsx`, relatório com resumo/quality/auditoria |
+| 90 | [81](#81-documentação-grc-da-90) | Documentação GRC (ISO 27001, SOC2): mapeamento, guia de auditoria, checklist |
+| 91 | [82](#82-testes-rbac-completos-da-91) | Testes RBAC completos para todos os endpoints |
+| 92 | [83](#83-modelo-canônico-qwen3635b-a3b-da-92) | Modelo canônico `qwen3.6:35b-a3b` desde 2026-10-13, substituindo `qwen3-coder-next:latest`; re-baseline do promptfoo pendente (DA-51) |
 | — | — | DA-64: número não utilizado (pulo intencional) |
 
 > **Ordenação da prosa:** as seções §42–§47 (DA-42, DA-38, DA-39, DA-40,
 > DA-41, DA-12) foram retro-registradas em bloco, fora da ordem crescente de
 > DA. O número da seção é a posição no arquivo, não o número da DA. DA-32 a
 > DA-35 têm a prosa em [`ARCHITECTURE.md`](ARCHITECTURE.md).
+
+> **DAs candidatas (2026-10-20):** DA-79, DA-84 e DA-85 foram rebaixadas para
+> candidatas. A prosa de §73, §75 e §76 permanece como histórico editorial,
+> mas essas DAs não fazem parte do índice de DAs entregues nem do livro-razão
+> em `CLAUDE.md`.
 
 ---
 
@@ -779,12 +804,20 @@ de dev a cada start (agora `CMD` chama `.venv/bin/uvicorn` direto) —
 `docker-compose.yml` não precisa mais do `command:` override que
 contornava esse último problema.
 
-**Não-objetivos explícitos:** nenhum manifest foi validado contra um
-cluster Kyma real, nem imagem Docker construída de fato (sem cluster
-ou Docker acessível neste ambiente de desenvolvimento — mesma honestidade
-já aplicada ao Neo4j/DA-21 e ao MCP/DA-19); o schema do CRD `APIRule`
-deve ser conferido contra o cluster alvo antes de aplicar; Qdrant e
-Neo4j continuam pré-requisitos externos, não implantados por este bundle.
+**Validação em Kubernetes real (2026-10-18, k3d/k3s v1.35).** O bundle foi
+aplicado sem cópia via o overlay `deploy/local` (`scripts/k3d-validate.sh`):
+rollout dos 4 Deployments (API, worker, Qdrant, Redis), probes `/health` e
+`/ready`, `401` sem chave, indexação dos 15 documentos dentro do Pod,
+`/diagnose` com `200` pelo rule engine e pelo LLM local (Ollama do host, soberania
+`strict`) e o HPA escalando de 1 para 2 réplicas sob carga.
+Evidência em `docs/EVIDENCIA_K3D_2026-10-18.md`. A validação achou dois bugs
+reais, corrigidos: `/app/data` sem permissão de escrita para o `appuser`
+(o ingest falhava dentro do Pod, também no Kyma) e o script regerando o Secret
+a cada execução (Redis com senha antiga).
+
+**Ainda não validado:** o que é específico do Kyma gerenciado — `APIRule`
+(schema do CRD a conferir no cluster alvo), Istio e OIDC do BTP. Neo4j segue
+pré-requisito externo, não implantado por este bundle.
 
 **Validação:** `tests/test_kyma_manifests.py` (11 testes) — todo YAML
 sintaticamente válido, namespace consistente entre recursos, probes
@@ -1079,6 +1112,18 @@ Com isso, **todos os 7 itens do médio prazo da segunda revisão
 arquitetural externa estão fechados** (rate limit global, persistência
 A2A, circuit breaker, redaction de PII, métricas/feedback, fila
 assíncrona e este). Resta só o longo prazo, ainda não autorizado.
+
+**Atualização (2026-10-18): regra do gate `reranker_invariant`.** Com o
+dataset ampliado para 90 consultas no escopo, nenhum candidato ficou
+significativamente melhor que o mmarco (bge-reranker-base: uma consulta a
+mais, McNemar p = 1,0). A regra "produção = maior Hit@1 medido, com margem
+≥ 0,05" exigiria trocar de modelo por ruído. Passou a ser: produção precisa
+ter sido medida, passar do piso de Hit@1 e nenhum candidato pode ser
+significativamente melhor (McNemar exato pareado, p < 0,05, via
+`app/rag/eval_metrics.py::paired_hit_comparison`); vantagem pontual não
+significativa vira aviso. Sem acertos por consulta no benchmark, vale a
+margem mínima antiga. O invariante 1 (mmarco em produção) não muda. Ver
+`docs/RERANKER_BENCHMARK.md`.
 
 ### 29. Redaction de PII antes do prompt e do Langfuse, com truncamento inteligente e backoff (DA-30)
 
@@ -1403,7 +1448,7 @@ fechado e auditável, no mesmo regime da Fase A (DA-46/47/48):
 
 - `system_key` (slug único, ex. `sap_odata_prod`) é o identificador estável do
   sistema; `connector_type` usa **o mesmo Literal fechado do pipeline**
-  (`odata/rfc/servicenow/salesforce/workday/ariba/cap/apim` — `app/models.py`;
+  (`odata/rfc/servicenow/salesforce/workday/ariba/cap/apim` — `app/models/models.py`;
   8 tipos na entrega da DA-49, hoje 10 com `successfactors` e `po`, ver
   `app/admin/models.py::CONNECTOR_TYPES`),
   a ponte natural para correlacionar o registro ao `interface_type` de um
@@ -2220,7 +2265,7 @@ registradas — [DA-4](#decisoes-de-arquitetura) e [DA-8](#decisoes-de-arquitetu
 mesmo assim a troca de produção não tinha registro próprio. O commit `0222b79`
 (que trocou `qwen2.5-coder:32b` por `qwen3-coder-next:latest`) foi commitado
 como `feat:` sem prefixo de DA, e por isso ficou anos sem linha na tabela. DAs
-seguintes passaram a citá-lo pelo número — `app/models.py`, `alembic/006` — como
+seguintes passaram a citá-lo pelo número — `app/models/models.py`, `alembic/006` — como
 se já estivesse registrado. É a diferença entre uma DA que existe na prosa e uma
 DA que existe: o número aparecia no código, mas não na fonte de verdade.
 
@@ -2483,8 +2528,8 @@ Ela não é repetida aqui para não envelhecer em dois lugares.
 **Superfícies atualizadas ao adicionar um conector (DA-58/DA-59):**
 
 1. `app/connectors/__init__.py` — `_REGISTRY` e `_REAL_MODE_SETTING`
-2. `app/models.py` — `Literal` em `IncidentRequest.interface_type`
-3. `app/models.py` — `Literal` em `IncidentEventData.interface_type`
+2. `app/models/models.py` — `Literal` em `IncidentRequest.interface_type`
+3. `app/models/models.py` — `Literal` em `IncidentEventData.interface_type`
 4. `app/agent/supervisor.py` — classificação por domínio (`sap/saas/generic`)
 5. `app/agent/graph.py` — `choices` de `--interface` no CLI
 6. `app/admin/models.py` — `CONNECTOR_TYPES` do catálogo admin
@@ -2747,3 +2792,759 @@ cwd na raiz. Correções:
 **Limitações.** A degradação protege contra Qdrant indisponível, não contra Ollama/LLM indisponível. Se ambos Qdrant e o LLM caírem, `/diagnose` falha — mas isso é esperado: sem regra conhecida e sem modelo, não há diagnóstico possível.
 
 **Testes.** `tests/test_da65_rag_degradation.py`: 2 testes verificam que `_retrieve_hybrid` e `_retrieve_dense_only` retornam `[]` quando Qdrant lança exceção (não propagam). Não testam o fluxo completo `/diagnose → run_diagnosis` — isso exigiria fixture com servidor FastAPI.
+
+---
+
+### 56. Policy Engine puro para roteamento LLM (DA-66)
+
+**O problema.** O AI Gateway v1 (DA-26) misturava a lógica de roteamento com a chamada ao LLM, tornando a decisão de provider não auditável e não testável isoladamente. A policy de soberania (DA-39/DA-43) era avaliada dentro de `invoke_via_gateway`, sem separação clara entre "quais providers são permitidos" e "como chamar o provider escolhido".
+
+**O caso de uso.** Um auditor de segurança ou um operador quer saber:
+- Por que um provider foi escolhido ou rejeitado?
+- Qual a política efetiva em vigor para dado confidencial?
+- O gateway está respeitando a soberania de dados?
+
+A resposta atual exigia ler código e inferir — não havia uma decisão explícita, auditável e testável.
+
+**A solução.** `app/llm/routing.py` extrai um **Policy Engine puro** com duas fases:
+
+1. **Elegibilidade rígida** (rejeita se faltar algo):
+   - Soberania/origin: provider local ou origin em `CONFIDENTIAL_ALLOWED_ORIGINS` (DA-43)
+   - Capacidades exigidas: `seed`, `response_format`, `tools`
+   - Circuit breaker: não tentar provider com circuito aberto
+   - Orçamento: custo estimado ≤ orçamento restante
+
+2. **Scoring de preferências** (ordena os elegíveis):
+   - Custo estimado (menor primeiro)
+   - Latência observada (quando disponível)
+
+A função `evaluate_routing()` aceita `RoutingRequest` e devolve `RoutingDecision` com:
+- Lista de candidatos ordenados
+- Motivo de rejeição para cada provider rejeitado
+- Provider selecionado e motivo da seleção
+
+A decisão é logada em audit log estruturado e exposta via `GET /llm/policy` (DA-43).
+
+**Implementação.**
+- `app/llm/routing.py`: Policy Engine puro com `RoutingRequest`, `RoutingDecision`, `RejectionReason` (enum)
+- `app/llm/gateway.py`: `invoke_via_gateway()` usa o engine, mantém backward compatibility com `_select_allowed_providers()` e `_provider_allows_sensitivity()`
+- `app/llm/capabilities.py`: `ProviderCapabilities` dataclass (reutilizado)
+
+**Validação.**
+- `tests/test_llm_gateway.py`: 31 testes passando (incluindo 5 novos para o Policy Engine)
+- Quality gate: `da_registered` e `docs_code_references` validam a DA
+
+**Limitações (registradas de propósito).**
+- Os candidatos são só o provider primário e o de fallback (`LLM_PROVIDER`, `LLM_FALLBACK_PROVIDER`); os modelos cadastrados em `/admin/models` definem **qual modelo** cada provider chama (DA-46), não entram na escolha. **Resolvido pela DA-72** no modo gerenciado; o modo `.env` mantém este comportamento.
+- No modo `.env` a ordenação é só por custo estimado e a janela de contexto não é verificada. No modo gerenciado, a DA-72 mede latência, aplica os pesos (`LLM_ROUTING_*_WEIGHT`) e verifica a janela.
+- Orçamento é estimado por heurística (substituído por contagem por família na DA-67)
+- Circuit breaker compartilhado entre réplicas requer Redis (DA-41)
+
+**Próximos passos.**
+- DA-67: Token budgeting com contagem por família e preço real do registry
+- DA-68: Matriz de falhas e failover tipado
+- DA-69: Checkpointing e execução resumível
+- DA-70: Métricas FinOps e dashboards
+
+---
+
+### 57. Token budgeting e orçamento por tarefa (DA-67)
+
+**O problema.** O AI Gateway v1 (DA-26) estimava tokens com `len(text) // 4` e comparava o custo de **cada chamada** com um teto fixo (`llm_gateway_max_cost_usd`). Um diagnóstico com várias chamadas LLM (ReAct, retry, failover) nunca acumulava consumo: o "orçamento" era por chamada, não por tarefa.
+
+**A solução.**
+
+1. **Tokenizer aproximado** (`app/llm/gateway.py::_estimate_tokens`): `tiktoken` com `cl100k_base`, carregado de forma lazy e em cache. Qualquer falha de carga (tiktoken ausente, BPE sem rede em container/Kyma) cai na heurística `len//4`, é lembrada (`_encoding_failed`, sem nova tentativa a cada chamada) e logada uma vez. Nunca propaga exceção.
+2. **Preços do registry** (`app/llm/routing.py::_estimate_cost_usd`): `registry_prices()` quando há `DATABASE_URL`; senão, a tabela interna.
+3. **Orçamento por diagnóstico** (`app/llm/budget.py`): ledger em memória por `incident_id`, aberto em `run_diagnosis` com `DIAGNOSIS_BUDGET_USD` (default 1.00) e fechado no `finally`, mesmo em erro ou timeout.
+   - Teto efetivo de cada chamada = `min(llm_gateway_max_cost_usd, restante / (1 + LLM_BUDGET_RESERVE_RATIO))`. A reserva (default 0.25) cobre o erro do tokenizer aproximado e saída maior que a prevista.
+   - Após sucesso, o gateway debita o custo **real** (metering DA-48) ou, sem ele, o estimado. Chamada que falhou não é debitada.
+   - **Degradação:** o Policy Engine (DA-66) rejeita com `orcamento_excedido` os candidatos que não cabem; um candidato mais barato que ainda caiba (ex.: Ollama local) segue elegível.
+   - **Esgotamento:** se o orçamento do diagnóstico barra todos os candidatos, o gateway levanta `BudgetExhaustedError`, classificada como `FailureClass.BUDGET_EXHAUSTED` (DA-68: sem retry, sem failover). Se quem barra é o teto por chamada, segue `PolicyViolationError` (comportamento DA-26).
+4. **Ledger persistente** (`record_budget_ledger`, migration `018_create_llm_budget_ledger.py`): estimado × real por chamada, best-effort.
+5. **Preço do modelo efetivo** (correção de 2026-10-18): a estimativa do roteamento consultava o registro com o **rótulo** do provider (`"openai"`) como `model_id`; nenhum registro casa com isso, e a estimativa caía sempre na tabela interna. Para `gpt-4o-mini` (US$ 0,15/0,60 por 1M) a tabela dava ~33× o preço real: 10 mil tokens estimados em US$ 0,15 contra US$ 0,0045, e um contexto acima de ~34 mil tokens era barrado pelo teto de US$ 0,50 custando ~US$ 0,015. Agora `app/llm/routing.py::_registry_prices_for` consulta pelo modelo que o provider vai chamar (`llm_model`, o `model_name` do caller ou o deployment do Azure) e, no modo gerenciado, cai no default habilitado da origem — a mesma regra de `app/admin/runtime.py::resolve_runtime_model`. Testes em `tests/test_llm_routing.py::TestCostEstimation` (o teste anterior mockava o preço pelo rótulo e escondia o bug).
+6. **Borda HTTP e registro do incidente** (2026-10-18): `BudgetExhaustedError` vira 503 com `code: budget_exhausted` e `error_id` (`app/main.py`), em vez do 500 genérico; `PolicyViolationError` vira 503 `policy_violation`. O motivo completo vai só para o log. O total debitado e o número de chamadas são gravados no incidente (`cost_usd`, `llm_calls`, migration `019_incidents_escalation_and_cost.py`) e aparecem na Admin UI. Testes: `tests/test_gateway_refusal_http.py`, `tests/test_incident_escalation_cost.py`.
+
+**Validação.** `tests/test_budget_ledger.py` (aritmética e reserva, acúmulo e esgotamento, degradação para candidato mais barato, teto por chamada continua valendo, chamada com falha não é debitada, mapeamento para `BUDGET_EXHAUSTED`, abertura e fechamento em `run_diagnosis` mesmo com erro); `tests/test_tokenizer_offline.py` (fallback para `ConnectionError`/`OSError`/`ImportError`, sem retentativa, um único aviso).
+
+**Limitações (registradas de propósito).**
+- `cl100k_base` é o tokenizer da OpenAI: para Qwen/Ollama é uma **aproximação**. A contagem real vem de `prompt_eval_count` no metering (DA-48), usada no débito quando disponível.
+- O ledger por diagnóstico é **em memória, por processo**. O diagnóstico roda inteiro numa réplica, então basta na prática; não há orçamento agregado entre réplicas.
+- Após um timeout do watchdog (`diagnosis_timeout_seconds`), o orçamento já foi fechado; chamadas que a thread ainda em execução fizer valem só pelo teto por chamada.
+- Escalonamento humano (DA-44) ao esgotar o orçamento não foi ligado: o erro tipado sobe para o caller (na API, 503 `budget_exhausted`).
+- A tabela de preços interna é aproximada; não é cobrança real.
+
+---
+
+### 58. Matriz de falhas e failover tipado (DA-68)
+
+**O problema.** O AI Gateway v1 (DA-26) não tem uma taxonomia de falhas tipada. Quando um provider falha, o gateway não sabe se é transitório, rate-limited, ou fatal. A DA-68 estabelece uma taxonomia de falhas e como o gateway deve reagir.
+
+**O caso de uso.** Um operador quer saber se o gateway deve retryar uma chamada que falhou por timeout. A resposta deve ser clara: sim, se for `transient` ou `timeout`, não se for `quota_exceeded` ou `context_limit`.
+
+**A solução.** Definir uma taxonomia de falhas fechada:
+
+- `transient`: retry com backoff
+- `rate_limited/quota`: retry com backoff + redução de carga
+- `unavailable`: retry com backoff
+- `timeout`: retry com backoff
+- `context_limit`: não retry (reduzir contexto)
+- `output_limit`: não retry (reduzir output)
+- `budget_exhausted`: não retry (parar)
+- `validation_error`: não retry (corrigir input)
+- `quality_failure`: não retry (revisar prompt)
+
+Cada classe define: retry? backoff? abre circuito? failover? escala?
+
+**Implementação.**
+- `app/llm/factory.py`: mapear exceções reais → classe
+- `app/llm/gateway.py`: definir política por classe
+- `tests/test_llm_gateway.py`: testes parametrizados por classe
+
+**Validação.**
+- `tests/test_llm_gateway.py`: testes parametrizados para cada classe
+- Quality gate: `docs_code_references` valida que matriz está documentada
+
+**Limitações (registradas de propósito).**
+- Mapeamento de exceções pode ser provider-specific
+- Backoff requer configuração (não hardcoded)
+
+**Próximos passos.**
+- DA-69: Checkpointing e execução resumível
+- DA-70: Métricas FinOps e dashboards
+
+---
+
+### 59. Checkpointing e execução resumível (DA-69)
+
+**O problema.** O grafo LangGraph (`app/agent/graph.py`) não tinha checkpointing: uma falha no meio do pipeline perdia o trabalho já feito (conector, RAG).
+
+**A solução.** Checkpointing **opt-in** (`CHECKPOINTING_ENABLED=false` por default):
+
+- `build_graph(checkpointer=...)` compila o grafo com o checkpointer; `get_graph()` usa `build_postgres_checkpointer(DATABASE_URL)` quando a flag está ligada (exige `DATABASE_URL`; ver correção abaixo).
+- `thread_id` = `incident_id`, passado por `run_diagnosis` só com a flag ligada.
+- O import de `langgraph.checkpoint.postgres` é condicional: quem não liga a flag não precisa de libpq. Com a flag, o driver vem de `psycopg[binary]` (a imagem não instala libpq).
+- Retomada é a semântica nativa do LangGraph: `invoke(None, {"configurable": {"thread_id": ...}})` continua do último checkpoint, sem reexecutar nós concluídos. Não há retomada de geração parcial.
+
+**Correção aplicada.** `run_diagnosis` passava `thread_id` posicional e, com `timeout_seconds=None`, ele caía no parâmetro `timeout_seconds`: o checkpointer nunca recebia o `thread_id` e `min(limit, dict)` quebrava com a flag ligada. Agora é passado por nome.
+
+**Validação.** `tests/test_checkpointing.py`, com o grafo real e nós fake com contador (sem Qdrant/Ollama/Postgres): retomada após falha num nó intermediário sem reexecutar `supervisor`/`connector`/`retrieve`; controle sem checkpointer (tudo roda de novo); isolamento entre `thread_id`; `thread_id` só com a flag ligada e nunca em `timeout_seconds`; default sem import do Postgres; `get_graph` usa o builder com redação; normalização da URL; checkpoint sem e-mail/CPF (com controle provando o vazamento sem a redação); retomada lê estado redigido com os tipos originais. `tests/test_checkpointing_postgres.py` repete retomada + ausência de PII contra Postgres real.
+
+**PII no checkpoint (fechado).** O estado do grafo guarda `description`/`logs`/`payload`/`connector_data` crus, porque o conector e o RAG precisam do texto original e a redação (DA-30) só acontece ao montar o prompt. Em vez de redigir a entrada (o que mudaria o diagnóstico), `app/agent/checkpointing.py::RedactingCheckpointMixin` redige **só o que o checkpointer grava**: cada valor de canal passa por `redact_preserving_types` em `put`/`put_writes` (e variantes async).
+
+- A redação é no saver, não no serializer: o `PostgresSaver` grava `str`/`int`/`bool`/`None` **inline** no jsonb do checkpoint, sem passar pelo serde. Um serializer com redação deixaria `description` em claro no banco.
+- A estrutura de controle (`channel_versions`, ids) nunca é tocada: as versões têm sequências longas de dígitos que a regra de número de IDoc reescreveria, corrompendo o checkpoint (o estado retomado vinha vazio).
+- `redact_preserving_types` preserva o tipo de dataclasses e modelos Pydantic (diferente de `redact_pii_deep`, que os converte em dict): na retomada, `ConnectorResult.is_mock` continua acessível.
+
+**Construção do PostgresSaver (corrigido).** `get_graph()` chamava `PostgresSaver.from_conn_string(...)` e depois `.setup()` no resultado, mas `from_conn_string` é um context manager: com a flag ligada o app falhava ao montar o grafo. Além disso, `DATABASE_URL` usa o dialeto SQLAlchemy (`postgresql+asyncpg://`), que a libpq não aceita. `build_postgres_checkpointer` normaliza a URL (`libpq_url`), abre uma conexão de vida longa e usa o saver com redação.
+
+**Limitações (registradas de propósito).**
+- Um diagnóstico **retomado** lê o estado redigido (e-mail/CPF já substituídos): é o preço de nunca gravar PII. A redação cobre o que a DA-30 reconhece (e-mail, CPF, CNPJ, número de IDoc, tokens, senhas); nomes próprios e endereços não.
+- `tests/test_checkpointing_postgres.py` (marker `postgres_smoke`; usa `IIC_TEST_DATABASE_URL` e pula sem ela) valida retomada e ausência de PII nas tabelas do checkpointer contra Postgres real; os testes unitários usam `RedactingMemorySaver`.
+- Conexão única compartilhada pelas threads do pool do grafo (o `PostgresSaver` serializa com lock), sem reconexão automática.
+- Não existe endpoint/API de retomada: a retomada só é possível chamando o grafo com o mesmo `thread_id`. `run_diagnosis` sempre gera um `incident_id` novo.
+- Fernet de `evidence_json` (DA-60) protege a tabela `incidents`, não as tabelas do checkpointer; nelas o texto fica redigido, não cifrado.
+- O LangGraph avisa ao desserializar `ConnectorResult` (tipo não registrado no allowlist do msgpack); com o modo estrito de desserialização do LangGraph ligado, seria bloqueado.
+
+---
+
+### 60. Métricas e FinOps (DA-70)
+
+**O problema.** O Copilot precisa de métricas FinOps para monitorar custos e otimizar uso. A DA-70 estabelece quais métricas são viáveis e como expô-las.
+
+**O caso de uso.** Um operador quer saber o custo total de diagnósticos por dia, por provider, por dominínio. A resposta deve ser clara: usar Prometheus + métricas do metering (DA-48).
+
+**A solução.** Métricas FinOps viáveis com o que existe:
+
+- `llm_requests_total`: contagem de chamadas LLM por provider
+- `llm_tokens_total`: tokens (in/out) por provider
+- `llm_cost_usd_total`: custo em USD por provider
+- `llm_budget_deviation_ratio`: desvio estimado/real
+- `diagnosis_duration_seconds`: duração por dominínio
+
+Dashboards: estender os existentes e passar em `scripts/validate_dashboards.py`.
+
+**Implementação.**
+- `app/metrics.py`: métricas Prometheus
+- `app/admin/metering.py`: já tem `record_usage_observed()`
+- `grafana/dashboards/`: dashboards FinOps
+
+**Validação.**
+- `tests/test_metrics.py`: testes de métricas
+- `scripts/validate_dashboards.py`: 45 queries passando
+
+**Limitações (registradas de propósito).**
+- Métricas FinOps requerem `PROMETHEUS_ENABLED=true`
+- Alguns dados (ex: custo real) só estão disponíveis após o diagnóstico
+
+---
+
+### 61. Web search sources (DA-57)
+
+**O problema.** A busca na web (DuckDuckGo via `duckduckgo-search`) é usada como fonte de evidência quando o RAG não encontra nada. A DA-57 estabelece que a busca web é **fail-closed**: se o serviço estiver indisponível, o gateway não tenta fallback para outro mecanismo de busca (não há alternativa confiável).
+
+**O caso de uso.** Um operador quer saber se o Copilot vai falhar silenciosamente ou levantar uma exceção quando o serviço de busca web estiver fora. A resposta deve ser clara: **fail-closed**.
+
+**A solução.** `app/web_search_sources.py` implementa `search_web()` que:
+
+- Usa `duckduckgo-search` (via `DDGS`) como única fonte de busca web
+- Não tem fallback (fail-closed)
+- Levanta `WebSearchError` se o serviço estiver indisponível
+- Não usa LLM para validar resultados (DA-57, invariante 24)
+
+**Implementação.**
+- `app/web_search_sources.py`: `search_web()` com `DDGS` e `WebSearchError`
+- `tests/test_web_search_sources.py`: 24 testes passando
+- `app/agent/nodes.py`: `web_search_node` usa `search_web()` e trata `WebSearchError`
+
+**Validação.**
+- `tests/test_web_search_sources.py`: 24 testes passando
+- Quality gate: `connector_reachable` valida que `web_search_sources` está no registry
+
+**Limitações (registradas de propósito).**
+- Busca web é apenas para complemento de evidência (não substitui RAG)
+- Não há cache de resultados (repete chamadas)
+- Não há retry automático (fail-closed)
+
+**Próximos passos.**
+- (nenhum, DA-57 está completa)
+
+---
+
+### 62. Connector coverage (DA-58)
+
+**O problema.** Cada conector tem uma cobertura de produtos e mecanismos diferente. A DA-58 estabelece uma matriz de cobertura (27 produtos × 9 mecanismos) e exige que cada conector declare quais combinações suporta.
+
+**O caso de uso.** Um operador quer saber se o conector ServiceNow suporta o produto "incident" com o mecanismo "REST". A resposta deve ser clara: sim ou não, baseado na matriz declarada.
+
+**A solução.** `data/connector_coverage.yaml` declara a cobertura de cada conector:
+
+- 27 produtos (SAP, ServiceNow, Salesforce, etc.)
+- 9 mecanismos (OData, RFC, REST, etc.)
+- Cada conector declara quais combinações suporta
+
+A função `coverage_for_connector()` em `app/rag/coverage.py` verifica se um conector suporta uma combinação produto × mecanismo.
+
+**Implementação.**
+- `data/connector_coverage.yaml`: matriz de cobertura declarativa
+- `app/rag/coverage.py`: `coverage_for_connector()` e `generate_coverage_map()`
+- `scripts/coverage_map.py`: gera `docs/COVERAGE_MAP.md`
+
+**Validação.**
+- `tests/test_rag_coverage.py`: 12 testes passando
+- Quality gate: `connector_coverage` valida consistência da matriz
+
+**Limitações (registradas de propósito).**
+- Cobertura é declarativa (não validada contra implementação real)
+- Não há métrica de "quão bem" cada mecanismo funciona
+
+**Próximos passos.**
+- (nenhum, DA-58 está completa)
+
+---
+
+### 63. Connectors (DA-59)
+
+**O problema.** O projeto tem 10 conectores (OData, RFC, ServiceNow, Salesforce, Workday, Ariba, SuccessFactors, CAP, APIManagement, PO/PI), cada um com sua própria API e comportamento. A DA-59 consolidada documenta todos os conectores em um único lugar.
+
+**O caso de uso.** Um desenvolvedor quer saber como o conector ServiceNow funciona, quais são seus métodos obrigatórios e como testá-lo. A resposta deve estar em `docs/CONNECTORS.md`.
+
+**A solução.** `docs/CONNECTORS.md` é o documento central de referência para todos os conectores:
+
+- Descrição de cada conector
+- Métodos obrigatórios (`fetch_data()`, `validate()`, etc.)
+- Exemplos de uso
+- Limitações conhecidas
+
+**Implementação.**
+- `docs/CONNECTORS.md`: documentação consolidada de todos os conectores
+- `app/connectors/`: implementação de cada conector
+- `tests/test_connectors/`: testes de cada conector
+
+**Validação.**
+- `tests/test_connectors.py`: 10 testes passando (um por conector)
+- Quality gate: `connector_validation_matrix` valida que cada conector tem documentação
+
+**Limitações (registradas de propósito).**
+- Documentação pode ficar desatualizada (requer manutenção manual)
+- Não há validação automática de consistência entre código e docs
+
+**Próximos passos.**
+- (nenhum, DA-59 está completa)
+
+---
+
+### 64. Skill registry (DA-63)
+
+**O problema.** O Copilot usa skills declarativas (em `data/skills/*.yaml`) para mapear `capability` + `interface_type` → `domain`. A DA-63 estabelece o formato e validação dessas skills.
+
+**O caso de uso.** Um desenvolvedor quer adicionar uma nova skill para mapear `capability="sap_rfc"` + `interface_type="IDoc"` → `domain="sap_diagnosis"`. A resposta deve ser clara: adicione uma linha em `data/skills/diagnose_incident.yaml`.
+
+**A solução.** `data/skills/*.yaml` declara skills em formato YAML:
+
+- `capability`: string (ex: "sap_odata", "servicenow_rest")
+- `interface_type`: string (ex: "OData", "REST", "IDoc")
+- `domain`: string (ex: "sap_diagnosis", "saas_diagnosis", "generic")
+
+A função `load_skills()` em `app/mcp/skill_registry.py` carrega todas as skills e cria um índice.
+
+**Implementação.**
+- `data/skills/diagnose_incident.yaml`: skills de diagnóstico
+- `data/skills/escalation.yaml`: skills de escalonamento
+- `app/mcp/skill_registry.py`: `load_skills()`, `get_domain()`, `get_capabilities()`
+
+**Validação.**
+- `tests/test_skill_registry.py`: 12 testes passando
+- Quality gate: `connector_reachable` valida que skills estão no registry
+
+**Limitações (registradas de propósito).**
+- Skills são estáticas (não mudam em runtime)
+- Não há validação de conflitos (última skill vence)
+
+**Próximos passos.**
+- (nenhum, DA-63 está completa)
+
+---
+
+### 65. Degradação graciosa do RAG (DA-65)
+
+**O problema.** Quando o Qdrant está indisponível, o RAG degrada graciosamente usando apenas o índice denso (sem sparse). A DA-65 estabelece o comportamento de degradação.
+
+**O caso de uso.** Um operador quer saber se o Copilot continua funcionando quando o Qdrant está fora. A resposta deve ser clara: sim, usando apenas o índice denso (sem sparse).
+
+**A solução.** `app/rag/retriever.py` implementa `_retrieve_hybrid()` com degradação:
+
+- Tenta hybrid (dense + sparse) primeiro
+- Se sparse falhar, cai para dense-only
+- Se dense falhar, levanta exceção
+
+**Implementação.**
+- `app/rag/retriever.py`: `_retrieve_hybrid()`, `_retrieve_dense_only()`
+- `tests/test_da65_rag_degradation.py`: 2 testes passando
+
+**Validação.**
+- `tests/test_da65_rag_degradation.py`: 2 testes passando
+- Quality gate: `rag_dataset_schema` valida que o dataset tem o schema correto
+
+**Limitações (registradas de propósito).**
+- Dense-only é mais lento (sem sparse)
+- Não há fallback para web search (DA-57: fail-closed)
+
+**Próximos passos.**
+- (nenhum, DA-65 está completa)
+
+---
+
+### 66. Sanitização do resultado de busca web devolvido ao LLM (DA-71)
+
+**O problema.** O resultado da busca web era a única entrada não confiável que voltava ao LLM sem `sanitize_untrusted_input`. O tool do agente ReAct (`_make_web_search_tool`) devolvia título, URL e resumo crus do DuckDuckGo como observação. Uma página indexada com "ignore as instruções anteriores…" entrava no raciocínio do agente. A consulta de saída já era sanitizada (egress); a volta não. O limite estava declarado no README.
+
+**A solução.** `app/agent/nodes.py::format_untrusted_web_hits`, usada pelo tool do ReAct **e** pelo `web_search_node` (que alimenta prompt, evidência `web_untrusted` e relatório):
+
+- título e resumo passam por `sanitize_untrusted_input` (neutralização de injection em inglês, português e espanhol, normalização Unicode e caracteres invisíveis, redação de PII), com limite de tamanho por campo (200/800) e total (1800);
+- URL reduzida a esquema + host + caminho, só `http`/`https` (query e fragmento podem carregar texto do atacante; `javascript:`/`data:` somem);
+- o bloco vai entre delimitadores (`<<<DADOS_WEB_NAO_CONFIAVEIS>>>` … `<<<FIM_DADOS_WEB>>>`) com aviso de que é dado, não instrução; o delimitador é removido do conteúdo antes, para que o texto externo não consiga "fechar" o bloco;
+- mensagens de erro da busca também são sanitizadas.
+
+**Validação.** `tests/test_web_search_injection.py` (16 testes): injeção no resumo e no título (EN/PT/ES e com caractere de largura zero), PII, delimitador forjado, URL maliciosa, limites de tamanho, observação do tool do ReAct, erro da busca e texto gravado pelo `web_search_node`.
+
+**Limitações (registradas de propósito).**
+- Neutralização por padrões: reduz o risco, não o elimina. Paráfrases que não casem com `_INJECTION_PATTERNS` passam; o delimitador e o aviso são a segunda camada, não garantia.
+- O agente segue sem ferramenta de escrita (DA-27): uma injeção bem-sucedida afeta a qualidade do diagnóstico, não executa ação.
+
+---
+
+### 67. Roteamento por registro de modelos (DA-72)
+
+**O problema.** A DA-66 define que o agente escolhe o destino por elegibilidade (soberania, capacidade, janela de contexto, circuito, orçamento) e depois por preferência (custo × latência). O código fazia menos: os candidatos eram só `LLM_PROVIDER` e `LLM_FALLBACK_PROVIDER`; os modelos cadastrados em `/admin/models` diziam apenas **qual modelo** cada provider chamava (DA-46); capacidade vinha de tabela fixa; janela de contexto e latência não existiam; o limite mensal só era exibido; e o preço registrado não chegava à estimativa (corrigido antes, ver DA-67 item 5). Cadastrar um modelo não mudava a decisão do agente.
+
+**A decisão** (aprovada em 2026-10-18). No modo gerenciado (`LLM_REGISTRY_DB=true`), **cada modelo habilitado do registro é um candidato**. O Policy Engine avalia todos com as mesmas regras e devolve uma lista ordenada; o failover (DA-68) percorre essa lista. Fora do modo gerenciado nada muda.
+
+**Parâmetros por modelo** (migration `020_registry_routing.py`, `llm_models`; nulo = derivado ou herdado):
+
+| Coluna | Uso |
+|---|---|
+| `transport` (`ollama` · `openai_compatible` · `azure_openai`) | Cliente da chamada; nulo = derivado da origem |
+| `context_window_tokens` | Rejeita se contexto estimado + completion (×1,5) não couber |
+| `supports_tools` / `supports_response_format` / `supports_seed` | Só restringem a capacidade da origem |
+| `domains` (`sap`, `saas`, `generic`) | Rejeita se o domínio do supervisor não estiver na lista; nulo = todos |
+| `tier` (`local` · `standard` · `premium`) | `premium` é cadastrado e bloqueado (tier 3 da DA-44 exige decisão própria); nulo = `local` se loopback, senão `standard` |
+| `priority` | Desempate depois do score (menor primeiro) |
+| `monthly_limit_tokens` (já existia) | Passa a **bloquear** ao atingir 100% do período aberto |
+
+**Regras do engine** (`app/llm/routing.py::evaluate_routing`, ramo de registro). Fase 1 rejeita com motivo enumerado: `destino_fora_da_origem` (o `base_url` aponta para outro host que não a origem cadastrada), `soberania_bloqueada` (DA-43, avaliada sobre o destino final), `credencial_ausente` (origem cloud sem credencial cifrada, DA-47), `capability_faltando` (capacidade efetiva = origem ∩ modelo), `janela_insuficiente`, `dominio_nao_atendido`, `nivel_nao_autorizado`, `limite_mensal_atingido`, `circuito_aberto` (por **origem**) e `orcamento_excedido` (preço registrado do modelo). Fase 2 ordena os elegíveis por `w_custo·custo_norm + w_lat·latência_norm` (normalizados entre os elegíveis; `LLM_ROUTING_COST_WEIGHT`=0,7 e `LLM_ROUTING_LATENCY_WEIGHT`=0,3), depois `priority`, depois o default da origem. Sem latência medida o termo é zero: modelo novo não é penalizado.
+
+**Gateway.** `app/llm/gateway.py::invoke_via_gateway` aplica os overrides da Admin UI (`app/llm/registry_routing.py::effective_settings`, antes ignorados na decisão), lê o registro (`app/llm/registry_routing.py::load_registry_snapshot`; ilegível = nenhum candidato, fail-closed), decifra a credencial **só do modelo escolhido**, grava a latência de cada chamada bem-sucedida (`llm_call_latency`, mediana de 7 dias) e registra o modelo que respondeu (`app/llm/gateway.py::consume_last_selection`), que vai para `DiagnosisResponse.llm_model` e para `incidents` (DA-53).
+
+**Superfícies.** `/admin/models`: parâmetros por modelo no cadastro e na edição; orçamento e pesos (`DIAGNOSIS_BUDGET_USD`, `LLM_BUDGET_RESERVE_RATIO`, `LLM_GATEWAY_MAX_COST_USD`, pesos) como overrides de runtime; e o simulador `GET /admin/api/routing/preview`, que roda a mesma decisão sem chamar o LLM.
+
+**Invariantes.** A 3 (gateway é a única entrada) e a 8 (modelo nunca entra na tabela de rotas: o candidato vem de `llm_models`, dado do operador) se mantêm. A 9 foi **emendada**: a capacidade continua por origem, que é o teto; o modelo só restringe.
+
+**Validação.** `tests/test_registry_routing.py` (um teste por critério de aceite: todos os habilitados aparecem com posição ou motivo; `confidential` em `strict` só local; janela; domínio; limite mensal; failover pela lista com o modelo efetivo registrado; modo `.env` sem ler o registro — mais invariante 9, credencial, destino, premium, score, prioridade, preview e validação da API); `tests/test_registry_routing_repository.py` (leituras do registro, consumo aberto, credenciais, mediana de latência e chaves de runtime contra SQLite). `tests/test_llm_gateway.py::test_registry_com_destino_remoto_e_barrado_para_confidential` passou a exercitar o mecanismo novo (GOV-01).
+
+**Limitações (registradas de propósito).**
+- No modo gerenciado o `model_name` do caller (`llm_model` do state) não restringe os candidatos: quem escolhe é o engine.
+- Latência é medida por réplica e gravada no banco; sem `DATABASE_URL` o score usa só custo.
+- O circuito do modo `.env` continua por rótulo de provider (comportamento da DA-66 preservado).
+- Escalonamento automático para `premium` e roteamento por qualidade medida ficam fora (exigem decisão e baseline por modelo).
+
+---
+
+### 68. Interfaces no idioma do navegador (DA-73)
+
+**O problema.** As duas interfaces tinham texto fixo em português: cerca de 175 textos no React (`frontend/src`) e cerca de 365 nos templates e no JS da Admin UI. A página React declarava `<html lang="en">` com conteúdo em pt-BR, a hora era formatada sempre como `pt-BR` e dinheiro com `toFixed`. As mensagens de erro exibidas vinham do `detail` do backend, em português.
+
+**A decisão** (aprovada em 2026-10-18). Idioma resolvido nesta ordem: `?lng=` na URL (revisão) → cookie `iic_locale` (escolha explícita, compartilhada pelas duas UIs) → idioma do navegador pelo idioma base (`pt-PT` → `pt-BR`) → fallback `en`. Locales: `pt-BR` e `en`. O conteúdo gerado pelo LLM fica fora: mudar o idioma do prompt altera o `prompt_digest` (DA-53) e exige nova medição.
+
+**UI web.** `react-i18next` com `i18next-browser-languagedetector` (`frontend/src/i18n/index.ts`), catálogos `frontend/src/i18n/locales/{pt-BR,en}.json`, seletor de idioma (`frontend/src/components/LanguageSelect.tsx`), `<html lang>` sincronizado, e formatação por `Intl` (`frontend/src/i18n/format.ts`). Códigos estáveis do backend (`trust_level`, motivo de escalonamento, `code` de erro) são traduzidos pelo código, nunca pelo texto.
+
+**Admin UI.** Negociação no servidor (`app/i18n/__init__.py::negotiate`, `Accept-Language` com pesos `q`), `t()`/`t_html()` nos templates Jinja e o catálogo do idioma embutido na página como `<script type="application/json">` — dado, não script, então a CSP `script-src 'self'` continua valendo; `<`, `>` e `&` vão escapados para o conteúdo não fechar a tag (`app/i18n/__init__.py::embed_json`). O JS do admin usa o mesmo catálogo e a mesma sintaxe do i18next (`{{x}}`, plural `_zero/_one/_other`). Respostas com `Vary: Accept-Language, Cookie` e `Content-Language`.
+
+**Erros por código.** `app/api_errors.py::CodedHTTPException`: erros de auth e da API admin passam a trazer `code` e `params` além do `detail` (mantido para clientes existentes). As UIs mostram o texto do catálogo para o `code`; sem código conhecido, o `detail`.
+
+**Pseudo-locale.** `?lng=xx` mostra todo texto do catálogo entre `⟦ ⟧`; o que aparece sem marca é texto fixo.
+
+**Garantia automática.** Gate `ui_i18n` (`app/i18n/checks.py`): paridade de chaves e de variáveis entre os locales; toda chave usada existe (estáticas e grupos dinâmicos); nenhum texto visível fora do catálogo (`app/i18n/inventory.py`, também em `scripts/i18n_inventory.py`).
+
+**Validação.** `tests/test_i18n.py` (negociação, interpolação e fallback, escape do catálogo embutido, catálogos reais consistentes, detecção de chave faltando/variável divergente/texto fixo, Admin UI em en e pt-BR pelo `Accept-Language`, cookie vencendo o navegador, pseudo-locale, erros com `code`, todo `code` com texto nos dois idiomas). Os testes de tela que conferem texto em português passam a fixar `Accept-Language: pt-BR`. Capturas Playwright das duas UIs em en, pt-BR e `xx`.
+
+**Limitações (registradas de propósito).**
+- O texto gerado pelo LLM e o relatório (`report_markdown`) seguiam em português — resolvido pela DA-74 (§69).
+- Textos livres do backend (motivos do simulador de roteamento, nota dos conectores no `/health`) — resolvido pela DA-74 com códigos estáveis. Os dados do usuário seguem no idioma em que foram escritos.
+- O inventário é heurístico: texto montado concatenando fragmentos de uma palavra escapa. O catálogo proíbe concatenar frases.
+- O e-mail de ativação (DA-55) não tinha idioma por usuário — resolvido pela DA-74.
+
+---
+
+### 69. Conteúdo do diagnóstico no idioma pedido (DA-74)
+
+**O problema.** Com a DA-73 as telas passaram a seguir o idioma do navegador, mas o que o backend escreve continuava em português: causa raiz e passos do rule engine, avisos acrescentados pelos guardrails de confiança (`[confianca limitada - ...]`), o relatório Markdown, o texto do LLM, o e-mail/SMS de ativação e os motivos que as telas exibem (simulador de roteamento, notas dos conectores no `/health`, motivo de soberania). Um usuário em inglês via a tela em inglês e o diagnóstico em português.
+
+Na mesma investigação apareceram dois defeitos do rule engine: (1) a regra do TTL tem precedência sobre a regra em código de mesma categoria, e a do TTL sem `ex:probableRootCause` devolvia o texto genérico "Erro conhecido detectado via taxonomia SKOS." — a causa curada de `rules.py` (ex.: IDoc status 51) nunca chegava ao usuário (a evidência do k3d de 2026-10-18 mostra o texto genérico); (2) os passos do TTL eram separados por vírgula, e "Validar credenciais (token, API key, Basic Auth)" virava três passos.
+
+**A decisão** (2026-10-18, pedido "efetivar o i18n"). O idioma do conteúdo é um campo do pedido, não do servidor:
+
+- `IncidentRequest.locale` (também em `IncidentEventData`, A2A e na tool MCP): `pt-BR` (default, ausente = comportamento anterior) ou `en`; a tag do navegador é normalizada (`en-US` → `en`, `pt-PT` → `pt-BR`); outro idioma = 422 (`app/models/models.py::_coerce_locale`). O idioma vai ao estado do grafo, à resposta (`DiagnosisResponse.locale`) e a `incidents.locale` (migration `021_locale.py`). A UI web envia o idioma da tela (`frontend/src/i18n/index.ts::diagnosisLocale`; o pseudo-locale pede `en`).
+- **Rule engine:** os padrões casam em qualquer idioma; só o texto devolvido muda. pt-BR é o texto da própria regra (TTL/`rules.py`); `en` vem de `rules.<categoria>` em `app/i18n/locales/content.en.json` (`app/i18n/content.py::localize_rule`). O loader preenche causa e passos ausentes no TTL com a regra em código de mesma categoria (`app/agent/ontology_loader.py::_fill_from_hardcoded`) e separa passos por `;`.
+- **Avisos e relatório:** `content.<idioma>.json` (`diagnosis.*`, `report.*`); o `pt-BR` reproduz byte a byte os textos de antes (teste dourado do relatório). Valor interpolado não é reinterpretado.
+- **Prompt:** o pt-BR é o prompt medido e o digest dele não muda (o payload canônico do default não ganhou chave). Para `en`, o prompt medido recebe ao fim uma instrução de idioma (`app/agent/prompts.py::OUTPUT_LANGUAGE_INSTRUCTIONS`) e tem digest próprio, gravado na resposta. O gate `prompt_digest_measured` avisa (WARN) enquanto o digest `en` não estiver em `locales.en` do baseline e reprova se um digest medido divergir; `--write-prompt-baseline --prompt-locale en` grava depois de medir (o provider do promptfoo aceita o idioma como 4ª parte do prompt).
+- **Ativação:** `web_users.locale` guarda o idioma da Admin UI de quem cadastrou (ou o `locale` do payload); e-mail e SMS saem nesse idioma; linha antiga (nulo) = pt-BR.
+- **Textos que as telas exibem:** `app/llm/routing.py::sovereignty_decision` devolve código e parâmetros (o texto em pt continua no audit log e no `/llm/policy`), os candidatos do simulador trazem `detail_items` (motivo + parâmetros) e o `/health` traz a variável de cada conector (`setting`). As UIs montam o texto (`sovereigntyReason.*`, `reasonDetail.*`, `status.connectorNote.*`).
+
+**Garantia automática.** Gate `content_i18n` (`app/i18n/checks.py::content_i18n_problems`): paridade de chaves e variáveis entre os catálogos de conteúdo; toda categoria do rule engine (TTL + código) com causa e passos em cada idioma não-default, e nenhuma categoria órfã; todo idioma de conteúdo com instrução de idioma no prompt e presente nas interfaces.
+
+**Validação.** `tests/test_i18n_content.py` (34): normalização e 422 do `locale`; estado e resposta; digest pt-BR igual ao medido e `en` próprio; regra com causa curada (não mais genérica) e passo com vírgula inteiro; regra em pt-BR e en com a mesma decisão; aviso de guardrail e relatório em en; relatório pt-BR idêntico ao de antes; ativação pt-BR igual à de antes e en; motivos de soberania com código e o mesmo texto; gate reprovando regra sem tradução e variável divergente. Suítes existentes ajustadas onde o contrato mudou de propósito (dublês de `match_known_error`/`deliver_email`, gate do prompt com idiomas).
+
+**Limitações (registradas de propósito).**
+- O prompt `en` foi medido em 2026-10-20 com `qwen3.6:35b-a3b` (11 casos, 17 asserts, 0 falhas); o digest está em `locales.en`. O placar continua separado do pt-BR porque são prompts distintos.
+- O LLM recebe o contexto (documentos da base, persona, schema) em português e escreve em inglês por instrução: qualidade da tradução técnica depende do modelo.
+- Documentos da base de conhecimento e dados do usuário não são traduzidos; `matched_source` e identificadores técnicos ficam como estão.
+- Um diagnóstico já exibido não muda ao trocar o idioma da tela.
+---
+
+### 70. Aprovação humana no grafo (Human-in-the-Loop) (DA-75)
+
+**O problema.** Quando o sinal de escalonamento (`escalation.should_escalate == True`) pede revisão humana, o grafo LangGraph continuava executando até o fim, chamando o LLM mesmo quando o resultado seria descartado. Não havia forma de pausar o grafo e retomar após a aprovação humana.
+
+**O caso de uso.** Um operador quer revisar um diagnóstico quando o escalonamento detecta baixa evidência (`grounded_tier_weak` ou `curated_tier_weak`) ou conector mock/fallback (`mock_tier_weak`). A resposta deve ser clara: o grafo pausa, o operador aprova/edita/rejeita, e o grafo retoma com a nova informação.
+
+**A solução.** Interrupt no node de diagnóstico (`_run_diagnosis_agent`), com checkpointing (DA-69) para retomada:
+
+- **Interrupt no node:** `_run_diagnosis_agent` verifica `escalation.should_escalate` **antes** de chamar o LLM. Quando verdadeiro, chama `interrupt(hitl_request)`; o payload fica no checkpoint e **o LLM não é chamado**. Sem checkpointer (`CHECKPOINTING_ENABLED=false`), o node devolve `hitl_request` no topo do estado e o diagnóstico fica pendente, sem retomada.
+- **Endpoint de revisão:** `POST /incidents/{id}/review` recupera o checkpoint com `graph.get_state(thread_id)`, valida que há um `interrupt` pendente e retoma o grafo com `Command(resume={"action": ..., "edited_cause": ..., "reviewed_by": ..., "reviewed_at": ...})`.
+- **Report especial:** `report_node` verifica `hitl_request` **sem** `hitl_response` e devolve `report_markdown` indicando que o diagnóstico está pendente de aprovação humana; depois da retomada, renderiza o relatório final.
+- **Modelo de requisição:** `ReviewIncidentRequest` com `action` (`approve`/`edit`/`reject`), `edit` (nova causa raiz quando `action='edit'`) e `reviewed_by` (`human`/`system`).
+
+**Implementação.**
+- `app/agent/nodes.py::_run_diagnosis_agent`: verifica `escalation.should_escalate` antes de chamar LLM; com `hitl_interrupt_enabled` chama `interrupt()` com `incident_id`, `escalation.as_log_fields()`, `prompt`, `locale`, `probable_root_cause`, `matched_source` e `evidence_strength`. A retomada reentra no node, consome o `Command(resume=...)` e aplica approve/edit/reject sem chamar o LLM.
+- `app/agent/nodes.py::_wrap_diagnosis_result`: promove `hitl_request`/`hitl_response` ao TOPO do `CopilotState` (antes ficavam aninhados em `diagnosis` e o `report_node` nunca os via).
+- `app/agent/nodes.py::report_node`: devolve o relatório pendente somente quando há `hitl_request` e ainda não há `hitl_response`.
+- `app/main.py::review_incident_endpoint`: valida `CHECKPOINTING_ENABLED`, usa `graph.get_state()`/`snapshot.interrupts` e retoma com `Command(resume=...)` — sem abrir uma conexão `psycopg` própria por requisição.
+- `app/models/models.py::ReviewIncidentRequest`: modelo Pydantic com `action`, `edit` e `reviewed_by`.
+
+**Validação.**
+- `tests/test_hitl.py` (novo): escalonamento antes do LLM, `hitl_request` no topo, `interrupt()`/`Command(resume=...)`, endpoint de revisão e ausência de chamada ao LLM.
+- Quality gate: `da_registered` e `docs_code_references` validam a DA.
+
+**Limitações (registradas de propósito).**
+- No caminho com checkpointer, o `hitl_request` fica no payload do `interrupt` até a retomada; depois dela, `hitl_request` e `hitl_response` ficam no estado. O `report_markdown` pendente é montado por `run_diagnosis` a partir do payload.
+- O `hitl_request` não é gravado na tabela `incidents`. A tabela só recebe o resultado final (pendente ou revisado).
+- O endpoint `/incidents/{id}/review` usa o mesmo `thread_id` (incident_id) do checkpoint. Não há suporte para retomada com novo `incident_id`.
+- Com `CHECKPOINTING_ENABLED=false` não há `interrupt()`: o diagnóstico fica pendente e o endpoint devolve 400, porque não existe checkpoint para retomar.
+
+**Próximos passos.**
+- DA-76 implementada → ver §71 abaixo (aviso de IA, não escalonamento tier 3).
+- DA-77: Dashboard de incidentes em revisão (histórico de `hitl_request`/`hitl_response`).
+
+### 71. Aviso de IA no relatório e API (DA-76)
+
+**Motivo.** Atender a requisitos mínimos de transparência regulatória: o usuário deve saber
+que um diagnóstico foi gerado automaticamente por IA, sem depender de documentação separada.
+
+**Decisão.** O aviso fica em dois lugares:
+- **Catálogo de conteúdo:** chave `ai_warning` em `content.pt-BR.json` e `content.en.json`.
+  pt-BR (default) e en têm textos equivalentes; mudar um ou outro não altera o digest
+  porque o template é a fonte do markdown.
+- **Template Markdown:** `report.template` inclui `**Aviso de IA:** ...` embutido no final.
+  `report_node()` **não** adiciona novamente (evita duplicação).
+- **Camada API:** `DiagnosisResponse.ai_warning` campo obrigatório (`str`, default `""`).
+  Preenchido com o valor do catálogo baseado no locale da requisição.
+
+**O que NÃO foi feito.**
+- Nenhuma configuração de feature flag: aviso sempre presente quando o diagnóstico retorna.
+- Não há versão/idioma separado por `diagnosis_response` — a string vem diretamente do
+  catálogo (`content_text(locale, "ai_warning")`).
+
+---
+
+### 72. Rollback de deployment (DA-82)
+
+**Motivo.** Em produção, é essencial poder reverter para uma versão anterior do
+schema em caso de falha no deploy. O snapshot do schema permite rollback rápido
+e seguro.
+
+**Decisão.**
+- Tabela `snapshot_table`: registra versão do schema antes de cada deploy
+- Tabela `rollback_log`: registro de todos os rollbacks com timestamp, hash e status
+- Endpoint `/admin/deploy/rollback`: removido em 2026-10-20 (importava funções
+  inexistentes e usava autenticação de usuário final). Será reintroduzido no
+  `admin_router`, com chave de admin e repositório real, quando o mecanismo de
+  rollback existir.
+
+**O que NÃO foi feito.**
+- Endpoint de rollback (removido; ver acima)
+- Auto-rollback em caso de falha (só manual via API)
+- Histórico de schema completo (apenas hash para identificação)
+
+---
+
+### 73. Multi-tenancy (DA-79 — candidata; histórico)
+
+> **Status (2026-10-20): candidata.** O schema (`tenant_id`) e os filtros de
+> repositório existem, mas o isolamento não é fail-closed em todos os caminhos.
+> O texto abaixo é o registro histórico da decisão original; a pendência vive
+> em `CLAUDE.md` (lista de DAs candidatas) e `docs/DIVIDAS_TECNICAS.md`.
+
+**Motivo.** Isolamento de tenants é essencial para produtos SaaS multi-tenant. Sem
+tenant_id em incidents e queries filtradas por tenant, dados de um cliente podem
+vazar para outro.
+
+**Decisão.**
+- Campo `tenant_id` em `IncidentRequest` e `IncidentEventData`.
+- Migration `022_add_tenant_id_to_incidents.py` cria índice no DB.
+- Consultas ao repository devem filtrar por `tenant_id` do usuário autenticado.
+- Credenciais LLM devem ser isoladas por tenant (não compartilhadas).
+
+**Implementação.**
+- `app/services/incident_repository.py::filter_by_tenant_id()`: filtra incidentes por tenant_id com ordenação por tempo.
+- `app/services/incident_repository.py::get_by_id_and_tenant()`: busca incidente específico de um tenant específico (fail-closed).
+- `app/services/incident_repository.py::list_recent()` agora aceita filtro por tenant_id.
+- `app/services/incident_repository.py::create()` grava tenant_id.
+- `app/services/incident_recorder.py::build_incident_row()` inclui tenant_id.
+- `app/admin/repository.py::set_credential()`, `get_credential()`, `decrypt_credential()`: aceitam tenant_id para isolamento.
+- `app/admin/models.py::LlmCredential` tem coluna tenant_id com restrição única por (tenant_id, provider_origin) quando tenant_id não é NULL.
+
+**Validação.** Testes unitários verificam:
+- `filter_by_tenant_id()` devolve só incidentes do tenant especificado.
+- `get_by_id_and_tenant()` falha silenciosamente se tenant_id não bater.
+- Tenant_id é gravado e recuperado com o incidente.
+
+**Limitações (registradas de propósito).**
+- Tenant_id não é obrigatório: quando None, usa tenant_id do usuário autenticado (quando disponível) ou é None (comportamento anterior).
+
+---
+
+### 75. Controle de Versão de Prompt (DA-84 — candidata; histórico)
+
+> **Status (2026-10-20): candidata.** Tabela, ORM e repositório existem; os
+> endpoints de listagem/rollback não foram implementados. O texto abaixo é o
+> registro histórico da decisão original; a pendência vive em `CLAUDE.md`
+> (lista de DAs candidatas) e `docs/DIVIDAS_TECNICAS.md`.
+
+**Motivo.** Para correlacionar regressões de qualidade com versões de prompt, é essencial
+ter versionamento de artefatos e capacidade de fazer rollback.
+
+**Decisão.**
+- Tabela `prompt_versions` com campos: prompt_id, version, digest, content, created_at, is_current
+- Endpoint `/admin/prompt/{id}/versions` para listagem de versões
+- Endpoint `/admin/prompt/{id}/rollback/{version}` para rollback para versão específica
+- Modelos Pydantic `PromptVersion` e `PromptRollbackRequest`
+
+**Implementação.**
+- Migration `024_add_prompt_versions_table.py`
+- `app/models/prompt_versioning_orm.py`: modelo ORM
+- `app/services/prompt_version_repository.py`: CRUD operations
+- Endpoints `/admin/api/prompt/versions`, `/admin/api/prompt/{id}/versions/{version}` e `/admin/api/prompt/{id}/rollback/{version}`: **não implementados**.
+
+**Validação.**
+- `tests/test_prompt_versioning.py` (5 testes)
+
+---
+
+### 76. Pipeline A/B Testing (DA-85 — candidata; histórico)
+
+> **Status (2026-10-20): candidata.** Tabela, ORM e repositório existem; não há
+> endpoint de experimentos nem `_run_ab_test()`. O texto abaixo é o registro
+> histórico da decisão original; a pendência vive em `CLAUDE.md` (lista de DAs
+> candidatas) e `docs/DIVIDAS_TECNICAS.md`.
+
+**Motivo.** Para validar melhorias em prompts ou pipeline, é necessário poder comparar
+variantes de forma sistemática com métricas quantitativas.
+
+**Decisão.**
+- Tabela `ab_experiments` com campos: experiment_id, name, description, variant_a_prompt, variant_b_prompt, starting_at, ending_at, is_active
+- Endpoint `/admin/ab/experiments` para CRUD de experimentos
+- Endpoint `/diagnose/ab/{experiment_id}` para rodar diagnóstico com variante
+
+**Implementação.**
+- Migration `025_add_ab_experiments_table.py`
+- `app/models/ab_testing_orm.py`: modelo ORM
+- `app/services/ab_test_repository.py`: CRUD operations
+- Endpoints `/admin/api/ab/experiments`, `/admin/api/ab/experiments/{id}` e `/diagnose/ab/{id}`: **não implementados**.
+
+**Validação.**
+- Endpoints e `_run_ab_test()` não implementados; o teste citado no plano nunca existiu.
+
+---
+
+### 77. UI versionamento RAG (DA-86)
+
+**Motivo.** O histórico de versões de documentos de conhecimento (RAG) permite
+reverter para versões anteriores em caso de degradação ou erro introduzido.
+
+**Decisão.**
+- Tabela `knowledge_document_versions`: armazena versões de documentos com `is_current`
+- Endpoints: `/admin/knowledge/documents/{id}/versions`, `/rollback/{version}`, `/history/{id}`
+- UI: visualização de histórico e botão de rollback
+
+**O que NÃO foi feito.**
+- UI implementada (falta em `frontend/src/admin/knowledge/`)
+
+### 78. Testes de Escalonamento (DA-88)
+
+**Motivo.** Para garantir performance sob carga e evitar falhas em pico, é necessário
+testes de load e stress régulares.
+
+**Decisão.**
+- Script `app/scripts/load_test.py` que gera requisições simultâneas e mede latência (p50, p95, p99) e taxa de sucesso
+- Config `tests/load_test_config.py` com variáveis TPS_TARGET, TOTAL_REQUESTS
+- Testes em `tests/test_load_testing.py`
+
+**Implementação.**
+- `app/scripts/load_test.py`: script principal com métricas p50/p95/p99, TPS, success rate
+- `tests/load_test_config.py`: configuração de TPS_TARGET, TOTAL_REQUESTS, CONCURRENT_REQUESTS
+- `tests/test_load_testing.py`: 3 testes (test_positive, test_timeout_handling, test_rate_limiting)
+
+**Validação.**
+- `tests/test_load_testing.py` (3 testes)
+
+**O que NÃO foi feito.**
+- Load test contínuo em produção (só tests de regressão)
+- Integração com ferramentas externas (k6, Locust)
+
+---
+
+### 74. Explicabilidade XAI (DA-83)
+
+**Motivo.** O usuário final precisa entender **por que** o modelo chegou àquela conclusão,
+não apenas o resultado. Isso é fundamental para confiança e validação humana do diagnóstico.
+
+**Decisão.** Campo `explanation` em `DiagnosisResponse` (da-73, `DiagnosisResponse`)
+contém texto em markdown com:
+- **Highlight do documento base:** `**{matched_source}**` em negrito
+- **Força de evidência:** `{evidence_strength:.0%}`
+- **Localização do chunk principal:** `locator` doretrieve_context[0] se disponível
+
+A função `_build_xai_explanation()` constroída em `app/agent/nodes.py`
+
+**O que NÃO foi feito.**
+- Não há extração automática de trechos específicos do documento (requer NER adicional)
+- Não há visualização interativa de highlights (deixado para UI futura)
+
+### 79. Dashboard por Domínio (DA-87)
+
+**Motivo.** Para identificar regiões de baixa qualidade e otimizar recursos,
+necessário visualizar métricas por domínio (sap/saas/generic) de forma isolada.
+
+**Decisão.** Implementação do endpoint `/admin/metrics/domains` (JSON com métricas count/hit@1/latência/custo por domínio, janela `days`, default 30). A rota duplicada `/admin/dashboard/domains` foi removida em 2026-10-20 (IIC-AUD-021).
+
+Implementada em `app/admin/metrics.py` com funções:
+- `count_incidents_by_domain()`: Contagem por domínio
+- `calculate_domain_hit1()`: Hit@1 (precisão de diagnósticos corretos)
+- `calculate_domain_latency()`: Tempo médio por domínio
+- `calculate_cost_by_domain()`: Custo total por domínio
+
+**O que NÃO foi feito.**
+- Não há gráfico visual HTML renderizado no servidor (dados em JSON, frontend renderiza)
+- Não há persistência de métricas (usado memória para cálculo em tempo real)
+
+### 80. Relatórios Compliance (DA-89)
+
+**Motivo.** Setores regulamentados exigem relatórios de conformidade para auditoria,
+incluindo resumo de incidentes, métricas de qualidade e eventos auditáveis.
+
+**Decisão.** Endpoint `/admin/reports/compliance/export?format=pdf|xlsx` com:
+- Resumo de incidentes (total, verificados, custo)
+- Métricas de qualidade (Hit@1, accuracy por domínio)
+- Eventos auditáveis (diagnósticos e verificações)
+- Export para PDF e XLSX
+
+Implementada em `app/admin/reports.py` com funções:
+- `build_compliance_summary()`: Resumo consolidado
+- `calculate_quality_metrics()`: Métricas de qualidade
+- `extract_auditable_events()`: Eventos para auditoria
+- `export_pdf()`: Geração de PDF (reportlab)
+- `export_xlsx()`: Geração de planilha XLSX (openpyxl)
+
+**O que NÃO foi feito.**
+- Relatórios agendados automatiamente (apenas export manual)
+- Assinatura digital dos relatórios (padrão PDF/XLSX não inclui)
+
+### 81. Documentação GRC (DA-90)
+
+**Motivo.** Para obtenção de certificações (ISO 27001, SOC2), é essencial
+documentar o mapeamento de controles, guias de auditoria e checklists.
+
+**Decisão.** Criação de três documentos:
+- `docs/GRM_MAPPING.md`: Mapeamento completo ISO 27001 + SOC2
+- `docs/GRM_AUDIT.md`: Guia de auditoria com cronograma e procedimentos
+- `docs/GRM_CHECKLIST.md`: Checklist de verificação pré-auditoria
+
+Ambiente: `tests/test_grm_documentation.py` com 18 testes para validar:
+
+**O que NÃO foi feito.**
+- Integração com ferramentas de compliance (ex: ServiceNow GRC)
+- Relatórios automáticos para registro externo
+
+### 82. Testes RBAC Completos (DA-91)
+
+**Motivo.** Para garantir isolation de permissões e segurança, todos os endpoints
+devem ser testados com diferentes níveis de acesso (admin, usuário comum, não autenticado).
+
+**Decisão.** Escrita de testes abrangentes em `tests/test_rbac_comprehensive.py`:
+- Endpoint `/diagnose`: admin e usuário autenticado aceitam, não autenticado rejeita
+- Endpoints `/admin/*`: só admin aceita, usuário comum e não autenticado rejeitam
+- Endpoints `/a2a` e `/mcp`: autenticação obrigatória com chaves dedicadas
+
+**O que NÃO foi feito.**
+- Testes de RBAC em todos os endpoints internos (só endpoints HTTP)
+
+### 83. Modelo canônico qwen3.6:35b-a3b (DA-92)
+
+**Motivo.** A troca de 2026-10-13 precedeu o registro formal: a linha "Modelo
+canônico" do `CLAUDE.md` já apontava para `qwen3.6:35b-a3b`, mas a DA-12 ainda
+descrevia `qwen3-coder-next:latest` como o modelo final. Sem uma DA própria, a
+mudança não tinha rastro no livro-razão.
+
+**Decisão.**
+- `qwen3.6:35b-a3b` (35B MoE, 128k ctx) é o default em `app/config.py`,
+  `.env.example`, `docker-compose.yml` e `promptfooconfig.yaml`.
+- `qwen3-coder-next:latest` permanece registrado como histórico em DA-4/8 e
+  DA-12; não é mais o default.
+- O re-baseline do promptfoo continua pendente (DA-51). Enquanto o baseline
+  medir outro modelo, o gate `deployed_model_evaluated` emite WARN.
+
+**Validação.** `tests/test_model_harness.py` cobre o harness de medição;
+`promptfooconfig.yaml` e `app/config.py` são a fonte do default. O gate
+`deployed_model_evaluated` é o lembrete de que a qualidade só está medida
+para o modelo que o baseline registra.

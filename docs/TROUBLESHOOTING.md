@@ -22,6 +22,8 @@ Incident Copilot. Instalação e configuração inicial estão em
 9. [Build da imagem e `python-qpid-proton`](#9-build-da-imagem-e-python-qpid-proton)
 10. [GraphRAG: Neo4j inacessível](#10-graphrag-neo4j-inacessivel)
 11. [Ambiente em containers (`scripts/start-docker.sh`)](#11-ambiente-em-containers-scriptsstart-dockersh)
+12. [Kubernetes local (`scripts/k3d-validate.sh`)](#12-kubernetes-local-scriptsk3d-validatesh)
+13. [Idioma: tela ou diagnóstico no idioma errado](#13-idioma-tela-ou-diagnostico-no-idioma-errado)
 
 ---
 
@@ -186,6 +188,33 @@ Postgres, Grafana e API.
 | `PermissionError: '.env'` no container | O container lê o `.env` como uid 1000. Com `chmod 600` e outro dono, ele não consegue ler; use `chmod 644` ou ajuste o dono. |
 | Ingestão tenta o Ollama sem ele instalado | Defina `EMBEDDING_BACKEND=fastembed` no `.env`. |
 | Container tenta `127.0.0.1` para o banco | No modo container, o compose injeta `postgres:5432`. Para um banco externo, use `CONTAINER_DATABASE_URL`, não `DATABASE_URL`. |
+
+## 12. Kubernetes local (`scripts/k3d-validate.sh`)
+
+Validado em 2026-10-18 (k3d v5.9.0, k3s v1.35). Passo a passo completo em
+[`TUTORIAL_K3D_KUBERNETES_LOCAL.md`](TUTORIAL_K3D_KUBERNETES_LOCAL.md).
+
+| Sintoma | Causa e correção |
+|---|---|
+| `'k3d' nao encontrado no PATH` | Instale o k3d (`curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh \| bash`) e o `kubectl`. |
+| Ingest no Pod falha com `PermissionError` em `/app/data` | Imagem anterior à correção do `Dockerfile` (`/app/data` com dono root). Reconstrua: rode o script sem `--skip-build`. |
+| Pod novo com `/ready` 503 e worker em `CrashLoopBackOff`, Pod antigo saudável | Senha do Redis divergente entre Secret e Redis em execução. `kubectl -n integration-incident-copilot rollout restart deployment/redis`. |
+| `/ready` 503 com `ollama` degradado | Ollama ouvindo só em `127.0.0.1`. Configure `OLLAMA_HOST=0.0.0.0` no serviço do Ollama. |
+| Rollout parado em "old replicas are pending termination" | O Pod novo não fica pronto. O script lista eventos e logs dos Pods não prontos; leia o corpo do `/ready`. |
+
+## 13. Idioma: tela ou diagnóstico no idioma errado
+
+DA-73 (telas) e DA-74 (conteúdo).
+
+| Sintoma | Causa e correção |
+|---|---|
+| A tela abre em inglês, mas o navegador está em português | O cookie `iic_locale` vence o navegador. Troque no seletor ou apague o cookie. `?lng=pt-BR` força o idioma na URL. |
+| Tela em inglês e diagnóstico em português | Diagnóstico feito antes de trocar o idioma (o já exibido não muda; rode de novo), ou cliente da API sem o campo `locale` (sem ele, o conteúdo sai em `pt-BR`). |
+| `/diagnose` responde 422 com `locale nao suportado` | O conteúdo existe em `pt-BR` e `en`. Tags do navegador como `en-US` e `pt-PT` são aceitas; outros idiomas não. |
+| Texto entre `⟦ ⟧` na tela | Pseudo-locale de revisão (`?lng=xx`). Troque o idioma no seletor. |
+| Gate `prompt_digest_measured` com aviso sobre o prompt `en` | O digest `en` não está em `locales.en` (ou mudou depois da medição). Meça e regrave conforme [`CUSTOMIZACAO.md`](CUSTOMIZACAO.md) ("Idioma das interfaces"). |
+| Gate `content_i18n` reprova depois de uma regra nova | A categoria nova precisa de `rules.<categoria>` (causa e passos) em `app/i18n/locales/content.en.json`. |
+| E-mail de ativação no idioma errado | Sai no idioma da Admin UI de quem cadastrou (ou no `locale` do cadastro). Usuários anteriores à migration 021 recebem em pt-BR. |
 
 ## Não resolveu?
 

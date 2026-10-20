@@ -23,6 +23,7 @@ export interface IncidentRequest {
   sensitivity_level?: 'public' | 'internal' | 'confidential' | 'secret';
   pii_detected?: boolean;
   redaction_applied?: boolean;
+  locale?: 'pt-BR' | 'en'; // DA-74: idioma do conteudo do diagnostico
 }
 
 // espelho de app/models.py::Evidence — proveniência de cada afirmação
@@ -58,9 +59,71 @@ export interface DiagnosisResponse {
   llm_model?: string;
   prompt_version?: string;
   prompt_digest?: string;
+  locale?: 'pt-BR' | 'en'; // DA-74: idioma em que o diagnostico foi produzido
   evidence?: EvidenceItem[];
   incident_id?: string;
   trace_id?: string;
+  escalation?: EscalationSignal;
+  // DA-76/DA-83: campos de resultado (nao do corpo de /verify).
+  ai_warning?: string;
+  explanation?: string;
+}
+
+// espelho de app/agent/escalation.py::EscalationDecision.as_log_fields (DA-44).
+// INFORMATIVO: o pipeline nao escala sozinho para um modelo pago.
+export type EscalationReason =
+  | 'grounded'
+  | 'no_context'
+  | 'abstained'
+  | 'floor_tier_weak'
+  | 'curated_tier_weak';
+
+export interface EscalationSignal {
+  escalation: EscalationReason | string; // codigo da razao
+  should_escalate: boolean;
+  tier: string;
+  abstained: boolean;
+  top_evidence: number;
+  connector_real: boolean;
+}
+
+// Corpo de erro da API: `code` e estavel (app/main.py, handlers de excecao);
+// `error_id` liga a resposta ao log do servidor.
+export type ApiErrorCode =
+  | 'budget_exhausted' // DA-67
+  | 'policy_violation' // DA-66/DA-43
+  | 'overloaded'
+  | 'timeout'
+  | 'internal_error';
+
+// Espelho de GET /llm/policy (app/llm/routing.py::describe_effective_policy)
+export interface ProviderPolicy {
+  locality: 'local' | 'cloud';
+  origin: string | null;
+  may_receive_public: boolean;
+  may_receive_confidential: boolean;
+  public_reason: string;
+  confidential_reason: string;
+  // DA-74: motivo com codigo estavel, traduzido pela UI (sovereigntyReason.*)
+  public_reason_code?: string;
+  public_reason_params?: Record<string, string>;
+  confidential_reason_code?: string;
+  confidential_reason_params?: Record<string, string>;
+}
+
+export interface LlmPolicy {
+  data_sovereignty_mode: string;
+  sensitivity_default: string;
+  confidential_allowed_origins: string[];
+  routing: {
+    primary: string;
+    fallback: string | null;
+    allowed_for_confidential: string[];
+    allowed_for_public: string[];
+  };
+  limits: { max_cost_usd: number; request_timeout_seconds: number };
+  providers: Record<string, ProviderPolicy>;
+  note: string;
 }
 
 // Tipo interno da UI — não existe no backend
@@ -78,6 +141,7 @@ export type ConnectorHealthStatus = 'real' | 'mock' | 'misconfigured';
 export interface ConnectorHealth {
   status: ConnectorHealthStatus;
   note: string;
+  setting?: string; // DA-74: variavel de modo real, para o texto traduzido
 }
 
 export interface HealthResponse {

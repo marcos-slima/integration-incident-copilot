@@ -11,6 +11,9 @@ build/
 .env.*
 !.env.example
 
+# Config local do Kyma (identificadores do tenant; use o .example)
+kyma-config.json
+
 # Caches de ferramentas
 .pytest_cache/
 .ruff_cache/
@@ -55,7 +58,6 @@ Modelfile
 
 # Documentação privada de treinamento (não versionada)
 docs/learning/
-docs/DEPLOYMENT.md
 docs/GUIA_DE_ESTUDOS.md
 docs/MODOLO_*.md
 docs/TRILHA_ESTUDOS_AGENTES_IA.md
@@ -77,3 +79,7 @@ docs/AUDITORIA_COMPLETA_*.md
 docs/VALIDACAO_*.md
 scripts/test_resend_domain.py
 scripts/redact_docs_secrets.py
+
+# Documentos internos de trabalho (notas de implementacao, auditorias,
+# TODO): ficam so na maquina do mantenedor, fora do repositorio publico.
+docs/interno/

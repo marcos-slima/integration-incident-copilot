@@ -22,8 +22,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from app.admin import crypto
-from app.admin.models import LlmCredential, LlmModel, LlmUsage, percent_consumed
-from app.admin.repository import AdminRepository, record_usage
+from app.admin.models import LlmBudgetLedger, LlmCredential, LlmModel, LlmUsage, percent_consumed
+from app.admin.repository import AdminRepository, record_budget_ledger, record_usage
 from app.config import settings
 
 
@@ -191,3 +191,168 @@ def test_record_usage_respeita_metering_flag(monkeypatch):
     monkeypatch.setattr(settings, "database_url", "")
     monkeypatch.setattr(settings, "metering_enabled", False)
     assert record_usage("api.groq.com", "m1") is False
+
+
+# ---------------------------------------------------------------------------
+# testes de LlmBudgetLedger (DA-67)
+# ---------------------------------------------------------------------------
+
+
+def test_record_budget_ledger_noop_sem_banco(monkeypatch):
+    monkeypatch.setattr(settings, "database_url", "")
+    # no-op sem DATABASE_URL: retorna False, sem excecao
+    assert (
+        record_budget_ledger(
+            incident_id="inc123",
+            origin="api.groq.com",
+            model_id="m1",
+            estimated_cost_usd=0.01,
+            actual_cost_usd=0.012,
+            tokens_estimated=100,
+            tokens_actual_in=80,
+            tokens_actual_out=20,
+        )
+        is False
+    )
+
+
+def test_record_budget_ledger_com_banco(monkeypatch):
+    monkeypatch.setattr(settings, "database_url", "sqlite+aiosqlite:///:memory:")
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.pool import StaticPool
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        poolclass=StaticPool,
+    )
+
+    LlmBudgetLedger.metadata.create_all(engine)
+
+    from sqlalchemy.orm import sessionmaker
+
+    factory = sessionmaker(engine, expire_on_commit=False)
+
+    # Mock _get_sync_session_factory para usar o factory de teste
+    from app.admin import repository
+
+    original_factory = repository._get_sync_session_factory
+    repository._get_sync_session_factory = lambda: factory
+
+    try:
+        # Gravar ledger
+        result = record_budget_ledger(
+            incident_id="inc123",
+            origin="api.groq.com",
+            model_id="m1",
+            estimated_cost_usd=0.01,
+            actual_cost_usd=0.012,
+            tokens_estimated=100,
+            tokens_actual_in=80,
+            tokens_actual_out=20,
+        )
+        assert result is True
+
+        # Ler ledger
+        with factory() as session:
+            row = session.query(LlmBudgetLedger).one()
+            assert row.incident_id == "inc123"
+            assert row.provider_origin == "api.groq.com"
+            assert row.model_id == "m1"
+            assert row.estimated_cost_usd == 0.01
+            assert row.actual_cost_usd == 0.012
+            assert row.deviation_ratio == pytest.approx(0.2)  # (0.012 - 0.01) / 0.01
+            assert row.tokens_estimated == 100
+            assert row.tokens_actual_in == 80
+            assert row.tokens_actual_out == 20
+    finally:
+        repository._get_sync_session_factory = original_factory
+        engine.dispose()
+
+
+def test_record_budget_ledger_deviation_zero(monkeypatch):
+    monkeypatch.setattr(settings, "database_url", "sqlite+aiosqlite:///:memory:")
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.pool import StaticPool
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        poolclass=StaticPool,
+    )
+
+    LlmBudgetLedger.metadata.create_all(engine)
+
+    from sqlalchemy.orm import sessionmaker
+
+    factory = sessionmaker(engine, expire_on_commit=False)
+
+    from app.admin import repository
+
+    original_factory = repository._get_sync_session_factory
+    repository._get_sync_session_factory = lambda: factory
+
+    try:
+        # Gravar ledger com custos iguais (deviation_ratio = 0)
+        result = record_budget_ledger(
+            incident_id="inc456",
+            origin="api.groq.com",
+            model_id="m1",
+            estimated_cost_usd=0.01,
+            actual_cost_usd=0.01,
+            tokens_estimated=100,
+            tokens_actual_in=80,
+            tokens_actual_out=20,
+        )
+        assert result is True
+
+        with factory() as session:
+            row = session.query(LlmBudgetLedger).one()
+            assert row.deviation_ratio == 0.0
+    finally:
+        repository._get_sync_session_factory = original_factory
+        engine.dispose()
+
+
+def test_record_budget_ledger_deviation_none_se_estimado_zero(monkeypatch):
+    monkeypatch.setattr(settings, "database_url", "sqlite+aiosqlite:///:memory:")
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.pool import StaticPool
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        poolclass=StaticPool,
+    )
+
+    LlmBudgetLedger.metadata.create_all(engine)
+
+    from sqlalchemy.orm import sessionmaker
+
+    factory = sessionmaker(engine, expire_on_commit=False)
+
+    from app.admin import repository
+
+    original_factory = repository._get_sync_session_factory
+    repository._get_sync_session_factory = lambda: factory
+
+    try:
+        # Gravar ledger com estimado=0 (deviation_ratio = None)
+        result = record_budget_ledger(
+            incident_id="inc789",
+            origin="api.groq.com",
+            model_id="m1",
+            estimated_cost_usd=0.0,
+            actual_cost_usd=0.01,
+            tokens_estimated=0,
+            tokens_actual_in=80,
+            tokens_actual_out=20,
+        )
+        assert result is True
+
+        with factory() as session:
+            row = session.query(LlmBudgetLedger).one()
+            assert row.deviation_ratio is None
+    finally:
+        repository._get_sync_session_factory = original_factory
+        engine.dispose()

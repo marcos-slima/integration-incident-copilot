@@ -21,7 +21,7 @@ data:
   # "Modelo canonico"): este deploy e cloud-by-design (LLM_PROVIDER=openai,
   # sem Ollama no cluster, ver bloco acima), entao o default local nao se
   # aplica. O gate deployed_model_evaluated AVISA que este modelo nao tem
-  # baseline medido (o promptfoo mediu o qwen3.8) - WARN esperado, nao
+  # baseline medido (o promptfoo mediu o qwen3.6:35b-a3b) - WARN esperado, nao
   # regressao. Re-baselinar se este deploy passar a usar um modelo local.
   # Validacao 2026-10-07 (DEP-01): embeddings in-process (fastembed,
   # BAAI/bge-small-en-v1.5, ja embutido na imagem). O default do app e

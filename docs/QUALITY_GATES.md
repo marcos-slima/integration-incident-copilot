@@ -32,7 +32,7 @@ verificadas à mão, uma vez, e nunca mais.
 | `connector_validation_matrix` | todo conector registrado em `app/connectors/__init__.py` tem linha na matriz de validação de `docs/ARCHITECTURE.md` — a única fonte de verdade sobre o que foi testado contra instância real — e nenhuma linha órfã sobrou para conector removido. Apodreceu em silêncio uma vez: `successfactors` ficou meses sem linha, com todos os gates verdes | instantâneo | todo push/PR |
 | `connector_coverage` | o mapa de cobertura (DA-58) ainda corresponde ao código: todo conector registrado tem linha em `data/connector_coverage.yaml` (9ª superfície da invariante 23), nenhuma declaração aponta para produto ou conector inexistente, e `docs/COVERAGE_MAP.md` — que é **gerado**, não editado — está em dia com os dados. Reprova por **incoerência**, nunca por lacuna: exigir cobertura completa seria exigir 76 conectores novos para o CI ficar verde | instantâneo | todo push/PR |
 | `migrations_and_dashboards` (job) | `alembic upgrade head` em banco limpo + as 45 queries dos 4 dashboards | ~1 min | todo push/PR |
-| `llm_eval` (job) | promptfoo contra o baseline; falha em regressão de caso | depende do provider | agendado 03:17 UTC + manual |
+| `llm_eval` (job) | promptfoo contra o baseline; falha em regressão de caso | runner com Ollama+Qdrant | manual (`workflow_dispatch`) |
 
 ### WARNs conhecidos (IIC-AUD-023)
 
@@ -47,8 +47,8 @@ O gate completo termina com dois avisos permanentes, ambos informativos:
   medida para o modelo que o baseline registra. Rode o promptfoo com o modelo
   em uso antes de promover uma release.
 
-O prompt `en` foi medido em 2026-10-20 com `qwen3.6:35b-a3b` (11 casos,
-17 asserts, 0 falhas) e o digest está em `locales.en` do
+O prompt `en` foi medido em 2026-10-20 com `qwen3.6:35b-a3b` (17 casos:
+12 via LLM + 5 via rule engine, 0 falhas) e o digest está em `locales.en` do
 `data/eval/prompt_baseline.json`. Se o aviso `prompt_digest_measured` voltar,
 o texto `en` mudou depois da medição ou o baseline foi regravado sem medir.
 
@@ -83,7 +83,7 @@ flowchart LR
         db["<b>docker-build</b>"]
     end
 
-    subgraph agenda["Agendado (03:17 UTC) ou manual"]
+    subgraph agenda["Manual (workflow_dispatch)"]
         llm["<b>llm_eval</b><br/>promptfoo eval<br/>--compare-promptfoo"]
     end
 
@@ -116,7 +116,7 @@ flowchart LR
 - **O que e deterministico roda em todo push:** forma do dataset, corpus,
   invariante do reranker, digest do prompt, configs do promptfoo,
   documentacao, alcance dos conectores. Sem LLM e sem infraestrutura.
-- **O que mede o LLM roda agendado** (`llm_eval`) e compara com o baseline
+- **O que mede o LLM roda manual** (`llm_eval`) e compara com o baseline
   gravado; sem baseline, o gate `llm_baseline` avisa em vez de passar.
 - **O que so roda na sua maquina** (Ollama de 80B, reranker com mais
   consultas, ingestao do acervo) gera os artefatos que os gates conferem
@@ -152,12 +152,13 @@ uv run python scripts/validate_dashboards.py --dsn "postgresql://iic:<senha>@loc
 
 O promptfoo deste repositório roda **modelo local** via `exec:` provider
 (`scripts/promptfoo_provider.py`). Um runner hospedado do GitHub não tem Ollama
-nem o modelo de 51 GB, então o job `llm_eval` só roda no agendado ou manual, e
-mesmo assim exige um provider alternativo configurado (`OPENAI_API_KEY`).
+nem o modelo de 51 GB, então o job `llm_eval` só roda **manual**, em um runner
+com Ollama e Qdrant com o corpus ingerido. Ele não roda no agendado: agendar
+em runner hospedado só produzia uma falha diária.
 
-Sem provider, o job **não fica verde**: ele escreve "NÃO EXECUTADO" no summary
-explicando que o gate de LLM segue sem verificação automática. Um gate que
-reporta sucesso sem ter rodado é pior que não existir.
+Sem infraestrutura, o job **não fica verde**: ele escreve "NÃO EXECUTADO" no
+summary e falha com mensagem explícita. Um gate que reporta sucesso sem ter
+rodado é pior que não existir.
 
 Para fechar o ciclo quando rodar localmente:
 
@@ -178,7 +179,8 @@ recusado com exit 1 — nunca interpretado como "zero regressões".
   produção é o vencedor *medido antes*. Reexecutar o benchmark exige Qdrant com
   o corpus ingerido e o cross-encoder; isso vive em `scripts/benchmark_rerankers.py`,
   rodado a mão. Um gate que dependesse disso só rodaria no CI com GPU.
-- **O promptfoo em todo PR.** Por custo e pelo modelo local, é agendado.
+- **O promptfoo em todo PR.** Por custo e pelo modelo local, não roda em PR;
+  é manual em runner preparado.
 - **Resultado visual dos painéis.** `validate_dashboards.py` prova que a query
   roda; não prova que o painel mostra o que alguém espera.
 - **Erros que só aparecem com um filtro específico selecionado.** O validador

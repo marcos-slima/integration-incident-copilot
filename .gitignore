@@ -11,6 +11,9 @@ build/
 .env.*
 !.env.example
 
+# Config local do Kyma (identificadores do tenant; use o .example)
+kyma-config.json
+
 # Caches de ferramentas
 .pytest_cache/
 .ruff_cache/

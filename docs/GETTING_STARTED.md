@@ -80,7 +80,7 @@ docker compose --profile graphrag up -d neo4j
 ```
 
 Sobe: Qdrant (`localhost:6333`), Postgres (`localhost:5432`), Neo4j
-(`localhost:7474`, só com o perfil `graphrag`), Grafana (`localhost:3001`).
+(`localhost:7474`, só com o perfil `graphrag`), Grafana (`localhost:3002`).
 
 Com Postgres, aplique as migrations antes de rodar a aplicação. O Alembic lê
 `DATABASE_URL` do `.env` — use a mesma senha gerada no passo 1:
@@ -291,7 +291,7 @@ Antes de trocar o provider, quatro pré-requisitos:
    `docker compose up -d api`.
 4. **Embeddings sem GPU.** Sem Ollama, os embeddings também precisam de
    outra fonte: `EMBEDDING_BACKEND=fastembed` (em processo). Trocar o backend
-   muda o espaço vetorial — reindexe com `--reset` (passo 4).
+   muda o espaço vetorial — recrie a collection com `--reset-collection` (passo 4).
 
 ```bash
 # OpenAI

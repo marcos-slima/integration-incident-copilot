@@ -53,7 +53,7 @@ flowchart LR
     end
 
     subgraph pr["On every push and PR"]
-        det["<b>deterministic</b><br/>scripts/quality_gate.py<br/>22 gates"]
+        det["<b>deterministic</b><br/>scripts/quality_gate.py<br/>23 gates"]
         mig["<b>migrations_and_dashboards</b><br/>alembic upgrade + check<br/>45 queries of dashboards<br/>DA-52 e2e in Postgres"]
         tst["<b>test</b><br/>ruff + pytest, coverage >= 80%"]
         rq["<b>rag-quality</b><br/>ingest with fastembed in Qdrant<br/>pytest -m rag_quality"]

@@ -95,11 +95,12 @@ final.
 | 82 | [72](#72-rollback-deployment-da-82) | Rollback de deployment — tabelas `snapshot_table`/`rollback_log` (schema apenas); endpoint removido até existir mecanismo real de rollback |
 | 83 | [74](#74-explicabilidade-xai-da-83) | Explicabilidade XAI — campo `explanation` em `DiagnosisResponse`, função `_build_xai_explanation` |
 | 86 | [77](#77-ui-versionamento-rag-da-86) | UI versionamento RAG: tabela `knowledge_document_versions`, endpoints `/admin/knowledge/documents/{id}/versions`, `/rollback/{version}`, `/history/{id}` |
-| 87 | [75](#75-dashboard-por-domínio-da-87) | Dashboard de Performance por Domínio: endpoints `/admin/metrics/domains` e `/admin/dashboard/domains`, métricas count/hit@1/latência/custo por domain (sap/saas/generic) |
-| 88 | [78](#78-testes-de-escalonamento-da-88) | Testes de escalonamento: script `scripts/load_test.py` com métricas p50/p95/p99 e TPS, config `tests/load_test_config.py`, 3 testes em `tests/test_load_testing.py` |
-| 89 | [76](#76-relatórios-compliance-da-89) | Relatórios automatizados de compliance export: endpoint `/admin/reports/compliance/export?format=pdf|xlsx`, relatório com resumo/quality/auditoria |
-| 90 | [77](#77-documentação-grc-da-90) | Documentação GRC (ISO 27001, SOC2): mapeamento, guia de auditoria, checklist |
-| 91 | [79](#79-testes-rbac-completos-da-91) | Testes RBAC completos para todos os endpoints |
+| 87 | [79](#79-dashboard-por-domínio-da-87) | Dashboard de Performance por Domínio: endpoint `/admin/metrics/domains` com janela `days` (default 30), métricas count/hit@1/latência/custo por domain (sap/saas/generic) |
+| 88 | [78](#78-testes-de-escalonamento-da-88) | Testes de escalonamento: script `app/scripts/load_test.py` com métricas p50/p95/p99 e TPS, config `tests/load_test_config.py`, 3 testes em `tests/test_load_testing.py` |
+| 89 | [80](#80-relatórios-compliance-da-89) | Relatórios automatizados de compliance export: endpoint `/admin/reports/compliance/export?format=pdf|xlsx`, relatório com resumo/quality/auditoria |
+| 90 | [81](#81-documentação-grc-da-90) | Documentação GRC (ISO 27001, SOC2): mapeamento, guia de auditoria, checklist |
+| 91 | [82](#82-testes-rbac-completos-da-91) | Testes RBAC completos para todos os endpoints |
+| 92 | [83](#83-modelo-canônico-qwen3635b-a3b-da-92) | Modelo canônico `qwen3.6:35b-a3b` desde 2026-10-13, substituindo `qwen3-coder-next:latest`; re-baseline do promptfoo pendente (DA-51) |
 | — | — | DA-64: número não utilizado (pulo intencional) |
 
 > **Ordenação da prosa:** as seções §42–§47 (DA-42, DA-38, DA-39, DA-40,
@@ -3371,10 +3372,9 @@ ter versionamento de artefatos e capacidade de fazer rollback.
 
 **Implementação.**
 - Migration `024_add_prompt_versions_table.py`
-- `app/models/prompt_versioning.py`: modelos Pydantic
 - `app/models/prompt_versioning_orm.py`: modelo ORM
 - `app/services/prompt_version_repository.py`: CRUD operations
-- `app/admin/routes.py`: endpoints `/admin/api/prompt/versions`, `/admin/api/prompt/{id}/versions/{version}`, `/admin/api/prompt/{id}/rollback/{version}`
+- Endpoints `/admin/api/prompt/versions`, `/admin/api/prompt/{id}/versions/{version}` e `/admin/api/prompt/{id}/rollback/{version}`: **não implementados**.
 
 **Validação.**
 - `tests/test_prompt_versioning.py` (5 testes)
@@ -3398,13 +3398,12 @@ variantes de forma sistemática com métricas quantitativas.
 
 **Implementação.**
 - Migration `025_add_ab_experiments_table.py`
-- `app/models/ab_testing.py`: modelos Pydantic
 - `app/models/ab_testing_orm.py`: modelo ORM
 - `app/services/ab_test_repository.py`: CRUD operations
-- `app/admin/routes.py`: endpoints `/admin/api/ab/experiments`, `/admin/api/ab/experiments/{id}`, `/diagnose/ab/{id}`
+- Endpoints `/admin/api/ab/experiments`, `/admin/api/ab/experiments/{id}` e `/diagnose/ab/{id}`: **não implementados**.
 
 **Validação.**
-- `tests/test_ab_testing.py` (5 testes)
+- Endpoints e `_run_ab_test()` não implementados; o teste citado no plano nunca existiu.
 
 ---
 
@@ -3427,17 +3426,21 @@ reverter para versões anteriores em caso de degradação ou erro introduzido.
 testes de load e stress régulares.
 
 **Decisão.**
-- Script `scripts/load_test.py` que gera requisições simultâneas e mede latência (p50, p95, p99) e taxa de sucesso
+- Script `app/scripts/load_test.py` que gera requisições simultâneas e mede latência (p50, p95, p99) e taxa de sucesso
 - Config `tests/load_test_config.py` com variáveis TPS_TARGET, TOTAL_REQUESTS
 - Testes em `tests/test_load_testing.py`
 
 **Implementação.**
-- `scripts/load_test.py`: script principal com métricas p50/p95/p99, TPS, success rate
+- `app/scripts/load_test.py`: script principal com métricas p50/p95/p99, TPS, success rate
 - `tests/load_test_config.py`: configuração de TPS_TARGET, TOTAL_REQUESTS, CONCURRENT_REQUESTS
 - `tests/test_load_testing.py`: 3 testes (test_positive, test_timeout_handling, test_rate_limiting)
 
 **Validação.**
 - `tests/test_load_testing.py` (3 testes)
+
+**O que NÃO foi feito.**
+- Load test contínuo em produção (só tests de regressão)
+- Integração com ferramentas externas (k6, Locust)
 
 ---
 
@@ -3458,27 +3461,24 @@ A função `_build_xai_explanation()` constroída em `app/agent/nodes.py`
 - Não há extração automática de trechos específicos do documento (requer NER adicional)
 - Não há visualização interativa de highlights (deixado para UI futura)
 
-### 75. Dashboard por Domínio (DA-87)
+### 79. Dashboard por Domínio (DA-87)
 
 **Motivo.** Para identificar regiões de baixa qualidade e otimizar recursos,
 necessário visualizar métricas por domínio (sap/saas/generic) de forma isolada.
 
-**Decisão.** Implementação de dois endpoints:
-- `/admin/metrics/domains`: JSON com métricas count/hit@1/latência/custo por domínio
-- `/admin/dashboard/domains`: Dados estruturados para renderização no frontend
+**Decisão.** Implementação do endpoint `/admin/metrics/domains` (JSON com métricas count/hit@1/latência/custo por domínio, janela `days`, default 30). A rota duplicada `/admin/dashboard/domains` foi removida em 2026-10-20 (IIC-AUD-021).
 
 Implementada em `app/admin/metrics.py` com funções:
 - `count_incidents_by_domain()`: Contagem por domínio
 - `calculate_domain_hit1()`: Hit@1 (precisão de diagnósticos corretos)
 - `calculate_domain_latency()`: Tempo médio por domínio
 - `calculate_cost_by_domain()`: Custo total por domínio
-- `build_dashboard_data()`: Estrutura consolidada para dashboard
 
 **O que NÃO foi feito.**
 - Não há gráfico visual HTML renderizado no servidor (dados em JSON, frontend renderiza)
 - Não há persistência de métricas (usado memória para cálculo em tempo real)
 
-### 76. Relatórios Compliance (DA-89)
+### 80. Relatórios Compliance (DA-89)
 
 **Motivo.** Setores regulamentados exigem relatórios de conformidade para auditoria,
 incluindo resumo de incidentes, métricas de qualidade e eventos auditáveis.
@@ -3500,7 +3500,7 @@ Implementada em `app/admin/reports.py` com funções:
 - Relatórios agendados automatiamente (apenas export manual)
 - Assinatura digital dos relatórios (padrão PDF/XLSX não inclui)
 
-### 77. Documentação GRC (DA-90)
+### 81. Documentação GRC (DA-90)
 
 **Motivo.** Para obtenção de certificações (ISO 27001, SOC2), é essencial
 documentar o mapeamento de controles, guias de auditoria e checklists.
@@ -3516,21 +3516,7 @@ Ambiente: `tests/test_grm_documentation.py` com 18 testes para validar:
 - Integração com ferramentas de compliance (ex: ServiceNow GRC)
 - Relatórios automáticos para registro externo
 
-### 78. Testes de Escalonamento (DA-88)
-
-**Motivo.** Para garantir que o sistema escala sob carga, é necessário testar
-com métricas p50/p95/p99 e TPS (transactions per second) reais.
-
-**Decisão.** Implementação de script `scripts/load_test.py` com:
-- Geração de carga simulada usando pytest-asyncio
-- Métricas p50/p95/p99 (latência) e TPS
-- Configuração em `tests/load_test_config.py`
-
-**O que NÃO foi feito.**
-- Load test contínuo em produção (só tests de regressão)
-- Integração com ferramentas externas (k6, Locust)
-
-### 79. Testes RBAC Completos (DA-91)
+### 82. Testes RBAC Completos (DA-91)
 
 **Motivo.** Para garantir isolation de permissões e segurança, todos os endpoints
 devem ser testados com diferentes níveis de acesso (admin, usuário comum, não autenticado).
@@ -3542,3 +3528,23 @@ devem ser testados com diferentes níveis de acesso (admin, usuário comum, não
 
 **O que NÃO foi feito.**
 - Testes de RBAC em todos os endpoints internos (só endpoints HTTP)
+
+### 83. Modelo canônico qwen3.6:35b-a3b (DA-92)
+
+**Motivo.** A troca de 2026-10-13 precedeu o registro formal: a linha "Modelo
+canônico" do `CLAUDE.md` já apontava para `qwen3.6:35b-a3b`, mas a DA-12 ainda
+descrevia `qwen3-coder-next:latest` como o modelo final. Sem uma DA própria, a
+mudança não tinha rastro no livro-razão.
+
+**Decisão.**
+- `qwen3.6:35b-a3b` (35B MoE, 128k ctx) é o default em `app/config.py`,
+  `.env.example`, `docker-compose.yml` e `promptfooconfig.yaml`.
+- `qwen3-coder-next:latest` permanece registrado como histórico em DA-4/8 e
+  DA-12; não é mais o default.
+- O re-baseline do promptfoo continua pendente (DA-51). Enquanto o baseline
+  medir outro modelo, o gate `deployed_model_evaluated` emite WARN.
+
+**Validação.** `tests/test_model_harness.py` cobre o harness de medição;
+`promptfooconfig.yaml` e `app/config.py` são a fonte do default. O gate
+`deployed_model_evaluated` é o lembrete de que a qualidade só está medida
+para o modelo que o baseline registra.

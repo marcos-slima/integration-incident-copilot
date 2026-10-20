@@ -150,7 +150,11 @@ class LlmCredential(Base):
 
     __tablename__ = "llm_credentials"
 
-    tenant_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    tenant_id: Mapped[str | None] = mapped_column(
+        String(128),
+        nullable=True,
+        comment="DA-79: tenant identifier for credential isolation. NULL = global credential",
+    )
     provider_origin: Mapped[str] = mapped_column(String(128), primary_key=True)
     encrypted_key: Mapped[str] = mapped_column(Text, nullable=False)
     key_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
@@ -174,6 +178,14 @@ class LlmCredential(Base):
             "provider_origin",
             unique=True,
             postgresql_where=text("tenant_id IS NOT NULL"),
+        ),
+        # Migration 023 cria este indice parcial para a credencial global.
+        # Sem ele no metadata, `alembic check` proporia DROP INDEX.
+        Index(
+            "uq_llm_credentials_global_origin",
+            "provider_origin",
+            unique=True,
+            postgresql_where=text("tenant_id IS NULL"),
         ),
         Index("ix_llm_credentials_tenant", "tenant_id"),
     )
@@ -539,6 +551,15 @@ class LlmRuntimeConfig(Base):
     llm_gateway_max_cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
     llm_routing_cost_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
     llm_routing_latency_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Colunas que existem no schema desde deploys anteriores, mas nao estao no
+    # conjunto editavel da Admin UI. O gateway usa Settings; manter no ORM
+    # alinha metadata e banco sem descartar valores ja persistidos.
+    llm_gateway_circuit_failure_threshold: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    llm_gateway_circuit_cooldown_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    llm_gateway_backoff_base_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    llm_gateway_backoff_max_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 # ---------------------------------------------------------------------------
@@ -669,10 +690,66 @@ class KnowledgeDocumentVersion(Base):
     )
     is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
 
-    __table_args__ = (UniqueConstraint("document_id", "version", name="uq_document_version"),)
+    __table_args__ = (
+        UniqueConstraint("document_id", "version", name="uq_knowledge_document_version"),
+        # Migration 026 usa um indice unico parcial (nao UniqueConstraint:
+        # SQLAlchemy nao aceita postgresql_where em UniqueConstraint).
+        Index(
+            "uq_knowledge_document_current",
+            "document_id",
+            "is_current",
+            unique=True,
+            sqlite_where=text("is_current = 1"),
+            postgresql_where=text("is_current = true"),
+        ),
+    )
 
     def __repr__(self) -> str:
         return (
             f"<KnowledgeDocumentVersion doc={self.document_id} v{self.version} "
             f"current={self.is_current}>"
         )
+
+
+# ---------------------------------------------------------------------------
+# snapshot_table / rollback_log (DA-82: rollback de deployment)
+# ---------------------------------------------------------------------------
+class Snapshot(Base):
+    """Snapshot de schema criado antes de um deploy (DA-82).
+
+    A tabela nasceu na migration aa5bc901f443 sem ORM. Sem o modelo aqui,
+    `Base.metadata` nao a conhecia e `alembic revision --autogenerate`
+    proporia DROP TABLE. O endpoint de rollback foi removido por nao ter
+    repositorio real; o schema permanece para a DA-82 (schema-only).
+    """
+
+    __tablename__ = "snapshot_table"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_now
+    )
+    schema_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    operation: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    __table_args__ = (Index("ix_snapshot_table_created", "created_at"),)
+
+
+class RollbackLog(Base):
+    """Registro de rollbacks executados (DA-82).
+
+    Mesmo caso do Snapshot: tabela criada por migration direta, agora
+    representada no metadata ORM para o `alembic check` nao enxergar drift.
+    """
+
+    __tablename__ = "rollback_log"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_now
+    )
+    target_schema_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+
+    __table_args__ = (Index("ix_rollback_log_created", "created_at"),)

@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Index, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -38,7 +38,14 @@ class PromptVersion(Base):
 
     __table_args__ = (
         UniqueConstraint("prompt_id", "version", name="uq_prompt_versions_prompt_version"),
-        UniqueConstraint("prompt_id", "is_current", name="uq_prompt_versions_current"),
+        Index(
+            "uq_prompt_versions_current",
+            "prompt_id",
+            "is_current",
+            unique=True,
+            sqlite_where=text("is_current = 1"),
+            postgresql_where=text("is_current = true"),
+        ),
     )
 
     def __repr__(self) -> str:

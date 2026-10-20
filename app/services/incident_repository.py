@@ -103,7 +103,12 @@ class Incident(Base):
     error_codes: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
     # DA-79: tenant identifier for multi-tenancy isolation
-    tenant_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    tenant_id: Mapped[str | None] = mapped_column(
+        String(128),
+        nullable=True,
+        index=True,
+        comment="DA-79: tenant identifier for multi-tenancy isolation",
+    )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(

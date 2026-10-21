@@ -1,6 +1,6 @@
 # Documentation — Integration Incident Copilot
 
-> English translation of [`docs/README.md`](../README.md) · source commit `812800c` · [Português](../README.md)
+> English translation of [`docs/README.md`](../README.md) · source commit `b2b21a7` · [Português](../README.md)
 > If this page and the Portuguese source differ, the code and the Portuguese source prevail.
 
 Index of `docs/`. The [`README.md` at the root](../README.md) introduces the project;

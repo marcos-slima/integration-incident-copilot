@@ -1,6 +1,6 @@
 # Multi-vendor connectors — integration guide (DA-59)
 
-> English translation of [`docs/CONNECTORS.md`](../CONNECTORS.md) · source commit `812800c` · [Português](../CONNECTORS.md)
+> English translation of [`docs/CONNECTORS.md`](../CONNECTORS.md) · source commit `54265f5` · [Português](../CONNECTORS.md)
 > If this page and the Portuguese source differ, the code and the Portuguese source prevail.
 
 The Copilot has **10 connectors**. All follow the same contract:

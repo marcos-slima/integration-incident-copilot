@@ -1,6 +1,6 @@
 # Quality Gates (DA-51)
 
-> English translation of [`docs/QUALITY_GATES.md`](../QUALITY_GATES.md) · source commit `1fec929` · [Português](../QUALITY_GATES.md)
+> English translation of [`docs/QUALITY_GATES.md`](../QUALITY_GATES.md) · source commit `e0640be` · [Português](../QUALITY_GATES.md)
 
 The test suite answers "does the code do what it promises?". The gates answer
 another question: **"what does the project claim about its own quality remains

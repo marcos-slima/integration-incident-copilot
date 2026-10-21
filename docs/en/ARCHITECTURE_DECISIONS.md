@@ -1,6 +1,6 @@
 # Architecture Decisions
 
-> English translation of [`docs/DECISOES_DE_ARQUITETURA.md`](../DECISOES_DE_ARQUITETURA.md) · source commit `6a78d3b` · [Português](../DECISOES_DE_ARQUITETURA.md)
+> English translation of [`docs/DECISOES_DE_ARQUITETURA.md`](../DECISOES_DE_ARQUITETURA.md) · source commit `cde10c9` · [Português](../DECISOES_DE_ARQUITETURA.md)
 
 Record of architecture decisions (ADs) for the Integration Incident Copilot:
 the real problem encountered, the solution adopted, how it was validated, and the

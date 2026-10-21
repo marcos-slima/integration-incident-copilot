@@ -2271,7 +2271,7 @@ perde o estado compartilhado e ganha o de antes, que é o comportamento de
 
 **O problema.** O modelo canônico já tinha duas decisões de comparação
 registradas — [DA-4](#4-comparação-formal-de-modelos-qwen330b-a3b-vs-qwen25-coder32b-da-4) e [DA-8](#8-segunda-comparação-de-modelo-qwen3635b-a3b-avaliado-e-rejeitado-da-8) — e
-mesmo assim a troca de produção não tinha registro próprio. O commit `0222b79`
+mesmo assim a troca de produção não tinha registro próprio. O commit `b92dced`
 (que trocou `qwen2.5-coder:32b` por `qwen3-coder-next:latest`) foi commitado
 como `feat:` sem prefixo de DA, e por isso ficou anos sem linha na tabela. DAs
 seguintes passaram a citá-lo pelo número — `app/models/models.py`, `alembic/006` — como

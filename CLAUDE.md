@@ -248,7 +248,7 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
 | DA-2 | `seed=42` obrigatório para determinismo Ollama | `factory.py` |
 | DA-3 | Guardrails em código, não em prompt | `nodes.py::_apply_confidence_guardrails()` |
 | DA-4/8 | Comparações de modelo via promptfoo: `qwen2.5-coder:32b` ganhou do `qwen3:30b-a3b` (DA-4) e do `qwen3.6:35b-a3b` (DA-8); trocado por `qwen3-coder-next:latest` na Fase 12 (paridade 10/10) | `config.py::llm_model` |
-| DA-12 | Troca final do modelo canônico para `qwen3-coder-next:latest` (MoE 80B/3B, 262K ctx) — empate técnico 10/10 com `qwen2.5-coder:32b` no promptfoo, decidida por roadmap (commit `0222b79`, sem prefixo de DA: por isso ficou anos sem registro). Substituído em 2026-10-13 por `qwen3.6:35b-a3b` (DA-92) | `config.py::llm_model` + `README` |
+| DA-12 | Troca final do modelo canônico para `qwen3-coder-next:latest` (MoE 80B/3B, 262K ctx) — empate técnico 10/10 com `qwen2.5-coder:32b` no promptfoo, decidida por roadmap (commit `b92dced`, sem prefixo de DA: por isso ficou anos sem registro). Substituído em 2026-10-13 por `qwen3.6:35b-a3b` (DA-92) | `config.py::llm_model` + `README` |
 | DA-32 | Consumidor AMQP 1.0 assíncrono para Solace Cloud / SAP Event Mesh (corrigido pela DA-40) | `events/amqp_consumer.py` |
 | DA-34 | Conector SuccessFactors EC (OAuth2 Client Credentials + OData v2 PerPerson) | `connectors/successfactors_connector.py` |
 | DA-35 | `/health` como readiness probe real (GET nos serviços) + expansão do catálogo Rule Engine | `main.py::_probe_infra_services` |

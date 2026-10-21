@@ -1,6 +1,6 @@
 # Getting Started — Integration Incident Copilot
 
-> English translation of [`docs/GETTING_STARTED.md`](../GETTING_STARTED.md) · source commit `812800c` · [Português](../GETTING_STARTED.md)
+> English translation of [`docs/GETTING_STARTED.md`](../GETTING_STARTED.md) · source commit `3a7eab8` · [Português](../GETTING_STARTED.md)
 > If this page and the Portuguese source differ, the code and the Portuguese source prevail.
 
 > From zero to first diagnosis in less than 10 minutes.

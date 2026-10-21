@@ -5,7 +5,7 @@ For the "why" of each decision (real problems encountered and how they were
 solved), see [`DECISOES_DE_ARQUITETURA.md`](../DECISOES_DE_ARQUITETURA.md);
 this document is the "what" and "where".
 
-> English translation of [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md) · source commit `812800c` · [Português](../ARCHITECTURE.md)
+> English translation of [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md) · source commit `7019e4e` · [Português](../ARCHITECTURE.md)
 > If this page and the Portuguese source differ, the code and the Portuguese source prevail.
 
 ## Diagrams map

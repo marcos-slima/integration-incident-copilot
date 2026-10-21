@@ -9,14 +9,14 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 
 Correções da auditoria técnica R3 (2026-10-20, `IIC-AUD-101`…`114`).
 
-> **Rastreabilidade (IIC-AUD-103).** A mensagem do commit `6c5e2e3` cita
+> **Rastreabilidade (IIC-AUD-103).** A mensagem do commit `400bce1` cita
 > `IIC-AUD-051`, `053`, `058` e `082`, que não existem nos relatórios R1/R2
 > (que vão até `044`). Os itens correspondem, pela descrição, a `030`/`051`
 > (referências quebradas), `031` (`--reset`), `035`/`036` (DA-84/85) e `036`
 > (`RollbackRequest`). A R3 numera a partir de `101` para não colidir.
 
 ### Corrigido
-- **Build da imagem (IIC-AUD-101):** `Dockerfile` pedia `--extra reports`, removido do `pyproject.toml` no commit `6c5e2e3`; `uv sync` falhava. Docstring de `scripts/generate_reports.py` atualizada.
+- **Build da imagem (IIC-AUD-101):** `Dockerfile` pedia `--extra reports`, removido do `pyproject.toml` no commit `400bce1`; `uv sync` falhava. Docstring de `scripts/generate_reports.py` atualizada.
 - **Grafana (IIC-AUD-102):** `GF_SERVER_ROOT_URL` segue `GRAFANA_HOST_PORT` (default 3002); `scripts/start-docker.sh` usava 3001.
 - **Compose:** serviço `postgres` passa a ler `POSTGRES_USER`/`POSTGRES_DB` (antes fixos em `iic`, divergindo do `DATABASE_URL` dos containers).
 - **`Modelfile` versionado (IIC-AUD-103):** saiu do `.gitignore`; a correção do IIC-AUD-038 só existia na máquina local.
@@ -41,7 +41,7 @@ Correções da auditoria técnica R3 (2026-10-20, `IIC-AUD-101`…`114`).
 ## Correções da auditoria R4 (2026-10-20, `IIC-AUD-201`…`217`)
 
 ### Corrigido
-- **IIC-AUD-201/303** Compose senhas: `bd160fd` havia trocado
+- **IIC-AUD-201/303** Compose senhas: `90ddb67` havia trocado
   `${VAR:?REQUIRED}` por senhas padrão públicas. Agora as quatro variáveis
   (`POSTGRES_PASSWORD`, `GRAFANA_PASSWORD`, `GRAFANA_DB_PASSWORD`,
   `NEO4J_PASSWORD`) usam `${VAR:-REQUIRED_SET_IN_ENV}`: a interpolação sempre
@@ -146,7 +146,7 @@ Correções da auditoria técnica R3 (2026-10-20, `IIC-AUD-101`…`114`).
 ## [1.4.0] — 2026-10-20
 
 > **Numeração.** A tag `v1.3.0` já existe no remoto apontando para um commit
-> experimental (`a854531`, linha v1.3) que não é ancestral do `master`. Para
+> experimental (`8aeb64b`, linha v1.3) que não é ancestral do `master`. Para
 > não reescrever uma tag publicada, esta release usa o próximo minor
 > disponível, **1.4.0**.
 

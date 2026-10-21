@@ -1,6 +1,6 @@
 # Integration Incident Copilot — User Guide
 
-> English translation of [`docs/USER_GUIDE.md`](../USER_GUIDE.md) · source commit `812800c` · [Português](../USER_GUIDE.md)
+> English translation of [`docs/USER_GUIDE.md`](../USER_GUIDE.md) · source commit `d67fea8` · [Português](../USER_GUIDE.md)
 > If this page and the Portuguese source differ, the code and the Portuguese source prevail.
 
 > Operational guide · For integration architects, support analysts and SAP sustainment teams

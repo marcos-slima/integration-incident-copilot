@@ -3,7 +3,9 @@ error_codes.ttl falha (nao encontrado, parse error) ou ontology enrichment
 nao esta ativado (ONTOLOGY_ENRICHMENT_ENABLED=false). Nunca deve derrubar
 o diagnostico inteiro."""
 
+from app.agent import nodes as nodes_module
 from app.agent.nodes import ontology_enrich_node
+from app.connectors.base import ConnectorResult
 
 
 def test_ontology_enrich_node_returns_empty_when_no_category():
@@ -57,3 +59,40 @@ def test_ontology_enrich_node_next_steps_empty_when_not_defined(monkeypatch):
     result = ontology_enrich_node({"diagnosis": {"rule_engine_category": "HTTP401Unauthorized"}})
 
     assert result["ontology_next_steps"] == "- Nenhum next step definido"
+
+
+def test_retrieve_node_with_ontology_enabled_accepts_connector_result(monkeypatch):
+    """IIC-AUD-301: `connector_data` e um `ConnectorResult` (attrs), nao dict.
+
+    Antes do fix, `state["connector_data"].get(...)` levantava AttributeError
+    e derrubava qualquer requisicao com a flag ligada.
+    """
+    monkeypatch.setattr(nodes_module.settings, "ontology_enrichment_enabled", True)
+    monkeypatch.setattr(
+        nodes_module,
+        "get_upper_categories_from_category",
+        lambda category: ["http://example.org/iic/error_codes#AuthenticationError"],
+    )
+
+    capturado: dict[str, str] = {}
+
+    def _retrieve_ontology(query: str, *, target: str, top_k: int, ontology_category: str):
+        capturado["categoria"] = ontology_category
+        return [{"doc": "ontology-aware"}]
+
+    monkeypatch.setattr(nodes_module, "retrieve_hybrid_ontology_aware", _retrieve_ontology)
+    monkeypatch.setattr(nodes_module, "retrieve", lambda *a, **k: [{"doc": "plain"}])
+
+    connector_data = ConnectorResult(
+        source_system="odata",
+        status="error",
+        error_code="HTTP401Unauthorized",
+        message="401",
+        is_mock=True,
+        raw={},
+    )
+
+    result = nodes_module.retrieve_node({"description": "x", "connector_data": connector_data})
+
+    assert result["retrieved_context"] == [{"doc": "ontology-aware"}]
+    assert capturado["categoria"] == "http://example.org/iic/error_codes#AuthenticationError"

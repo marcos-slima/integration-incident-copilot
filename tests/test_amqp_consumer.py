@@ -165,6 +165,13 @@ def _payload(event_id: str) -> str:
 def test_on_start_grants_initial_credit_and_escapes_credentials(monkeypatch) -> None:
     """create_receiver() do proton nao aceita "credit" (TypeError); com
     prefetch=0 o credito inicial precisa vir de receiver.flow()."""
+    # IIC-AUD-310: _ssl_domain() lanca SSLException quando o proton foi
+    # compilado sem libssl-dev. `SSL.present()` retorna False SEM excecao,
+    # entao o skip precisa testar o valor (nao apenas ImportError).
+    from proton import SSL
+
+    if not SSL.present():
+        pytest.skip("proton compiled without SSL")
     monkeypatch.setattr(mod.settings, "amqp_username", "user@corp")
     monkeypatch.setattr(mod.settings, "amqp_password", "p@ss/w:rd")
     monkeypatch.setattr(mod.settings, "amqp_prefetch", 3)

@@ -1,18 +1,59 @@
 # app/ontology/enrichment.py
-"""Fase 2: Neo4j + SKOS integration for incident enrichment."""
+"""Fase 2: Neo4j + SKOS integration for incident enrichment.
 
-from neo4j import Driver
-from rdflib import Graph
+IIC-AUD-302: a normalizacao de categorias ignora separadores (CamelCase,
+espacos, `_` e `-`) dos dois lados, e as consultas usam `initBindings` em
+vez de concatenar URIs na string SPARQL. Sem isso o `str + URIRef` criava
+um `URIRef` invalido (aviso do rdflib) e o resultado nao dependia da
+categoria de entrada.
+"""
+
+from __future__ import annotations
+
+import re
+
+from rdflib import Graph, URIRef
 from rdflib.namespace import SKOS
 
 from app.config import settings
+
+_NEXT_STEPS_PREFIX = "next_steps:"
+
+
+def _normalize(category: str) -> str:
+    """Normaliza rótulo/categoria para comparacao.
+
+    Remove tudo que nao for letra/digito e passa para minusculo. Assim
+    `HTTP401Unauthorized`, `HTTP 401 Unauthorized` e `http_401_unauthorized`
+    casam com o mesmo conceito — o TTL mistura CamelCase e snake_case.
+    """
+    return re.sub(r"[^a-z0-9]", "", category.lower())
+
+
+def _load_graph(ttl_path: str | None) -> Graph:
+    path = ttl_path or settings.ontology_ttl_path
+    graph = Graph()
+    graph.parse(path, format="turtle")
+    return graph
+
+
+def _category_index(graph: Graph) -> dict[str, URIRef]:
+    index: dict[str, URIRef] = {}
+    for subject, _, label in graph.triples((None, SKOS.prefLabel, None)):
+        if isinstance(label, str):
+            index[_normalize(str(label))] = subject
+    return index
+
+
+def _concept_iri(graph: Graph, category: str) -> URIRef | None:
+    return _category_index(graph).get(_normalize(category))
 
 
 def get_upper_categories_from_category(category: str, ttl_path: str | None = None) -> list[str]:
     """Infer upper categories from TTL SKOS hierarchy.
 
     Args:
-        category: error category (e.g., "http_timeout")
+        category: error category (e.g., "http_timeout", "HTTP401Unauthorized")
         ttl_path: path to error_codes.ttl (default: app/ontology/error_codes.ttl)
 
     Returns:
@@ -22,156 +63,68 @@ def get_upper_categories_from_category(category: str, ttl_path: str | None = Non
         >>> get_upper_categories_from_category("http_timeout")
         ["http://example.org/iic/error_codes#NetworkError"]
     """
-    if ttl_path is None:
-        ttl_path = settings.ontology_ttl_path
-
-    graph = Graph()
-    graph.parse(ttl_path, format="turtle")
-
-    # Build category → IRI mapping
-    # Normalize o nome da categoria de entrada para casar com os labels
-    normalized_input = category.lower().replace(" ", "_")
-    category_to_iri = {}
-    for s, _, label in graph.triples((None, SKOS.prefLabel, None)):
-        if isinstance(label, str):
-            label_category = label.lower().replace(" ", "_")
-            category_to_iri[label_category] = s
-
-    if normalized_input not in category_to_iri:
+    graph = _load_graph(ttl_path)
+    concept = _concept_iri(graph, category)
+    if concept is None:
         return []
 
-    # Query upper categories via skos:broader*
-    query = (
-        """
+    # Consulta via skos:broader*; `initBindings` evita montar `<uri>` na mao.
+    query = """
     PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-    PREFIX ex: <http://example.org/iic/error_codes#>
     SELECT ?upper WHERE {
-      BIND(<"""
-        + category_to_iri[normalized_input]
-        + """> AS ?concept)
       ?concept skos:broader* ?upper .
       FILTER(?upper != ?concept)
     }
     """
-    )
 
-    results = list(graph.query(query))
-    # Use str() em vez de n3() para evitar '< >' no output
+    results = graph.query(query, initBindings={"concept": concept})
     return [str(row["upper"]) for row in results]
 
 
 def get_next_steps_from_category(category: str, ttl_path: str | None = None) -> list[str]:
     """Extract recommended next steps from TTL.
 
+    O TTL atual guarda os passos em `skos:note "next_steps: ...; ..."`;
+    `ex:next_steps` continua suportado para TTLs futuros/alternativos.
+
     Args:
         category: error category (e.g., "oauth_token_expired")
         ttl_path: path to error_codes.ttl
 
     Returns:
-        List of next steps (e.g., ["refresh_token", "reauth"])
+        List of next steps (e.g., ["Refresh token", "Reauth"])
 
     Example:
         >>> get_next_steps_from_category("oauth_token_expired")
-        ["Refresh token", "Reauth"]
+        ["Renovar token OAuth2 via grant flow", ...]
     """
-    if ttl_path is None:
-        ttl_path = settings.ontology_ttl_path
-
-    graph = Graph()
-    graph.parse(ttl_path, format="turtle")
-
-    # Build category → IRI mapping (normalizar tambem aqui)
-    normalized_input = category.lower().replace(" ", "_")
-    category_to_iri = {}
-    for s, _, label in graph.triples((None, SKOS.prefLabel, None)):
-        if isinstance(label, str):
-            label_category = label.lower().replace(" ", "_")
-            category_to_iri[label_category] = s
-
-    if normalized_input not in category_to_iri:
+    graph = _load_graph(ttl_path)
+    concept = _concept_iri(graph, category)
+    if concept is None:
         return []
 
-    # Query next_steps property
-    query = (
-        """
+    # Forma canonica (TTLs novos): ex:next_steps.
+    query = """
     PREFIX ex: <http://example.org/iic/error_codes#>
-    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
     SELECT ?step WHERE {
-      BIND(<"""
-        + category_to_iri[normalized_input]
-        + """> AS ?concept)
       ?concept ex:next_steps ?step .
     }
     """
-    )
+    steps = [str(row["step"]) for row in graph.query(query, initBindings={"concept": concept})]
+    if steps:
+        return steps
 
-    results = list(graph.query(query))
-    # Converte para string se for URIRef
-    return [str(row["step"]) for row in results]
-
-
-def infer_consistency(incident_id: str, neo4j_driver: Driver) -> dict:
-    """Infer consistency between incident and ontology.
-
-    Args:
-        incident_id: incident ID
-        neo4j_driver: Neo4j driver instance
-
-    Returns:
-        Dict with consistency check results
-
-    Example:
-        >>> infer_consistency("INC-123", driver)
-        {"consistent": True, "issues": [], "recommendations": []}
-    """
+    # Forma usada no error_codes.ttl atual: skos:note "next_steps: a; b; c".
     query = """
-    MATCH (i:Incident {id: $incident_id})-[:HAS_ERROR]->(e:ErrorCategory)
-    WITH i, e
-    OPTIONAL MATCH (i)-[:HAS_UPPER_LEVEL_ERROR]->(upper:ErrorCategory)
-    RETURN i.diagnosis->>'rule_engine_category' AS incident_category,
-           e.category AS error_category,
-           collect(upper.category) AS upper_categories,
-           i.description AS description
+    PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+    SELECT ?note WHERE {
+      ?concept skos:note ?note .
+    }
     """
-
-    result = neo4j_driver.execute(query, {"incident_id": incident_id})
-    if not result:
-        return {"consistent": False, "issues": ["No error category found"], "recommendations": []}
-
-    # Perform consistency check
-    issues = []
-    recommendations = []
-
-    # DA-61 Fase 2b: Implement consistency checks
-    # Check 1: Verify rule_engine_category matches error category
-    incident_cat = result[0]["incident_category"]
-    error_cat = result[0]["error_category"]
-
-    if incident_cat and error_cat and incident_cat.lower() != error_cat.lower():
-        issues.append(f"Category mismatch: incident has '{incident_cat}', error has '{error_cat}'")
-        recommendations.append("Verify the rule engine category matches the error category")
-
-    # Check 2: Verify upper categories are consistent
-    upper_cats = result[0]["upper_categories"] or []
-    if upper_cats and error_cat in upper_cats:
-        issues.append("Circular reference detected: error category in upper categories")
-        recommendations.append("Check SKOS hierarchy for circular broader relationships")
-
-    # Check 3: Verify description has relevant keywords
-    description = result[0]["description"] or ""
-    if description:
-        # Simple keyword check based on category
-        keywords = {
-            "oauth": ["token", "oauth", "authentication"],
-            "http": ["status", "code", "response"],
-            "rfc": ["function", "calling", "rfc"],
-        }
-        cat_key = error_cat.lower().split("_")[0] if error_cat else ""
-        if cat_key in keywords:
-            found = any(kw in description.lower() for kw in keywords[cat_key])
-            if not found:
-                recommendations.append(
-                    f"Consider adding keywords for {cat_key} to improve matching"
-                )
-
-    return {"consistent": len(issues) == 0, "issues": issues, "recommendations": recommendations}
+    for row in graph.query(query, initBindings={"concept": concept}):
+        note = str(row["note"])
+        if not note.lower().startswith(_NEXT_STEPS_PREFIX):
+            continue
+        body = note.split(":", 1)[1]
+        steps.extend(step.strip() for step in body.split(";") if step.strip())
+    return steps

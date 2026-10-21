@@ -1,5 +1,7 @@
 # Deploy in Another Environment (Docker Compose) — Integration Incident Copilot
 
+> English translation of [`docs/DEPLOY.md`](../DEPLOY.md) · source commit `4d18e31` · [Português](../DEPLOY.md)
+
 > Guide to take the project, as it is today, to a new environment (client, server, other machine) via `docker compose`. Covers the real problems found when validating this flow from scratch and how to solve them.
 
 To run locally without Docker (`uv run uvicorn app.main:app --reload`), see [GETTING_STARTED.md](GETTING_STARTED.md).

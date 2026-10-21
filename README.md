@@ -195,7 +195,7 @@ Variables, demo identifiers and how to add a connector:
 | Retrieval on the bundled evaluation set (90 in-scope queries, 20 out of scope) | Hit@1 95.6 % (86/90, 95 % CI 89.1–98.3 %), Hit@3 97.8 %, MRR 0.967; 19 of 20 out-of-scope queries rejected | `scripts/eval_rag.py`, fastembed, local run 2026-10-18; CI job `rag-quality` re-measures |
 | Quality gates | 23 deterministic checks: dataset, reranker invariant, prompt digest vs. the measured prompt, documentation links, symbols and environment variables, connector reachability, UI and content i18n | CI job `deterministic` |
 | Database | migrations applied and checked; the 45 dashboard queries and the contract-drift end-to-end tests run against a real PostgreSQL | CI job `migrations_and_dashboards` |
-| Test coverage | 1888 tests passing, 82% code coverage (7745 lines; 1359 uncovered) | CI job `tests` |
+| Test coverage | 1928 tests passing, 83% code coverage (10 253 lines; 1 769 uncovered) | CI job `tests` |
 
 The evaluation set is small, and the chosen reranker's advantage over the
 baseline (ms-marco-L6) is one query out of 18, which is not statistically
@@ -241,8 +241,8 @@ The table below maps each capability to its implementation status and evidence.
 | HITL a posteriori | VER | `POST /incidents/{id}/verify`, `main.py:777-884` | SQL, `VERIFIED_AS` (if GraphRAG on), Langfuse score |
 | HITL before action | AUS | `policy.py: approval_required` exists; `approved` depends on "not implemented in v1" mechanism | No action to approve today |
 | Langfuse | VER | `observe_span` in retrieve, graph_enrich, graph_write, web_search, 3 specialists, report and root; CallbackHandler on LLM | supervisor and connector not instrumented |
-| Tests | VER | `-m "not integration"`: 1888 passed, 17 skipped, 17 deselected, 0 failures | Without Qdrant, Ollama and Neo4j |
-| Coverage | VER | 82% (7745 lines; 1359 uncovered); CI requires ≥80% (`tests.yml:55`) | |
+| Tests | VER | `-m "not integration"`: 1928 passed, 21 skipped, 17 deselected, 0 failures | Without Qdrant, Ollama and Neo4j |
+| Coverage | VER | 83% (10 253 lines; 1 769 uncovered); CI requires ≥80% (`tests.yml:55`) | |
 | Quality gates | VER | 23 defined (`gates.py`); 21 PASS, 2 WARN, 0 FAIL | WARN: reranker, deployed model |
 | CI | VER | `tests.yml` (lint, tests, security, compose smoke, rag-quality, neo4j-smoke) and `quality.yml` | |
 | Kyma | PARC | `deploy/kyma/` + `deploy/local/` | Applied to real Kubernetes (k3d, 2026-10-18); APIRule/Istio/BTP OIDC not validated |
@@ -263,7 +263,7 @@ Each of these is documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 ## Current status (2026-10-20)
 
 - ✅ All 16 remediation phases completed
-- ✅ 1888 tests passing (unit, without integration), 82% code coverage
+- ✅ 1928 tests passing (unit, without integration), 83% code coverage
 - ✅ Quality gate: 21 PASS, 2 WARN
 - ✅ README corrected: 28 rules (22 hardcoded + 6 SKOS), 55 sections, CIO 2025 source
 - ✅ Evidence matrix added with implementation status (VER/NVAL/OPC/PARC/AUS)

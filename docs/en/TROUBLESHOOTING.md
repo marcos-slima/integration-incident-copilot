@@ -1,5 +1,7 @@
 # Troubleshooting
 
+> English translation of [`docs/TROUBLESHOOTING.md`](../TROUBLESHOOTING.md) · source commit `ec0d6f9` · [Português](../TROUBLESHOOTING.md)
+
 Guide to diagnose the most common problems when running the Integration
 Incident Copilot. Installation and initial configuration are in
 [GETTING_STARTED.md](GETTING_STARTED.md).

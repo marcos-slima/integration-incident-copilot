@@ -11,12 +11,17 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _is_gitignored(path: Path) -> bool:
-    """Verifica se um caminho eh ignorado pelo git (`.gitignore`)."""
+def _is_gitignored(path: Path, root: Path = REPO_ROOT) -> bool:
+    """Verifica se um caminho eh ignorado pelo git (`.gitignore`).
+
+    Quando o git nao esta disponivel (arvore sem .git, tarball de release),
+    retorna False e deixa o caller decidir. O caller deve usar uma lista
+    conhecida de artefatos de runtime para evitar falsos negativos.
+    """
     try:
         result = subprocess.run(
-            ["git", "check-ignore", str(path.relative_to(REPO_ROOT))],
-            cwd=REPO_ROOT,
+            ["git", "check-ignore", str(path.relative_to(root))],
+            cwd=root,
             capture_output=True,
             text=True,
             check=False,
@@ -24,6 +29,18 @@ def _is_gitignored(path: Path) -> bool:
         return result.returncode == 0
     except Exception:  # noqa: BLE001 - fallback silencioso se git falhar
         return False
+
+
+# IIC-AUD-309: artefatos de runtime que o gate deve ignorar quando git
+# nao esta disponivel (tarball, sdist, imagem sem .git).
+_RUNTIME_ARTIFACTS = frozenset(
+    {
+        "data/.ingest_state_incidents.json",
+        "data/.ingest_state_reference.json",
+        "data/reference_library/",
+        "docs/interno/",
+    }
+)
 
 
 PIPELINE_INTERFACE_TYPES = frozenset(
@@ -1201,7 +1218,13 @@ def check_docs_code_references(root: Path = REPO_ROOT) -> list[Finding]:
         if not doc.name.startswith(("AUDITORIA_", "EVIDENCIA_")):
             for caminho in sorted(set(_BARE_CODE_PATH.findall(texto))):
                 caminho_path = root / caminho
-                if not caminho_path.is_file() and not _is_gitignored(caminho_path):
+                if not caminho_path.is_file():
+                    # IIC-AUD-309: passa por gitignore (com root correto)
+                    # ou artefato de runtime conhecido.
+                    if _is_gitignored(caminho_path, root):
+                        continue
+                    if any(caminho.startswith(ra) for ra in _RUNTIME_ARTIFACTS):
+                        continue
                     problemas.append(f"{doc.relative_to(root)}: {caminho} nao existe")
 
     if problemas:

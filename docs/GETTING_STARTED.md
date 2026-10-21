@@ -9,7 +9,7 @@
 | Requisito | Versão mínima | Verificar |
 |---|---|---|
 | Python | 3.12+ | `python3 --version` |
-| uv | qualquer | `uv --version` |
+| uv | >= 0.12.17 | `uv --version` |
 | Ollama | qualquer | `ollama --version` |
 | Docker (opcional) | 24+ | `docker --version` |
 
@@ -26,12 +26,13 @@ uv sync
 
 ### Senhas exigidas pelo compose
 
-O `docker-compose.yml` usa `${VAR:?...}` para `POSTGRES_PASSWORD`,
-`GRAFANA_PASSWORD` e `NEO4J_PASSWORD`, e o Compose interpola **todos** os
-serviços, inclusive os de perfis inativos. No `.env.example` as três estão
-comentadas: sem defini-las, **qualquer** `docker compose` (até `up -d qdrant`)
-falha com `required variable POSTGRES_PASSWORD is missing a value`. Gere as
-três antes do primeiro comando do compose.
+O `docker-compose.yml` usa `${VAR:-REQUIRED_SET_IN_ENV}` para
+`POSTGRES_PASSWORD`, `GRAFANA_PASSWORD`, `GRAFANA_DB_PASSWORD` e
+`NEO4J_PASSWORD`. O Compose interpola **todos** os serviços, inclusive os de
+perfis inativos, mas o valor sentinela `REQUIRED_SET_IN_ENV` não é uma senha
+válida: a API e o Postgres sobem com o mesmo placeholder e a autenticação falha
+explicitamente. O `.env.example` deixa essas variáveis vazias/comentadas de
+propósito. Gere as senhas antes do primeiro comando do compose.
 
 Gere também `LLM_CREDENTIALS_MASTER_KEY` (chave Fernet): com `DATABASE_URL`
 configurada a API **não sobe** sem ela (DA-60), e no modo container o
@@ -322,9 +323,9 @@ EMBEDDING_BACKEND=fastembed
 export LD_LIBRARY_PATH=/usr/local/sap/nwrfcsdk/lib:$LD_LIBRARY_PATH
 ```
 
-**`required variable POSTGRES_PASSWORD is missing a value`** (ou
-`GRAFANA_PASSWORD`/`NEO4J_PASSWORD`) em qualquer `docker compose`
-Faltam as senhas no `.env` — ver passo 1, "Senhas exigidas pelo compose".
+**`REQUIRED_SET_IN_ENV` em erro de autenticação** (Postgres/Grafana/Neo4j)
+Faltam as senhas no `.env` — o compose usou o sentinela. Ver passo 1,
+"Senhas exigidas pelo compose".
 
 **Qdrant connection refused**
 ```bash

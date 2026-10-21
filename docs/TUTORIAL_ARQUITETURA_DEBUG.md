@@ -348,7 +348,7 @@ Cada variável mapeia 1:1 pra um campo de `app/config.py::Settings`:
 |---|---|---|
 | (não setado, usa default) | `llm_model` | Qual modelo os nodes de diagnóstico (`sap_`/`saas_`/`generic_diagnosis_node`) chamam quando o rule engine não resolve — foi editando isso indiretamente (via `sed` no código, antes do `app/config.py` existir) que trocamos de `qwen3:30b-a3b` pra `qwen3-coder-next:latest` |
 | `RULE_ENGINE_ENABLED` (default `true`) | `rule_engine_enabled` | Com `false`, `_run_diagnosis_agent` pula o rule engine e todo diagnóstico vai ao LLM — use só para depurar o caminho LLM (Seção 5) |
-| `NEO4J_PASSWORD` | `neo4j_password` | Usado pelo GraphRAG (`app/rag/graph_store.py`) quando `GRAPH_RAG_ENABLED=true` — desligado por default, mas implementado e testado (nao mais so provisionado) |
+| `NEO4J_PASSWORD` | *(sem default)* — compose usa `REQUIRED_SET_IN_ENV` | Usado pelo GraphRAG (`app/rag/graph_store.py`) quando `GRAPH_RAG_ENABLED=true` — desligado por default, mas implementado e testado (nao mais so provisionado) |
 | `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_HOST` | `langfuse_*` | Sem essas três, o `CallbackHandler()` do Langfuse falha silenciosamente em autenticar — os traces simplesmente não aparecem em `localhost:3000` |
 
 **Para ver a configuração efetiva sem ler código:** `uv run python -m app.config`

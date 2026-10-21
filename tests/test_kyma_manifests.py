@@ -121,7 +121,8 @@ def test_worker_consumes_diagnosis_queue_with_shared_config():
     doc = _load("worker.yaml")
     container = doc["spec"]["template"]["spec"]["containers"][0]
     assert container["command"] == ["/app/.venv/bin/rq"]
-    assert container["args"] == ["worker", "--url", "$(REDIS_URL)", "diagnosis"]
+    # IIC-AUD-314: REDIS_URL via env RQ_REDIS_URL, nao --url na linha de comando
+    assert container["args"] == ["worker", "diagnosis"]
     refs = {next(iter(ref.values()))["name"] for ref in container["envFrom"]}
     assert refs == {"integration-incident-copilot-config", "integration-incident-copilot-secrets"}
     assert doc["spec"]["template"]["spec"]["securityContext"]["runAsNonRoot"] is True

@@ -44,6 +44,25 @@ def test_m18_worker_le_o_mesmo_env_da_api():
     assert "./.env:/app/.env:ro" in COMPOSE["services"]["worker"]["volumes"]
 
 
+def test_m18_compose_sem_senha_default_fraca():
+    """IIC-AUD-303: nenhum servico pode subir com senha conhecida."""
+    texto = (RAIZ / "docker-compose.yml").read_text(encoding="utf-8")
+    for valor in (
+        "iic_password",
+        "changeme_postgres",
+        "grafana_admin_password",
+        "grafana_readonly_password",
+        "neo4j_password",
+        "changeme_",
+    ):
+        assert valor not in texto, f"default fraco ainda no compose: {valor}"
+
+    api_db = COMPOSE["services"]["api"]["environment"]["DATABASE_URL"]
+    pg_password = COMPOSE["services"]["postgres"]["environment"]["POSTGRES_PASSWORD"]
+    assert "REQUIRED_SET_IN_ENV" in api_db
+    assert pg_password == "${POSTGRES_PASSWORD:-REQUIRED_SET_IN_ENV}"
+
+
 def test_m18_start_docker_sem_ai_stack_e_sem_uv_no_container():
     script = (RAIZ / "scripts" / "start-docker.sh").read_text(encoding="utf-8")
     codigo = "\n".join(linha for linha in script.splitlines() if not linha.lstrip().startswith("#"))

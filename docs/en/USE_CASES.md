@@ -1,5 +1,7 @@
 # Use Cases — Functional and Technical
 
+> English translation of [`docs/CASOS_DE_USO.md`](../CASOS_DE_USO.md) · source commit `c5c06d8` · [Português](../CASOS_DE_USO.md)
+
 > **What this document is.** Nine scenarios of use of the Integration Incident
 > Copilot. Each brings:
 >

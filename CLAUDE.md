@@ -116,7 +116,7 @@ de `/diagnose` (DA-18) via `RequireApiKeyMiddleware`.
 Consequência prática: `settings.api_key` é **gerada aleatoriamente no
 startup** quando está vazia (`app/main.py::_ensure_api_keys_configured`).
 Para um cliente MCP conseguir autenticar, `API_KEY` precisa estar
-**fixada no `.env`** (ver `.env.example:120`).
+**fixada no `.env`** (ver `.env.example:201`).
 
 Configuração por ferramenta:
 
@@ -229,7 +229,7 @@ scripts/            # benchmark_rerankers.py, generate_reports.py,
                     # graph_diagram.py (gera o grafo Mermaid de ARCHITECTURE.md e README.md),
                     # quality_gate.py (DA-51)
 docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_ARQUITETURA.md, GETTING_STARTED.md,
-                    # TUTORIAL_ARQUETURA_DEBUG.md, TROUBLESHOOTING.md,
+                    # TUTORIAL_ARQUITETURA_DEBUG.md, TROUBLESHOOTING.md,
                     # QUALITY_GATES.md, COVERAGE_MAP.md (DA-58, GERADO),
                     # CASOS_DE_USO.md (cenários medidos por testes), CONNECTORS.md
 .vscode/
@@ -293,7 +293,7 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
 | DA-58 | Mapa de cobertura produto SAP × mecanismo, **calculado** de dados versionados (27 linhas × 9 mecanismos) em vez de tabela mantida à mão: 3 níveis (`dedicated` / `generic` / `absent`) porque "cliente OData alcançaria" não é "conector de S/4HANA". Os dois eixos (capacidade do produto = afirmação sem fonte; cobertura do repo = fato verificável) são independentes, e `unknown` ≠ `none`. Gate `connector_coverage` reprova por **incoerência**, nunca por lacuna | `data/sap_products.yaml`, `data/connector_coverage.yaml`, `app/evaluation/coverage.py`, `scripts/coverage_map.py`, `docs/COVERAGE_MAP.md`, `app/evaluation/gates.py` |
 | DA-59 | Conectores multi-vendor: fluxo completo do pipeline, padrão comum (`fetch(identifier) → ConnectorResult`), checklist de 9 superfícies ao adicionar conector (registry, 2 Literals, supervisor, CLI, `CONNECTOR_TYPES`, seed `web_search_sources`, formulário de sistemas, `connector_coverage.yaml`), e documento consolidado `docs/CONNECTORS.md` (reescrito em 2026-10-07; variáveis conferidas pelo gate `docs_env_vars`) | `app/connectors/__init__.py`, `app/models/models.py`, `app/agent/supervisor.py`, `app/agent/graph.py` (CLI), `app/admin/templates/systems.html`, `app/admin/models.py`, `data/connector_coverage.yaml`, `docs/CONNECTORS.md` |
 | DA-60 | Criptografia em repouso de `evidence_json` com Fernet + redação de PII | `app/admin/crypto.py`, `app/main.py::_ensure_evidence_key_configured`, migration 009 |
-| DA-61 | Taxonomia de erros SAP com TTL/RDFLib (SKOS para Rule Engine) | `app/ontology/`, `app/agent/ontology_loader.py` |
+| DA-61 | Taxonomia de erros SAP com TTL/RDFLib (SKOS para Rule Engine) — Fase 1 no caminho de dados; Fases 2–6 candidatas (IIC-AUD-304) | `app/ontology/`, `app/agent/ontology_loader.py` |
 | DA-62 | Neo4j loader para SKOS taxonomy import (idempotent upsert, Cypher queries) | `app/ontology/neo4j_loader.py` |
 | DA-63 | Skills declarativas: cada skill é um artefato YAML em data/skills/*.yaml com schema, versão e capability contract; supervisor deriva domain index do registry ao invés de hardcoded sets; CAPABILITY_REGISTRY carregado de YAML quando disponível | `data/skills/`, `app/mcp/skill_registry.py`, `app/mcp/policy.py`, `app/agent/supervisor.py` |
 | DA-65 | Degradação graciosa do RAG: quando Qdrant cai, `_retrieve_hybrid` e `_retrieve_dense_only` (app/rag/retriever.py) retornam lista vazia (não propaga exceção) → rule engine ainda responde erros conhecidos; fluxo completo `/diagnose → run_diagnosis` pendente de teste de integração | `app/rag/retriever.py::_retrieve_hybrid`, `app/rag/retriever.py::_retrieve_dense_only`, `tests/test_da65_rag_degradation.py` |
@@ -317,7 +317,7 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
 | DA-90 | Documentação GRC (ISO 27001, SOC2): mapeamento, guia de auditoria, checklist | `docs/GRM_MAPPING.md`, `docs/GRM_AUDIT.md`, `docs/GRM_CHECKLIST.md`, `tests/test_grm_documentation.py` |
 | DA-91 | Testes RBAC completos para todos os endpoints | `tests/test_rbac_comprehensive.py` |
 | DA-92 | Modelo canônico `qwen3.6:35b-a3b` (35B MoE, 128k ctx) desde 2026-10-13, substituindo `qwen3-coder-next:latest`; re-baseline do promptfoo pendente (DA-51) | `app/config.py`, `.env.example`, `docker-compose.yml`, `promptfooconfig.yaml` |
-| DA-80 | DLP/NER avançado — detecção NER spaCy (fallback regex), validação contra lista de PII | `app/validation/pii.py`, `tests/test_dlp_ner.py` |
+| DA-80 | DLP/NER avançado — detecção NER spaCy (fallback regex), validação contra lista de PII — **candidata** (R4-206: regex no caminho, NER não integrado) | `app/validation/pii.py`, `tests/test_dlp_ner.py` |
 
 **DAs candidatas (não entregues ou com implementação parcial):**
 - **DA-31 — SAP AI Agent Hub registration (MCP + A2A)** · bloqueada: exige tenant Kyma.
@@ -347,6 +347,16 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
   - **Histórico.** A prosa original continua em `docs/DECISOES_DE_ARQUITETURA.md`
     §73, §75 e §76, marcada como candidata; não há force-push nem remoção de
     commits.
+- **DA-80 — rebaixada para candidata (2026-10-21, R4-206).**
+  - **O que existe.** `app/validation/pii.py` (`PIIValidator`) e
+    `tests/test_dlp_ner.py`; o caminho de produção usa apenas o regex de
+    `app/redaction.py` (`grep PIIValidator` fora do módulo = 0) e `spacy` não
+    está no lock.
+  - **Por que não está entregue.** O Kyma declara
+    `DATA_SOVEREIGNTY_MODE=cloud_with_dlp` (`deploy/kyma/configmap.yaml:57`),
+    que pressupõe DLP/NER no pipeline; hoje só há regex. Permanece candidata
+    até o NER ser integrado ao `redact_pii_*` (com teste e2e) ou o modo ser
+    rebaixado para `strict`.
 
 > A DA-32 (AMQP 1.0 via Solace Cloud) **já foi entregue** (`app/events/amqp_consumer.py`,
 > commit `67b78e8`). Ela ficou nesta lista até a DA-51 criar o gate

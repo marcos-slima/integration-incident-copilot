@@ -91,6 +91,9 @@ def build_incident_row(
         "redaction_applied": True,
         "latency_ms": latency_ms,
         "error_codes": [connector.error_code] if getattr(connector, "error_code", None) else None,
+        # R4-208/IIC-AUD: o campo existia na request mas nunca chegava ao
+        # INSERT, entao incidents.tenant_id era sempre NULL.
+        "tenant_id": request.tenant_id,
         "probable_root_cause": response.probable_root_cause,
         "model_confidence": response.model_confidence,
         "diagnosis_confidence": response.diagnosis_confidence,

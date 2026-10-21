@@ -41,7 +41,7 @@ dependencies = [
     # para dentro da imagem e de toda venv.
     "torch>=2.14.1",
     "slowapi>=0.1.10",
-    "mcp>=1.9.0",
+    "mcp>=2.0,<3",  # IIC-AUD-307: piso >=1.9.0 admitia v1 incompativel com MCPServer
     # Opcional em runtime (REDIS_URL vazio = nao usado, ver
     # app/a2a/task_store.py e app/queue.py) - declarado como
     # dependencia principal (nao um extra) pelo mesmo motivo de
@@ -96,7 +96,7 @@ dependencies = [
 # dependencias principais de proposito - o caminho local-first nao
 # deve exigir instalar SDK de nenhum provedor de nuvem.
 openai = [
-    "langchain-openai>=0.3",
+    "langchain-openai>=1.6.0",  # IIC-AUD-312: alinhado com dev group (>=1.6.0)
 ]
 # Observabilidade Prometheus (Fase 2): PROMETHEUS_ENABLED=true exige este extra.
 # pip install -e ".[prometheus]"
@@ -105,13 +105,26 @@ prometheus = [
 ]
 
 [tool.uv]
+# IIC-AUD-313: uv 0.12.13 nao oferece Python 3.12.15 (lista termina em 3.12.14).
+# Dockerfile:41 fixa 0.12.17; CI setup-uv deve usar a mesma versao.
+required-version = ">=0.12.17"
+
 # CVE-2026-97687/97688/97689 no urllib3 2.7.0 (fix: 2.8.0). urllib3 e'
 # transitivo (requests, langfuse, etc.), entao nao ha linha `urllib3=` em
 # dependencies para subir o piso. Uma constraint e' o mecanismo correto: ela
 # governa a resolucao sem declarar uma dependencia que o projeto nao usa
 # diretamente. Sem isto o pip-audit mantem o processo de seguranca verde
 # sobre uma versao com CVE conhecida.
-constraint-dependencies = ["urllib3>=2.8.0"]
+# DEP-01 (R4-203): CVEs em dependencias transitivas que o projeto nao declara
+# diretamente. Sem constraint o pip-audit reporta falsos positivos sobre versoes
+# com vulnerabilidades conhecidas.
+constraint-dependencies = [
+    "urllib3>=2.8.0",
+    # IIC-AUD-203: certifi corrigido. Pillow 13 ainda NAO e' instalavel:
+    # fastembed 0.8/0.9 pina `pillow<13` em todas as versoes de Python.
+    # O achado fica aberto ate o upstream liberar (ou trocar o backend).
+    "certifi>=2026.10.19",
+]
 
 # DEP-01: torch so-CPU no Linux (imagem, CI e a maquina de desenvolvimento).
 # macOS/Windows continuam no PyPI (as rodas de la ja sao so-CPU).

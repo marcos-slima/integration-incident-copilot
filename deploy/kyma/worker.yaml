@@ -5,7 +5,7 @@
 # (deployment.yaml); mesmo equivalente ao servico "worker" do
 # docker-compose.yml.
 #
-# Pre-requisito: o Redis apontado por REDIS_URL (configmap.yaml) - nao
+# Pre-requisito: o Redis apontado por REDIS_URL (secret.example.yaml) - nao
 # faz parte deste bundle de manifests.
 apiVersion: apps/v1
 kind: Deployment
@@ -33,8 +33,15 @@ spec:
         - name: worker
           image: "<REGISTRY>/integration-incident-copilot:<TAG>"
           command: ["/app/.venv/bin/rq"]
-          # $(REDIS_URL) e expandido pelo kubelet a partir do envFrom
-          args: ["worker", "--url", "$(REDIS_URL)", "diagnosis"]
+          # IIC-AUD-314: RQ CLI lê RQ_REDIS_URL via env (rq/cli/helpers.py:393).
+          # Passar --url "$(REDIS_URL)" expoe a senha em ps/kubectl describe.
+          args: ["worker", "diagnosis"]
+          env:
+            - name: RQ_REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: integration-incident-copilot-secrets
+                  key: REDIS_URL
           envFrom:
             - configMapRef:
                 name: integration-incident-copilot-config
@@ -56,3 +63,12 @@ spec:
             readOnlyRootFilesystem: false
             capabilities:
               drop: ["ALL"]
+          # IIC-AUD-314: liveness probe — rq nao expoe HTTP, usa exec.
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - 'python -c "import redis; r=redis.from_url(__import__(\"os\").environ[\"RQ_REDIS_URL\"]); r.ping()"'
+            initialDelaySeconds: 30
+            periodSeconds: 15

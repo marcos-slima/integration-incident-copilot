@@ -36,6 +36,90 @@ Correções da auditoria técnica R3 (2026-10-20, `IIC-AUD-101`…`114`).
 ### Pendente
 - **IIC-AUD-113:** re-baseline do promptfoo com o modelo de produção Kyma (`gpt-4o-mini`) — exige credenciais e rede.
 
+---
+
+## Correções da auditoria R4 (2026-10-20, `IIC-AUD-201`…`217`)
+
+### Corrigido
+- **IIC-AUD-201/303** Compose senhas: `bd160fd` havia trocado
+  `${VAR:?REQUIRED}` por senhas padrão públicas. Agora as quatro variáveis
+  (`POSTGRES_PASSWORD`, `GRAFANA_PASSWORD`, `GRAFANA_DB_PASSWORD`,
+  `NEO4J_PASSWORD`) usam `${VAR:-REQUIRED_SET_IN_ENV}`: a interpolação sempre
+  funciona, não há senha fraca e API/Postgres recebem o mesmo valor. O
+  `.env.example` deixa as variáveis vazias/comentadas; `GETTING_STARTED`
+  (pt/en) e os comentários do compose foram corrigidos.
+- **IIC-AUD-202/309** Gate hermético: `_is_gitignored` aceita `root` e
+  `_RUNTIME_ARTIFACTS` cobre os artefatos de runtime; testes em árvore sem
+  `.git` adicionados.
+- **IIC-AUD-205** DA-86 rebaixada para candidata; a prosa agora diz que
+  endpoints e UI **não** foram implementados.
+- **IIC-AUD-206** DA-80 rebaixada para candidata: o NER não está no caminho de
+  dados e o Kyma usa `cloud_with_dlp` dependendo apenas do regex.
+- **IIC-AUD-208** `IncidentRequest.tenant_id` agora chega a
+  `build_incident_row` e é persistido em `incidents.tenant_id`.
+- **IIC-AUD-210** Este CHANGELOG corrigido (as entradas anteriores declaravam
+  como “corrigido” itens que ainda estavam parciais).
+- **IIC-AUD-211** README atualizado para 1928 testes / 83 % / 10 253 linhas.
+- **IIC-AUD-213** Referências de `.env.example`, `ARQUETURA` e `worker.yaml`
+  alinhadas.
+- **IIC-AUD-214** Os seis docs de `docs/en/` sem cabeçalho receberam
+  `source commit`.
+- **IIC-AUD-216/313** `required-version = ">=0.12.17"` no `[tool.uv]`,
+  `setup-uv` fixado em `0.12.17` nos workflows e docs atualizados.
+
+### Pendente
+- **IIC-AUD-203:** `certifi` atualizado para `2026.10.19`. `pillow` continua em
+  `12.3.0`: `fastembed` (0.8/0.9) pina `pillow<13` em todas as versões de
+  Python, então o upgrade exige trocar/atualizar o backend de embeddings.
+- **IIC-AUD-204:** Valores com cara de segredo no histórico alcançáveis por
+  `origin/master`. Exige reescrita de histórico (force-push, destrutivo) —
+  decisão do mantenedor.
+- **IIC-AUD-207:** Sem referências a docs privados em `app/` e
+  `docs/MANUAL.md`; `docs/interno/` segue como artefato de runtime no gate.
+- **IIC-AUD-209:** Project externo — não verificável pelo repositório.
+- **IIC-AUD-212/215:** Não reexecutados nesta rodada (scripts da R4).
+- **IIC-AUD-217:** Re-baseline do modelo de produção Kyma continua pendente
+  (exige credenciais/rede).
+
+---
+
+## Correções da auditoria R5 (2026-10-21, `IIC-AUD-301`…`316`)
+
+### Corrigido
+- **IIC-AUD-301:** `retrieve_node` lia `connector_data` como `dict`; agora usa
+  `getattr(..., "error_code", None)` e há teste com `ConnectorResult` real.
+- **IIC-AUD-302:** normalização sem separadores (CamelCase/espaços/`_`),
+  consultas com `initBindings` (sem aviso do rdflib), `next_steps` lidos de
+  `skos:note "next_steps: ..."` e testes contra o TTL real.
+- **IIC-AUD-304:** `ontology_debug` removido do grafo; §52 e as linhas de
+  índice/registro da DA-61 declaram que só a Fase 1 está no caminho de dados e
+  as Fases 2–6 são candidatas.
+- **IIC-AUD-305:** `@observe_span("graph_enrich")` de volta em
+  `graph_enrich_node`; `ontology_enrich_node` tem span próprio.
+- **IIC-AUD-306:** `enrich_incident_with_ontology` e `infer_consistency`
+  removidas.
+- **IIC-AUD-307:** Piso `mcp>=1.9.0` corrigido para `mcp>=2.0,<3`.
+- **IIC-AUD-308:** `ontology_ttl_path` resolvido a partir do pacote
+  (`app/ontology/error_codes.ttl`), independente do cwd.
+- **IIC-AUD-309:** Gate hermético (`_RUNTIME_ARTIFACTS` + `root`) com testes de
+  árvore sem `.git`.
+- **IIC-AUD-310:** Teste AMQP faz skip quando `SSL.present()` é `False`.
+- **IIC-AUD-311:** `/llm` adicionado ao proxy do Vite.
+- **IIC-AUD-312:** `langchain-openai>=1.6.0` alinhado no extra; ruff hook
+  atualizado para `v0.16.10`.
+- **IIC-AUD-313:** `required-version`, pin do `setup-uv` e docs do uv alinhados.
+- **IIC-AUD-314:** Worker Kyma usa `RQ_REDIS_URL` via Secret em vez de `--url`
+  na linha de comando; liveness probe adicionado.
+- **IIC-AUD-315:** Os `nosec` de `salesforce_connector.py`, `i18n/__init__.py`
+  e `llm/origins.py` **foram mantidos**: ao remove-los, `bandit -ll` volta a
+  reportar B608/B704/B104 como Medium (não são obsoletos; cada um tem
+  justificativa na linha). O job de segurança continua verde.
+
+### Pendente
+- **IIC-AUD-316:** Sem type-checker Python. Adicionar `mypy`/`pyright` é uma
+  decisão de escopo (Info) e não foi feita nesta rodada.
+
+
 ## [1.4.0] — 2026-10-20
 
 > **Numeração.** A tag `v1.3.0` já existe no remoto apontando para um commit

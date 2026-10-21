@@ -74,7 +74,7 @@ final.
 | 55 | [40](#40-manutenção-de-usuários-pelo-admin-com-ativação-por-e-mail-e-telefone-da-55) | Manutenção de usuários pelo admin com ativação em duas etapas: token por e-mail → código por telefone (out-of-band até haver SMTP/SMS) |
 | 56 | [41](#41-conector-sap-popi-o-middleware-on-premise-que-não-é-rest-first-da-56) | Conector SAP PO/PI on-premise: Basic Auth nativo contra o Message Monitor, com OAuth2 opcional para quando há API Management na frente |
 | 60 | [51](#51-criptografia-em-repouso-de-evidence_json-com-fernet-da-60) | Criptografia em repouso de `evidence_json` com Fernet (`LLM_CREDENTIALS_MASTER_KEY`) + migration idempotente `009_encrypt_evidence_json.py` |
-| 61 | [52](#52-taxonomia-de-erros-sap-com-ttlrdflib-skos-para-rule-engine-da-61) | Taxonomia de erros SAP com TTL/RDFLib (SKOS) para Rule Engine: carregamento dinâmico vs hardcoded, zero breaking changes (DA-61 Fase 1) |
+| 61 | [52](#52-taxonomia-de-erros-sap-com-ttlrdflib-skos-para-rule-engine-da-61) | Taxonomia de erros SAP com TTL/RDFLib (SKOS) para Rule Engine: carregamento dinâmico vs hardcoded, zero breaking changes (DA-61 Fase 1 no caminho de dados; Fases 2–6 candidatas) |
 | 62 | [53](#53-neo4j-loader-para-skos-taxonomy-import-da-62) | Neo4j loader para SKOS taxonomy import (idempotent upsert, Cypher queries) |
 | 57 | [48](#48-fontes-de-busca-web-como-configuração-e-approved-que-não-era-no-op-da-57) | Fontes de busca web como configuração (`web_search_sources`): `WEB_SEARCH_POLICY=approved` deixa de ser no-op |
 | 58 | [49](#49-mapa-de-cobertura-dedicated-generic-e-absent-da-58) | Mapa de cobertura produto SAP × mecanismo, calculado de dados versionados: 3 níveis (`dedicated` / `generic` / `absent`) em vez de um booleano |
@@ -101,13 +101,13 @@ final.
 | 90 | [81](#81-documentação-grc-da-90) | Documentação GRC (ISO 27001, SOC2): mapeamento, guia de auditoria, checklist |
 | 91 | [82](#82-testes-rbac-completos-da-91) | Testes RBAC completos para todos os endpoints |
 | 92 | [83](#83-modelo-canônico-qwen3635b-a3b-da-92) | Modelo canônico `qwen3.6:35b-a3b` desde 2026-10-13, substituindo `qwen3-coder-next:latest`; re-baseline do promptfoo pendente (DA-51) |
-| 80 | [84](#84-dlpner-avancado-da-80) | DLP/NER avancado - detecção NER spaCy (fallback regex), validação contra lista de PII |
+| 80 | [84](#84-dlpner-avancado-da-80) | DLP/NER avancado - detecção NER spaCy (fallback regex), validação contra lista de PII (candidata: regex no caminho, NER nao integrado) |
 | — | — | DA-64: número não utilizado (pulo intencional) |
 | — | — | DA-31: bloqueada (exige tenant Kyma; ver `CLAUDE.md`) |
 | — | — | DA-36, DA-37: números não utilizados |
 | — | — | DA-5, DA-6, DA-7, DA-9, DA-10, DA-11, DA-13: números não utilizados — as decisões dessa fase ficaram como "nota informal" (seções 5–7 e 9–13) |
 | — | — | DA-79, DA-84, DA-85: candidatas rebaixadas em 2026-10-20 (prosa histórica em §73, §75, §76) |
-| — | — | DA-77, DA-78, DA-81: candidatas sem prosa — DA-77 aparece com dois escopos (dashboard HITL em §70; correção do TCO em `ROADMAP.md`), DA-78 (comparação de modelos, `ROADMAP.md`), DA-81 (`DIVIDAS_TECNICAS.md`) |
+| — | — | DA-77, DA-78, DA-81: candidatas sem prosa — DA-77 aparece com dois escopos (dashboard HITL em §70; correção do TCO em `ROADMAP.md`), DA-78 (comparação de modelos, `ROADMAP.md`), DA-81 (`AVALIACAO_ARQUITETURAL_PRODUTO_AI.md`, item 15) |
 
 > **Ordenação da prosa:** as seções §42–§47 (DA-42, DA-38, DA-39, DA-40,
 > DA-41, DA-12) foram retro-registradas em bloco, fora da ordem crescente de
@@ -2626,6 +2626,16 @@ downgrade (emergency rollback).
 
 ### 52. Taxonomia de erros SAP com TTL/RDFLib (SKOS para Rule Engine) (DA-61)
 
+> **Status (2026-10-21, IIC-AUD-304): apenas a Fase 1 está no caminho de
+> dados.** O TTL é lido pelo Rule Engine híbrido (`ontology_loader.py`) e as
+> funções SKOS de `app/ontology/enrichment.py` são usadas pelo
+> `retrieve_node` quando `ONTOLOGY_ENRICHMENT_ENABLED=true`. As Fases 2–6
+> (`neo4j_loader.py`, `ontology_agent.py`, `ontology_enrich_node`,
+> `ontology_aware_retriever.py`) permanecem **candidatas**: o
+> `ontology_enrich_node` foi removido do grafo (seu output não é declarado em
+> `CopilotState` nem consumido) e o retriever ontológico não é o caminho
+> padrão. Ver `CLAUDE.md` → "DAs candidatas".
+
 **O problema.** O Rule Engine determinístico (DA-33) armazena regras de erro conhecidas em `KNOWN_ERROR_RULES` no arquivo `app/agent/rules.py` como um `dict` hardcoded: 22 pares `(pattern, error_type)`. Isso gera dois problemas:
 
 1. **Dificuldade de manutenção**: adicionar/remover regras exige editar código Python, fazer commit e deploy.
@@ -2641,16 +2651,16 @@ A auditoria Q2 2026 (DATA-01) recomendou substituir hardcoded por taxonomia form
 
 **A solução.**
 
-- `app/ontology/error_codes.ttl`: arquivo Turtle RDF com 28 erros mapeados (OAuth, RFC, HTTP, JSON/XML, IDoc, OData, S/4HANA, CPI, etc.). Cada erro tem URI canônico (`<urn:error:>`) e labels em PT/EN.
+- `app/ontology/error_codes.ttl`: arquivo Turtle RDF com 28 erros mapeados (OAuth, RFC, HTTP, JSON/XML, IDoc, OData, S/4HANA, CPI, etc.). Cada erro tem URI no namespace `http://example.org/iic/error_codes#` e labels em PT/EN.
 - `app/agent/ontology_loader.py`: carregador que lê o TTL, transforma em instâncias `ErrorRule` e carrega em memória via `rdflib.Graph.parse()`. Fallback para `KNOWN_ERROR_RULES` se o TTL não for encontrado ou falhar na parse.
-- Implementação **aditiva**: `app/agent/rules.py` mantém `KNOWN_ERROR_RULES` intacto; `ontology_loader.py` só é chamado se `error_codes.ttl` existir. Nenhum change em `app/agent/graph.py`, `app/agent/nodes.py`, etc.
+- Implementação **aditiva**: `app/agent/rules.py` mantém `KNOWN_ERROR_RULES` intacto; `ontology_loader.py` só é chamado se `error_codes.ttl` existir. A Fase 1 integra o TTL ao Rule Engine via loader; o grafo (`graph.py`) e os nós padrão (`nodes.py`) não dependem da ontologia — `retrieve_node` só a consulta com `ONTOLOGY_ENRICHMENT_ENABLED=true` e degrada para o retrieve normal se ela falhar.
 - API compatível: `ErrorRule` (pattern `str`, error_type `Literal["OAuth2", "RFC", ...]`) é a mesma da versão hardcoded.
 
 **Expansão Fase 1 (2026-10-08):**
 
-- Normalizar URIs TTL para `snake_case` (ex: `ex:ssl_certificate_expired` em vez de `ex:SSLCertificateExpired`)
+- Normalizar a busca por labels (o TTL mistura CamelCase e `snake_case`; `app/ontology/enrichment.py` compara rótulos sem separadores)
 - Expandir TTL de 11 para 28 regras (cobertura 100% de `KNOWN_ERROR_RULES`)
-- Adicionar `next_steps` a todas as entradas (ações específicas de diagnóstico)
+- Adicionar `next_steps` a todas as entradas (ações específicas de diagnóstico, gravadas em `skos:note "next_steps: ..."`)
 - Mapear nomes TTL/hardcoded via `category_map` em `_extract_category()` (compatibilidade semântica)
 
 **Limitações (aceitas):**
@@ -3176,7 +3186,7 @@ e seguro.
 > **Status (2026-10-20): candidata.** O schema (`tenant_id`) e os filtros de
 > repositório existem, mas o isolamento não é fail-closed em todos os caminhos.
 > O texto abaixo é o registro histórico da decisão original; a pendência vive
-> em `CLAUDE.md` (lista de DAs candidatas) e `docs/DIVIDAS_TECNICAS.md`.
+> em `CLAUDE.md` (lista de DAs candidatas).
 
 **Motivo.** Isolamento de tenants é essencial para produtos SaaS multi-tenant. Sem
 tenant_id em incidents e queries filtradas por tenant, dados de um cliente podem
@@ -3212,7 +3222,7 @@ vazar para outro.
 > **Status (2026-10-20): candidata.** Tabela, ORM e repositório existem; os
 > endpoints de listagem/rollback não foram implementados. O texto abaixo é o
 > registro histórico da decisão original; a pendência vive em `CLAUDE.md`
-> (lista de DAs candidatas) e `docs/DIVIDAS_TECNICAS.md`.
+> (lista de DAs candidatas).
 
 **Motivo.** Para correlacionar regressões de qualidade com versões de prompt, é essencial
 ter versionamento de artefatos e capacidade de fazer rollback.
@@ -3238,8 +3248,7 @@ ter versionamento de artefatos e capacidade de fazer rollback.
 
 > **Status (2026-10-20): candidata.** Tabela, ORM e repositório existem; não há
 > endpoint de experimentos nem `_run_ab_test()`. O texto abaixo é o registro
-> histórico da decisão original; a pendência vive em `CLAUDE.md` (lista de DAs
-> candidatas) e `docs/DIVIDAS_TECNICAS.md`.
+> histórico da decisão original; a pendência vive em `CLAUDE.md` (lista de DAs candidatas).
 
 **Motivo.** Para validar melhorias em prompts ou pipeline, é necessário poder comparar
 variantes de forma sistemática com métricas quantitativas.
@@ -3262,6 +3271,10 @@ variantes de forma sistemática com métricas quantitativas.
 
 ### 77. UI versionamento RAG (DA-86)
 
+> **Status (2026-10-21, R4-205): candidata.** Apenas o schema existe
+> (`knowledge_document_versions`, migration 026). Os endpoints
+> `/admin/knowledge/...` e a UI **não** foram implementados.
+
 **Motivo.** O histórico de versões de documentos de conhecimento (RAG) permite
 reverter para versões anteriores em caso de degradação ou erro introduzido.
 
@@ -3271,7 +3284,7 @@ reverter para versões anteriores em caso de degradação ou erro introduzido.
 - UI: visualização de histórico e botão de rollback
 
 **O que NÃO foi feito.**
-- UI implementada (falta em `frontend/src/admin/knowledge/`)
+- Endpoints e UI **não implementados** (falta em `frontend/src/admin/knowledge/`)
 
 ### 78. Testes de Escalonamento (DA-88)
 
@@ -3404,6 +3417,12 @@ para o modelo que o baseline registra.
 
 
 ### 84. DLP/NER Avancado (DA-80)
+
+> **Status (2026-10-21, R4-206): candidata.** `app/validation/pii.py` existe
+> com testes, mas não está no caminho de dados (`grep PIIValidator` fora do
+> módulo = 0), `spacy` não está no lock e o Kyma usa
+> `DATA_SOVEREIGNTY_MODE=cloud_with_dlp` contando apenas com o regex de
+> `app/redaction.py`.
 
 **Motivo.** A redação atual em `app/redaction.py` cobre apenas e-mail, CPF, CNPJ
 e IDoc com regex estáticas. Para atingir um nível de DLP **real** (detecção de

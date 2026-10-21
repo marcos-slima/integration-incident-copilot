@@ -12,7 +12,7 @@
 | Requirement | Minimum version | Verify |
 |---|---|---|
 | Python | 3.12+ | `python3 --version` |
-| uv | any | `uv --version` |
+| uv | >= 0.12.17 | `uv --version` |
 | Ollama | any | `ollama --version` |
 | Docker (optional) | 24+ | `docker --version` |
 
@@ -29,12 +29,13 @@ uv sync
 
 ### Passwords required by compose
 
-The `docker-compose.yml` uses `${VAR:?...}` for `POSTGRES_PASSWORD`,
-`GRAFANA_PASSWORD` and `NEO4J_PASSWORD`, and the Compose interpolates **all**
-services, even those of inactive profiles. In `.env.example` the three are
-commented: without defining them, **any** `docker compose` (even `up -d qdrant`)
-fails with `required variable POSTGRES_PASSWORD is missing a value`. Generate
-all three before the first compose command.
+The `docker-compose.yml` uses `${VAR:-REQUIRED_SET_IN_ENV}` for
+`POSTGRES_PASSWORD`, `GRAFANA_PASSWORD`, `GRAFANA_DB_PASSWORD` and
+`NEO4J_PASSWORD`. Compose interpolates **all** services, even those of inactive
+profiles, but the sentinel `REQUIRED_SET_IN_ENV` is not a valid password: the
+API and Postgres start with the same placeholder and authentication fails
+explicitly. `.env.example` leaves these variables empty/commented on purpose.
+Generate the passwords before the first compose command.
 
 Also generate `LLM_CREDENTIALS_MASTER_KEY` (Fernet key): with `DATABASE_URL`
 configured the API **does not start** without it (DA-60), and in container mode
@@ -322,9 +323,9 @@ EMBEDDING_BACKEND=fastembed
 export LD_LIBRARY_PATH=/usr/local/sap/nwrfcsdk/lib:$LD_LIBRARY_PATH
 ```
 
-**`required variable POSTGRES_PASSWORD is missing a value`** (or
-`GRAFANA_PASSWORD`/`NEO4J_PASSWORD`) in any `docker compose`
-Missing passwords in `.env` — see step 1, "Passwords required by compose".
+**`REQUIRED_SET_IN_ENV` in an authentication error** (Postgres/Grafana/Neo4j)
+Missing passwords in `.env` — compose used the sentinel. See step 1,
+"Passwords required by compose".
 
 **Qdrant connection refused**
 ```bash

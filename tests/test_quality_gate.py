@@ -80,6 +80,29 @@ class TestRealRepository:
         assert not [f for f in check_difficulty_mix(REAL_ROOT) if f.is_failure]
 
 
+class TestDocsCodeReferencesWithoutGit:
+    def test_artefato_de_runtime_aceito_sem_git(self, tmp_path):
+        """IIC-AUD-309: arvore sem `.git` (tarball/sdist) nao pode falhar
+        por causa dos artefatos de runtime documentados no CLAUDE/MANUAL."""
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "README.md").write_text(
+            "O estado fica em `data/.ingest_state_reference.json`.\n",
+            encoding="utf-8",
+        )
+
+        findings = check_docs_code_references(tmp_path)
+
+        assert not [f for f in findings if f.is_failure]
+
+    def test_caminho_inexistente_sem_git_continua_falhando(self, tmp_path):
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "README.md").write_text("`data/nao_existe.json`\n", encoding="utf-8")
+
+        findings = check_docs_code_references(tmp_path)
+
+        assert [f for f in findings if f.is_failure]
+
+
 class TestRagDataset:
     def test_dataset_minimal_valido(self, tmp_path):
         findings = check_rag_dataset(_minimal_root(tmp_path), Thresholds(min_rag_cases=2))

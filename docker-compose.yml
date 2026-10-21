@@ -150,7 +150,10 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-iic}
       POSTGRES_USER: ${POSTGRES_USER:-iic}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_postgres}
+      # IIC-AUD-303: sem default fraco. O sentinela `REQUIRED_SET_IN_ENV`
+      # mantem a interpolacao valida (inclusive nos perfis inativos) e faz
+      # API/Postgres usarem o MESMO valor placeholder; troque antes de subir.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-REQUIRED_SET_IN_ENV}
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -165,18 +168,19 @@ services:
     ports:
       - "127.0.0.1:${GRAFANA_HOST_PORT:-3002}:3000"
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-changeme_grafana_admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-REQUIRED_SET_IN_ENV}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:${GRAFANA_HOST_PORT:-3002}}
       # Datasource (deploy/grafana/provisioning/datasources/postgres.yml).
-      # Validacao 2026-10-07 (M-17) + IIC-AUD-110: o datasource usa o papel
+      # Validacao 2026-10-07 (M-17) + IIC-AUD-110/303: o datasource usa o papel
       # somente leitura iic_grafana_ro (migration 013, criada por
-      # `alembic upgrade head` com GRAFANA_DB_PASSWORD no ambiente). Nao ha
-      # mais fallback para o dono do banco: sem GRAFANA_DB_PASSWORD o perfil
-      # observability nao sobe. Para voltar ao dono (so dev), defina
-      # GRAFANA_DB_USER=iic e GRAFANA_DB_PASSWORD=<POSTGRES_PASSWORD>.
+      # `alembic upgrade head` com GRAFANA_DB_PASSWORD no ambiente). Sem um
+      # valor real o servico sobe com o sentinela REQUIRED_SET_IN_ENV e o
+      # datasource falha na autenticacao; defina antes de usar o perfil.
+      # Para voltar ao dono (so dev), use GRAFANA_DB_USER=iic e a mesma senha
+      # de POSTGRES_PASSWORD.
       GRAFANA_DB_USER: ${GRAFANA_DB_USER:-iic_grafana_ro}
-      GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD:-changeme_grafana_readonly}
+      GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD:-REQUIRED_SET_IN_ENV}
       GRAFANA_DB_SSLMODE: ${GRAFANA_DB_SSLMODE:-disable}
     volumes:
       - grafana_data:/var/lib/grafana
@@ -235,15 +239,12 @@ services:
       - "127.0.0.1:7474:7474"
       - "127.0.0.1:7687:7687"
     environment:
-      # Avaliacao externa (curto prazo, item 6): sem default fraco -
-      # NEO4J_PASSWORD tinha um fallback "changeme123" aqui, que
-      # ficaria valendo de verdade se alguem ativasse o profile
-      # graphrag sem configurar a senha no .env (o Neo4j fica
-      # exposto nas portas 7474/7687 do host). "${VAR:?mensagem}" faz
-      # o "docker compose --profile graphrag up" falhar explicitamente
-      # se NEO4J_PASSWORD nao estiver definida, em vez de subir com
-      # uma senha conhecida publicamente.
-      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-changeme_neo4j}
+      # Avaliacao externa (curto prazo, item 6) + IIC-AUD-303: sem default
+      # fraco. O sentinela REQUIRED_SET_IN_ENV substitui o antigo
+      # "changeme123": a interpolacao continua valida e quem ativar o perfil
+      # graphrag sem configurar a senha ve o valor explicito (e falha a
+      # autenticacao), em vez de subir com uma senha conhecida publicamente.
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-REQUIRED_SET_IN_ENV}
     volumes:
       - neo4j_data:/data
 

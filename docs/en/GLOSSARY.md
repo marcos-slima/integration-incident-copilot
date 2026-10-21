@@ -1,5 +1,7 @@
 # Glossary — Integration Incident Copilot
 
+> English original · source commit `13fb2e9`
+
 > English translation of terminology used throughout the documentation.
 
 ## Keep in English (already project terms)

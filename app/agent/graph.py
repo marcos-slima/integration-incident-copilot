@@ -30,7 +30,6 @@ from app.agent.nodes import (
     graph_enrich_node,
     graph_write_node,
     observe_span,
-    ontology_enrich_node,
     report_node,
     retrieve_node,
     saas_diagnosis_node,
@@ -132,9 +131,11 @@ def build_graph(checkpointer=None):
 
     graph.add_edge("report", END)
 
-    if settings.ontology_enrichment_enabled:
-        graph.add_node("ontology_debug", ontology_enrich_node)
-        graph.add_edge("report", "ontology_debug")
+    # DA-61 Fases 4-6: candidatas (IIC-AUD-304). ontology_enrich_node existe
+    # mas nao esta conectado ao grafo — seu output (ontology_inference,
+    # ontology_next_steps) nao eh declarado em CopilotState e nenhum consumer
+    # o utiliza. A fase 1 (regras do TTL, error_codes.ttl) continua ativa via
+    # get_upper_categories_from_category() / get_next_steps_from_category().
 
     return graph.compile(checkpointer=checkpointer)
 

@@ -13,6 +13,7 @@ mascarando senhas/chaves - util pra depurar "por que esta apontando
 pro lugar errado" sem depender de mais ninguem.
 """
 
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, model_validator
@@ -414,10 +415,11 @@ class Settings(BaseSettings):
     checkpointing_enabled: bool = False
 
     # DA-61: caminho para error_codes.ttl (SKOS ontology para erros SAP)
-    # Default aponta para o arquivo no repo; pode ser sobrescrito para
-    # uso em deploy (ex:volume montado). Ontology loader (app/agent/ontology_loader.py)
-    # e enrichment (app/ontology/enrichment.py) usam este caminho.
-    ontology_ttl_path: str = "app/ontology/error_codes.ttl"
+    # Resolvido a partir de __file__ para funcionar independente do cwd.
+    # Pode ser sobrescrito via env var para deploy (ex: volume montado).
+    # IIC-AUD-308: config.py mora em app/, entao o TTL esta em app/ontology/.
+    _default_ttl = str(Path(__file__).resolve().parent / "ontology" / "error_codes.ttl")
+    ontology_ttl_path: str = _default_ttl
     neo4j_user: str = "neo4j"
     neo4j_password: str = ""
 

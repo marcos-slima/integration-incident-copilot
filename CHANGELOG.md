@@ -84,18 +84,26 @@ Correções da auditoria técnica R3 (2026-10-20, `IIC-AUD-101`…`114`).
   80 % por pacote — o piso global de 80 % sozinho escondia regressões.
 - **IIC-AUD-216/313** `required-version = ">=0.12.17"` no `[tool.uv]`,
   `setup-uv` fixado em `0.12.17` nos workflows e docs atualizados.
+- **IIC-AUD-204** Histórico purgado em 2026-10-21 com `git filter-repo` e
+  force-push em todas as branches e tags. Verificação: **0 achados** de
+  gitleaks no clone bare do remoto (462 commits). A árvore atual está limpa e
+  o CI passou a varrer também o histórico completo (`fetch-depth: 0` +
+  `gitleaks detect`). Os hashes de commit nos docs foram remapeados para o
+  histórico novo.
 - **IIC-AUD-217** Exceção **datada e com dono** para o modelo de produção Kyma:
   `deployed_model_exception` em `data/eval/promptfoo_baseline.json`
   (`gpt-4o-mini`, revisar até 2027-01-31). O gate continua WARN porque a
   qualidade **não foi medida** (faltam credenciais OpenAI/Azure); exceção
   expirada ou incompleta passa a FAIL, para a dívida não ser esquecida.
 
-### Pendente
-- **IIC-AUD-204:** Valores com cara de segredo no histórico alcançáveis por
-  `origin/master` (árvore atual limpa). A correção exige reescrita de histórico
-  + force-push em todas as branches/tags e rotação das credenciais — operação
-  destrutiva que precisa de janela de manutenção e confirmação do mantenedor.
-  Não executada nesta rodada.
+### Pendente / risco residual
+- **IIC-AUD-204 (residual):** As refs ocultas `refs/pull/4/head` … `8/head`,
+  de PRs já mergeados, ainda apontam para commits antigos com os valores
+  removidos. O GitHub rejeita atualização (`deny updating a hidden ref`) e não
+  há API para as apagar. Risco residual **aceito pelo mantenedor em
+  2026-10-21**; a remoção definitiva depende de ticket no GitHub Support ou de
+  recriar o repositório. A rotação das credenciais reais (`HomolAdmin-...`,
+  chave Fernet) continua a cargo de quem tem acesso aos sistemas afetados.
 
 ---
 

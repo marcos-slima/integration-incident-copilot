@@ -85,6 +85,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # IIC-AUD-204: o scan de histórico precisa de todos os commits,
+          # não só do último. O default do actions/checkout é fetch-depth: 1.
+          fetch-depth: 0
 
       - name: Instalar uv
         uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
@@ -148,6 +152,13 @@ jobs:
           curl -sSL -o /tmp/gl.tgz https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz
           tar -xzf /tmp/gl.tgz -C /tmp gitleaks
           /tmp/gitleaks detect --no-git --source . --config .gitleaks.toml --redact --exit-code 1
+
+      - name: gitleaks — histórico completo (IIC-AUD-204)
+        # Depois do purge de 2026-10-21, branches e tags não têm mais os
+        # valores antigos. Este passo impede que um segredo volte por um
+        # commit novo; PRs mergeados antigos têm refs gerenciadas pelo
+        # GitHub (refs/pull/*) e não são cobertos pelo checkout.
+        run: /tmp/gitleaks detect --source . --config .gitleaks.toml --redact --exit-code 1
 
       - name: bandit — SAST Python
         run: uv run bandit -r app/ -ll -f json -o bandit-report.json || uv run bandit -r app/ -ll

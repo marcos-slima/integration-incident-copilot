@@ -310,7 +310,7 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
 | DA-76 | Aviso de IA — alerta de que o diagnóstico é produto de IA: chave `ai_warning` no catálogo de conteúdo (`pt-BR` default e `en`); campo obrigatório `ai_warning` em `DiagnosisResponse` (string vazia como default); texto do aviso embutido na template Markdown do `report.template`; UI exibe o aviso quando presente | `app/i18n/locales/content.*.json`, `app/models/models.py::DiagnosisResponse`, `app/agent/nodes.py::report_node`, `app/agent/graph.py` |
 | DA-82 | Rollback de deployment — tabelas `snapshot_table`/`rollback_log` (schema apenas); endpoint removido até existir mecanismo real de rollback | `alembic/versions/aa5bc901f443_da_82_rollback_de_deployment_com_.py` |
 | DA-83 | Explicabilidade XAI — campo `explanation` em `DiagnosisResponse` com texto Highlight dos chunks usados, função `_build_xai_explanation` | `app/models/models.py`, `app/agent/nodes.py`, `app/i18n/locales/content.*.json` |
-| DA-86 | UI versionamento RAG: tabela `knowledge_document_versions`, endpoints `/admin/knowledge/documents/{id}/versions`, `/rollback/{version}`, `/history/{id}` | `app/admin/models.py::KnowledgeDocumentVersion`, `app/admin/routes.py`, `alembic/versions/026_add_knowledge_document_versions_table.py` |
+| DA-86 | UI versionamento RAG: tabela `knowledge_document_versions`, endpoints `/admin/knowledge/documents/{id}/versions`, `/rollback/{version}`, `/history/{id}` | `app/admin/models.py::KnowledgeDocumentVersion`, `app/admin/routes.py`, `alembic/versions/026_add_knowledge_document_versions_table.py` (schema apenas; DA-86 rebaixada em 2026-10-21) |
 | DA-87 | Dashboard de Performance por Domínio: endpoint `/admin/metrics/domains` com janela `days` (default 30), métricas count/hit@1/latência/custo por domain (sap/saas/generic) | `app/admin/metrics.py`, `app/admin/routes.py`, `tests/test_domain_metrics.py` |
 | DA-88 | Testes de escalonamento: script `app/scripts/load_test.py` com métricas p50/p95/p99 e TPS, config `tests/load_test_config.py`, 3 testes em `tests/test_load_testing.py` | `app/scripts/load_test.py`, `tests/load_test_config.py`, `tests/test_load_testing.py` |
 | DA-89 | Relatórios automatizados de compliance export: endpoint `/admin/reports/compliance/export?format=pdf|xlsx`, relatório com resumo/quality/auditoria, export PDF e XLSX | `app/admin/reports.py`, `tests/test_compliance_reports.py` |
@@ -335,7 +335,7 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
   - **Critério de entrada.** Tenant Kyma disponível → registrar o AgentCard e o endpoint
     MCP no hub → então esta decisão ganha seção própria em
     `docs/DECISOES_DE_ARQUITETURA.md`, linha no índice e no livro-razão, e sai desta lista.
-- **DA-79, DA-84 e DA-85 — rebaixadas para candidatas em 2026-10-20.**
+- **DA-79, DA-84, DA-85 e DA-86 — rebaixadas para candidatas.**
   - **DA-79 (multi-tenancy).** O schema (`tenant_id`, migration 022) e os filtros de
     repositório existem, mas o isolamento não é fail-closed em todos os caminhos
     (leituras diretas, exportações e credenciais). Permanece candidata até o

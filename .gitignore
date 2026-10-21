@@ -82,3 +82,7 @@ scripts/redact_docs_secrets.py
 # Documentos internos de trabalho (notas de implementacao, auditorias,
 # TODO): ficam so na maquina do mantenedor, fora do repositorio publico.
 docs/interno/
+
+# Dossie tecnico local (2026-10-21): material de trabalho do mantenedor,
+# nao versionado. O conteudo continua no disco, mas fora do historico.
+docs/dossier/

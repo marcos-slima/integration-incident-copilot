@@ -305,11 +305,11 @@ AZURE_OPENAI_API_KEY=...
 AZURE_OPENAI_ENDPOINT=https://recurso.openai.azure.com/
 AZURE_OPENAI_DEPLOYMENT=gpt-4o
 
-# OpenRouter (qwen3-coder-next via API, sem GPU local)
+# OpenRouter (modelo canônico DA-92 via API, sem GPU local; confira o slug no catálogo do OpenRouter)
 LLM_PROVIDER=openai
 OPENAI_API_KEY=chave-openrouter
 OPENAI_BASE_URL=https://openrouter.ai/api/v1
-LLM_MODEL=qwen/qwen3-coder-next
+LLM_MODEL=<slug-do-modelo-no-openrouter>
 EMBEDDING_BACKEND=fastembed
 ```
 

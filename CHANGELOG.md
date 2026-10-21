@@ -5,6 +5,37 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+Correções da auditoria técnica R3 (2026-10-20, `IIC-AUD-101`…`114`).
+
+> **Rastreabilidade (IIC-AUD-103).** A mensagem do commit `6c5e2e3` cita
+> `IIC-AUD-051`, `053`, `058` e `082`, que não existem nos relatórios R1/R2
+> (que vão até `044`). Os itens correspondem, pela descrição, a `030`/`051`
+> (referências quebradas), `031` (`--reset`), `035`/`036` (DA-84/85) e `036`
+> (`RollbackRequest`). A R3 numera a partir de `101` para não colidir.
+
+### Corrigido
+- **Build da imagem (IIC-AUD-101):** `Dockerfile` pedia `--extra reports`, removido do `pyproject.toml` no commit `6c5e2e3`; `uv sync` falhava. Docstring de `scripts/generate_reports.py` atualizada.
+- **Grafana (IIC-AUD-102):** `GF_SERVER_ROOT_URL` segue `GRAFANA_HOST_PORT` (default 3002); `scripts/start-docker.sh` usava 3001.
+- **Compose:** serviço `postgres` passa a ler `POSTGRES_USER`/`POSTGRES_DB` (antes fixos em `iic`, divergindo do `DATABASE_URL` dos containers).
+- **`Modelfile` versionado (IIC-AUD-103):** saiu do `.gitignore`; a correção do IIC-AUD-038 só existia na máquina local.
+- **Âncoras (IIC-AUD-104):** índice de `docs/DECISOES_DE_ARQUITETURA.md`, links internos, `docs/TROUBLESHOOTING.md`, `docs/GOVERNANCA.md`, `docs/en/QUALITY_GATES.md`; seções não traduzidas do `docs/en/ARCHITECTURE_DECISIONS.md` apontam para o registro em português.
+- **Índice de DAs (IIC-AUD-105):** números sem prosa declarados (pulos, notas informais, candidatas, DA-31 bloqueada).
+- **DA-92 nos guias (IIC-AUD-106):** `README.md` e `GETTING_STARTED` (pt/en) sem `qwen3-coder-next` como recomendação.
+- **Testes herméticos (IIC-AUD-107):** dois testes unitários baixavam `Qdrant/bm25` do Hugging Face.
+- `scripts/check_models.py`: modelo duplicado (IIC-AUD-111).
+
+### Alterado
+- **Quality gate:** `docs_markup_integrity` valida âncoras (`#secao`, no arquivo e em outro `.md`); `das_index_current` exige que todo número de 1 até a maior DA esteja no índice ou declarado numa linha `| — |`.
+- **Grafana somente leitura (IIC-AUD-110) — quebra de compatibilidade local:** o perfil `observability` exige `GRAFANA_DB_PASSWORD` e usa `iic_grafana_ro` por default (sem fallback para o dono do banco). Rode `alembic upgrade head` com `GRAFANA_DB_PASSWORD` no ambiente.
+- **Versões fixadas (IIC-AUD-112):** base `python:3.12.15-slim` (= `.python-version`), `uv==0.12.17` no `Dockerfile` (= venv local), GitHub Actions por SHA.
+- `.env.example`: portas do compose, `POSTGRES_USER/DB`, `FASTEMBED_BM25_PATH`, `SKILLS_DIR`; removido `MESSAGEPIT_SMS_FROM` sem consumidor (IIC-AUD-109).
+- Cobertura (IIC-AUD-108): `tests/test_circuit_breaker_redis.py` (caminho Redis/Lua e degradação) e `tests/test_ingest_helpers.py`.
+
+### Pendente
+- **IIC-AUD-113:** re-baseline do promptfoo com o modelo de produção Kyma (`gpt-4o-mini`) — exige credenciais e rede.
+
 ## [1.4.0] — 2026-10-20
 
 > **Numeração.** A tag `v1.3.0` já existe no remoto apontando para um commit

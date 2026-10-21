@@ -25,6 +25,9 @@ result.
 > prose. `informal note` = real decision that never received a DA. DAs grouped
 > in a section (e.g., DA-15/16/17, DA-46/47/48) share its number.
 
+> Sections not yet translated (after §23) link to the Portuguese record,
+> [`DECISOES_DE_ARQUITETURA.md`](../DECISOES_DE_ARQUITETURA.md).
+
 | DA | Section | What is it |
 |---|---|---|
 | 1 | [1](#1-hallucination-by-context-mixing-da-1) | RAG top-1 (avoids context mixing) |
@@ -32,7 +35,7 @@ result.
 | 3 | [3](#3-deterministic-guardrail-for-fallback-data-da-3) | Guardrails in code, not in prompt |
 | 4 | [4](#4-formal-model-comparison-qwen330b-a3b-vs-qwen25-coder32b-da-4) | Model comparison via promptfoo: `qwen2.5-coder:32b` won against |
 | 8 | [8](#8-second-model-comparison-qwen3635b-a3b-evaluated-and-rejected-da-8) | Model comparison via promptfoo: `qwen2.5-coder:32b` won against |
-| 12 | [47](#47-the-model-switch-that-didnt-have-a-number-da-12) | Final switch of canonical model to `qwen3-coder-next:latest` (MoE 80B/3B, 262K ctx) — technical tie 10/10, decided by roadmap |
+| 12 | [47](../DECISOES_DE_ARQUITETURA.md#47-a-troca-de-modelo-que-não-tinha-número-da-12) | Final switch of canonical model to `qwen3-coder-next:latest` (MoE 80B/3B, 262K ctx) — technical tie 10/10, decided by roadmap |
 | 14 | [14](#14-a2a-agent2agent-layer-implemented-with-the-caveat-of-ga-preserved-da-14) | A2A (Agent2Agent) JSON-RPC 2.0 layer |
 | 15 | [15](#15-evidencetrust-layer-between-ragconnectors-and-the-llm-da-151617) | Evidence/Trust Layer deterministic |
 | 16 | [15](#15-evidencetrust-layer-between-ragconnectors-and-the-llm-da-151617) | `is_grounded` via evidence_strength (never LLM self-assessment) |
@@ -44,43 +47,43 @@ result.
 | 22 | [20](#20-multi-agent---supervisor--specialists-by-domain-da-22) | Multi-agent: supervisor → sap/saas/generic (no LLM) |
 | 23 | [21](#21-event-mesh---event-driven-ingestion-da-23) | Event Mesh via CloudEvents webhook → `run_diagnosis()` |
 | 24 | [22](#22-deploy-in-production---sap-btp-kyma-runtime-da-24) | Deploy SAP BTP Kyma Runtime |
-| 25 | [24](#24-evidencetrust-layer--correction-of-rag-threshold-before-reranker-da-25) | Evidence/Trust Layer v2 + RAG threshold post-reranker |
-| 26 | [25](#26-ai-gateway-v1---routing-policy-circuit-breaker-and-budget-da-26) | AI Gateway v1: policy + circuit breaker + budget |
-| 27 | [26](#26-capability-registry--agent-execution-policy-da-27) | Capability Registry FAIL-CLOSED |
-| 28 | [27](#27-graphrag---verified_as-model-da-28) | GraphRAG model `VERIFIED_AS` + endpoint `/incidents/{id}/verify` |
-| 29 | [28](#28-scientific-benchmark-of-rerankers-da-29) | Reranker benchmark → mmarco-mMiniLMv2 wins (+7pp Hit@1) |
-| 30 | [29](#29-pii-redaction-before-prompt-and-langfuse-with-smart-log-truncation-and-exponential-backoff-da-30) | Expanded PII redaction + smart log truncation + exponential backoff |
+| 25 | [24](../DECISOES_DE_ARQUITETURA.md#24-evidencetrust-layer--correção-do-threshold-do-rag-antes-do-reranker-da-25) | Evidence/Trust Layer v2 + RAG threshold post-reranker |
+| 26 | [25](../DECISOES_DE_ARQUITETURA.md#25-ai-gateway-v1---policy-de-roteamento-circuit-breaker-e-budget-da-26) | AI Gateway v1: policy + circuit breaker + budget |
+| 27 | [26](../DECISOES_DE_ARQUITETURA.md#26-capability-registry--agent-execution-policy-da-27) | Capability Registry FAIL-CLOSED |
+| 28 | [27](../DECISOES_DE_ARQUITETURA.md#27-graphrag---modelo-verified_as-da-28) | GraphRAG model `VERIFIED_AS` + endpoint `/incidents/{id}/verify` |
+| 29 | [28](../DECISOES_DE_ARQUITETURA.md#28-benchmark-científico-de-rerankers-da-29) | Reranker benchmark → mmarco-mMiniLMv2 wins (+7pp Hit@1) |
+| 30 | [29](../DECISOES_DE_ARQUITETURA.md#29-redaction-de-pii-antes-do-prompt-e-do-langfuse-com-truncamento-inteligente-e-backoff-da-30) | Expanded PII redaction + smart log truncation + exponential backoff |
 | 32 | ARCHITECTURE | Async AMQP 1.0 consumer for Solace Cloud / SAP Event Mesh (protocol fixed by DA-40) |
 | 33 | ARCHITECTURE | Deterministic Rule Engine (pre-LLM filter; 22 rules in `KNOWN_ERROR_RULES`) |
 | 34 | ARCHITECTURE | SuccessFactors EC connector (OAuth2 Client Credentials + OData v2 PerPerson) |
 | 35 | ARCHITECTURE | `/health` as real readiness probe (GET on services) + Rule Engine catalog expansion |
-| 38 | [43](#43-embedder-backend-pluggable-for-ci-not-to-depend-on-ollama-da-38) | `EMBEDDING_BACKEND=fastembed` for RAG eval job in CI, which doesn't have Ollama |
-| 39 | [44](#44-data-sovereignty-in-the-ai-gateway-the-mode-is-policy-not-preference-da-39) | Data sovereignty policy in AI Gateway (`strict` / `cloud_with_dlp`) |
-| 40 | [45](#45-aiormq-is-not-amqp-10-the-failure-was-silent-da-40) | Migration aiormq (AMQP 0.9.1) → python-qpid-proton (AMQP 1.0), with asyncio wrapper |
-| 41 | [46](#46-circuit-breaker-with-shared-redis-backend-da-41) | Circuit breaker with shared Redis backend (fallback in memory without infra mandatory) |
-| 42 | [42](#42-scale-calibrated-by-sigmoid-for-rerank-score-da-42) | Scale calibrated by sigmoid for rerank score (no consumer uses the raw score) |
-| 43 | [30](#30-data-sovereignty-governance-by-real-origin-da-43) | Data sovereignty by real origin, fail-closed |
-| 44 | [31](#31-deterministic-escalation-signal-in-three-tiers-da-44) | Deterministic escalation signal in 3 tiers (prep. tier 3) |
-| 45 | [32](#32-provider-universality-audited-route-capabilities-by-origin-embedding-identity-da-45) | Provider universality: audited route + capabilities by origin |
-| 46 | [33](#33-managed-registration-of-models-credentials-encrypted-and-real-metering-da-464748) | Managed registration of models/credentials by ORIGIN (LLM_REGISTR |
-| 47 | [33](#33-managed-registration-of-models-credentials-encrypted-and-real-metering-da-464748) | Encrypted credentials at rest with Fernet (master key in .env, nu |
-| 48 | [33](#33-managed-registration-of-models-credentials-encrypted-and-real-metering-da-464748) | REAL token metering (usage_metadata, not estimate) persisted |
-| 49 | [34](#34-integrated-systems-catalog-managed-by-admin-surface-da-49) | Integrated systems catalog (`integration_systems`) in admin surface |
-| 50 | [35](#35-incident-correlation-with-systems-catalog--persisted-verification-da-50) | Correlation `incidents` ↔ catalog by `system_key` (exact, from |
-| 51 | [36](#36-quality-gates-transform-claims-of-quality-into-verified-invariants-da-51) | Quality gates: machine-verified evaluation invariants (d |
-| 52 | [37](#37-sap-contract-drift-detection-baseline-severity-and-incident-da-52) | SAP contract drift detection: probe `$metadata` (interface se |
-| 53 | [38](#38-diagnostic-prompt-as-versioned-artifact-with-gate-against-measured-prompt-da-53) | Diagnostic prompt as versioned artifact: `PromptSpec` (vers |
-| 54 | [39](#39-session-login-for-web-ui--each-credential-in-its-layer-da-54) | Session login for web UI (`/auth/login` + HttpOnly cookie; X-API-Key continues for machines) |
-| 55 | [40](#40-user-maintenance-by-admin-with-activation-by-email-and-phone-da-55) | User maintenance by admin with two-step activation: token by email → code by phone (out-of-band until SMTP/SMS) |
-| 56 | [41](#41-sap-po-pi-connector-on-premise-middleware-that-is-not-rest-first-da-56) | SAP PO/PI on-premise connector: Native Basic Auth against Message Monitor, with optional OAuth2 when API Management is in front |
-| 57 | [48](#48-web-search-sources-as-configuration-and-approved-that-was-not-a-no-op-da-57) | Web search sources as configuration (`web_search_sources`): `WEB_SEARCH_POLICY=approved` ceases to be no-op |
-| 58 | [49](#49-coverage-map-dedicated-generic-and-absent-da-58) | SAP product × mechanism coverage map, calculated from versioned data: 3 levels (`dedicated` / `generic` / `absent`) instead of a boolean |
-| 59 | [50](#50-multi-vendor-connectors-full-standard-flow-common-checklist-of-8-surfaces-when-adding-connector-consolidated-documentation-da-59) | Multi-vendor connectors: full flow, common standard, 8-surface checklist when adding connector, consolidated doc `/docs/CONNECTORS.md` |
-| 60 | [51](#51-encryption-at-rest-of-evidence_json-with-fernet-da-60) | Encryption at rest of `evidence_json` with Fernet (`LLM_CREDENTIALS_MASTER_KEY`) + idempotent migration `009_encrypt_evidence_json.py` |
-| 61 | [52](#52-sap-error-taxonomy-with-ttl-rdflib-da-61) | SAP error taxonomy with TTL/RDFLib (SKOS) for Rule Engine: dynamic loading vs hardcoded, zero breaking changes (DA-61 Phase 1) |
-| 62 | [53](#53-neo4j-loader-for-skos-taxonomy-import-da-62) | Neo4j loader for SKOS taxonomy import (idempotent upsert, Cypher queries) |
-| 63 | [54](#54-declarative-skills---yaml-as-source-of-truth-for-capability-and-routing-da-63) | Declarative skills — YAML as source of truth for capability and routing (DA-63) |
-| 65 | [55](#55-graceful-degradation-of-rag-when-qdrant-falls-da-65) | Graceful degradation of RAG: Qdrant falls → `_retrieve_hybrid` and `_retrieve_dense_only` return `[]` → rule engine still responds known errors; full flow `/diagnose → run_diagnosis` pending integration test |
+| 38 | [43](../DECISOES_DE_ARQUITETURA.md#43-backend-de-embedding-trocável-para-o-ci-não-depender-de-ollama-da-38) | `EMBEDDING_BACKEND=fastembed` for RAG eval job in CI, which doesn't have Ollama |
+| 39 | [44](../DECISOES_DE_ARQUITETURA.md#44-soberania-de-dados-no-ai-gateway-o-modo-é-política-não-preferência-da-39) | Data sovereignty policy in AI Gateway (`strict` / `cloud_with_dlp`) |
+| 40 | [45](../DECISOES_DE_ARQUITETURA.md#45-aiormq-não-é-amqp-10-a-falha-era-silenciosa-da-40) | Migration aiormq (AMQP 0.9.1) → python-qpid-proton (AMQP 1.0), with asyncio wrapper |
+| 41 | [46](../DECISOES_DE_ARQUITETURA.md#46-circuit-breaker-com-backend-redis-compartilhado-da-41) | Circuit breaker with shared Redis backend (fallback in memory without infra mandatory) |
+| 42 | [42](../DECISOES_DE_ARQUITETURA.md#42-escala-calibrada-por-sigmoid-para-o-rerank-score-da-42) | Scale calibrated by sigmoid for rerank score (no consumer uses the raw score) |
+| 43 | [30](../DECISOES_DE_ARQUITETURA.md#30-governança-de-soberania-de-dados-por-origin-real-da-43) | Data sovereignty by real origin, fail-closed |
+| 44 | [31](../DECISOES_DE_ARQUITETURA.md#31-sinal-determinístico-de-escalonamento-em-três-tiers-da-44) | Deterministic escalation signal in 3 tiers (prep. tier 3) |
+| 45 | [32](../DECISOES_DE_ARQUITETURA.md#32-universalidade-de-provider-rota-auditada-capacidades-por-origin-identidade-de-embedding-da-45) | Provider universality: audited route + capabilities by origin |
+| 46 | [33](../DECISOES_DE_ARQUITETURA.md#33-registro-gerenciado-de-modelos-credenciais-cifradas-e-metering-real-da-464748) | Managed registration of models/credentials by ORIGIN (LLM_REGISTR |
+| 47 | [33](../DECISOES_DE_ARQUITETURA.md#33-registro-gerenciado-de-modelos-credenciais-cifradas-e-metering-real-da-464748) | Encrypted credentials at rest with Fernet (master key in .env, nu |
+| 48 | [33](../DECISOES_DE_ARQUITETURA.md#33-registro-gerenciado-de-modelos-credenciais-cifradas-e-metering-real-da-464748) | REAL token metering (usage_metadata, not estimate) persisted |
+| 49 | [34](../DECISOES_DE_ARQUITETURA.md#34-catálogo-de-sistemas-integrados-gerenciados-pela-superfície-admin-da-49) | Integrated systems catalog (`integration_systems`) in admin surface |
+| 50 | [35](../DECISOES_DE_ARQUITETURA.md#35-correlação-de-incidentes-com-o-catálogo-de-sistemas--verificação-persistida-da-50) | Correlation `incidents` ↔ catalog by `system_key` (exact, from |
+| 51 | [36](../DECISOES_DE_ARQUITETURA.md#36-quality-gates-transformar-alegações-de-qualidade-em-invariantes-verificadas-da-51) | Quality gates: machine-verified evaluation invariants (d |
+| 52 | [37](../DECISOES_DE_ARQUITETURA.md#37-detecção-de-drift-de-contrato-sap-baseline-severidade-e-incidente-da-52) | SAP contract drift detection: probe `$metadata` (interface se |
+| 53 | [38](../DECISOES_DE_ARQUITETURA.md#38-prompt-de-diagnóstico-como-artefato-versionado-com-gate-contra-o-prompt-medido-da-53) | Diagnostic prompt as versioned artifact: `PromptSpec` (vers |
+| 54 | [39](../DECISOES_DE_ARQUITETURA.md#39-login-de-sessão-para-a-ui-web--cada-credencial-na-camada-dela-da-54) | Session login for web UI (`/auth/login` + HttpOnly cookie; X-API-Key continues for machines) |
+| 55 | [40](../DECISOES_DE_ARQUITETURA.md#40-manutenção-de-usuários-pelo-admin-com-ativação-por-e-mail-e-telefone-da-55) | User maintenance by admin with two-step activation: token by email → code by phone (out-of-band until SMTP/SMS) |
+| 56 | [41](../DECISOES_DE_ARQUITETURA.md#41-conector-sap-popi-o-middleware-on-premise-que-não-é-rest-first-da-56) | SAP PO/PI on-premise connector: Native Basic Auth against Message Monitor, with optional OAuth2 when API Management is in front |
+| 57 | [48](../DECISOES_DE_ARQUITETURA.md#48-fontes-de-busca-web-como-configuração-e-approved-que-não-era-no-op-da-57) | Web search sources as configuration (`web_search_sources`): `WEB_SEARCH_POLICY=approved` ceases to be no-op |
+| 58 | [49](../DECISOES_DE_ARQUITETURA.md#49-mapa-de-cobertura-dedicated-generic-e-absent-da-58) | SAP product × mechanism coverage map, calculated from versioned data: 3 levels (`dedicated` / `generic` / `absent`) instead of a boolean |
+| 59 | [50](../DECISOES_DE_ARQUITETURA.md#50-conectores-multi-vendor-fluxo-completo-padrão-comum-e-documentação-da-59) | Multi-vendor connectors: full flow, common standard, 8-surface checklist when adding connector, consolidated doc `/docs/CONNECTORS.md` |
+| 60 | [51](../DECISOES_DE_ARQUITETURA.md#51-criptografia-em-repouso-de-evidence_json-com-fernet-da-60) | Encryption at rest of `evidence_json` with Fernet (`LLM_CREDENTIALS_MASTER_KEY`) + idempotent migration `009_encrypt_evidence_json.py` |
+| 61 | [52](../DECISOES_DE_ARQUITETURA.md#52-taxonomia-de-erros-sap-com-ttlrdflib-skos-para-rule-engine-da-61) | SAP error taxonomy with TTL/RDFLib (SKOS) for Rule Engine: dynamic loading vs hardcoded, zero breaking changes (DA-61 Phase 1) |
+| 62 | [53](../DECISOES_DE_ARQUITETURA.md#53-neo4j-loader-para-skos-taxonomy-import-da-62) | Neo4j loader for SKOS taxonomy import (idempotent upsert, Cypher queries) |
+| 63 | [54](../DECISOES_DE_ARQUITETURA.md#54-skills-declarativas--yaml-como-fonte-de-verdade-para-capability-e-roteamento-da-63) | Declarative skills — YAML as source of truth for capability and routing (DA-63) |
+| 65 | [55](../DECISOES_DE_ARQUITETURA.md#55-degradação-graciosa-do-rag-quando-qdrant-cai-da-65) | Graceful degradation of RAG: Qdrant falls → `_retrieve_hybrid` and `_retrieve_dense_only` return `[]` → rule engine still responds known errors; full flow `/diagnose → run_diagnosis` pending integration test |
 | — | — | DA-64: number unused (intentional skip) |
 
 > **Prose ordering:** §§42–§47 (DA-42, DA-38, DA-39, DA-40,

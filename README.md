@@ -137,8 +137,7 @@ Abridged response:
 
 - **Interactive API docs:** <http://127.0.0.1:8000/docs>.
 - **Free-text incidents** (anything the rules do not cover) need an LLM:
-  - local development: `ollama pull qwen3-coder-next:latest` (faster, better reasoning for refactorings);
-  - local production: `ollama pull qwen3.6:35b-a3b` (stable, fast enough for incident diagnosis);
+  - local (canonical model, DA-92): `ollama pull qwen3.6:35b-a3b`;
   - cloud: set `LLM_PROVIDER=openai` or `azure_openai` with its credentials,
     and allow the origin as described in section 6 of the
     [troubleshooting guide](docs/TROUBLESHOOTING.md).

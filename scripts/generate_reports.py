@@ -12,9 +12,9 @@ Variáveis de ambiente:
     REPORT_PERIOD — daily | weekly (padrão: daily; sobreposto por --period)
     REPORT_OUTPUT — diretório de saída (padrão: reports/)
 
-Dependências extras:
-    pip install -e ".[reports]"
-    # openpyxl>=3.1, jinja2>=3.1, psycopg2-binary>=2.9
+Dependências:
+    nenhuma extra - openpyxl, jinja2 e psycopg2-binary já estão nas
+    dependências principais (o extra `reports` foi removido, IIC-AUD-040).
 """
 
 from __future__ import annotations

@@ -11,19 +11,19 @@ Incident Copilot. Instalação e configuração inicial estão em
 
 ## Conteúdo
 
-1. [A API não sobe](#1-a-api-nao-sobe)
-2. [Consumidor AMQP não conecta](#2-consumidor-amqp-nao-conecta)
+1. [A API não sobe](#1-a-api-não-sobe)
+2. [Consumidor AMQP não conecta](#2-consumidor-amqp-não-conecta)
 3. [Kyma: CrashLoopBackOff ou readiness falhando](#3-kyma-crashloopbackoff-ou-readiness-falhando)
 4. [Redis e circuit breaker](#4-redis-e-circuit-breaker)
 5. [RAG sem contexto ou `/diagnose` com 500 por Qdrant](#5-rag-sem-contexto-ou-diagnose-com-500-por-qdrant)
-6. [LLM: autenticação ou `PolicyViolationError`](#6-llm-autenticacao-ou-policyviolationerror)
-7. [Busca web não acontece](#7-busca-web-nao-acontece)
+6. [LLM: autenticação ou `PolicyViolationError`](#6-llm-autenticação-ou-policyviolationerror)
+7. [Busca web não acontece](#7-busca-web-não-acontece)
 8. [Frontend: 401 ou tela de login em loop](#8-frontend-401-ou-tela-de-login-em-loop)
 9. [Build da imagem e `python-qpid-proton`](#9-build-da-imagem-e-python-qpid-proton)
-10. [GraphRAG: Neo4j inacessível](#10-graphrag-neo4j-inacessivel)
+10. [GraphRAG: Neo4j inacessível](#10-graphrag-neo4j-inacessível)
 11. [Ambiente em containers (`scripts/start-docker.sh`)](#11-ambiente-em-containers-scriptsstart-dockersh)
 12. [Kubernetes local (`scripts/k3d-validate.sh`)](#12-kubernetes-local-scriptsk3d-validatesh)
-13. [Idioma: tela ou diagnóstico no idioma errado](#13-idioma-tela-ou-diagnostico-no-idioma-errado)
+13. [Idioma: tela ou diagnóstico no idioma errado](#13-idioma-tela-ou-diagnóstico-no-idioma-errado)
 
 ---
 

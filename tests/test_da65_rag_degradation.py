@@ -11,6 +11,7 @@ from qdrant_client.http.exceptions import (
     ResponseHandlingException,
     UnexpectedResponse,
 )
+from qdrant_client.http.models import SparseVector
 
 
 def _make_unexpected_response():
@@ -37,6 +38,12 @@ class TestQdrantFailureGracefulDegradation:
                 return_value=("fastembed", "BAAI/bge-small-en-v1.5"),
             ),
             patch("app.rag.retriever._get_embeddings") as mock_emb,
+            # IIC-AUD-107: vetor esparso stubado - sem rede, o Qdrant/bm25 real
+            # nao carrega e o teste falhava antes de chegar no Qdrant.
+            patch(
+                "app.rag.retriever._sparse_query_vector",
+                return_value=SparseVector(indices=[1], values=[1.0]),
+            ),
         ):
             mock_emb.return_value.embed_query.return_value = [0.1] * 384
 

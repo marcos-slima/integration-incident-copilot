@@ -224,8 +224,8 @@ Antes de cada release:
 
 - [Architecture Decision Records (ADR)](https://adr.github.io/)
 - [Quality Gates (DA-51)](../CLAUDE.md)
-- [Decisões de Arquitetura](./DECISOES_DE_ARQUITETURA.md#registrar-uma-nova-da)
-- [GraphRAG (DA-21)](./DECISOES_DE_ARQUITETURA.md#21-graphrag-como-camada-de-conhecimento-operacional---hardening-da-21)
+- [Decisões de Arquitetura — como registrar uma nova DA](../CLAUDE.md#como-registrar-uma-nova-da)
+- [GraphRAG (DA-21)](./DECISOES_DE_ARQUITETURA.md#19-graphrag-como-camada-de-conhecimento-operacional---hardening-da-21)
 - [RAG (DA-25)](./DECISOES_DE_ARQUITETURA.md#24-evidencetrust-layer--correção-do-threshold-do-rag-antes-do-reranker-da-25)
 
 ---

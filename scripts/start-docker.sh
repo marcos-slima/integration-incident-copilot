@@ -111,7 +111,7 @@ if [[ "$NO_OBS" == "true" ]]; then
 else
   log "4/6 Subindo observabilidade — PostgreSQL IIC + Grafana (Docker)..."
   (cd "$PROJECT_DIR" && docker compose --profile observability up -d postgres grafana)
-  wait_http "http://localhost:3001" "Grafana"
+  wait_http "http://localhost:${GRAFANA_HOST_PORT:-3002}" "Grafana"
 
   # Migrações via container (DATABASE_URL aponta para host; substituímos por postgres)
   log "Verificando migrações Alembic..."
@@ -166,7 +166,7 @@ echo "  │    Copilot UI / API  → http://localhost:8000                   │
 echo "  │    API docs (Swagger)→ http://localhost:8000/docs              │"
 echo "  │  DOCKER (Infra)                                                 │"
 if [[ "$NO_OBS" == "false" ]]; then
-echo "  │    Grafana           → http://localhost:3001  admin/<GRAFANA_PW>│"
+echo "  │    Grafana           → http://localhost:3002  admin/<GRAFANA_PW>│"
 echo "  │    PostgreSQL IIC    → localhost:5432                          │"
 fi
 echo "  │    Qdrant dashboard  → http://localhost:6333/dashboard         │"

@@ -20,7 +20,7 @@ RUN npm run build
 # Antes, gcc/cmake/make/*-dev ficavam na imagem final, e o venv puxava
 # torch com CUDA (~6,3 GB de venv); agora o uv.lock resolve torch CPU
 # (index pytorch-cpu em pyproject.toml) e o venv cai para ~1,5 GB.
-FROM python:3.12-slim AS builder
+FROM python:3.12.15-slim AS builder
 
 WORKDIR /app
 
@@ -38,7 +38,7 @@ RUN apt-get update \
 
 # Versao do uv fixada: o mesmo uv.lock com outra versao do uv pode
 # resolver/instalar diferente.
-RUN pip install --no-cache-dir uv==0.11.32
+RUN pip install --no-cache-dir uv==0.12.17
 
 ENV UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1 \
@@ -49,7 +49,7 @@ ENV UV_LINK_MODE=copy \
 # fallback azure_openai; sem o extra, langchain-openai nao existia na
 # imagem e o primeiro diagnostico falhava com ImportError.
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project --extra reports --extra openai
+RUN uv sync --frozen --no-dev --no-install-project --extra openai
 
 # DEP-01: modelos baixados no build, nao no primeiro request. Antes o
 # primeiro /diagnose de cada pod baixava ~120 MB do reranker e os modelos
@@ -85,7 +85,7 @@ RUN .venv/bin/python -c "from proton import SSL; assert SSL.present(), 'python-q
 # Stage Python de runtime — sem frontend e sem compiladores. Base do
 # stage "final" (API e worker) e target do servico "reporter" no
 # docker-compose, que nao precisa do frontend compilado.
-FROM python:3.12-slim AS app
+FROM python:3.12.15-slim AS app
 
 WORKDIR /app
 

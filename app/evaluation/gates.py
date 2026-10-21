@@ -889,6 +889,24 @@ def check_index_current(root: Path = REPO_ROOT) -> list[Finding]:
 
     declarados = {int(n) for n in re.findall(r"^\|\s*(\d+)\s*\|", corpo, re.MULTILINE)}
     registradas = _registered_das(root)
+    # IIC-AUD-105: todo numero de 1 ate a maior DA registrada tem de estar
+    # no indice - como linha propria ou declarado numa linha "| — |"
+    # (pulo intencional, nota informal, candidata). Antes um numero ausente
+    # passava em silencio.
+    declarados_nao_entregues = {
+        int(n)
+        for linha in re.findall(r"^\|\s*—\s*\|.*$", corpo, re.MULTILINE)
+        for n in re.findall(r"DA-(\d+)", linha)
+    }
+    if registradas:
+        lacunas = sorted(
+            set(range(1, max(registradas) + 1)) - declarados - declarados_nao_entregues
+        )
+        if lacunas:
+            return _fail(
+                check,
+                f"numeros de DA sem linha no indice nem declaracao '| — |': {_das(lacunas)}",
+            )
     if declarados != registradas:
         faltando = sorted(registradas - declarados)
         sobrando = sorted(declarados - registradas)
@@ -1018,6 +1036,19 @@ def _markdown_docs(root: Path) -> list[Path]:
     return docs
 
 
+def _github_anchors(texto: str) -> set[str]:
+    """Slugs que o GitHub gera para os headings (com sufixo -N em repetidos)."""
+    vistos: dict[str, int] = {}
+    ancoras: set[str] = set()
+    sem_codigo = re.sub(r"^```.*?^```", "", texto, flags=re.MULTILINE | re.DOTALL)
+    for titulo in re.findall(r"^#{1,6} (.+?)\s*#*\s*$", sem_codigo, re.MULTILINE):
+        slug = re.sub(r"[^\w\- ]", "", titulo.strip().lower()).replace(" ", "-")
+        n = vistos.get(slug, 0)
+        ancoras.add(slug if n == 0 else f"{slug}-{n}")
+        vistos[slug] = n + 1
+    return ancoras
+
+
 def check_docs_markup_integrity(root: Path = REPO_ROOT) -> list[Finding]:
     """Fences de codigo balanceadas e links relativos para .md resolvendo.
 
@@ -1041,6 +1072,18 @@ def check_docs_markup_integrity(root: Path = REPO_ROOT) -> list[Finding]:
                 continue
             if not _published(root, (doc.parent / alvo).resolve()):
                 problemas.append(f"{doc.relative_to(root)}: link quebrado -> {alvo}")
+
+        # IIC-AUD-104: ancoras (#secao) no proprio arquivo e em outro .md.
+        # O check acima so' via o arquivo; a ancora apodrecia ao renumerar
+        # secoes ou traduzir titulos.
+        for arquivo, ancora in re.findall(r"\]\(([^)#\s]*\.md)?#([^)\s]+)\)", texto):
+            if arquivo.startswith(("http://", "https://")):
+                continue
+            destino = (doc.parent / arquivo).resolve() if arquivo else doc
+            if not destino.is_file():
+                continue  # arquivo inexistente ja' reportado acima
+            if ancora not in _github_anchors(destino.read_text(encoding="utf-8")):
+                problemas.append(f"{doc.relative_to(root)}: ancora quebrada -> {arquivo}#{ancora}")
 
     if problemas:
         return _fail(check, "; ".join(sorted(problemas)[:8]))

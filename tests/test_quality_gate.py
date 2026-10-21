@@ -550,6 +550,33 @@ class TestDocumentedDas:
         assert len(falhas) == 1
         assert "DA-2" in falhas[0].message
 
+    def test_numero_de_da_sem_declaracao_reprova(self, tmp_path):
+        """IIC-AUD-105: numero entre 1 e a maior DA registrada que nao aparece
+        no indice nem numa linha '| — |' reprova; declarado, passa."""
+        indice = (
+            "## Decisões de Arquitetura\n\n"
+            "| DA | Seção | O que é |\n|---|---|---|\n"
+            "| 1 | [1](#1-coisa-da-1) | a |\n"
+            "| 3 | [2](#2-outra-da-3) | b |\n"
+            "{extra}\n"
+            "### 1. Coisa (DA-1)\n### 2. Outra (DA-3)\n"
+        )
+        (tmp_path / "CLAUDE.md").write_text(
+            "| DA | O que é |\n|---|---|\n| DA-1 | a |\n| DA-3 | b |\n", encoding="utf-8"
+        )
+        (tmp_path / "docs").mkdir(exist_ok=True)
+        (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
+
+        _decisoes(tmp_path).write_text(indice.format(extra=""), encoding="utf-8")
+        falhas = [f for f in check_index_current(tmp_path) if f.is_failure]
+        assert len(falhas) == 1
+        assert "DA-2" in falhas[0].message
+
+        _decisoes(tmp_path).write_text(
+            indice.format(extra="| — | — | DA-2: número não utilizado |\n"), encoding="utf-8"
+        )
+        assert not [f for f in check_index_current(tmp_path) if f.is_failure]
+
     def test_indice_colado_duas_vezes_reprova(self, tmp_path):
         """O indice chegou a estar colado TRES vezes no README de verdade,
         com numeros de secao defasados por um nas copias velhas — e o gate
@@ -716,6 +743,23 @@ def test_docs_markup_integrity_acusa_link_quebrado(tmp_path: Path) -> None:
 
     falhas = [f for f in check_docs_markup_integrity(root) if f.is_failure]
     assert "link quebrado" in falhas[0].message
+
+
+def test_docs_markup_integrity_acusa_ancora_quebrada(tmp_path: Path) -> None:
+    """IIC-AUD-104: ancora para heading inexistente (no proprio arquivo ou em
+    outro .md) reprova; heading acentuado gera slug com acento (GitHub)."""
+    root = _docs_root(tmp_path)
+    (root / "docs/A.md").write_text(
+        "# Decisões\n\n## 2. Não sobe\n\n"
+        "[ok](#2-não-sobe) [ruim](#2-nao-sobe) [outro](OK.md#ok) [x](OK.md#nada)\n",
+        encoding="utf-8",
+    )
+
+    falhas = [f for f in check_docs_markup_integrity(root) if f.is_failure]
+    assert len(falhas) == 1
+    assert "#2-nao-sobe" in falhas[0].message
+    assert "OK.md#nada" in falhas[0].message
+    assert "#2-não-sobe" not in falhas[0].message
 
 
 def test_docs_markup_integrity_ignora_link_externo(tmp_path: Path) -> None:

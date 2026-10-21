@@ -177,7 +177,7 @@ def test_configmap_de_producao():
 
 def test_dockerfile_sem_toolchain_no_runtime_e_com_migrations():
     dockerfile = (KYMA_DIR.parent.parent / "Dockerfile").read_text(encoding="utf-8")
-    runtime = dockerfile.split("FROM python:3.12-slim AS app", 1)[1]
+    runtime = dockerfile.split("FROM python:3.12.15-slim AS app", 1)[1]
     for pacote in ("gcc", "cmake", "libssl-dev", "libsasl2-dev"):
         assert pacote not in runtime.split("FROM app AS final", 1)[0], pacote
     assert "COPY --chown=appuser:appuser alembic/ alembic/" in runtime

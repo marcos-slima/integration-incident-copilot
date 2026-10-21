@@ -53,7 +53,6 @@ reports/
 
 # Artefatos locais de ambiente (IA local / backups manuais)
 *.bak-*
-Modelfile
 .continue/
 
 # Documentação privada de treinamento (não versionada)

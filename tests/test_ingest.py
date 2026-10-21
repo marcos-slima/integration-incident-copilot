@@ -174,6 +174,9 @@ def test_run_ingest_returns_error_count_on_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(ingest_module, "probe_vector_size", lambda emb: 768)
     monkeypatch.setattr(ingest_module, "ensure_collection", lambda *a, **kw: None)
     monkeypatch.setattr(ingest_module, "stamp_collection", lambda *a, **kw: None)
+    # IIC-AUD-107: sem isto o teste baixava Qdrant/bm25 do Hugging Face e
+    # falhava offline, apesar de nao ter o marker `integration`.
+    monkeypatch.setattr(ingest_module, "_get_sparse_model", lambda: object())
 
     result = ingest_module.run_ingest(
         "incidents", limit=None, excludes=[], reset_state=False, reset_collection=False

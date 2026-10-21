@@ -74,7 +74,7 @@ final.
 | 55 | [40](#40-manutenção-de-usuários-pelo-admin-com-ativação-por-e-mail-e-telefone-da-55) | Manutenção de usuários pelo admin com ativação em duas etapas: token por e-mail → código por telefone (out-of-band até haver SMTP/SMS) |
 | 56 | [41](#41-conector-sap-popi-o-middleware-on-premise-que-não-é-rest-first-da-56) | Conector SAP PO/PI on-premise: Basic Auth nativo contra o Message Monitor, com OAuth2 opcional para quando há API Management na frente |
 | 60 | [51](#51-criptografia-em-repouso-de-evidence_json-com-fernet-da-60) | Criptografia em repouso de `evidence_json` com Fernet (`LLM_CREDENTIALS_MASTER_KEY`) + migration idempotente `009_encrypt_evidence_json.py` |
-| 61 | [52](#52-taxonomia-de-erros-sap-com-ttl-rdflib-da-61) | Taxonomia de erros SAP com TTL/RDFLib (SKOS) para Rule Engine: carregamento dinâmico vs hardcoded, zero breaking changes (DA-61 Fase 1) |
+| 61 | [52](#52-taxonomia-de-erros-sap-com-ttlrdflib-skos-para-rule-engine-da-61) | Taxonomia de erros SAP com TTL/RDFLib (SKOS) para Rule Engine: carregamento dinâmico vs hardcoded, zero breaking changes (DA-61 Fase 1) |
 | 62 | [53](#53-neo4j-loader-para-skos-taxonomy-import-da-62) | Neo4j loader para SKOS taxonomy import (idempotent upsert, Cypher queries) |
 | 57 | [48](#48-fontes-de-busca-web-como-configuração-e-approved-que-não-era-no-op-da-57) | Fontes de busca web como configuração (`web_search_sources`): `WEB_SEARCH_POLICY=approved` deixa de ser no-op |
 | 58 | [49](#49-mapa-de-cobertura-dedicated-generic-e-absent-da-58) | Mapa de cobertura produto SAP × mecanismo, calculado de dados versionados: 3 níveis (`dedicated` / `generic` / `absent`) em vez de um booleano |
@@ -84,7 +84,7 @@ final.
 | 68 | [58](#58-matriz-de-falhas-e-failover-tipado-da-68) | Matriz de falhas e failover tipado: taxonomia fechada, mapear exceções → classe, definir retry/backoff/circuit/failover/escala |
 | 69 | [59](#59-checkpointing-e-execução-resumível-da-69) | Checkpointing e execução resumível: `checkpointer=PostgresSaver`, `thread_id` = id do incidente, retomada a partir do último nó concluído |
 | 70 | [60](#60-métricas-e-finops-da-70) | Métricas e FinOps: Prometheus (`llm_requests_total`, `llm_tokens_total`, `llm_cost_usd_total`, `llm_budget_deviation_ratio`, `diagnosis_duration_seconds`) |
-| 63 | [54](#54-skills-declarativas---yaml-como-fonte-de-verdade-para-capability-e-roteamento-da-63) | Skills declarativas — YAML como fonte de verdade para capability e roteamento (DA-63) |
+| 63 | [54](#54-skills-declarativas--yaml-como-fonte-de-verdade-para-capability-e-roteamento-da-63) | Skills declarativas — YAML como fonte de verdade para capability e roteamento (DA-63) |
 | 65 | [55](#55-degradação-graciosa-do-rag-quando-qdrant-cai-da-65) | Degradação graciosa do RAG: Qdrant cai → `_retrieve_hybrid` e `_retrieve_dense_only` retornam `[]` → rule engine ainda responde erros conhecidos; fluxo completo `/diagnose → run_diagnosis` pendente de teste de integração |
 | 71 | [66](#66-sanitização-do-resultado-de-busca-web-devolvido-ao-llm-da-71) | Resultado de busca web sanitizado e delimitado antes de voltar ao LLM (tool do ReAct e `web_search_node`) |
 | 74 | [69](#69-conteúdo-do-diagnóstico-no-idioma-pedido-da-74) | Conteúdo do diagnóstico (rule engine, avisos, relatório, prompt, ativação) no idioma pedido; pt-BR intacto e medido, `en` com digest próprio; gate `content_i18n` |
@@ -92,7 +92,7 @@ final.
 | 72 | [67](#67-roteamento-por-registro-de-modelos-da-72) | Roteamento por registro de modelos: cada modelo habilitado é candidato do Policy Engine, com parâmetros por modelo, score custo × latência e failover pela lista |
 | 75 | [70](#70-aprovação-humana-no-grafo-human-in-the-loop-da-75) | Human-in-the-Loop: interrupt no node de diagnóstico quando `escalation.should_escalate == True`, endpoint `/incidents/{id}/review` para retomada com `hitl_response` |
 | 76 | [71](#71-aviso-de-ia-no-relatório-e-api-da-76) | Aviso de IA — texto embutido no template do relatório, chave `ai_warning` no catálogo (pt-BR + en), campo `DiagnosisResponse.ai_warning` |
-| 82 | [72](#72-rollback-deployment-da-82) | Rollback de deployment — tabelas `snapshot_table`/`rollback_log` (schema apenas); endpoint removido até existir mecanismo real de rollback |
+| 82 | [72](#72-rollback-de-deployment-da-82) | Rollback de deployment — tabelas `snapshot_table`/`rollback_log` (schema apenas); endpoint removido até existir mecanismo real de rollback |
 | 83 | [74](#74-explicabilidade-xai-da-83) | Explicabilidade XAI — campo `explanation` em `DiagnosisResponse`, função `_build_xai_explanation` |
 | 86 | [77](#77-ui-versionamento-rag-da-86) | UI versionamento RAG: tabela `knowledge_document_versions`, endpoints `/admin/knowledge/documents/{id}/versions`, `/rollback/{version}`, `/history/{id}` |
 | 87 | [79](#79-dashboard-por-domínio-da-87) | Dashboard de Performance por Domínio: endpoint `/admin/metrics/domains` com janela `days` (default 30), métricas count/hit@1/latência/custo por domain (sap/saas/generic) |
@@ -102,6 +102,11 @@ final.
 | 91 | [82](#82-testes-rbac-completos-da-91) | Testes RBAC completos para todos os endpoints |
 | 92 | [83](#83-modelo-canônico-qwen3635b-a3b-da-92) | Modelo canônico `qwen3.6:35b-a3b` desde 2026-10-13, substituindo `qwen3-coder-next:latest`; re-baseline do promptfoo pendente (DA-51) |
 | — | — | DA-64: número não utilizado (pulo intencional) |
+| — | — | DA-31: bloqueada (exige tenant Kyma; ver `CLAUDE.md`) |
+| — | — | DA-36, DA-37: números não utilizados |
+| — | — | DA-5, DA-6, DA-7, DA-9, DA-10, DA-11, DA-13: números não utilizados — as decisões dessa fase ficaram como "nota informal" (seções 5–7 e 9–13) |
+| — | — | DA-79, DA-84, DA-85: candidatas rebaixadas em 2026-10-20 (prosa histórica em §73, §75, §76) |
+| — | — | DA-77, DA-78, DA-80, DA-81: candidatas sem prosa — DA-77 aparece com dois escopos (dashboard HITL em §70; correção do TCO em `ROADMAP.md`), DA-78 (comparação de modelos, `ROADMAP.md`), DA-80/DA-81 (`DIVIDAS_TECNICAS.md`) |
 
 > **Ordenação da prosa:** as seções §42–§47 (DA-42, DA-38, DA-39, DA-40,
 > DA-41, DA-12) foram retro-registradas em bloco, fora da ordem crescente de
@@ -2113,12 +2118,12 @@ no resumo. Suíte completa e gates verdes.
 
 ### 42. Escala calibrada por sigmoid para o rerank score (DA-42)
 
-**O problema.** O score do cross-encoder de rerank ([DA-29](#decisoes-de-arquitetura))
+**O problema.** O score do cross-encoder de rerank ([DA-29](#28-benchmark-científico-de-rerankers-da-29))
 é um logit, não uma probabilidade: ele não é comparável entre documentos, e
 `0.7` numa consulta e `0.7` em outra não significam a mesma coisa. Três
 consumidores o usavam direto e cada um tinha seu próprio corte — a
 `evidence_strength` (DA-15/16), o limiar de admissão pós-reranker (DA-25) e os
-tiers de escalonamento ([DA-44](#decisoes-de-arquitetura)). O mesmo par
+tiers de escalonamento ([DA-44](#31-sinal-determinístico-de-escalonamento-em-três-tiers-da-44)). O mesmo par
 documento/consulta podia ser "evidência forte" para um e "descartável" para
 outro, dependendo do consumidor.
 
@@ -2264,7 +2269,7 @@ perde o estado compartilhado e ganha o de antes, que é o comportamento de
 ### 47. A troca de modelo que não tinha número (DA-12)
 
 **O problema.** O modelo canônico já tinha duas decisões de comparação
-registradas — [DA-4](#decisoes-de-arquitetura) e [DA-8](#decisoes-de-arquitetura) — e
+registradas — [DA-4](#4-comparação-formal-de-modelos-qwen330b-a3b-vs-qwen25-coder32b-da-4) e [DA-8](#8-segunda-comparação-de-modelo-qwen3635b-a3b-avaliado-e-rejeitado-da-8) — e
 mesmo assim a troca de produção não tinha registro próprio. O commit `0222b79`
 (que trocou `qwen2.5-coder:32b` por `qwen3-coder-next:latest`) foi commitado
 como `feat:` sem prefixo de DA, e por isso ficou anos sem linha na tabela. DAs

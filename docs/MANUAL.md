@@ -1612,7 +1612,7 @@ uv run pytest tests/ -m "not integration" --collect-only -q | tail -1   # total 
 ```
 
 O CI roda `-m "not integration"` com `--cov-fail-under=80`. No último build
-registrado no [`README.md`](../README.md): **1888 testes, 82 % de cobertura**.
+registrado no [`README.md`](../README.md): **1940 testes, 84 % de cobertura**.
 O número muda a cada commit — use o `--collect-only` acima em vez de confiar em
 qualquer documento, inclusive este.
 

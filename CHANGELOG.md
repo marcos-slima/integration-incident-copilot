@@ -59,7 +59,7 @@ Correções da auditoria técnica R3 (2026-10-20, `IIC-AUD-101`…`114`).
   `build_incident_row` e é persistido em `incidents.tenant_id`.
 - **IIC-AUD-210** Este CHANGELOG corrigido (as entradas anteriores declaravam
   como “corrigido” itens que ainda estavam parciais).
-- **IIC-AUD-211** README atualizado para 1928 testes / 83 % / 10 253 linhas.
+- **IIC-AUD-211** README atualizado para 1940 testes / 84 % / 10 243 linhas.
 - **IIC-AUD-213** Referências de `.env.example`, `ARQUETURA` e `worker.yaml`
   alinhadas.
 - **IIC-AUD-214** Os seis docs de `docs/en/` sem cabeçalho receberam

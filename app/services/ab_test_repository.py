@@ -4,7 +4,7 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import ABExperiment
@@ -24,17 +24,31 @@ class ABExperimentRepository:
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_active(self) -> list[ABExperiment]:
-        """Obtém todos os experimentos ativos."""
-        stmt = select(ABExperiment).where(
-            ABExperiment.is_active.is_(True),
-            ABExperiment.starting_at.is_(None),
+    async def get_active(self, now: datetime | None = None) -> list[ABExperiment]:
+        """Experimentos em execução em `now` (default: agora, UTC).
+
+        Ativo = `is_active` ligado e `now` dentro da janela
+        [starting_at, ending_at): sem `starting_at` já começou; sem
+        `ending_at` não termina. Antes o filtro era `starting_at IS NULL`,
+        o que excluía todo experimento com data de início, inclusive os já
+        iniciados.
+        """
+        now = now or datetime.now(UTC)
+        stmt = (
+            select(ABExperiment)
+            .where(
+                ABExperiment.is_active.is_(True),
+                or_(ABExperiment.starting_at.is_(None), ABExperiment.starting_at <= now),
+                or_(ABExperiment.ending_at.is_(None), ABExperiment.ending_at > now),
+            )
+            .order_by(ABExperiment.created_at.desc())
         )
         result = await self._session.execute(stmt)
         return list(result.scalars())
 
     async def list_experiments(self, include_inactive: bool = False) -> list[ABExperiment]:
-        """Lista todos os experimentos."""
+        """Lista experimentos pelo flag `is_active` (sem olhar a janela de
+        datas - para "em execução agora" use `get_active`)."""
         stmt = select(ABExperiment).order_by(ABExperiment.created_at.desc())
         if not include_inactive:
             stmt = stmt.where(ABExperiment.is_active.is_(True))

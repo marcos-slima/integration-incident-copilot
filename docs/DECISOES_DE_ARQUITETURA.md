@@ -101,12 +101,13 @@ final.
 | 90 | [81](#81-documentação-grc-da-90) | Documentação GRC (ISO 27001, SOC2): mapeamento, guia de auditoria, checklist |
 | 91 | [82](#82-testes-rbac-completos-da-91) | Testes RBAC completos para todos os endpoints |
 | 92 | [83](#83-modelo-canônico-qwen3635b-a3b-da-92) | Modelo canônico `qwen3.6:35b-a3b` desde 2026-10-13, substituindo `qwen3-coder-next:latest`; re-baseline do promptfoo pendente (DA-51) |
+| 80 | [84](#84-dlpner-avancado-da-80) | DLP/NER avancado - detecção NER spaCy (fallback regex), validação contra lista de PII |
 | — | — | DA-64: número não utilizado (pulo intencional) |
 | — | — | DA-31: bloqueada (exige tenant Kyma; ver `CLAUDE.md`) |
 | — | — | DA-36, DA-37: números não utilizados |
 | — | — | DA-5, DA-6, DA-7, DA-9, DA-10, DA-11, DA-13: números não utilizados — as decisões dessa fase ficaram como "nota informal" (seções 5–7 e 9–13) |
 | — | — | DA-79, DA-84, DA-85: candidatas rebaixadas em 2026-10-20 (prosa histórica em §73, §75, §76) |
-| — | — | DA-77, DA-78, DA-80, DA-81: candidatas sem prosa — DA-77 aparece com dois escopos (dashboard HITL em §70; correção do TCO em `ROADMAP.md`), DA-78 (comparação de modelos, `ROADMAP.md`), DA-80/DA-81 (`DIVIDAS_TECNICAS.md`) |
+| — | — | DA-77, DA-78, DA-81: candidatas sem prosa — DA-77 aparece com dois escopos (dashboard HITL em §70; correção do TCO em `ROADMAP.md`), DA-78 (comparação de modelos, `ROADMAP.md`), DA-81 (`DIVIDAS_TECNICAS.md`) |
 
 > **Ordenação da prosa:** as seções §42–§47 (DA-42, DA-38, DA-39, DA-40,
 > DA-41, DA-12) foram retro-registradas em bloco, fora da ordem crescente de
@@ -3400,3 +3401,43 @@ mudança não tinha rastro no livro-razão.
 `promptfooconfig.yaml` e `app/config.py` são a fonte do default. O gate
 `deployed_model_evaluated` é o lembrete de que a qualidade só está medida
 para o modelo que o baseline registra.
+
+
+### 84. DLP/NER Avancado (DA-80)
+
+**Motivo.** A redação atual em `app/redaction.py` cobre apenas e-mail, CPF, CNPJ
+e IDoc com regex estáticas. Para atingir um nível de DLP **real** (detecção de
+nome, data de nascimento, número de cartão, token, etc.), é necessário um
+classificador semântico (NER spaCy) com fallback para palavras-chave sensíveis
+(password, secret, api_key, token, bearer, etc.).
+
+**Decisão.** Implementação de `app/validation/pii.py` com `PIIValidator` que:
+
+1. **NER com spaCy (`pt_core_news_lg`)**: detecta entidades nomeadas (PERSON,
+   ORG, DATE, MONEY, etc.) – usadas futuramente para validar se algo é PII
+   estrito ou só informação potencialmente sensível.
+
+2. **Regex fallback**: padrões formais (CPF, CNPJ, e-mail, IDoc) e palavras-chave
+   (password, secret, api_key, token, bearer, etc.) em JSON/YAML/env-var.
+
+3. **Redação inteligente**: substitui PII por marcadores (ex: `[CPF_REDACTED]`)
+   mantendo a estrutura do texto original para rastreabilidade.
+
+4. **Método `has_sensitive_data()`**: verificação rápida se texto contém PII
+   antes de aplicar redação (otimização).
+
+**O que NÃO foi feito.**
+- Integração com spaCy obrigatória (opcional nesta versão)
+- Detecção de CNH, passaporte, RNE (exige modelos específicos)
+- Consolidação com `app/redaction.py` (pode coexistir; DA-80 é NER+keyword;
+   redaction.py é regex-only para legacy)
+
+**Validação.** `tests/test_dlp_ner.py` com 15 testes cobrindo:
+- E-mail, CPF, CNPJ, IDoc
+- Password em JSON/YAML/env-var
+- Token bearer
+- Múltiplas entidades
+- Texto sem PII
+- Entidades vazias
+
+---

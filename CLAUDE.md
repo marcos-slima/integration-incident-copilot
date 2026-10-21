@@ -317,6 +317,7 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
 | DA-90 | Documentação GRC (ISO 27001, SOC2): mapeamento, guia de auditoria, checklist | `docs/GRM_MAPPING.md`, `docs/GRM_AUDIT.md`, `docs/GRM_CHECKLIST.md`, `tests/test_grm_documentation.py` |
 | DA-91 | Testes RBAC completos para todos os endpoints | `tests/test_rbac_comprehensive.py` |
 | DA-92 | Modelo canônico `qwen3.6:35b-a3b` (35B MoE, 128k ctx) desde 2026-10-13, substituindo `qwen3-coder-next:latest`; re-baseline do promptfoo pendente (DA-51) | `app/config.py`, `.env.example`, `docker-compose.yml`, `promptfooconfig.yaml` |
+| DA-80 | DLP/NER avançado — detecção NER spaCy (fallback regex), validação contra lista de PII | `app/validation/pii.py`, `tests/test_dlp_ner.py` |
 
 **DAs candidatas (não entregues ou com implementação parcial):**
 - **DA-31 — SAP AI Agent Hub registration (MCP + A2A)** · bloqueada: exige tenant Kyma.

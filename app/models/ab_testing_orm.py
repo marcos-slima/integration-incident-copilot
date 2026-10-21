@@ -19,7 +19,8 @@ class ABExperiment(Base):
         variant_b_prompt: ID ou hash do prompt variante B
         starting_at: data/hora de início do experimento
         ending_at: data/hora de término do experimento
-        is_active: indica se o experimento está ativo
+        is_active: indica se o experimento está ativo (default False, igual ao
+            repositório: experimento nasce desligado)
 
     Migration: 025_add_ab_experiments_table
     """
@@ -35,7 +36,7 @@ class ABExperiment(Base):
     variant_b_prompt: Mapped[str] = mapped_column(Text, nullable=False)
     starting_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ending_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )

@@ -150,7 +150,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-iic}
       POSTGRES_USER: ${POSTGRES_USER:-iic}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-iic_password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_postgres}
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -165,7 +165,7 @@ services:
     ports:
       - "127.0.0.1:${GRAFANA_HOST_PORT:-3002}:3000"
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-grafana_admin_password}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-changeme_grafana_admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:${GRAFANA_HOST_PORT:-3002}}
       # Datasource (deploy/grafana/provisioning/datasources/postgres.yml).
@@ -176,7 +176,7 @@ services:
       # observability nao sobe. Para voltar ao dono (so dev), defina
       # GRAFANA_DB_USER=iic e GRAFANA_DB_PASSWORD=<POSTGRES_PASSWORD>.
       GRAFANA_DB_USER: ${GRAFANA_DB_USER:-iic_grafana_ro}
-      GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD:-grafana_readonly_password}
+      GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD:-changeme_grafana_readonly}
       GRAFANA_DB_SSLMODE: ${GRAFANA_DB_SSLMODE:-disable}
     volumes:
       - grafana_data:/var/lib/grafana
@@ -243,7 +243,7 @@ services:
       # o "docker compose --profile graphrag up" falhar explicitamente
       # se NEO4J_PASSWORD nao estiver definida, em vez de subir com
       # uma senha conhecida publicamente.
-      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-neo4j_password}
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-changeme_neo4j}
     volumes:
       - neo4j_data:/data
 

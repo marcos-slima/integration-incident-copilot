@@ -161,7 +161,9 @@ def retrieve_node(state: CopilotState) -> CopilotState:
 
     if settings.ontology_enrichment_enabled and get_upper_categories_from_category is not None:
         try:
-            category = state.get("connector_data", {}).get("error_code")
+            # DA-61: connector_data é uma classe attrs, não dict
+            connector_data = state.get("connector_data")
+            category = getattr(connector_data, "error_code", None) if connector_data else None
             if category:
                 upper_cats = get_upper_categories_from_category(category)
                 if upper_cats:
@@ -185,7 +187,7 @@ def retrieve_node(state: CopilotState) -> CopilotState:
     return {"retrieved_context": hits}
 
 
-@observe_span(name="graph_enrich")
+@observe_span(name="ontology_enrich")
 def ontology_enrich_node(state: CopilotState) -> CopilotState:
     """So entra no grafo quando ONTOLOGY_ENRICHMENT_ENABLED=true - consulta
     a ontologia SKOS (error_codes.ttl) por upper categories e next steps,
@@ -234,6 +236,7 @@ def ontology_enrich_node(state: CopilotState) -> CopilotState:
         return {"ontology_inference": "", "ontology_next_steps": ""}
 
 
+@observe_span(name="graph_enrich")
 def graph_enrich_node(state: CopilotState) -> CopilotState:
     """So entra no grafo quando GRAPH_RAG_ENABLED=true (ver
     build_graph()) - consulta o Neo4j por incidentes anteriores na

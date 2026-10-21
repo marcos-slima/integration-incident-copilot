@@ -29,13 +29,15 @@ def get_upper_categories_from_category(category: str, ttl_path: str | None = Non
     graph.parse(ttl_path, format="turtle")
 
     # Build category → IRI mapping
+    # Normalize o nome da categoria de entrada para casar com os labels
+    normalized_input = category.lower().replace(" ", "_")
     category_to_iri = {}
     for s, _, label in graph.triples((None, SKOS.prefLabel, None)):
         if isinstance(label, str):
-            category = label.lower().replace(" ", "_")
-            category_to_iri[category] = s
+            label_category = label.lower().replace(" ", "_")
+            category_to_iri[label_category] = s
 
-    if category not in category_to_iri:
+    if normalized_input not in category_to_iri:
         return []
 
     # Query upper categories via skos:broader*
@@ -45,7 +47,7 @@ def get_upper_categories_from_category(category: str, ttl_path: str | None = Non
     PREFIX ex: <http://example.org/iic/error_codes#>
     SELECT ?upper WHERE {
       BIND(<"""
-        + category_to_iri[category]
+        + category_to_iri[normalized_input]
         + """> AS ?concept)
       ?concept skos:broader* ?upper .
       FILTER(?upper != ?concept)
@@ -54,37 +56,8 @@ def get_upper_categories_from_category(category: str, ttl_path: str | None = Non
     )
 
     results = list(graph.query(query))
-    return [row["upper"].n3() for row in results]
-
-
-def enrich_incident_with_ontology(incident_id: str, neo4j_driver: Driver) -> None:
-    """Link incident to ontology concepts and infer upper categories.
-
-    Args:
-        incident_id: incident ID
-        neo4j_driver: Neo4j driver instance
-
-    Example:
-        >>> driver = neo4j.GraphDatabase.driver("bolt://localhost:7687")
-        >>> enrich_incident_with_ontology("INC-123", driver)
-    """
-    query = """
-    MATCH (i:Incident {id: $incident_id})
-    WITH i, i.diagnosis->>'rule_engine_category' AS category
-    WHERE category IS NOT NULL
-    MATCH (e:ErrorCategory {category: category})
-    CREATE (i)-[:HAS_ERROR]->(e)
-    WITH e
-    CALL apoc.cypher.doIt("
-        MATCH (e)<-[:SKOS_BROADER*]-(upper:ErrorCategory)
-        RETURN collect(upper.category) AS upper_categories
-    ", {e: e}) YIELD value
-    WITH e, value.upper_categories AS upper_categories
-    UNWIND upper_categories AS upper
-    MATCH (upper_node:ErrorCategory {category: upper})
-    CREATE (i)-[:HAS_UPPER_LEVEL_ERROR]->(upper_node)
-    """
-    neo4j_driver.execute(query, {"incident_id": incident_id})
+    # Use str() em vez de n3() para evitar '< >' no output
+    return [str(row["upper"]) for row in results]
 
 
 def get_next_steps_from_category(category: str, ttl_path: str | None = None) -> list[str]:
@@ -107,14 +80,15 @@ def get_next_steps_from_category(category: str, ttl_path: str | None = None) -> 
     graph = Graph()
     graph.parse(ttl_path, format="turtle")
 
-    # Build category → IRI mapping
+    # Build category → IRI mapping (normalizar tambem aqui)
+    normalized_input = category.lower().replace(" ", "_")
     category_to_iri = {}
     for s, _, label in graph.triples((None, SKOS.prefLabel, None)):
         if isinstance(label, str):
-            category = label.lower().replace(" ", "_")
-            category_to_iri[category] = s
+            label_category = label.lower().replace(" ", "_")
+            category_to_iri[label_category] = s
 
-    if category not in category_to_iri:
+    if normalized_input not in category_to_iri:
         return []
 
     # Query next_steps property
@@ -124,7 +98,7 @@ def get_next_steps_from_category(category: str, ttl_path: str | None = None) -> 
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
     SELECT ?step WHERE {
       BIND(<"""
-        + category_to_iri[category]
+        + category_to_iri[normalized_input]
         + """> AS ?concept)
       ?concept ex:next_steps ?step .
     }
@@ -132,7 +106,8 @@ def get_next_steps_from_category(category: str, ttl_path: str | None = None) -> 
     )
 
     results = list(graph.query(query))
-    return [row["step"] for row in results]
+    # Converte para string se for URIRef
+    return [str(row["step"]) for row in results]
 
 
 def infer_consistency(incident_id: str, neo4j_driver: Driver) -> dict:

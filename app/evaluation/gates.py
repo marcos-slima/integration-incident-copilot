@@ -2,12 +2,29 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from dataclasses import dataclass
 from datetime import UTC
 from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _is_gitignored(path: Path) -> bool:
+    """Verifica se um caminho eh ignorado pelo git (`.gitignore`)."""
+    try:
+        result = subprocess.run(
+            ["git", "check-ignore", str(path.relative_to(REPO_ROOT))],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return result.returncode == 0
+    except Exception:  # noqa: BLE001 - fallback silencioso se git falhar
+        return False
+
 
 PIPELINE_INTERFACE_TYPES = frozenset(
     {
@@ -1183,7 +1200,8 @@ def check_docs_code_references(root: Path = REPO_ROOT) -> list[Finding]:
         # auditado que podem nao existir mais; cobra-los seria ruido.
         if not doc.name.startswith(("AUDITORIA_", "EVIDENCIA_")):
             for caminho in sorted(set(_BARE_CODE_PATH.findall(texto))):
-                if not (root / caminho).is_file():
+                caminho_path = root / caminho
+                if not caminho_path.is_file() and not _is_gitignored(caminho_path):
                     problemas.append(f"{doc.relative_to(root)}: {caminho} nao existe")
 
     if problemas:

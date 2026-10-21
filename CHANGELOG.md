@@ -71,10 +71,12 @@ Correções da auditoria técnica R3 (2026-10-20, `IIC-AUD-101`…`114`).
   como “corrigido” itens que ainda estavam parciais).
 - **IIC-AUD-211** README atualizado para 1943 testes / 84 % / 10 276 linhas
   (1 688 descobertas).
-- **IIC-AUD-212** `docs/SECURITY.md` corrigido: a linha STRIDE de prompt
-  descreve o digest do artefato (não rejeição em runtime) e §7.4 mostra o
-  comando/gate reais, incluindo `prompt_digest=None` quando o rule engine
-  responde. `docs/TCO_...` voltou ao modelo canônico `qwen3.6:35b-a3b`.
+- **IIC-AUD-212** `docs/MANUAL.md` Apêndice B: 8 símbolos com número de linha
+  errado foram corrigidos (ex.: `_apply_confidence_guardrails` de 855 para 921,
+  `verify_session_or_api_key` de 76 para 80). `docs/SECURITY.md` linha STRIDE
+  de prompt descreve o digest do artefato (não rejeição em runtime) e §7.4
+  mostra o comando/gate reais. `docs/TCO_...` voltou ao modelo canônico
+  `qwen3.6:35b-a3b`.
 - **IIC-AUD-213** Referências de `.env.example`, `ARQUETURA` e `worker.yaml`
   alinhadas.
 - **IIC-AUD-214** Os seis docs de `docs/en/` sem cabeçalho receberam
@@ -97,7 +99,7 @@ Correções da auditoria técnica R3 (2026-10-20, `IIC-AUD-101`…`114`).
   expirada ou incompleta passa a FAIL, para a dívida não ser esquecida.
 
 ### Pendente / risco residual
-- **IIC-AUD-204 (residual):** As refs ocultas `refs/pull/4/head` … `8/head`,
+- **IIC-AUD-204 (residual):** As refs ocultas `refs/pull/1/head`, `4/head` … `8/head`,
   de PRs já mergeados, ainda apontam para commits antigos com os valores
   removidos. O GitHub rejeita atualização (`deny updating a hidden ref`) e não
   há API para as apagar. Risco residual **aceito pelo mantenedor em

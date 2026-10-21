@@ -242,7 +242,7 @@ The table below maps each capability to its implementation status and evidence.
 | HITL before action | AUS | `policy.py: approval_required` exists; `approved` depends on "not implemented in v1" mechanism | No action to approve today |
 | Langfuse | VER | `observe_span` in retrieve, graph_enrich, graph_write, web_search, 3 specialists, report and root; CallbackHandler on LLM | supervisor and connector not instrumented |
 | Tests | VER | `-m "not integration"`: 1943 passed, 21 skipped, 17 deselected, 0 failures | Without Qdrant, Ollama and Neo4j |
-| Coverage | VER | 84% (10 276 lines; 1 688 uncovered); CI requires ≥80% (`tests.yml:55`) | |
+| Coverage | VER | 84% (10 276 lines; 1 688 uncovered); CI requires ≥80% | |
 | Quality gates | VER | 23 defined (`gates.py`); 21 PASS, 2 WARN, 0 FAIL | WARN: reranker, deployed model |
 | CI | VER | `tests.yml` (lint, tests, security, compose smoke, rag-quality, neo4j-smoke) and `quality.yml` | |
 | Kyma | PARC | `deploy/kyma/` + `deploy/local/` | Applied to real Kubernetes (k3d, 2026-10-18); APIRule/Istio/BTP OIDC not validated |

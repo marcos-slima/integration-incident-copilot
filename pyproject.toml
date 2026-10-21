@@ -173,7 +173,7 @@ dev = [
 ]
 
 [tool.mypy]
-# IIC-AUD-316: adocao incremental. O `app/` legado ainda tem ~150 erros de
+# IIC-AUD-316: adocao incremental. O `app/` legado ainda tem 114 erros de
 # tipagem (principalmente stubs de Starlette/LangGraph/rdflib); o job do CI
 # cobre primeiro os modulos de contrato/configuracao/qualidade, onde um erro
 # de tipo ja causa incidente. Expandir a lista conforme os modulos forem

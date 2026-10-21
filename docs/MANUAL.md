@@ -6,8 +6,8 @@ sessão de debug**: a configuração do VS Code, o breakpoint, o comando e a
 saída esperada. Quem seguir o manual de ponta a ponta vê a aplicação rodando
 enquanto aprende como ela é feita.
 
-**Proveniência.** Escrito a partir do código deste checkout em 2026-10-15,
-commit `79510c0`, versão `1.2.0` do `pyproject.toml`. Os números citados
+**Proveniência.** Escrito a partir do código deste checkout em 2026-10-15 e revisado em
+2026-10-21 contra o commit `c4af109`, versão `1.4.0` do `pyproject.toml`. Os números citados
 (regras, conectores, migrations, testes) foram conferidos no fonte, e cada um
 traz o comando que os reconfere.
 
@@ -292,13 +292,13 @@ A configuração **"Debug: graph.py (caso IDoc travado)"** do
 `.vscode/launch.json` roda exatamente este incidente, sem HTTP no caminho —
 é a forma mais curta de parar dentro do pipeline.
 
-| # | Breakpoint em | Linha (commit `79510c0`) | O que inspecionar |
+| # | Breakpoint em | Linha (commit `c4af109`) | O que inspecionar |
 |---|---|---|---|
-| 1 | `app/agent/graph.py::run_diagnosis` | 210 | `initial_state` — o `CopilotState` que entra no grafo |
+| 1 | `app/agent/graph.py::run_diagnosis` | 234 | `initial_state` — o `CopilotState` que entra no grafo |
 | 2 | `app/agent/supervisor.py::classify_domain` | 128 | o retorno: `"sap"`, decidido sem LLM |
-| 3 | `app/agent/nodes.py::connector_node` | 125 | `state["connector_data"]`, com `is_mock=True` |
+| 3 | `app/agent/nodes.py::connector_node` | 128 | `state["connector_data"]`, com `is_mock=True` |
 | 4 | `app/agent/rules.py::match_known_error` | 602 | o `dict` devolvido — é o diagnóstico final |
-| 5 | `app/agent/nodes.py::_assemble_evidence` | 741 | a lista de evidências antes de virar resposta |
+| 5 | `app/agent/nodes.py::_assemble_evidence` | 807 | a lista de evidências antes de virar resposta |
 
 Pela linha de comando, o equivalente:
 
@@ -331,8 +331,8 @@ e por que mexer na descrição de um campo pode reprovar o build.
 
 ```mermaid
 flowchart LR
-    REQ["IncidentRequest<br/>app/models/models.py:14<br/>entrada validada"] -->|"run_diagnosis()"| ST["CopilotState<br/>app/agent/state.py:59<br/>TypedDict compartilhado"]
-    ST -->|"report_node"| RES["DiagnosisResponse<br/>app/models/models.py:180<br/>saída + evidência"]
+    REQ["IncidentRequest<br/>app/models/models.py:37<br/>entrada validada"] -->|"run_diagnosis()"| ST["CopilotState<br/>app/agent/state.py:59<br/>TypedDict compartilhado"]
+    ST -->|"report_node"| RES["DiagnosisResponse<br/>app/models/models.py:221<br/>saída + evidência"]
     ST -.->|"with_structured_output"| DM["DiagnosisModel<br/>app/agent/state.py:14<br/>saída do LLM"]
     DM -.-> ST
 ```
@@ -459,12 +459,12 @@ cota. Erros têm handler próprio:
 
 Use a configuração **"Debug: FastAPI (uvicorn)"** do `launch.json`.
 
-| # | Breakpoint em | Linha (commit `79510c0`) | O que observar |
+| # | Breakpoint em | Linha (commit `c4af109`) | O que observar |
 |---|---|---|---|
-| 1 | `app/main.py::lifespan` | 245 | a sequência de validações do boot |
-| 2 | `app/main.py::verify_session_or_api_key` | 76 | a chave chegando no header, antes do pipeline |
-| 3 | `app/main.py::diagnose` | 663 | o `IncidentRequest` já validado |
-| 4 | `app/main.py::_validation_error_handler` | 369 | o corpo do 422 que o cliente vai ver |
+| 1 | `app/main.py::lifespan` | 246 | a sequência de validações do boot |
+| 2 | `app/main.py::verify_session_or_api_key` | 80 | a chave chegando no header, antes do pipeline |
+| 3 | `app/main.py::diagnose` | 714 | o `IncidentRequest` já validado |
+| 4 | `app/main.py::_validation_error_handler` | 372 | o corpo do 422 que o cliente vai ver |
 
 Dispare os três casos, em ordem, e veja o breakpoint 2 aceitar, recusar e o 4 formatar:
 
@@ -644,10 +644,10 @@ de um jeito diferente, e quase sempre em silêncio:
 
 Use **"Debug: graph.py (ServiceNow - alerta ITSM)"** do `launch.json`.
 
-| # | Breakpoint em | Linha (commit `79510c0`) | O que confirmar |
+| # | Breakpoint em | Linha (commit `c4af109`) | O que confirmar |
 |---|---|---|---|
 | 1 | `app/connectors/__init__.py::get_connector` | 47 | a classe escolhida pelo `interface_type` |
-| 2 | `app/agent/nodes.py::connector_node` | 125 | `is_mock` e `is_fallback` do resultado |
+| 2 | `app/agent/nodes.py::connector_node` | 128 | `is_mock` e `is_fallback` do resultado |
 
 Compare dois identificadores, um mapeado e um inventado:
 
@@ -775,7 +775,7 @@ rejeita. É essa diferença que o job `rag-quality` do CI mede (medição de
 2026-10-18 com 110 casos: Hit@1 95,6 %, MRR 0,967; 19 de 20 consultas fora
 de escopo rejeitadas).
 
-| # | Breakpoint em | Linha (commit `79510c0`) | O que inspecionar |
+| # | Breakpoint em | Linha (commit `c4af109`) | O que inspecionar |
 |---|---|---|---|
 | 1 | `app/rag/retriever.py::_retrieve_hybrid` | 164 | os 20 candidatos por perna, antes da fusão |
 | 2 | `app/rag/retriever.py::rerank` | 338 | `rerank_score` cru vs. `rerank_score_calibrated` |
@@ -881,11 +881,11 @@ for texto, conector in [
 Esperado: a primeira casa com `evid=0.95`; a segunda casa com `0.70`; a
 terceira **não** casa (negação); a quarta não casa e segue para o modelo.
 
-| # | Breakpoint em | Linha (commit `79510c0`) | O que inspecionar |
+| # | Breakpoint em | Linha (commit `c4af109`) | O que inspecionar |
 |---|---|---|---|
 | 1 | `app/agent/rules.py::match_known_error` | 602 | `rules` (origem: ontologia ou hardcoded) e o `dict` de retorno |
 | 2 | `app/agent/rules.py::_negated` | 88 | por que "não houve timeout" não dispara |
-| 3 | `app/agent/nodes.py::_run_diagnosis_agent` | 1074 | a linha em que a regra retorna **antes** de montar prompt |
+| 3 | `app/agent/nodes.py::_run_diagnosis_agent` | 1200 | a linha em que a regra retorna **antes** de montar prompt |
 
 No breakpoint 3, observe: com regra casada, a execução nunca alcança
 `_build_diagnosis_prompt`. É o mesmo fato que o `--debug` mostra pela ausência
@@ -1004,13 +1004,13 @@ Um incidente com dado real de conector é classificado `confidential`, nenhum
 provider local está disponível, e o gateway levanta `PolicyViolationError` —
 a chamada não sai. Esse é o caminho a observar:
 
-| # | Breakpoint em | Linha (commit `79510c0`) | O que inspecionar |
+| # | Breakpoint em | Linha (commit `c4af109`) | O que inspecionar |
 |---|---|---|---|
-| 1 | `app/llm/gateway.py::classify_sensitivity` | 129 | por que virou `confidential` |
-| 2 | `app/llm/gateway.py::_select_allowed_providers` | 261 | a lista filtrada (vazia = negação) |
-| 3 | `app/llm/gateway.py::invoke_via_gateway` | 361 | budget e circuit breaker antes da chamada |
-| 4 | `app/llm/factory.py::invoke_with_hybrid_fallback` | 270 | o `except` que troca de provider |
-| 5 | `app/agent/prompts.py::compute_digest` | 230 | o digest que o gate compara |
+| 1 | `app/llm/gateway.py::classify_sensitivity` | 166 | por que virou `confidential` |
+| 2 | `app/llm/gateway.py::_select_allowed_providers` | 287 | a lista filtrada (vazia = negação) |
+| 3 | `app/llm/gateway.py::invoke_via_gateway` | 396 | budget e circuit breaker antes da chamada |
+| 4 | `app/llm/factory.py::invoke_with_hybrid_fallback` | 357 | o `except` que troca de provider |
+| 5 | `app/agent/prompts.py::compute_digest` | 268 | o digest que o gate compara |
 
 Com texto livre e Ollama no ar, rode com `--debug` e leia o bloco
 "PROMPT ENVIADO AO LLM (ReAct v1.3)" seguido de "ITERAÇÕES DO AGENTE ReAct" —
@@ -1113,12 +1113,12 @@ print('saída             :', _apply_confidence_guardrails(dict(d), {}))
 Esperado: `evidence_strength 0.0` e `model_confidence` cortado para `0.25` — o
 teto `0.0 + 0.25`.
 
-| # | Breakpoint em | Linha (commit `79510c0`) | O que inspecionar |
+| # | Breakpoint em | Linha (commit `c4af109`) | O que inspecionar |
 |---|---|---|---|
-| 1 | `app/agent/nodes.py::_compute_evidence_strength` | 718 | `rag_score`, `connector_is_real_evidence` |
-| 2 | `app/agent/nodes.py::_apply_confidence_guardrails` | 855 | `evidence_ceiling` vs. `model_confidence` |
-| 3 | `app/agent/nodes.py::_assemble_evidence` | 741 | a lista final e cada `trust_level` |
-| 4 | `app/agent/nodes.py::_recover_matched_source_from_raw` | 1237 | recuperação de `matched_source` da saída crua |
+| 1 | `app/agent/nodes.py::_compute_evidence_strength` | 784 | `rag_score`, `connector_is_real_evidence` |
+| 2 | `app/agent/nodes.py::_apply_confidence_guardrails` | 921 | `evidence_ceiling` vs. `model_confidence` |
+| 3 | `app/agent/nodes.py::_assemble_evidence` | 807 | a lista final e cada `trust_level` |
+| 4 | `app/agent/nodes.py::_recover_matched_source_from_raw` | 1403 | recuperação de `matched_source` da saída crua |
 
 **Aprofundar:** DA_AULA_10_NODES.md.
 
@@ -1196,7 +1196,7 @@ for nome, st in casos.items():
 Esperado, nesta ordem: `no_context` (não escalona), `abstained`,
 `floor_tier_weak`, `curated_tier_weak`, `grounded`.
 
-| # | Breakpoint em | Linha (commit `79510c0`) | O que inspecionar |
+| # | Breakpoint em | Linha (commit `c4af109`) | O que inspecionar |
 |---|---|---|---|
 | 1 | `app/agent/escalation.py::compute_escalation_signal` | 199 | `collection`, `top_evidence`, `abstained` |
 | 2 | `app/agent/escalation.py::_top_evidence` | 187 | sempre `rerank_score_calibrated`, nunca o logit cru |
@@ -1332,10 +1332,10 @@ curl -s -X POST http://127.0.0.1:8000/events/incident \
 Repita o último comando **com o mesmo `id`**: esperado é a idempotência
 reconhecer a duplicata em vez de diagnosticar de novo.
 
-| # | Breakpoint em | Linha (commit `79510c0`) | O que inspecionar |
+| # | Breakpoint em | Linha (commit `c4af109`) | O que inspecionar |
 |---|---|---|---|
 | 1 | `app/mcp/policy.py::enforce` | 165 | a decisão fail-closed |
-| 2 | `app/a2a/task_manager.py::TaskManager.handle_message` | 151 | a tarefa mudando de estado |
+| 2 | `app/a2a/task_manager.py::TaskManager.handle_message` | 152 | a tarefa mudando de estado |
 | 3 | `app/events/consumer.py::handle_incident_event` | 106 | o envelope virando `IncidentRequest` |
 | 4 | `app/events/idempotency.py::is_duplicate` | 150 | a chave do evento e o veredito |
 
@@ -1434,7 +1434,7 @@ Esperado no caso do capítulo 1: `llm_provider_used='rule_engine'` e
 `prompt_version`/`prompt_digest` **NULL** — invariante 21, um diagnóstico sem
 LLM não foi produzido por prompt nenhum.
 
-| # | Breakpoint em | Linha (commit `79510c0`) | O que inspecionar |
+| # | Breakpoint em | Linha (commit `c4af109`) | O que inspecionar |
 |---|---|---|---|
 | 1 | `app/services/incident_recorder.py::build_incident_row` | 51 | a linha antes do INSERT |
 | 2 | `app/admin/crypto.py::encrypt_evidence` | 82 | a evidência redigida e cifrada |
@@ -1506,7 +1506,7 @@ mudança real (que **não** deve gerar drift). Os e2e
 (`tests/test_contracts_e2e.py`) exigem `IIC_TEST_DATABASE_URL` com PostgreSQL
 real.
 
-| # | Breakpoint em | Linha (commit `79510c0`) | O que inspecionar |
+| # | Breakpoint em | Linha (commit `c4af109`) | O que inspecionar |
 |---|---|---|---|
 | 1 | `app/contracts/odata.py::parse_odata_metadata` | 158 | o EDMX virando `Contract` |
 | 2 | `app/contracts/model.py::Contract.fingerprint` | 140 | o hash canônico (sem namespace/versão) |
@@ -1585,11 +1585,11 @@ Esperado: `iic_diagnosis_total{...} 1` logo após o primeiro diagnóstico,
 Com Langfuse configurado, confira a procedência no próprio retorno
 (`prompt_digest`) e o span correspondente no dashboard.
 
-| # | Breakpoint em | Linha (commit `79510c0`) | O que inspecionar |
+| # | Breakpoint em | Linha (commit `c4af109`) | O que inspecionar |
 |---|---|---|---|
-| 1 | `app/metrics.py::observe_diagnosis` | 229 | os rótulos da série temporal |
+| 1 | `app/metrics.py::observe_diagnosis` | 267 | os rótulos da série temporal |
 | 2 | `app/redaction.py::redact_pii_text` | 153 | o que sai do log |
-| 3 | `app/main.py::_probe_infra_services` | 483 | o readiness real, com GET nos serviços [DA-35] |
+| 3 | `app/main.py::_probe_infra_services` | 533 | o readiness real, com GET nos serviços [DA-35] |
 
 **Aprofundar:** DA_AULA_6_MONITORING.md ·
 DA_AULA_16_OPERATIONAL.md ·
@@ -1825,23 +1825,23 @@ DA_AULA_XX_DEPLOY.md.
 
 ## Apêndice B — Mapa de sintoma → breakpoint
 
-Linhas medidas no commit `79510c0`; o símbolo é a referência estável.
+Linhas medidas no commit `c4af109`; o símbolo é a referência estável.
 
 | Sintoma | Comece em | Linha | Pergunta que o breakpoint responde |
 |---|---|---|---|
-| "configurei e não pegou" | `app/config.py::_print_effective_config` | 669 | a configuração em uso é a que eu acho que é? |
-| 401 em toda chamada | `app/main.py::verify_session_or_api_key` | 76 | a chave chegou? é a mesma do `.env`? |
-| 422 sem explicação | `app/main.py::_validation_error_handler` | 369 | qual campo o Pydantic recusou? |
+| "configurei e não pegou" | `app/config.py::_print_effective_config` | 702 | a configuração em uso é a que eu acho que é? |
+| 401 em toda chamada | `app/main.py::verify_session_or_api_key` | 80 | a chave chegou? é a mesma do `.env`? |
+| 422 sem explicação | `app/main.py::_validation_error_handler` | 372 | qual campo o Pydantic recusou? |
 | incidente foi para o especialista errado | `app/agent/supervisor.py::classify_domain` | 128 | `_DOMAIN_INDEX` tem este `interface_type`? |
-| "está inventando dado do sistema" | `app/agent/nodes.py::connector_node` | 125 | `is_mock` / `is_fallback` |
+| "está inventando dado do sistema" | `app/agent/nodes.py::connector_node` | 128 | `is_mock` / `is_fallback` |
 | documento errado como fonte | `app/rag/retriever.py::_evidence_admission_score` | 369 | qual score admitiu este chunk? |
 | nenhum documento recuperado | `app/rag/retriever.py::_retrieve_hybrid` | 164 | a coleção está indexada? a identidade do embedding casa? |
 | LLM não foi chamado (ou foi, e não devia) | `app/agent/rules.py::match_known_error` | 602 | alguma regra casou? |
-| confiança alta sem evidência | `app/agent/nodes.py::_apply_confidence_guardrails` | 855 | o teto `evidence_strength + 0.25` |
-| `PolicyViolationError` | `app/llm/gateway.py::_select_allowed_providers` | 261 | sobrou algum provider permitido? |
-| trocou de provider sem motivo | `app/llm/factory.py::invoke_with_hybrid_fallback` | 270 | foi falha de transporte mesmo? |
+| confiança alta sem evidência | `app/agent/nodes.py::_apply_confidence_guardrails` | 921 | o teto `evidence_strength + 0.25` |
+| `PolicyViolationError` | `app/llm/gateway.py::_select_allowed_providers` | 287 | sobrou algum provider permitido? |
+| trocou de provider sem motivo | `app/llm/factory.py::invoke_with_hybrid_fallback` | 357 | foi falha de transporte mesmo? |
 | escalonou (ou não) sem razão clara | `app/agent/escalation.py::compute_escalation_signal` | 199 | qual das quatro regras casou primeiro? |
-| gate `prompt_digest_measured` reprovou | `app/agent/prompts.py::compute_digest` | 230 | o que mudou no prompt (inclusive um `Field(description=)`)? |
+| gate `prompt_digest_measured` reprovou | `app/agent/prompts.py::compute_digest` | 268 | o que mudou no prompt (inclusive um `Field(description=)`)? |
 | incidente não foi gravado | `app/services/incident_recorder.py::build_incident_row` | 51 | há `DATABASE_URL`? a chave de evidência existe? |
 | dashboard com zero linhas | `scripts/validate_dashboards.py` | — | predicado textual sobre `evidence_strength` FLOAT? |
 | evento processado duas vezes | `app/events/idempotency.py::is_duplicate` | 150 | há `REDIS_URL`? a chave do evento é a mesma? |
@@ -1883,18 +1883,18 @@ este manual"); os entre colchetes são documentos do repositório.
 
 ## Apêndice D — Os números deste manual, e como reconferi-los
 
-Tudo abaixo foi lido do código em 2026-10-15, commit `79510c0`. Nenhum número
+Tudo abaixo foi relido do código em 2026-10-21, commit `c4af109`. Nenhum número
 deste manual precisa de confiança: cada um tem um comando.
 
 | Afirmação | Valor | Comando que reconfere |
 |---|---|---|
-| versão do projeto | 1.2.0 | `grep -m1 '^version' pyproject.toml` |
+| versão do projeto | 1.4.0 | `grep -m1 '^version' pyproject.toml` |
 | regras em código | 22 | `uv run python -c "from app.agent.rules import KNOWN_ERROR_RULES as r; print(len(r))"` |
 | regras com taxonomia SKOS | 28 no total (o TTL cobre as 22 em código + 6) | `uv run python -c "from app.agent.ontology_loader import load_error_rules_combined as f; print(len(f()))"` |
 | conectores registrados | 10 | `uv run python -c "from app.connectors import _REGISTRY as r; print(len(r), sorted(r))"` |
-| migrations | 21 (head `021`) | `uv run alembic heads` |
-| gates de qualidade | 22 | `uv run python -c "from app.evaluation.gates import GATES; print(len(GATES))"` |
-| testes | 1764 coletados (2026-10-18) | `uv run pytest tests/ -m "not integration" --collect-only -q \| tail -1` |
+| migrations | 28 (head `028`) | `uv run alembic heads` |
+| gates de qualidade | 23 | `uv run python -c "from app.evaluation.gates import GATES; print(len(GATES))"` |
+| testes | 1963 coletados (2026-10-21) | `uv run pytest tests/ -m "not integration" --collect-only -q \| tail -1` |
 | configurações de debug | 14 | contar `"name"` em `.vscode/launch.json` |
 | playbooks RAG curados | 15 | `ls data/sample_docs/*.md \| wc -l` |
 | limiares de escalonamento | 0.62 / 0.45 | `app/agent/escalation.py::FLOOR_TIER_MIN_EVIDENCE`, `::CURATED_TIER_MIN_EVIDENCE` |
@@ -1903,9 +1903,8 @@ deste manual precisa de confiança: cada um tem um comando.
 **Divergências encontradas na documentação existente** (registradas aqui, não
 corrigidas por este manual): a
 TRILHA_ESTUDOS_AGENTES_IA.md cita "68 testes",
-"21 regras", "2 migrations", o modelo `qwen3-coder-next:latest` e o script
-`start-local.sh`, que não existe neste checkout; o `CLAUDE.md` fala em
-"13 configurações" de debug, e são 14. O [`README.md`](../README.md) está
+"22 regras", "28 migrations", o modelo `qwen3.6:35b-a3b` e o script
+`start-local.sh`, que não existe neste checkout. O [`README.md`](../README.md) está
 atualizado.
 
 ---

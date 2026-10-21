@@ -55,7 +55,8 @@ jobs:
       - name: mypy — tipos (IIC-AUD-316)
         # Adocao incremental: [tool.mypy].files cobre os modulos de
         # configuracao/contrato/qualidade; nao roda no app/ legado inteiro
-        # (stubs de Starlette/LangGraph/rdflib ainda geram ~150 erros).
+        # (stubs de Starlette/LangGraph/rdflib ainda geram 114 erros com o app/ completo;
+        # o CI usa a lista [tool.mypy].files para focar nos módulos críticos).
         run: uv run mypy
 
       - name: Pytest

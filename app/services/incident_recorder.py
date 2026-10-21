@@ -79,6 +79,7 @@ def build_incident_row(
     connector_source_system = final_state.get("connector_source_system") or getattr(
         connector, "source_system", None
     )
+    error_code = getattr(connector, "error_code", None) if connector else None
     return {
         "id": uuid.UUID(incident_id),
         "trace_id": response.trace_id,
@@ -90,7 +91,7 @@ def build_incident_row(
         "pii_detected": redacted_description != (request.description or ""),
         "redaction_applied": True,
         "latency_ms": latency_ms,
-        "error_codes": [connector.error_code] if getattr(connector, "error_code", None) else None,
+        "error_codes": [error_code] if error_code else None,
         # R4-208/IIC-AUD: o campo existia na request mas nunca chegava ao
         # INSERT, entao incidents.tenant_id era sempre NULL.
         "tenant_id": request.tenant_id,

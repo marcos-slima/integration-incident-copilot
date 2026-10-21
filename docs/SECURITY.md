@@ -25,7 +25,7 @@ This document describes the **threat model** and **security test suite** for the
 | Element | Threat | Likelihood | Impact | Mitigation |
 |---|---|---|---|---|
 | **User authentication** | **Spoofing**: fake API key | Medium | High | `X-API-Key` header required, validated against `web_users` table. |
-| **LLM calls** | **Tampering**: modify prompt | Low | Critical | Hash digest of prompt stored in `incidents.prompt_digest`; changes → reject. |
+| **LLM calls** | **Tampering**: modify prompt | Low | Critical | SHA-256 of the prompt artifact is recorded per incident (`prompt_digest`/`prompt_version`) and compared with the measured baseline by gate `prompt_digest_measured`; the runtime does not reject legitimate prompts. |
 | **Evidence storage** | **Repudiation**: deny evidence | Low | Medium | `evidence_json` encrypted with Fernet (`LLM_CREDENTIALS_MASTER_KEY`). |
 | **Policy engine** | **Elevation of privilege**: bypass routing | Low | Critical | Fail-closed: unknown origin → no LLM access (`app/mcp/policy.py`). |
 | **Web search** | **Information disclosure**: PII leak | Low | High | PII redaction before LLM call (DA-30); URLs truncated. |
@@ -176,24 +176,25 @@ def test_pii_redaction_credit_card(client):
     assert "[REDACTED_CREDIT_CARD]" in r["diagnosis"]["prompt"]
 ```
 
-### 7.4. Prompt digest (anti-tampering)
+### 7.4. Prompt digest (anti-drift, DA-53)
 
-```python
-def test_prompt_digest_mismatch(client):
-    # First request
-    headers = {"X-API-Key": "valid_key"}
-    payload = {"description": "test", "locale": "pt-BR"}
-    response = client.post("/diagnose", headers=headers, json=payload)
-    prompt_digest_1 = response.json()["diagnosis"]["prompt_digest"]
+The digest is **not per request**: it is the SHA-256 of the prompt artifact
+(template, slots, personas, output instruction and response schema). Two
+diagnoses with the same digest used the same prompt; the input description is
+not part of it. When the rule engine answers, `prompt_digest` and
+`prompt_version` are `None` (DA-33/DA-53).
 
-    # Second request (modified prompt)
-    payload = {"description": "test modificado", "locale": "pt-BR"}
-    response = client.post("/diagnose", headers=headers, json=payload)
-    prompt_digest_2 = response.json()["diagnosis"]["prompt_digest"]
+The gate compares the production prompt with the versioned measurement:
 
-    # Digests should differ
-    assert prompt_digest_1 != prompt_digest_2
+```bash
+uv run python -c "from app.agent import prompts; print(prompts.compute_digest())"
+uv run python scripts/quality_gate.py --only prompt_digest_measured
 ```
+
+Changing the prompt without re-running promptfoo makes the gate fail until
+`data/eval/prompt_baseline.json` is re-measured (`--write-prompt-baseline`).
+There is no runtime rejection: a legitimate prompt change is a release
+decision, not an incident.
 
 ### 7.5. Policy fail-closed
 

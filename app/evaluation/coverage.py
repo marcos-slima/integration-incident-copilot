@@ -131,7 +131,7 @@ def _as_cell(raw: Any, product: str, mechanism: str) -> MechanismCell:
     if isinstance(raw, str):
         level, note = raw, ""
     elif isinstance(raw, dict):
-        level = raw.get("level")
+        level = str(raw.get("level") or "")
         note = str(raw.get("note") or "")
     else:
         raise CoverageError(

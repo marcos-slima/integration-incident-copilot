@@ -52,11 +52,27 @@ jobs:
       - name: Ruff — formatação
         run: uv run ruff format --check .
 
+      - name: mypy — tipos (IIC-AUD-316)
+        # Adocao incremental: [tool.mypy].files cobre os modulos de
+        # configuracao/contrato/qualidade; nao roda no app/ legado inteiro
+        # (stubs de Starlette/LangGraph/rdflib ainda geram ~150 erros).
+        run: uv run mypy
+
       - name: Pytest
         # Exclui testes marcados como integration: eles exigem Qdrant e Ollama,
         # que não existem no runner do GitHub.
         # §3.10: --cov + --cov-fail-under=80 — CI falha se cobertura < 80%.
         run: uv run pytest -m "not integration" -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=80
+
+      - name: Cobertura por modulo de risco (IIC-AUD-215)
+        # O piso global de 80% esconde modulo critico abaixo da media. Estes
+        # tres concentram roteamento/LLM/eventos; medido em 2026-10-21:
+        # app/llm 90%, app/agent 90%, app/events 85%. O piso de 80 impede
+        # regressao, nao congela o numero atual.
+        run: |
+          uv run coverage report --include='app/llm/*' --fail-under=80
+          uv run coverage report --include='app/agent/*' --fail-under=80
+          uv run coverage report --include='app/events/*' --fail-under=80
 
 
   security:

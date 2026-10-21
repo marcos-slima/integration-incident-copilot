@@ -52,7 +52,7 @@ milhões a US$ 1 bilhão, dependendo da complexidade.
 *Fonte: [Cost of Running Local LLM: Break-Even Guide 2026](https://aisuperior.com/cost-of-running-local-llm/).*
 
 O `SAP Integration Copilot` já roda nessa faixa hoje (Ollama +
-qwen3-coder-next, default em `app/config.py`), como prova de conceito em produção, não como
+`qwen3.6:35b-a3b`, default em `app/config.py`), como prova de conceito em produção, não como
 projeção teórica.
 
 ## Onde este projeto se encaixa

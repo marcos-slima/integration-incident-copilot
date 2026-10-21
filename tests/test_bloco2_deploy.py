@@ -61,6 +61,45 @@ def _repo(tmp_path: Path, llm_model: str | None, baseline: dict | None) -> Path:
         ("gpt-4o-mini", {"model": None, "cases": {}}, "warn"),
         ("gpt-4o-mini", {"model": "qwen3:8b", "cases": {}}, "warn"),
         ("gpt-4o-mini", {"model": "gpt-4o-mini", "cases": {}}, "pass"),
+        (
+            "gpt-4o-mini",
+            {
+                "model": "qwen3:8b",
+                "cases": {},
+                "deployed_model_exception": {
+                    "model": "gpt-4o-mini",
+                    "reason": "sem credenciais",
+                    "accepted_by": "owner",
+                    "accepted_at": "2026-10-21",
+                    "review_by": "2099-01-01",
+                },
+            },
+            "warn",
+        ),
+        (
+            "gpt-4o-mini",
+            {
+                "model": "qwen3:8b",
+                "cases": {},
+                "deployed_model_exception": {
+                    "model": "gpt-4o-mini",
+                    "reason": "sem credenciais",
+                    "accepted_by": "owner",
+                    "accepted_at": "2026-10-21",
+                    "review_by": "2020-01-01",
+                },
+            },
+            "fail",
+        ),
+        (
+            "gpt-4o-mini",
+            {
+                "model": "qwen3:8b",
+                "cases": {},
+                "deployed_model_exception": {"model": "gpt-4o-mini"},
+            },
+            "fail",
+        ),
         (None, None, "warn"),
     ],
 )

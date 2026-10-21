@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC
+from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -243,7 +244,7 @@ def _per_query_hits(result: dict) -> list[int] | None:
     hits = [r.get("hit_at_1") for r in rows if isinstance(r, dict)]
     if len(hits) != len(rows) or not all(h in (0, 1) for h in hits):
         return None
-    return hits
+    return [int(bool(h)) for h in hits]
 
 
 def check_reranker_invariant(
@@ -608,12 +609,44 @@ def check_deployed_model_evaluated(root: Path = REPO_ROOT) -> list[Finding]:
             f"{PROMPTFOO_BASELINE} nao registra o modelo medido; grave com "
             f"--baseline-model {deployed}",
         )
-    if str(measured).strip() != deployed:
+    if str(measured).strip() == deployed:
+        return _ok(check)
+
+    # IIC-AUD-217: quando o deploy e' cloud-by-design e nao ha credenciais
+    # para re-medir, a lacuna pode ser registrada como excecao ACEITA no
+    # baseline - mas com dono, motivo e data de revisao. Excecao expirada
+    # ou incompleta e' FAIL, nao WARN: a intencao e' nao deixar a divida
+    # esquecida. O gate continua WARN porque a qualidade NAO foi medida.
+    exception = baseline.get("deployed_model_exception")
+    if isinstance(exception, dict) and str(exception.get("model") or "").strip() == deployed:
+        exigidos = ("reason", "accepted_by", "accepted_at", "review_by")
+        faltando = [campo for campo in exigidos if not str(exception.get(campo) or "").strip()]
+        if faltando:
+            return _fail(
+                check,
+                f"excecao para '{deployed}' incompleta (faltam: {', '.join(faltando)})",
+            )
+        try:
+            revisar_ate = date.fromisoformat(str(exception["review_by"]))
+        except ValueError:
+            return _fail(
+                check, f"review_by invalido em {PROMPTFOO_BASELINE}: {exception['review_by']!r}"
+            )
+        if revisar_ate < datetime.now(UTC).date():
+            return _fail(
+                check,
+                f"excecao para '{deployed}' expirou em {revisar_ate} - reavalie ou re-meça",
+            )
         return _warn(
             check,
-            f"producao usa '{deployed}' mas o baseline mediu '{measured}'",
+            f"excecao aceita para '{deployed}' (medido: '{measured}'); "
+            f"qualidade ainda NAO medida - revisar ate {revisar_ate}",
         )
-    return _ok(check)
+
+    return _warn(
+        check,
+        f"producao usa '{deployed}' mas o baseline mediu '{measured}'",
+    )
 
 
 def _candidate_das(root: Path) -> list[str]:
@@ -1697,7 +1730,11 @@ def check_connector_validation_matrix(root: Path = REPO_ROOT) -> list[Finding]:
         return _fail(
             check, f"{ARCHITECTURE_DOC}: nenhuma linha de matriz de conectores reconhecida"
         )
-    documentados = {re.match(r"^\|\s*`(\w*Connector)`", linha).group(1) for linha in linhas}
+    documentados: set[str] = set()
+    for linha in linhas:
+        match = re.match(r"^\|\s*`(\w*Connector)`", linha)
+        if match:
+            documentados.add(match.group(1))
 
     # A ligacao chave->classe vem do registry (ver `_registry_pairs`): o
     # nome da classe e' a identidade que a matriz documenta.
@@ -1771,7 +1808,7 @@ def check_connector_coverage(root: Path = REPO_ROOT) -> list[Finding]:
     except CoverageError as exc:
         return _fail(check, f"dado de cobertura invalido: {exc}")
 
-    problemas = check_consistency(conectores, produtos, cobertura)
+    problemas = check_consistency(frozenset(conectores), produtos, cobertura)
     if problemas:
         return _fail(check, "; ".join(problemas))
 
@@ -1880,7 +1917,11 @@ def run_one(
     if name not in GATES:
         raise KeyError(f"gate desconhecido: {name}")
     gate = GATES[name]
-    return list(gate(root, thresholds) if name in _THRESHOLD_AWARE else gate(root))
+    if name in _THRESHOLD_AWARE:
+        aware = cast(Callable[[Path, Thresholds], list[Finding]], gate)
+        return list(aware(root, thresholds))
+    simple = cast(Callable[[Path], list[Finding]], gate)
+    return list(simple(root))
 
 
 def run_all(root: Path = REPO_ROOT, thresholds: Thresholds = DEFAULT_THRESHOLDS) -> list[Finding]:

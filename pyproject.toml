@@ -120,11 +120,16 @@ required-version = ">=0.12.17"
 # com vulnerabilidades conhecidas.
 constraint-dependencies = [
     "urllib3>=2.8.0",
-    # IIC-AUD-203: certifi corrigido. Pillow 13 ainda NAO e' instalavel:
-    # fastembed 0.8/0.9 pina `pillow<13` em todas as versoes de Python.
-    # O achado fica aberto ate o upstream liberar (ou trocar o backend).
+    # IIC-AUD-203: certifi corrigido.
     "certifi>=2026.10.19",
 ]
+
+# IIC-AUD-203: fastembed 0.8/0.9 declara `pillow<13` em todas as versoes de
+# Python, mas so usa Pillow nos modelos de imagem (`fastembed.image`). O
+# projeto usa exclusivamente TextEmbedding/SparseTextEmbedding (texto), entao
+# o override sobe o Pillow corrigido sem trocar o backend. Se algum dia um
+# modelo multimodal for habilitado, reavalie este override.
+override-dependencies = ["pillow>=13.0.0"]
 
 # DEP-01: torch so-CPU no Linux (imagem, CI e a maquina de desenvolvimento).
 # macOS/Windows continuam no PyPI (as rodas de la ja sao so-CPU).
@@ -163,7 +168,32 @@ dev = [
     "pytest-cov>=6.0",
     "bandit>=1.8",
     "pip-audit>=2.7",
+    # IIC-AUD-316: type-checker (ver [tool.mypy]); roda no CI.
+    "mypy>=1.19",
 ]
+
+[tool.mypy]
+# IIC-AUD-316: adocao incremental. O `app/` legado ainda tem ~150 erros de
+# tipagem (principalmente stubs de Starlette/LangGraph/rdflib); o job do CI
+# cobre primeiro os modulos de contrato/configuracao/qualidade, onde um erro
+# de tipo ja causa incidente. Expandir a lista conforme os modulos forem
+# limpos - nao adicionar `ignore_errors` para "fechar" o gate.
+python_version = "3.12"
+files = [
+    "app/config.py",
+    "app/connectors/base.py",
+    "app/contracts/observe.py",
+    "app/contracts/odata.py",
+    "app/evaluation/coverage.py",
+    "app/evaluation/gates.py",
+    "app/ontology/enrichment.py",
+    "app/ontology/feedback.py",
+    "app/services/incident_recorder.py",
+]
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

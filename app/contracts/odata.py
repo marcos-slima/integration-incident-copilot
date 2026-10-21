@@ -197,17 +197,20 @@ def parse_odata_metadata(xml_text: str) -> Contract:
 def contract_from_dict(payload: Mapping[str, object]) -> Contract:
     """Reconstroi um Contract da forma canonica (persistida em JSON)."""
     entities: dict[str, Entity] = {}
-    for name, raw in (payload.get("entities") or {}).items():
+    raw_entities = payload.get("entities")
+    if not isinstance(raw_entities, Mapping):
+        raw_entities = {}
+    for name, raw in raw_entities.items():
         raw_map: Mapping[str, object] = raw if isinstance(raw, Mapping) else {}
-        raw_props: Mapping[str, object] = (
-            raw_map.get("properties") if isinstance(raw_map.get("properties"), Mapping) else {}
-        )
+        raw_props = raw_map.get("properties")
+        if not isinstance(raw_props, Mapping):
+            raw_props = {}
         properties = {
             prop_name: Property(
                 name=prop_name,
                 type_name=str(prop.get("type", "")),
                 nullable=bool(prop.get("nullable", False)),
-                max_length=prop.get("max_length"),  # type: ignore[arg-type]
+                max_length=prop.get("max_length"),
                 key=bool(prop.get("key", False)),
                 navigation=bool(prop.get("navigation", False)),
             )
@@ -218,9 +221,9 @@ def contract_from_dict(payload: Mapping[str, object]) -> Contract:
             name=str(name), properties=properties, abstract=bool(raw_map.get("abstract", False))
         )
 
-    raw_params: Mapping[str, object] = (
-        payload.get("parameters") if isinstance(payload.get("parameters"), Mapping) else {}
-    )
+    raw_params = payload.get("parameters")
+    if not isinstance(raw_params, Mapping):
+        raw_params = {}
     parameters = {
         name: Property(
             name=name,

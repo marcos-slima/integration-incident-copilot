@@ -14,7 +14,7 @@ pro lugar errado" sem depender de mais ninguem.
 """
 
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -666,7 +666,9 @@ class Settings(BaseSettings):
                 f"conflito - remova o llm_provider explicito e deixe a rota "
                 f"definir, ou escolha a rota que combina com ele."
             )
-        self.llm_provider = route.provider
+        # `LLMRoute.provider` e' `str` (o catalogo de rotas nao importa este
+        # modulo para evitar ciclo); os valores sao validados na importacao.
+        self.llm_provider = cast(Literal["ollama", "openai", "azure_openai"], route.provider)
 
         origin = resolve_provider_origin(route.provider, self)
         if not route.matches_destination_class(origin):

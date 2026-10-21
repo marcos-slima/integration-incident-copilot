@@ -51,35 +51,51 @@ Correções da auditoria técnica R3 (2026-10-20, `IIC-AUD-101`…`114`).
 - **IIC-AUD-202/309** Gate hermético: `_is_gitignored` aceita `root` e
   `_RUNTIME_ARTIFACTS` cobre os artefatos de runtime; testes em árvore sem
   `.git` adicionados.
+- **IIC-AUD-203** `certifi` atualizado para `2026.10.19`; `pillow` elevado para
+  `13.0.0` via `override-dependencies`. O `fastembed` só usa Pillow em modelos
+  de imagem; o projeto usa `TextEmbedding`/`SparseTextEmbedding`, então o
+  override não afeta o caminho de embeddings em uso.
 - **IIC-AUD-205** DA-86 rebaixada para candidata; a prosa agora diz que
   endpoints e UI **não** foram implementados.
 - **IIC-AUD-206** DA-80 rebaixada para candidata: o NER não está no caminho de
   dados e o Kyma usa `cloud_with_dlp` dependendo apenas do regex.
+- **IIC-AUD-207** Nenhuma referência a docs privados em `app/`; `docs/MANUAL.md`
+  e os docs EN foram alinhados; `docs/interno/` é tratado como artefato de
+  runtime pelo gate, não como fonte versionada.
 - **IIC-AUD-208** `IncidentRequest.tenant_id` agora chega a
   `build_incident_row` e é persistido em `incidents.tenant_id`.
+- **IIC-AUD-209** Verificado via API: a conta e o repositório **não têm**
+  GitHub Project v2 nem clássico; as duas issues abertas não têm
+  `projectItems`. Não há board a atualizar.
 - **IIC-AUD-210** Este CHANGELOG corrigido (as entradas anteriores declaravam
   como “corrigido” itens que ainda estavam parciais).
-- **IIC-AUD-211** README atualizado para 1940 testes / 84 % / 10 243 linhas.
+- **IIC-AUD-211** README atualizado para 1943 testes / 84 % / 10 276 linhas
+  (1 688 descobertas).
+- **IIC-AUD-212** `docs/SECURITY.md` corrigido: a linha STRIDE de prompt
+  descreve o digest do artefato (não rejeição em runtime) e §7.4 mostra o
+  comando/gate reais, incluindo `prompt_digest=None` quando o rule engine
+  responde. `docs/TCO_...` voltou ao modelo canônico `qwen3.6:35b-a3b`.
 - **IIC-AUD-213** Referências de `.env.example`, `ARQUETURA` e `worker.yaml`
   alinhadas.
 - **IIC-AUD-214** Os seis docs de `docs/en/` sem cabeçalho receberam
   `source commit`.
+- **IIC-AUD-215** Cobertura por pacote de risco no CI: `app/llm` 90 %,
+  `app/agent` 90 % e `app/events` 85 % (medido em 2026-10-21), com piso de
+  80 % por pacote — o piso global de 80 % sozinho escondia regressões.
 - **IIC-AUD-216/313** `required-version = ">=0.12.17"` no `[tool.uv]`,
   `setup-uv` fixado em `0.12.17` nos workflows e docs atualizados.
+- **IIC-AUD-217** Exceção **datada e com dono** para o modelo de produção Kyma:
+  `deployed_model_exception` em `data/eval/promptfoo_baseline.json`
+  (`gpt-4o-mini`, revisar até 2027-01-31). O gate continua WARN porque a
+  qualidade **não foi medida** (faltam credenciais OpenAI/Azure); exceção
+  expirada ou incompleta passa a FAIL, para a dívida não ser esquecida.
 
 ### Pendente
-- **IIC-AUD-203:** `certifi` atualizado para `2026.10.19`. `pillow` continua em
-  `12.3.0`: `fastembed` (0.8/0.9) pina `pillow<13` em todas as versões de
-  Python, então o upgrade exige trocar/atualizar o backend de embeddings.
 - **IIC-AUD-204:** Valores com cara de segredo no histórico alcançáveis por
-  `origin/master`. Exige reescrita de histórico (force-push, destrutivo) —
-  decisão do mantenedor.
-- **IIC-AUD-207:** Sem referências a docs privados em `app/` e
-  `docs/MANUAL.md`; `docs/interno/` segue como artefato de runtime no gate.
-- **IIC-AUD-209:** Project externo — não verificável pelo repositório.
-- **IIC-AUD-212/215:** Não reexecutados nesta rodada (scripts da R4).
-- **IIC-AUD-217:** Re-baseline do modelo de produção Kyma continua pendente
-  (exige credenciais/rede).
+  `origin/master` (árvore atual limpa). A correção exige reescrita de histórico
+  + force-push em todas as branches/tags e rotação das credenciais — operação
+  destrutiva que precisa de janela de manutenção e confirmação do mantenedor.
+  Não executada nesta rodada.
 
 ---
 
@@ -114,10 +130,17 @@ Correções da auditoria técnica R3 (2026-10-20, `IIC-AUD-101`…`114`).
   e `llm/origins.py` **foram mantidos**: ao remove-los, `bandit -ll` volta a
   reportar B608/B704/B104 como Medium (não são obsoletos; cada um tem
   justificativa na linha). O job de segurança continua verde.
+- **IIC-AUD-316:** `mypy` adotado de forma incremental. `[tool.mypy]` cobre 9
+  módulos de contrato/configuração/qualidade (`app/config.py`,
+  `app/connectors/base.py`, `app/contracts/observe.py`, `app/contracts/odata.py`,
+  `app/evaluation/coverage.py`, `app/evaluation/gates.py`,
+  `app/ontology/enrichment.py`, `app/ontology/feedback.py`,
+  `app/services/incident_recorder.py`), sem `ignore_errors`; 28 erros
+  corrigidos e passo `mypy` no CI. O `app/` legado continua fora do escopo até
+  os stubs de Starlette/LangGraph/rdflib serem resolvidos.
 
 ### Pendente
-- **IIC-AUD-316:** Sem type-checker Python. Adicionar `mypy`/`pyright` é uma
-  decisão de escopo (Info) e não foi feita nesta rodada.
+- Nenhum item aberto da R5.
 
 
 ## [1.4.0] — 2026-10-20

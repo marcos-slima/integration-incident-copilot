@@ -11,6 +11,7 @@ categoria de entrada.
 from __future__ import annotations
 
 import re
+from typing import Any, cast
 
 from rdflib import Graph, URIRef
 from rdflib.namespace import SKOS
@@ -41,7 +42,8 @@ def _category_index(graph: Graph) -> dict[str, URIRef]:
     index: dict[str, URIRef] = {}
     for subject, _, label in graph.triples((None, SKOS.prefLabel, None)):
         if isinstance(label, str):
-            index[_normalize(str(label))] = subject
+            # `triples()` tipa o sujeito como `Node`; o TTL usa URIRef.
+            index[_normalize(str(label))] = URIRef(str(subject))
     return index
 
 
@@ -77,7 +79,7 @@ def get_upper_categories_from_category(category: str, ttl_path: str | None = Non
     }
     """
 
-    results = graph.query(query, initBindings={"concept": concept})
+    results = cast(Any, graph.query(query, initBindings={"concept": concept}))
     return [str(row["upper"]) for row in results]
 
 
@@ -110,7 +112,8 @@ def get_next_steps_from_category(category: str, ttl_path: str | None = None) -> 
       ?concept ex:next_steps ?step .
     }
     """
-    steps = [str(row["step"]) for row in graph.query(query, initBindings={"concept": concept})]
+    steps_query = cast(Any, graph.query(query, initBindings={"concept": concept}))
+    steps = [str(row["step"]) for row in steps_query]
     if steps:
         return steps
 
@@ -121,7 +124,8 @@ def get_next_steps_from_category(category: str, ttl_path: str | None = None) -> 
       ?concept skos:note ?note .
     }
     """
-    for row in graph.query(query, initBindings={"concept": concept}):
+    notes_query = cast(Any, graph.query(query, initBindings={"concept": concept}))
+    for row in notes_query:
         note = str(row["note"])
         if not note.lower().startswith(_NEXT_STEPS_PREFIX):
             continue

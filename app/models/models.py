@@ -100,7 +100,9 @@ class IncidentRequest(BaseModel):
 # data). Hoje so um `type` e reconhecido - qualquer outro e rejeitado
 # com 422 automaticamente pelo Literal abaixo, em vez de tentar
 # interpretar um payload de formato desconhecido silenciosamente.
-INCIDENT_DETECTED_EVENT_TYPE = "com.sap.integration.incident.detected.v1"
+INCIDENT_DETECTED_EVENT_TYPE: Literal["com.sap.integration.incident.detected.v1"] = (
+    "com.sap.integration.incident.detected.v1"
+)
 
 
 class IncidentEventData(BaseModel):

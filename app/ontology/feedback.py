@@ -16,7 +16,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal, NotRequired, TypedDict
 
 from app.config import settings
-from app.services import get_sync_session_factory
+from app.db import get_sync_session_factory
 
 logger = logging.getLogger(__name__)
 

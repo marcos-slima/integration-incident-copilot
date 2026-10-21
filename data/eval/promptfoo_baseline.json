@@ -21,5 +21,12 @@
     "Guardrail 2 - identificador desconhecido plausivel (nao deve anexar doc)": true
   },
   "pass_rate": 1.0,
-  "notes": "Medido com qwen3.6:35b-a3b (modelo canônico de producao). O modelo qwen3-coder-next:latest foi o anterior (DA-4/8/12) e nao aparece neste baseline."
+  "notes": "Medido com qwen3.6:35b-a3b (modelo canônico de producao). O modelo qwen3-coder-next:latest foi o anterior (DA-4/8/12) e nao aparece neste baseline.",
+  "deployed_model_exception": {
+    "model": "gpt-4o-mini",
+    "reason": "O deploy Kyma e' cloud-by-design (LLM_PROVIDER=openai, sem Ollama no cluster) e nao ha credenciais OpenAI/Azure neste ambiente para rodar o promptfoo. A qualidade de gpt-4o-mini permanece NAO medida; este registro existe para que a lacuna tenha dono e prazo, em vez de ser um WARN anonimo.",
+    "accepted_by": "marcos-slima",
+    "accepted_at": "2026-10-21",
+    "review_by": "2027-01-31"
+  }
 }

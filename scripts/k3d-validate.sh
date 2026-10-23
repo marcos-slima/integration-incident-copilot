@@ -74,6 +74,7 @@ if ! kubectl -n "$NS" get secret "$SECRET" >/dev/null 2>&1; then
     --from-literal=API_KEY="$(rnd)" \
     --from-literal=A2A_API_KEY="$(rnd)" \
     --from-literal=EVENT_MESH_API_KEY="$(rnd)" \
+    --from-literal=ADMIN_API_KEY="$(rnd)" \
     --from-literal=REDIS_PASSWORD="$REDIS_PASSWORD" \
     --from-literal=REDIS_URL="redis://:$REDIS_PASSWORD@redis:6379/0"
   echo "Secret criado"

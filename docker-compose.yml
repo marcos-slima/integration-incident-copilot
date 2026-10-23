@@ -24,16 +24,18 @@ x-common-env: &common-env
   # CONTAINER_REDIS_URL no .env (veja .env.example); vazio = herda REDIS_URL.
   REDIS_URL: ${CONTAINER_REDIS_URL:-${REDIS_URL:-}}
   # Persistência de incidentes (Fase 1 Observabilidade Grafana)
-  # Opt-in: vazio = sem PostgreSQL (padrão). Configure no .env para ativar.
+  # Opt-in: vazio = sem PostgreSQL (padrão). IIC-AUD-405: antes o default
+  # apontava SEMPRE para o servico "postgres", que so existe no perfil
+  # "observability" - sem o perfil, cada /diagnose tentava gravar num host
+  # inexistente (stack trace no log) e o boot exigia
+  # LLM_CREDENTIALS_MASTER_KEY mesmo sem banco.
   #
-  # O host "postgres" é o nome do serviço dentro da rede do compose e
-  # NÃO resolve na máquina — é por isso que o .env documenta o
-  # DATABASE_URL com 127.0.0.1 (ver .env.example). Aqui o container
-  # recebe o valor interno por default, sem depender do .env:
-  # mesma estrategia de QDRANT_URL acima, que tambem hardcodeia "qdrant".
-  # Para apontar o container a um Postgres externo (RDS, BTP,
-  # Cloud SQL), defina CONTAINER_DATABASE_URL em vez de mexer aqui.
-  DATABASE_URL: ${CONTAINER_DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-iic}:${POSTGRES_PASSWORD:-REQUIRED_SET_IN_ENV}@postgres:5432/${POSTGRES_DB:-iic}}
+  # Para ligar no modo container, defina no .env (o host "postgres" e o
+  # nome do servico na rede do compose e NAO resolve na maquina; o
+  # DATABASE_URL do .env, com 127.0.0.1, vale so para o modo NATIVO):
+  #   CONTAINER_DATABASE_URL=postgresql+asyncpg://iic:<POSTGRES_PASSWORD>@postgres:5432/iic
+  # Para um Postgres externo (RDS, BTP, Cloud SQL), use o host dele.
+  DATABASE_URL: ${CONTAINER_DATABASE_URL:-}
   # Neo4j / GraphRAG (opt-in, perfil "graphrag"). O serviço "neo4j"
   # existia no compose mas estas variaveis NAO eram passadas a api,
   # entao o GraphRAG nao tinha como alcancar o banco nem no modo
@@ -139,20 +141,36 @@ services:
     image: postgres:16-alpine
     profiles: ["observability"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U iic -d iic"]
+      # IIC-AUD-412: mesmo usuario/banco de POSTGRES_USER/POSTGRES_DB abaixo.
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 15s
     restart: unless-stopped
+    # IIC-AUD-403: o sentinela REQUIRED_SET_IN_ENV mantem a interpolacao
+    # valida, mas e um valor PUBLICO - sem este guard o Postgres inicializava
+    # com ele como senha real. Entrypoint/cmd originais da imagem:
+    # ["docker-entrypoint.sh"] ["postgres"].
+    entrypoint:
+      - sh
+      - -c
+      - |
+        if [ "$$POSTGRES_PASSWORD" = "REQUIRED_SET_IN_ENV" ]; then
+          echo "POSTGRES_PASSWORD nao definida no .env (sentinela REQUIRED_SET_IN_ENV): recusando subir com senha conhecida." >&2
+          exit 1
+        fi
+        exec docker-entrypoint.sh "$$@"
+      - sh
+    command: ["postgres"]
     ports:
       - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-iic}
       POSTGRES_USER: ${POSTGRES_USER:-iic}
-      # IIC-AUD-303: sem default fraco. O sentinela `REQUIRED_SET_IN_ENV`
-      # mantem a interpolacao valida (inclusive nos perfis inativos) e faz
-      # API/Postgres usarem o MESMO valor placeholder; troque antes de subir.
+      # IIC-AUD-303/403: sem default fraco. O sentinela `REQUIRED_SET_IN_ENV`
+      # mantem a interpolacao valida (inclusive nos perfis inativos); o
+      # entrypoint acima recusa subir com ele.
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-REQUIRED_SET_IN_ENV}
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -165,6 +183,20 @@ services:
     image: grafana/grafana:11.3.0
     profiles: ["observability"]
     restart: unless-stopped
+    # IIC-AUD-403: recusa o sentinela como senha do admin. Entrypoint
+    # original da imagem: ["/run.sh"]. GRAFANA_DB_PASSWORD com o sentinela
+    # nao e uma senha do banco (o papel iic_grafana_ro so existe com valor
+    # real), entao o datasource apenas falha na autenticacao.
+    entrypoint:
+      - sh
+      - -c
+      - |
+        if [ "$$GF_SECURITY_ADMIN_PASSWORD" = "REQUIRED_SET_IN_ENV" ]; then
+          echo "GRAFANA_PASSWORD nao definida no .env (sentinela REQUIRED_SET_IN_ENV): recusando subir com senha conhecida." >&2
+          exit 1
+        fi
+        exec /run.sh "$$@"
+      - sh
     ports:
       - "127.0.0.1:${GRAFANA_HOST_PORT:-3002}:3000"
     environment:
@@ -215,6 +247,21 @@ services:
   neo4j:
     image: neo4j:5.26.0-community
     profiles: ["graphrag"]
+    # IIC-AUD-403: recusa o sentinela como senha. Entrypoint/cmd originais
+    # da imagem: ["tini","-g","--","/startup/docker-entrypoint.sh"] ["neo4j"].
+    entrypoint:
+      - sh
+      - -c
+      - |
+        case "$$NEO4J_AUTH" in
+          */REQUIRED_SET_IN_ENV)
+            echo "NEO4J_PASSWORD nao definida no .env (sentinela REQUIRED_SET_IN_ENV): recusando subir com senha conhecida." >&2
+            exit 1
+            ;;
+        esac
+        exec tini -g -- /startup/docker-entrypoint.sh "$$@"
+      - sh
+    command: ["neo4j"]
     # DA-34: healthcheck. O comentario anterior dizia que
     # /db/neo4j/available respondia sem autenticacao, e isso era verdade em
     # versoes antigas: no 5.26 o endpoint devolve 401, e `curl -f` falha em
@@ -239,11 +286,11 @@ services:
       - "127.0.0.1:7474:7474"
       - "127.0.0.1:7687:7687"
     environment:
-      # Avaliacao externa (curto prazo, item 6) + IIC-AUD-303: sem default
-      # fraco. O sentinela REQUIRED_SET_IN_ENV substitui o antigo
-      # "changeme123": a interpolacao continua valida e quem ativar o perfil
-      # graphrag sem configurar a senha ve o valor explicito (e falha a
-      # autenticacao), em vez de subir com uma senha conhecida publicamente.
+      # Avaliacao externa (curto prazo, item 6) + IIC-AUD-303/403: sem
+      # default fraco. O sentinela REQUIRED_SET_IN_ENV substitui o antigo
+      # "changeme123" e mantem a interpolacao valida; o entrypoint acima
+      # recusa subir com ele (antes, o Neo4j inicializava com o sentinela
+      # como senha real).
       NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-REQUIRED_SET_IN_ENV}
     volumes:
       - neo4j_data:/data
@@ -294,31 +341,27 @@ services:
   # Mesma imagem da API (build: .) - precisa do mesmo acesso a
   # Ollama/Qdrant/Langfuse que a API tem, pois "run_diagnosis_job"
   # (app/queue.py) chama o MESMO pipeline (app/agent/graph.py) rodando
-  # aqui dentro, nao um subconjunto. Sem REDIS_URL configurada, o
-  # worker nao tem o que consumir - "${VAR:?...}" falha explicito ao
-  # subir o profile, mesmo principio do NEO4J_PASSWORD acima (sem
-  # default fraco/silencioso).
+  # aqui dentro, nao um subconjunto. O worker fala com o servico-irmao
+  # "redis" (ver RQ_REDIS_URL abaixo).
   worker:
     build:
       context: .
       target: app
     profiles: ["async"]
-    command:
-      - ".venv/bin/rq"
-      - "worker"
-      - "--url"
-      # Container: RQ tem que falar com o servico-irmao "redis" da rede do
-      # compose, NAO com 127.0.0.1 (loopback do proprio container, onde nao ha
-      # nada). MESMA estrategia de CONTAINER_DATABASE_URL (linha 31) e
-      # QDRANT_URL em x-common-env: REDIS_URL no .env vale s/ modo nativo;
-      # CONTAINER_REDIS_URL aponta para o servico. A-12: senha via
-      # REDIS_PASSWORD. Override: CONTAINER_REDIS_URL=redis://:SENHA@redis:6379/0
-      - "${CONTAINER_REDIS_URL:-redis://:${REDIS_PASSWORD:-}@redis:6379/0}"
-      - "diagnosis"
+    # IIC-AUD-411: a URL (com a senha) vai por RQ_REDIS_URL, que o CLI do RQ
+    # le como default de --url (rq/cli/helpers.py) - na linha de comando ela
+    # aparecia em `docker inspect`/`ps`. Mesma correcao da IIC-AUD-314 no Kyma.
+    command: [".venv/bin/rq", "worker", "diagnosis"]
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
       <<: *common-env
+      # Container: RQ tem que falar com o servico-irmao "redis" da rede do
+      # compose, NAO com 127.0.0.1 (loopback do proprio container, onde nao ha
+      # nada). REDIS_URL no .env vale so no modo nativo; CONTAINER_REDIS_URL
+      # aponta para o servico. A-12: senha via REDIS_PASSWORD. Override:
+      # CONTAINER_REDIS_URL=redis://:SENHA@redis:6379/0
+      RQ_REDIS_URL: ${CONTAINER_REDIS_URL:-redis://:${REDIS_PASSWORD:-}@redis:6379/0}
     restart: unless-stopped
     # §3.8: condition: service_healthy no redis garante que o worker
     # so sobe depois do Redis estar aceitando conexoes — sem isso, o
@@ -388,7 +431,9 @@ services:
       # nativo aponta para 127.0.0.1 - dentro do container isso e o proprio
       # container, e o relatorio nunca alcancava o banco. Mesma regra do
       # x-common-env: host `postgres` da rede do compose.
-      DATABASE_URL: ${CONTAINER_DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-iic}:${POSTGRES_PASSWORD:-REQUIRED_SET_IN_ENV}@postgres:5432/${POSTGRES_DB:-iic}}
+      # IIC-AUD-405: mesma variavel da API (CONTAINER_DATABASE_URL). Vazia,
+      # scripts/generate_reports.py aborta com "DATABASE_URL não definida".
+      DATABASE_URL: ${CONTAINER_DATABASE_URL:-}
       REPORT_PERIOD: "${REPORT_PERIOD:-daily}"
       REPORT_OUTPUT: "/app/reports"
     volumes:

@@ -30,7 +30,9 @@ jobs:
           cache-dependency-glob: "uv.lock"
 
       - name: Instalar Python
-        # Lê a versão de .python-version (3.12.15), a mesma do ambiente local
+        # IIC-AUD-401: .python-version fixa so a serie (3.12). O uv 0.12.17 nao
+        # oferece 3.12.15 para download (a lista termina em 3.12.14); o patch
+        # exato fica na imagem Docker (python:3.12.15-slim).
         run: uv python install
 
 
@@ -173,13 +175,52 @@ jobs:
             bandit-report.json
           if-no-files-found: ignore
 
+  browser:
+    name: admin UI no Chromium (Playwright)
+    # IIC-AUD-408: tests/test_admin_ui_browser.py (marker `browser`) pulava
+    # sempre no CI porque o Playwright nao e dependencia do projeto. Ele so
+    # e necessario para este teste, entao entra via `uv run --with` (sem ir
+    # para o uv.lock) e o Chromium e instalado so neste job.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PLAYWRIGHT_VERSION: "1.56.0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          version: "0.12.17"  # IIC-AUD-313: mesmo pin do Dockerfile:41
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Instalar Python
+        run: uv python install
+
+      - name: Instalar deps de sistema (python-qpid-proton / A-07)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake make gcc libssl-dev libffi-dev libsasl2-dev libsasl2-2
+
+      - name: Sincronizar dependências
+        run: uv sync --dev
+
+      - name: Instalar Chromium do Playwright
+        run: uv run --with "playwright==${PLAYWRIGHT_VERSION}" playwright install --with-deps chromium
+
+      - name: Pytest (browser)
+        run: uv run --with "playwright==${PLAYWRIGHT_VERSION}" pytest tests/test_admin_ui_browser.py -v -rs
+
   compose-smoke:
     name: compose smoke — API /health
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # `docker compose` interpola TODOS os servicos ao carregar o arquivo,
-    # inclusive os de profile inativo. Sem estas variaveis o job falhava
-    # antes de subir qualquer container (POSTGRES/GRAFANA/NEO4J password).
+    # As senhas nao sao exigidas pela interpolacao (o compose usa o sentinela
+    # REQUIRED_SET_IN_ENV), mas ficam definidas para o job nao depender do
+    # sentinela em nenhum servico (IIC-AUD-403).
     env:
       POSTGRES_PASSWORD: ci-smoke-test-password
       GRAFANA_PASSWORD: ci-smoke-test-password
@@ -194,12 +235,10 @@ jobs:
       - name: Criar .env mínimo para o bind mount
         # O compose monta ./.env em /app/.env; num checkout limpo o
         # arquivo nao existe e o Docker criaria um DIRETORIO no lugar.
-        # Com DATABASE_URL definida pelo compose, o boot exige
-        # LLM_CREDENTIALS_MASTER_KEY (DA-47/DA-60); geramos uma chave
-        # efemera so para o smoke, sem persistir segredo no repo.
-        run: |
-          key="$(python3 -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')"
-          printf 'LLM_CREDENTIALS_MASTER_KEY=%s\n' "$key" > .env
+        # IIC-AUD-405: o .env fica VAZIO de proposito. Sem
+        # CONTAINER_DATABASE_URL a API nao recebe DATABASE_URL e tem de subir
+        # sem LLM_CREDENTIALS_MASTER_KEY - o smoke prova a persistencia opt-in.
+        run: ': > .env'
 
       - name: Subir stack (api + qdrant)
         run: docker compose up -d api qdrant

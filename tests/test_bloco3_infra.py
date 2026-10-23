@@ -57,10 +57,44 @@ def test_m18_compose_sem_senha_default_fraca():
     ):
         assert valor not in texto, f"default fraco ainda no compose: {valor}"
 
-    api_db = COMPOSE["services"]["api"]["environment"]["DATABASE_URL"]
     pg_password = COMPOSE["services"]["postgres"]["environment"]["POSTGRES_PASSWORD"]
-    assert "REQUIRED_SET_IN_ENV" in api_db
     assert pg_password == "${POSTGRES_PASSWORD:-REQUIRED_SET_IN_ENV}"
+
+
+def test_iic_aud_403_servicos_recusam_o_sentinela():
+    """O sentinela e publico: cada servico que o recebe como senha tem um
+    entrypoint que aborta antes de inicializar com ele."""
+    for nome, exec_original in (
+        ("postgres", "exec docker-entrypoint.sh"),
+        ("grafana", "exec /run.sh"),
+        ("neo4j", "exec tini -g -- /startup/docker-entrypoint.sh"),
+    ):
+        entrypoint = COMPOSE["services"][nome]["entrypoint"]
+        script = entrypoint[2]
+        assert entrypoint[:2] == ["sh", "-c"], nome
+        assert "REQUIRED_SET_IN_ENV" in script and "exit 1" in script, nome
+        assert exec_original in script, nome
+
+
+def test_iic_aud_405_persistencia_opt_in_no_modo_container():
+    """Sem CONTAINER_DATABASE_URL a API e o worker nao recebem DATABASE_URL:
+    o servico `postgres` so existe no perfil observability."""
+    for nome in ("api", "worker", "reporter"):
+        assert COMPOSE["services"][nome]["environment"]["DATABASE_URL"] == (
+            "${CONTAINER_DATABASE_URL:-}"
+        ), nome
+
+
+def test_iic_aud_411_worker_sem_senha_na_linha_de_comando():
+    worker = COMPOSE["services"]["worker"]
+    assert "--url" not in worker["command"]
+    assert "RQ_REDIS_URL" in worker["environment"]
+
+
+def test_iic_aud_412_healthcheck_do_postgres_usa_as_variaveis():
+    teste = " ".join(COMPOSE["services"]["postgres"]["healthcheck"]["test"])
+    assert "$${POSTGRES_USER}" in teste and "$${POSTGRES_DB}" in teste
+    assert "-U iic" not in teste
 
 
 def test_m18_start_docker_sem_ai_stack_e_sem_uv_no_container():

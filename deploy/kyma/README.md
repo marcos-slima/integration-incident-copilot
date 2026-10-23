@@ -25,15 +25,15 @@ docker build -t <REGISTRY>/integration-incident-copilot:<TAG> .
 docker push <REGISTRY>/integration-incident-copilot:<TAG>
 
 # 2. Ajuste deployment.yaml com a imagem real (troque <REGISTRY>/<TAG>)
-#    e apirule.yaml com o dominio real do cluster (troque <CLUSTER_DOMAIN>)
+#    (apirule.yaml usa short host name: o dominio vem do gateway do cluster)
 
 # 3. Segredos - NUNCA commitar preenchido, ver secret.example.yaml
 cp secret.example.yaml /tmp/secret.yaml
 # edite /tmp/secret.yaml com os valores reais
 kubectl apply -f /tmp/secret.yaml
 rm /tmp/secret.yaml
-# O ConfigMap define REQUIRE_AUTH=true: sem API_KEY, A2A_API_KEY e
-# EVENT_MESH_API_KEY no Secret, o Pod entra em CrashLoopBackOff de
+# O ConfigMap define REQUIRE_AUTH=true: sem API_KEY, A2A_API_KEY,
+# EVENT_MESH_API_KEY e ADMIN_API_KEY no Secret, o Pod entra em CrashLoopBackOff de
 # proposito (falha cedo em vez de gerar chave efemera por replica).
 
 # 4. Todo o resto (namespace, config, deployment, service, hpa, apirule)
@@ -81,10 +81,10 @@ Sem cluster Kyma, o bundle foi validado apenas offline:
 - `kubectl apply --dry-run=client --validate=false` passou para os seis
   recursos core: Namespace, ConfigMap, Service, Deployment da API, Deployment
   do worker e HPA.
-- O `APIRule` **não** pôde ser validado: o CRD
-  `gateway.kyma-project.io/v1beta1` não existe fora do cluster
-  (`no matches for kind "APIRule"`). Isso confirma a limitação abaixo; não
-  substitui o teste num cluster Kyma gerenciado.
+- O `APIRule` **não** pôde ser aplicado: o CRD do Kyma não existe fora do
+  cluster (`no matches for kind "APIRule"`). Desde a IIC-AUD-402 o manifest
+  (v2) é validado contra o schema do CRD publicado em `kyma-project/api-gateway`,
+  o que confere campos e tipos, mas não substitui o teste num cluster Kyma.
 
 ## Limitações explícitas (DA-24)
 
@@ -92,14 +92,14 @@ O que segue sem validação é o específico do Kyma gerenciado: nenhum destes
 manifests foi aplicado num cluster **Kyma** (o trial exige onboarding
 controlado pela SAP). Em particular:
 
-- O schema do CRD `APIRule` já mudou de versão mais de uma vez na
-  história do Kyma - o `apiVersion: gateway.kyma-project.io/v1beta1`
-  usado aqui é o correto até o conhecimento deste projeto, mas **deve
-  ser conferido contra o cluster alvo** (`kubectl explain apirule.spec`)
-  antes de aplicar de verdade.
+- O `APIRule` usa `gateway.kyma-project.io/v2` (IIC-AUD-402): o v1beta1 foi
+  removido do módulo API Gateway (sem create/edit; sem reconciliação desde a
+  3.10). Confira contra o cluster alvo antes de aplicar:
+  `kubectl explain apirule.spec --api-version=gateway.kyma-project.io/v2` e
+  `kubectl apply --dry-run=server -k deploy/kyma`.
 - O push para um registry acessível pelo Kyma não foi testado (no k3d a
   imagem é importada direto no nó, sem registry).
-- `accessStrategy: noop` no `APIRule` assume que a autenticação por
+- `noAuth: true` no `APIRule` assume que a autenticação por
   API key de cada endpoint (DA-18/DA-23) é suficiente. Trocar para
   `jwt` (validando tokens XSUAA do BTP) seria a evolução natural se
   este projeto avançar para integração mais profunda com serviços BTP

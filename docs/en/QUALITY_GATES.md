@@ -56,11 +56,12 @@ flowchart LR
 
     subgraph pr["On every push and PR"]
         det["<b>deterministic</b><br/>scripts/quality_gate.py<br/>23 gates"]
-        mig["<b>migrations_and_dashboards</b><br/>alembic upgrade + check<br/>45 queries of dashboards<br/>DA-52 e2e in Postgres"]
+        mig["<b>migrations_and_dashboards</b><br/>alembic upgrade + check<br/>45 queries of dashboards<br/>DA-52 e2e, DA-69/75 checkpoint and M-11 in Postgres"]
         tst["<b>test</b><br/>ruff + pytest, coverage >= 80%"]
         rq["<b>rag-quality</b><br/>ingest with fastembed in Qdrant<br/>pytest -m rag_quality"]
         sec["<b>security</b>"]
         cs["<b>compose-smoke</b>"]
+        br["<b>browser</b><br/>admin UI in Chromium (Playwright)"]
         n4["<b>neo4j-smoke</b>"]
         fe["<b>frontend</b>"]
         db["<b>docker-build</b>"]

@@ -284,6 +284,7 @@ def test_ensure_api_keys_configured_passes_when_require_auth_and_all_keys_set(mo
         api_key="chave-1",
         a2a_api_key="chave-2",
         event_mesh_api_key="chave-3",
+        admin_api_key="chave-4",
     )
     monkeypatch.setattr(main_module, "settings", fresh_settings)
 
@@ -300,6 +301,7 @@ def test_ensure_api_keys_configured_reports_only_the_missing_keys(monkeypatch):
         api_key="chave-configurada",
         a2a_api_key="",
         event_mesh_api_key="tambem-configurada",
+        admin_api_key="admin-configurada",
     )
     monkeypatch.setattr(main_module, "settings", fresh_settings)
 
@@ -652,3 +654,52 @@ def test_m15_health_e_ready_sem_credencial_nao_expoem_configuracao(monkeypatch):
         assert set(body) == {"status"}, path
         body = client.get(path, headers={"X-API-Key": "errada"}).json()
         assert set(body) == {"status"}, path
+
+
+@pytest.mark.parametrize(
+    ("campo", "valor"),
+    [
+        ("database_url", "postgresql+asyncpg://iic:REQUIRED_SET_IN_ENV@postgres:5432/iic"),
+        ("neo4j_password", "REQUIRED_SET_IN_ENV"),
+    ],
+)
+def test_iic_aud_403_recusa_sentinela_do_compose(monkeypatch, campo, valor):
+    """IIC-AUD-403: o sentinela do docker-compose.yml e publico; com ele numa
+    credencial o boot falha em vez de usar uma senha conhecida."""
+    from app.exceptions import ConfigurationError
+
+    monkeypatch.setattr(main_module, "settings", Settings(**{campo: valor}))
+    with pytest.raises(ConfigurationError) as exc_info:
+        main_module._ensure_no_compose_placeholder_secrets()
+    assert main_module.COMPOSE_PASSWORD_SENTINEL in str(exc_info.value)
+
+
+def test_iic_aud_403_aceita_credenciais_reais(monkeypatch):
+    monkeypatch.setattr(
+        main_module,
+        "settings",
+        Settings(
+            database_url="postgresql+asyncpg://iic:senha-de-teste@postgres:5432/iic",
+            neo4j_password="outra-senha-de-teste",
+        ),
+    )
+    main_module._ensure_no_compose_placeholder_secrets()  # nao deve levantar
+
+
+def test_iic_aud_410_require_auth_exige_admin_api_key(monkeypatch):
+    """IIC-AUD-410: com REQUIRE_AUTH=true a chave admin tambem nao pode ser
+    efemera (cada replica do HPA teria uma diferente e desconhecida)."""
+    fresh_settings = Settings(
+        require_auth=True,
+        api_key="chave-1",
+        a2a_api_key="chave-2",
+        event_mesh_api_key="chave-3",
+        admin_api_key="",
+    )
+    monkeypatch.setattr(main_module, "settings", fresh_settings)
+
+    with pytest.raises(main_module.MissingRequiredAuthError) as exc_info:
+        main_module._ensure_api_keys_configured()
+
+    assert "ADMIN_API_KEY" in str(exc_info.value)
+    assert fresh_settings.admin_api_key == ""

@@ -37,7 +37,7 @@ uv run python -c "from app.config import settings; print(settings.llm_provider, 
 | Mensagem no boot | Causa e correção |
 |---|---|
 | `ValidationError` do pydantic | Valor fora do domínio. Exemplos: `LLM_PROVIDER` aceita `ollama`, `openai` e `azure_openai`; `DATA_SOVEREIGNTY_MODE` aceita `strict` e `cloud_with_dlp`; `EMBEDDING_BACKEND` aceita `ollama` e `fastembed`. Booleanos são `true`/`false`. |
-| Recusa subir por chave ausente | Com `REQUIRE_AUTH=true`, `API_KEY`, `A2A_API_KEY` e `EVENT_MESH_API_KEY` precisam estar definidas. Sem `REQUIRE_AUTH`, a chave vazia é gerada no boot e só aparece no log. |
+| Recusa subir por chave ausente | Com `REQUIRE_AUTH=true`, `API_KEY`, `A2A_API_KEY`, `EVENT_MESH_API_KEY` e `ADMIN_API_KEY` precisam estar definidas. Sem `REQUIRE_AUTH`, a chave vazia é gerada no boot e só aparece no log. |
 | `ConfigurationError` sobre a chave de evidência | Com `DATABASE_URL` preenchida, `LLM_CREDENTIALS_MASTER_KEY` é obrigatória (DA-60). |
 | Variável "ignorada" | O pydantic **ignora** nomes que não são campos do `Settings`. Confira o nome exato em `app/config.py` ou no `.env.example`. A conexão com o Qdrant é por `QDRANT_URL` (URL completa), e não existe variável de porta separada. |
 | `.env` com BOM ou CRLF | `sed -i 's/\r//' .env` |
@@ -187,7 +187,7 @@ Postgres, Grafana e API.
 | "Migrações falharam" | O script para de propósito: subir a API com o schema velho seria pior. Leia o erro acima da mensagem. |
 | `PermissionError: '.env'` no container | O container lê o `.env` como uid 1000. Com `chmod 600` e outro dono, ele não consegue ler; use `chmod 644` ou ajuste o dono. |
 | Ingestão tenta o Ollama sem ele instalado | Defina `EMBEDDING_BACKEND=fastembed` no `.env`. |
-| Container tenta `127.0.0.1` para o banco | No modo container, o compose injeta `postgres:5432`. Para um banco externo, use `CONTAINER_DATABASE_URL`, não `DATABASE_URL`. |
+| Container tenta `127.0.0.1` para o banco | No modo container, a API só usa `CONTAINER_DATABASE_URL` (opt-in, IIC-AUD-405): `…@postgres:5432/iic` para o banco do compose ou o host de um banco externo — nunca `DATABASE_URL`. |
 
 ## 12. Kubernetes local (`scripts/k3d-validate.sh`)
 

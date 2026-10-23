@@ -20,7 +20,7 @@ resources:
 patches:
   - patch: |-
       $patch: delete
-      apiVersion: gateway.kyma-project.io/v1beta1
+      apiVersion: gateway.kyma-project.io/v2
       kind: APIRule
       metadata:
         name: integration-incident-copilot

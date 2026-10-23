@@ -424,7 +424,9 @@ def deterministic_document_id(source: str) -> str:
     sem reintroduzir a janela de indisponibilidade que este esquema
     evita). Para uma limpeza completa apos edicoes que reduzem
     bastante o numero de chunks de varios arquivos, use
-    `--reset-collection` (reindexa tudo do zero)."""
+    `--reset-collection` (reindexa tudo do zero). O mesmo vale para
+    arquivo APAGADO da base: nenhum run incremental (nem `--reset`, que so
+    limpa o estado local) remove os pontos dele (IIC-AUD-413)."""
     return str(uuid5(NAMESPACE_URL, f"ingest-document::{source}"))
 
 

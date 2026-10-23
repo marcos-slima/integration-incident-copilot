@@ -550,7 +550,7 @@ de ponta a ponta esta em `scripts/start-docker.sh`.
 
 ```mermaid
 flowchart TB
-    net(["Internet"]) --> ar["<b>APIRule</b><br/>handler noop: a autenticacao<br/>e da aplicacao (chaves e sessao)"]
+    net(["Internet"]) --> ar["<b>APIRule</b><br/>noAuth: a autenticacao<br/>e da aplicacao (chaves e sessao)"]
     ar --> svc["<b>Service</b> :80"]
     subgraph ns["namespace integration-incident-copilot (kustomization)"]
         svc
@@ -1038,7 +1038,7 @@ nunca aplicado direto, com todo valor prefixado `CHANGE-ME` (testado em
 `tests/test_kyma_manifests.py::test_secret_example_has_no_real_looking_values`).
 
 **APIRule** (módulo API Gateway do Kyma) expõe o Service pelo Istio
-Gateway gerenciado, com `accessStrategy: noop` - o Copilot já tem sua
+Gateway gerenciado, com `noAuth: true` (APIRule v2, IIC-AUD-402) - o Copilot já tem sua
 própria autenticação por API key em cada endpoint (DA-18/DA-23), então
 não duplica autenticação na camada de rede. Evoluir para `jwt`
 (validando tokens XSUAA do BTP) seria a evolução natural de uma

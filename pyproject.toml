@@ -105,8 +105,10 @@ prometheus = [
 ]
 
 [tool.uv]
-# IIC-AUD-313: uv 0.12.13 nao oferece Python 3.12.15 (lista termina em 3.12.14).
-# Dockerfile:41 fixa 0.12.17; CI setup-uv deve usar a mesma versao.
+# IIC-AUD-313/401: Dockerfile:41 e o setup-uv do CI fixam 0.12.17. Nenhuma
+# versao do uv ate a 0.12.17 oferece Python 3.12.15 para download (a lista
+# termina em 3.12.14), por isso `.python-version` fixa so a serie `3.12`; o
+# patch exato (3.12.15) fica na imagem base do Dockerfile.
 required-version = ">=0.12.17"
 
 # CVE-2026-97687/97688/97689 no urllib3 2.7.0 (fix: 2.8.0). urllib3 e'

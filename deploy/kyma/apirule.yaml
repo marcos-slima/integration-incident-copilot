@@ -2,40 +2,38 @@
 # Istio Gateway gerenciado pelo Kyma, sem precisar configurar Istio
 # VirtualService/Gateway manualmente.
 #
-# ATENCAO - risco de desatualizacao explicito: o schema do CRD APIRule
-# ja mudou de versao mais de uma vez na historia do Kyma (v1alpha1 ->
-# v1beta1, e o proprio v1beta1 teve campos renomeados entre releases
-# do modulo API Gateway). O que esta abaixo e o schema v1beta1 correto
-# ate o conhecimento deste projeto - NAO foi validado contra um cluster
-# Kyma real (nenhum cluster acessivel neste ambiente de
-# desenvolvimento, mesma limitacao ja registrada para Neo4j/Docker nas
-# fases DA-21/DA-19). Antes de aplicar de verdade, rode
-# `kubectl explain apirule.spec` (ou `kubectl api-resources | grep -i
-# apirule` para confirmar o apiVersion instalado) no cluster alvo e
-# ajuste este arquivo se o schema tiver mudado.
+# IIC-AUD-402 (2026-10-21): migrado de v1beta1 para v2. O v1beta1 foi
+# removido do modulo API Gateway: nao aceita mais create/edit, e desde a
+# release 3.10 nao e reconciliado (prazo de migracao no BTP: 19/08/2026
+# canal fast, 02/09/2026 regular). Fonte: "Migrate APIRule from Version
+# v1beta1 to Version v2" (kyma-project.io). Schema conferido contra o CRD
+# `config/crd/bases/gateway.kyma-project.io_apirules.yaml` do repositorio
+# kyma-project/api-gateway (versao v2: `hosts` e `rules` obrigatorios;
+# `methods` e `path` obrigatorios por regra).
 #
-# accessStrategy "noop" = sem autenticacao adicional do Istio/Kyma -
-# correto aqui porque o Copilot JA tem sua propria autenticacao por
-# API key em cada endpoint (X-API-Key, X-A2A-Api-Key,
-# X-Event-Mesh-Api-Key - DA-18/DA-23). Evoluir para "jwt" (validando
-# tokens XSUAA emitidos pelo BTP) seria a opcao natural se este projeto
-# avancar para o escopo "integracao com servicos BTP" descartado nesta
-# fase (ver conversa de escopo do DA-24) - troca a autenticacao por
-# token/roles do BTP em vez das API keys customizadas atuais.
+# Mudancas em relacao ao v1beta1:
+#   - `host` -> `hosts` (lista). Usamos o short host name (um rotulo RFC
+#     1123): o modulo completa com o dominio default do gateway, entao nao
+#     ha mais placeholder <CLUSTER_DOMAIN> para editar.
+#   - `accessStrategies: [{handler: noop}]` -> `noAuth: true` por regra.
+#     Sem autenticacao no gateway e correto aqui porque o Copilot ja
+#     autentica cada endpoint (X-API-Key, X-A2A-Api-Key,
+#     X-Event-Mesh-Api-Key, X-API-Admin-Key - DA-18/DA-23/DA-46). O caminho
+#     recomendado para producao e `jwt` com o IAS/XSUAA do subaccount
+#     (issuer + jwksUri), que troca as API keys por token/roles do BTP.
+#   - `/*` continua valido no v2 (equivale a `/{**}`).
 #
-# Proximo passo registrado (validacao 2026-10-07): o modulo API Gateway
-# atual usa APIRule v2 (gateway.kyma-project.io/v2), em que "noop" deixou
-# de existir - o equivalente e `noAuth: true` por regra, e o caminho
-# recomendado e `jwt` com o IAS/XSUAA do subaccount (issuer + jwksUri).
-# Migrar exige um cluster para validar o schema; ate la este arquivo segue
-# em v1beta1 e PRECISA ser conferido com `kubectl explain apirule.spec`.
-apiVersion: gateway.kyma-project.io/v1beta1
+# Ainda NAO validado contra um cluster Kyma real (trial bloqueado). Antes de
+# aplicar: `kubectl explain apirule.spec --api-version=gateway.kyma-project.io/v2`
+# e `kubectl apply --dry-run=server -k deploy/kyma`.
+apiVersion: gateway.kyma-project.io/v2
 kind: APIRule
 metadata:
   name: integration-incident-copilot
   namespace: integration-incident-copilot
 spec:
-  host: integration-incident-copilot.<CLUSTER_DOMAIN>
+  hosts:
+    - integration-incident-copilot
   service:
     name: integration-incident-copilot
     port: 80
@@ -46,5 +44,4 @@ spec:
       # admin (PATCH/DELETE em /admin/*) devolvia 404/405 no gateway, mesmo
       # funcionando local. OPTIONS nao e necessario (SPA same-origin).
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
-      accessStrategies:
-        - handler: noop
+      noAuth: true

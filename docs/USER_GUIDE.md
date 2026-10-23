@@ -356,6 +356,12 @@ O copilot só conhece o que está indexado. Caso novo resolvido → documento em
 uv run python -m app.rag.ingest --target incidents --reset
 ```
 
+`--reset` limpa só o estado local e reindexa os arquivos, sobrescrevendo os
+chunks de cada arquivo no lugar; ele **não** apaga a collection. Se você
+**removeu** ou **encolheu** documentos, os chunks antigos continuam no Qdrant
+e podem voltar no RAG — use `--reset-collection`, que apaga e recria a
+collection (IIC-AUD-413).
+
 ---
 
 ## Como construir um bom prompt

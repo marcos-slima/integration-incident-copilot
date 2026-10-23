@@ -4,6 +4,10 @@
 
 Para rodar localmente sem Docker (`uv run uvicorn app.main:app --reload`), veja [GETTING_STARTED.md](GETTING_STARTED.md).
 
+> **Fonte de verdade de implantação:** [DEPLOYMENT.md](DEPLOYMENT.md) (todos os cenários, com
+> o status do que foi validado). Este arquivo é o **detalhe do modo Docker Compose** —
+> armadilhas e troubleshooting — e é referenciado de lá (IIC-AUD-415).
+
 ---
 
 ## Pré-requisitos
@@ -26,20 +30,23 @@ cd integration-incident-copilot
 cp .env.example .env
 ```
 
-**Obrigatório antes de qualquer `docker compose`:** o `docker-compose.yml`
-usa `${VAR:?...}` para `POSTGRES_PASSWORD`, `GRAFANA_PASSWORD` e
-`NEO4J_PASSWORD`, e o Compose interpola todos os serviços, inclusive os de
-perfis inativos. No `.env.example` as três estão comentadas, então até
-`docker compose up -d` falha com `required variable POSTGRES_PASSWORD is
-missing a value`. Defina-as, junto com `LLM_CREDENTIALS_MASTER_KEY` — o
-compose sempre injeta `DATABASE_URL` na API, e com ela a API não sobe sem
-essa chave (DA-60):
+**Senhas antes de subir Postgres, Grafana ou Neo4j:** o `docker-compose.yml`
+usa `${VAR:-REQUIRED_SET_IN_ENV}` para `POSTGRES_PASSWORD`, `GRAFANA_PASSWORD`,
+`GRAFANA_DB_PASSWORD` e `NEO4J_PASSWORD`. A interpolação nunca falha (o Compose
+interpola todos os perfis), mas o sentinela é público: os três serviços
+**recusam subir** com ele e a API recusa `DATABASE_URL`/`NEO4J_PASSWORD` que o
+contenham (IIC-AUD-403). No modo container a persistência é opt-in: a API só
+recebe `DATABASE_URL` quando você define `CONTAINER_DATABASE_URL`
+(IIC-AUD-405), e com ela a API não sobe sem `LLM_CREDENTIALS_MASTER_KEY`
+(DA-60):
 
 ```bash
 for v in POSTGRES_PASSWORD GRAFANA_PASSWORD NEO4J_PASSWORD; do
   echo "$v=$(python3 -c 'import secrets;print(secrets.token_urlsafe(24))')" >> .env
 done
 echo "LLM_CREDENTIALS_MASTER_KEY=$(python3 -c 'import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())')" >> .env
+# só se for usar o perfil observability com a API em container:
+echo "CONTAINER_DATABASE_URL=postgresql+asyncpg://iic:$(grep ^POSTGRES_PASSWORD= .env | cut -d= -f2-)@postgres:5432/iic" >> .env
 docker compose config -q   # sem saída = interpolação ok
 ```
 
@@ -132,8 +139,8 @@ Esperado: `{"status":"ok"}`.
 
 Se for usar persistência de incidentes (perfil `observability`), suba o
 Postgres e aplique as migrations do host — o Alembic lê `DATABASE_URL` do
-`.env`, que no host aponta para `127.0.0.1` (a API no container continua
-usando o `postgres` injetado pelo compose):
+`.env`, que no host aponta para `127.0.0.1`. A API no container usa
+`CONTAINER_DATABASE_URL` (host `postgres`), definida na seção 1:
 
 ```bash
 docker compose --profile observability up -d postgres grafana
@@ -233,8 +240,8 @@ atributos, retorna `422 Unprocessable Content`.
 | Container `api` reinicia sozinho com erro de DNS/`python-discovery` | `uv run` tentando sync sem rede | Ver seção 4 |
 | `401 Unauthorized` em `/diagnose` ou `/a2a` | Header `X-API-Key`/`X-A2A-Api-Key` ausente ou errado (DA-18: chave sempre exigida, gerada automaticamente se não configurada) | Ver a chave gerada no log de startup (`docker logs ... \| grep API_KEY`), ou configure `API_KEY`/`A2A_API_KEY` no `.env` |
 | `429 Too Many Requests` em `/diagnose`, `/a2a`, `/events/incident` ou `/admin` mesmo depois de corrigir a chave | O IP errou a chave `AUTH_FAILURES_PER_MINUTE` vezes (default 10) na janela de 60 s (`app/auth_guard.py`, SEC-03) | Esperar o minuto virar; atrás de proxy, conferir `FORWARDED_ALLOW_IPS` (ver [RATE_LIMITING.md](RATE_LIMITING.md)) |
-| `required variable POSTGRES_PASSWORD is missing a value` (ou `GRAFANA_PASSWORD`/`NEO4J_PASSWORD`) em qualquer `docker compose` | Senhas comentadas no `.env.example`; o Compose interpola os `:?` de todos os perfis | Ver seção 1 |
-| `DATABASE_URL configurada sem LLM_CREDENTIALS_MASTER_KEY valida` no startup da API | O compose sempre injeta `DATABASE_URL`; a evidência é cifrada (DA-60) | Ver seção 1 |
+| `... nao definida no .env (sentinela REQUIRED_SET_IN_ENV): recusando subir` no log de `postgres`/`grafana`/`neo4j` | Senha ausente no `.env`; o compose interpolou o sentinela público (IIC-AUD-403) | Ver seção 1 |
+| `DATABASE_URL configurada sem LLM_CREDENTIALS_MASTER_KEY valida` no startup da API | `CONTAINER_DATABASE_URL` (container) ou `DATABASE_URL` (nativo) definida sem a chave; a evidência é cifrada (DA-60) | Ver seção 1 |
 | `401 Unauthorized` em `/events/incident` | Header `X-Event-Mesh-Api-Key` ausente/errado, ou reusando `X-API-Key` por engano (DA-23: chave dedicada, não compartilhada com `/diagnose`/`/a2a`) | Ver a chave gerada no log de startup, ou configure `EVENT_MESH_API_KEY` no `.env` |
 | `422 Unprocessable Content` em `/events/incident` | Campo `type` diferente de `com.sap.integration.incident.detected.v1` (DA-23: único tipo reconhecido hoje), ou falta `specversion`/`id`/`source` (CloudEvents 1.0) | Ajustar o payload; o corpo do 422 indica o campo (`loc`) sem ecoar o valor enviado |
 | `307 Temporary Redirect` em `POST /mcp` | Faltou a barra final - `app.mount()` do Starlette redireciona `/mcp` → `/mcp/` antes de checar autenticação (comportamento padrão, não é bug do MCP) | Chame `/mcp/` (com barra final) diretamente, ou configure o cliente MCP para seguir redirects |
@@ -245,7 +252,7 @@ atributos, retorna `422 Unprocessable Content`.
 | `dependency failed to start: container ...-ollama-1 is unhealthy` | Stack antigo com `api`/`worker` dependendo do Ollama em container | O Ollama do host é o padrão; o container `ollama` só sobe com `--profile container-ollama` |
 | `401` mesmo com `API_KEY` no `.env` | A variável não chega ao container (precisa estar em `x-common-env`), ou há linhas `API_KEY=` duplicadas/vazias no `.env`, ou a chave foi colada na linha anterior (`.env` sem quebra de linha final) | `docker compose exec api env \| grep ^API_KEY` deve mostrar a chave; `grep -n ^API_KEY= .env` deve mostrar uma única linha |
 | `"/frontend/dist": not found` no build | O Vite gera em `../static/dist` (`outDir`), ou seja, `/static/dist` no estágio `frontend-build` | Dockerfile usa `COPY --from=frontend-build /static/dist static/dist` |
-| `CONTAINER_DATABASE_URL` com `@localhost` falha dentro do container | `localhost` é o próprio container. O `DATABASE_URL` do `.env` não chega ao container: `x-common-env` define `DATABASE_URL` (variável de ambiente vence o `.env` no Pydantic Settings) | Deixar `CONTAINER_DATABASE_URL` vazio (usa `@postgres:5432`, com `--profile observability`) ou apontar para um host alcançável pelo container. Não há como desligar o Postgres no modo container: o default sempre aponta para `postgres` |
+| `CONTAINER_DATABASE_URL` com `@localhost` falha dentro do container | `localhost` é o próprio container. O `DATABASE_URL` do `.env` não chega ao container: `x-common-env` define `DATABASE_URL` a partir de `CONTAINER_DATABASE_URL` (variável de ambiente vence o `.env` no Pydantic Settings) | Usar `@postgres:5432` (com `--profile observability`) ou um host alcançável pelo container. `CONTAINER_DATABASE_URL` vazio = sem persistência (IIC-AUD-405) |
 | Variável de `.env` com `$` interpretada como interpolação do Compose (warning `variable is not set`) | `$` literal em segredo (ex: `CAP_CLIENT_SECRET`) | Escapar como `$$` no `.env` |
 
 ---

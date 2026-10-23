@@ -149,10 +149,11 @@ def _ensure_api_keys_configured() -> None:
     ligado, uma chave efemera gerada aqui NAO e aceitavel - o operador
     pediu explicitamente que o processo RECUSE subir em vez de rodar
     com uma chave que ninguem documentou/distribuiu. Verificado ANTES
-    de qualquer geracao automatica, para as 3 chaves (api_key,
-    a2a_api_key, event_mesh_api_key - a ultima nao fazia parte do
-    pedido original da revisao, mas e a mesma categoria de risco;
-    ficar de fora seria inconsistente)."""
+    de qualquer geracao automatica, para as 4 chaves (api_key,
+    a2a_api_key, event_mesh_api_key e, desde a IIC-AUD-410,
+    admin_api_key - as duas ultimas nao faziam parte do pedido original
+    da revisao, mas sao a mesma categoria de risco; ficar de fora seria
+    inconsistente)."""
     if settings.require_auth:
         missing = [
             name
@@ -160,6 +161,10 @@ def _ensure_api_keys_configured() -> None:
                 ("API_KEY", settings.api_key),
                 ("A2A_API_KEY", settings.a2a_api_key),
                 ("EVENT_MESH_API_KEY", settings.event_mesh_api_key),
+                # IIC-AUD-410: a chave admin e a mesma categoria de risco. Sem
+                # ela, cada replica do HPA gerava uma chave admin diferente,
+                # que nem aparece no log - superficie /admin inutilizavel.
+                ("ADMIN_API_KEY", settings.admin_api_key),
             )
             if not value
         ]
@@ -242,9 +247,38 @@ def _ensure_evidence_key_configured() -> None:
         ) from exc
 
 
+# IIC-AUD-403: valor que o docker-compose.yml interpola quando a senha nao
+# foi definida no .env. E publico (esta no repositorio), entao nunca pode
+# chegar a uma credencial real.
+COMPOSE_PASSWORD_SENTINEL = "REQUIRED_SET_IN_ENV"
+
+
+def _ensure_no_compose_placeholder_secrets() -> None:
+    """IIC-AUD-403: recusa subir com o sentinela do compose numa credencial.
+
+    O sentinela mantem a interpolacao do compose valida em perfis inativos,
+    mas e um valor conhecido: antes, Postgres e API combinavam nele em
+    silencio e o banco ficava protegido por uma senha publica."""
+    suspeitos = [
+        nome
+        for nome, valor in (
+            ("DATABASE_URL", settings.database_url),
+            ("NEO4J_PASSWORD", settings.neo4j_password),
+        )
+        if COMPOSE_PASSWORD_SENTINEL in (valor or "")
+    ]
+    if suspeitos:
+        raise ConfigurationError(
+            f"{', '.join(suspeitos)} contem o sentinela {COMPOSE_PASSWORD_SENTINEL} do "
+            "docker-compose.yml (senha nao definida no .env). Defina a senha real "
+            "antes de subir - o sentinela e publico."
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _ensure_api_keys_configured()
+    _ensure_no_compose_placeholder_secrets()
     _ensure_evidence_key_configured()
     # DA-54: segredo HMAC dos cookies de sessao — vazio gera efemero
     # com WARNING, mesmo padrao DA-18 (nunca cookie sem assinatura)

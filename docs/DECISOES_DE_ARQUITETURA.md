@@ -83,7 +83,7 @@ final.
 | 67 | [57](#57-token-budgeting-e-orçamento-por-tarefa-da-67) | Token budgeting e orçamento por tarefa: tokenizer real (tiktoken), preços reais do registry, estimado × real |
 | 68 | [58](#58-matriz-de-falhas-e-failover-tipado-da-68) | Matriz de falhas e failover tipado: taxonomia fechada, mapear exceções → classe, definir retry/backoff/circuit/failover/escala |
 | 69 | [59](#59-checkpointing-e-execução-resumível-da-69) | Checkpointing e execução resumível: `checkpointer=PostgresSaver`, `thread_id` = id do incidente, retomada a partir do último nó concluído |
-| 70 | [60](#60-métricas-e-finops-da-70) | Métricas e FinOps: Prometheus (`llm_requests_total`, `llm_tokens_total`, `llm_cost_usd_total`, `llm_budget_deviation_ratio`, `diagnosis_duration_seconds`) |
+| 70 | [60](#60-métricas-e-finops-da-70) | Métricas e FinOps: Prometheus (`iic_llm_requests_total`, `iic_llm_tokens_total`, `iic_llm_cost_usd_total`, `iic_llm_budget_deviation_ratio`, `iic_diagnosis_latency_seconds`) |
 | 63 | [54](#54-skills-declarativas--yaml-como-fonte-de-verdade-para-capability-e-roteamento-da-63) | Skills declarativas — YAML como fonte de verdade para capability e roteamento (DA-63) |
 | 65 | [55](#55-degradação-graciosa-do-rag-quando-qdrant-cai-da-65) | Degradação graciosa do RAG: Qdrant cai → `_retrieve_hybrid` e `_retrieve_dense_only` retornam `[]` → rule engine ainda responde erros conhecidos; fluxo completo `/diagnose → run_diagnosis` pendente de teste de integração |
 | 71 | [66](#66-sanitização-do-resultado-de-busca-web-devolvido-ao-llm-da-71) | Resultado de busca web sanitizado e delimitado antes de voltar ao LLM (tool do ReAct e `web_search_node`) |
@@ -94,7 +94,7 @@ final.
 | 76 | [71](#71-aviso-de-ia-no-relatório-e-api-da-76) | Aviso de IA — texto embutido no template do relatório, chave `ai_warning` no catálogo (pt-BR + en), campo `DiagnosisResponse.ai_warning` |
 | 82 | [72](#72-rollback-de-deployment-da-82) | Rollback de deployment — tabelas `snapshot_table`/`rollback_log` (schema apenas); endpoint removido até existir mecanismo real de rollback |
 | 83 | [74](#74-explicabilidade-xai-da-83) | Explicabilidade XAI — campo `explanation` em `DiagnosisResponse`, função `_build_xai_explanation` |
-| 86 | [77](#77-ui-versionamento-rag-da-86) | UI versionamento RAG: tabela `knowledge_document_versions`, endpoints REST (schema apenas; DA-86 candidata) |
+| 86 | [77](#77-ui-versionamento-rag-da-86) | UI versionamento RAG: tabela `knowledge_document_versions`, API de registro de versões sem efeito no índice (DA-86 candidata) |
 | 87 | [79](#79-dashboard-por-domínio-da-87) | Dashboard de Performance por Domínio: endpoint `/admin/metrics/domains` com janela `days` (default 30), métricas count/hit@1/latência/custo por domain (sap/saas/generic) |
 | 88 | [78](#78-testes-de-escalonamento-da-88) | Testes de escalonamento: script load_test.py com métricas p50/p95/p99 e TPS (DA-88) |
 | 89 | [80](#80-relatórios-compliance-da-89) | Relatórios compliance: endpoint export PDF/XLSX (DA-89) |
@@ -798,7 +798,7 @@ CPU - resposta direta a uma limitação já identificada na revisão do
 DA-23: picos de eventos aumentam chamadas simultâneas ao LLM Gateway),
 ConfigMap e um `secret.example.yaml` — template com todo valor
 prefixado `CHANGE-ME`, nunca aplicado direto. O `APIRule` (módulo API
-Gateway do Kyma) usa `accessStrategy: noop`, já que o Copilot tem sua
+Gateway do Kyma) usa `noAuth: true` (APIRule v2 desde a IIC-AUD-402; antes, `accessStrategy: noop` do v1beta1), já que o Copilot tem sua
 própria autenticação por API key em cada endpoint (DA-18/DA-23) — não
 duplica autenticação na camada de rede.
 
@@ -2975,18 +2975,25 @@ Cada classe define: retry? backoff? abre circuito? failover? escala?
 
 **A solução.** Métricas FinOps viáveis com o que existe:
 
-- `llm_requests_total`: contagem de chamadas LLM por provider
-- `llm_tokens_total`: tokens (in/out) por provider
-- `llm_cost_usd_total`: custo em USD por provider
-- `llm_budget_deviation_ratio`: desvio estimado/real
-- `diagnosis_duration_seconds`: duração por dominínio
+- `iic_llm_requests_total`: contagem de chamadas LLM por `provider`/`model`
+- `iic_llm_tokens_total`: tokens por `provider`/`model`/`token_type` (input/output)
+- `iic_llm_cost_usd_total`: custo em USD por `provider`/`model`
+- `iic_llm_budget_deviation_ratio`: desvio estimado/real (histograma)
+- `iic_diagnosis_latency_seconds`: latência do pipeline por `agent_domain`/`llm_provider` (histograma)
 
-Dashboards: estender os existentes e passar em `scripts/validate_dashboards.py`.
+Os nomes são os registrados em `app/metrics.py` (prefixo `iic_`; IIC-AUD-407 corrigiu
+a versão anterior desta lista, sem o prefixo e com `diagnosis_duration_seconds`, que
+não existe).
+
+Dashboards: os painéis FinOps fornecidos são **SQL** (datasource Postgres, tabelas
+`llm_usage`/`incidents`) e passam em `scripts/validate_dashboards.py`. O Grafana do
+compose não provisiona datasource Prometheus: as métricas acima só aparecem em
+`/metrics`, para um Prometheus externo.
 
 **Implementação.**
 - `app/metrics.py`: métricas Prometheus
 - `app/admin/metering.py`: já tem `record_usage_observed()`
-- `grafana/dashboards/`: dashboards FinOps
+- `deploy/grafana/dashboards/`: dashboards FinOps (SQL)
 
 **Validação.**
 - `tests/test_metrics_finops.py`: testes de métricas
@@ -3271,20 +3278,27 @@ variantes de forma sistemática com métricas quantitativas.
 
 ### 77. UI versionamento RAG (DA-86)
 
-> **Status (2026-10-21, R4-205): candidata.** Apenas o schema existe
-> (`knowledge_document_versions`, migration 026). Os endpoints
-> `/admin/knowledge/...` e a UI **não** foram implementados.
+> **Status (2026-10-21, R4-205 / IIC-AUD-406): candidata.** Existem o schema
+> (`knowledge_document_versions`, migration 026) e quatro endpoints de **registro**
+> de versões em `app/admin/routes.py` (`X-API-Admin-Key`):
+> `POST|GET /admin/api/knowledge/documents/{id}/versions`,
+> `GET /admin/api/knowledge/documents/{id}/history` e
+> `POST /admin/api/knowledge/documents/{id}/rollback/{version}`. Nada no ingest ou
+> no retriever lê a tabela: o "rollback" só marca `is_current` e **não muda o que o
+> RAG recupera**. A UI não existe. (A R4 registrou "endpoints não implementados";
+> a IIC-AUD-406 corrigiu a prosa para o que o código faz.)
 
 **Motivo.** O histórico de versões de documentos de conhecimento (RAG) permite
 reverter para versões anteriores em caso de degradação ou erro introduzido.
 
 **Decisão.**
 - Tabela `knowledge_document_versions`: armazena versões de documentos com `is_current`
-- Endpoints: `/admin/knowledge/documents/{id}/versions`, `/rollback/{version}`, `/history/{id}`
+- Endpoints (paths reais): `/admin/api/knowledge/documents/{id}/versions`, `/history`, `/rollback/{version}`
 - UI: visualização de histórico e botão de rollback
 
 **O que NÃO foi feito.**
-- Endpoints e UI **não implementados** (falta em `frontend/src/admin/knowledge/`)
+- Integração com o ingest/retriever: a versão corrente não é o que está indexado
+- UI de histórico e rollback
 
 ### 78. Testes de Escalonamento (DA-88)
 

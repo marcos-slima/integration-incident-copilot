@@ -96,6 +96,21 @@ def test_apirule_targets_the_same_service():
     assert doc["spec"]["service"]["name"] == "integration-incident-copilot"
 
 
+def test_apirule_usa_v2_e_nao_o_v1beta1_removido():
+    """IIC-AUD-402: o v1beta1 foi removido do modulo API Gateway (sem
+    create/edit). O v2 troca `host` por `hosts` (lista) e
+    `accessStrategies: [{handler: noop}]` por `noAuth: true` por regra."""
+    doc = _load("apirule.yaml")
+    assert doc["apiVersion"] == "gateway.kyma-project.io/v2"
+    spec = doc["spec"]
+    assert "host" not in spec
+    assert spec["hosts"] and all(isinstance(h, str) for h in spec["hosts"])
+    for rule in spec["rules"]:
+        assert "accessStrategies" not in rule
+        assert rule["methods"] and rule["path"]
+        assert rule.get("noAuth") is True or "jwt" in rule
+
+
 def test_secret_example_has_no_real_looking_values():
     """Todo valor do template deve comecar com o marcador CHANGE-ME -
     protege contra alguem commitar um segredo real por engano dentro

@@ -1390,7 +1390,10 @@ async def get_ontology_hierarchy(
 
 
 # ---------------------------------------------------------------------------
-# DA-86: versionamento de documentos RAG (UI /admin/knowledge/documents)
+# DA-86 (candidata): REGISTRO de versoes de documentos RAG.
+# IIC-AUD-406: nada no ingest/retriever le `knowledge_document_versions`.
+# Criar versao ou fazer "rollback" so muda esta tabela (`is_current`) - o
+# indice do Qdrant, que e o que o RAG recupera, nao muda. Nao ha UI.
 # ---------------------------------------------------------------------------
 
 
@@ -1495,7 +1498,10 @@ async def knowledge_version_history(document_id: str, session: SessionDep) -> di
 async def rollback_knowledge_version(
     document_id: str, version: int, session: SessionDep
 ) -> dict[str, Any]:
-    """DA-86: marca uma versão anterior como ativa (rollback)."""
+    """DA-86: marca uma versão anterior como ativa no registro.
+
+    Não reindexa nada: o RAG continua recuperando o que está no Qdrant
+    (IIC-AUD-406)."""
     if session is None:
         raise api_error(503, "db_not_configured", "Persistencia nao configurada")
 

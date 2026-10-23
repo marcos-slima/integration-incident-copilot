@@ -34,9 +34,10 @@ data:
   # a colecao no Qdrant tem que ser (re)ingerida com o MESMO backend
   # (EMBEDDING_BACKEND=fastembed python scripts/ingest.py ...), senao o
   # embedding_guard recusa a consulta por identidade divergente.
-  # EMBEDDING_MODEL abaixo so vale para EMBEDDING_BACKEND=ollama.
+  # IIC-AUD-416: EMBEDDING_MODEL saiu deste ConfigMap - com fastembed o modelo
+  # e fixo (app/rag/retriever.py::FASTEMBED_MODEL) e a variavel era ignorada.
+  # Ao voltar para EMBEDDING_BACKEND=ollama, defina EMBEDDING_MODEL junto.
   EMBEDDING_BACKEND: "fastembed"
-  EMBEDDING_MODEL: "nomic-embed-text"
   # Qdrant precisa ser implantado separadamente no cluster (Helm chart
   # oficial da Qdrant, ou um servico gerenciado) - este ConfigMap so
   # assume que ele e alcancavel neste DNS interno do namespace.
@@ -113,7 +114,8 @@ data:
   # DA-18: em producao a API nao pode subir com chave efemera por replica
   # (o HPA roda 2-6 pods e cada uma geraria uma chave diferente, causando
   # 401 intermitente). Com REQUIRE_AUTH=true, o lifespan aborta o startup
-  # se API_KEY/A2A_API_KEY/EVENT_MESH_API_KEY nao vierem do Secret.
+  # se API_KEY/A2A_API_KEY/EVENT_MESH_API_KEY/ADMIN_API_KEY nao vierem do
+  # Secret (ADMIN_API_KEY desde a IIC-AUD-410).
   REQUIRE_AUTH: "true"
   # B-07: timeout em segundos dos probes Qdrant/Ollama do /ready
   # (app/main.py::_probe_infra_services; Redis usa socket timeout proprio).

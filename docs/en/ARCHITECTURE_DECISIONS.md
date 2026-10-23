@@ -707,7 +707,7 @@ CPU - direct response to a limitation already identified in the review of
 DA-23: event spikes increase simultaneous calls to the LLM Gateway),
 ConfigMap and a `secret.example.yaml` — template with all values
 prefixed `CHANGE-ME`, never applied directly. The `APIRule` (Kyma API
-Gateway module) uses `accessStrategy: noop`, since the Copilot has its
+Gateway module) uses `noAuth: true` (APIRule v2 since IIC-AUD-402; previously the v1beta1 `accessStrategy: noop`), since the Copilot has its
 own API key authentication on each endpoint (DA-18/DA-23) — does not
 duplicate authentication at the network layer.
 
@@ -769,7 +769,7 @@ real one after the 2026-10-20 technical audit; the detailed findings are in
 | DA-83 | Delivered | `explanation` in `DiagnosisResponse` and `_build_xai_explanation` |
 | DA-84 | Candidate | Table, ORM and repository; version/rollback endpoints are missing |
 | DA-85 | Candidate | Table, ORM and repository; experiments endpoints and `_run_ab_test()` are missing |
-| DA-86 | Delivered | Version/history/rollback endpoints; the history UI is still pending |
+| DA-86 | Candidate (2026-10-21) | Version-registry endpoints under `/admin/api/knowledge/documents/{id}/...`; no effect on the RAG index and no UI (IIC-AUD-406) |
 | DA-87 | Delivered | `/admin/metrics/domains` with a `days` window; duplicate `/admin/dashboard/domains` removed |
 | DA-88 | Delivered | `app/scripts/load_test.py`, config and `tests/test_load_testing.py` (3 tests) |
 | DA-89 | Delivered | PDF/XLSX compliance export |

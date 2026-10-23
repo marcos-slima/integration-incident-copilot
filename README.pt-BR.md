@@ -93,8 +93,9 @@ git clone https://github.com/marcos-slima/integration-incident-copilot.git
 cd integration-incident-copilot
 uv sync
 
-# Configuração local. O compose exige as três senhas mesmo para serviços que
-# você não vai subir; a API_KEY é fixada para o curl abaixo usá-la.
+# Configuração local. Os serviços do compose recusam subir com a senha
+# placeholder pública, então gere senhas reais; a API_KEY é fixada para o curl
+# abaixo usá-la.
 cp .env.example .env
 echo "EMBEDDING_BACKEND=fastembed" >> .env   # embeddings no processo, sem Ollama
 for v in API_KEY POSTGRES_PASSWORD GRAFANA_PASSWORD NEO4J_PASSWORD; do

@@ -152,6 +152,105 @@ Correções da auditoria técnica R3 (2026-10-20, `IIC-AUD-101`…`114`).
 ### Pendente
 - Nenhum item aberto da R5.
 
+---
+
+## Correções da auditoria R6 (2026-10-21, `IIC-AUD-401`…`419`)
+
+Relatório: `AUDITORIA_R6_IIC_2026-10-21.md` (Project, pasta `claude/`). Três
+correções anteriores estavam incompletas e foram refeitas: **313** (pin do
+Python), **201/303** (sentinela de senha) e **205** (prosa da DA-86).
+
+### Corrigido
+- **IIC-AUD-401** `.python-version` passa a fixar só a série `3.12`. Nenhuma
+  versão do uv até a 0.12.17 oferece CPython 3.12.15 para download (a lista
+  termina em 3.12.14), então `uv python install` falhava no CI e `uv sync`
+  falhava em máquina sem 3.12.15 de sistema. O patch exato continua na imagem
+  (`python:3.12.15-slim`). Comentários do `pyproject.toml` e do `tests.yml`
+  corrigidos.
+- **IIC-AUD-402** `deploy/kyma/apirule.yaml` migrado para
+  `gateway.kyma-project.io/v2` (`hosts` com short host name, `noAuth: true`).
+  O v1beta1 foi removido do módulo API Gateway. Manifest validado contra o
+  schema do CRD publicado em `kyma-project/api-gateway`, não contra um cluster.
+  Overlay `deploy/local`, README do Kyma, `DEPLOYMENT.md`, `ARCHITECTURE.md`
+  (pt/en) e a prosa da DA-24 atualizados; teste novo em
+  `tests/test_kyma_manifests.py`.
+- **IIC-AUD-403** O sentinela `REQUIRED_SET_IN_ENV` deixou de ser uma senha
+  utilizável: Postgres, Grafana e Neo4j têm entrypoint que **recusa subir** com
+  ele (verificado com as imagens reais), e a API recusa `DATABASE_URL` ou
+  `NEO4J_PASSWORD` que o contenham
+  (`app/main.py::_ensure_no_compose_placeholder_secrets`).
+- **IIC-AUD-404** Docs que descreviam `${VAR:?}` e o erro `required variable
+  ... is missing a value` (que não existe mais) reescritos: `DEPLOY.md` (pt/en),
+  `GETTING_STARTED.md` (pt/en), `MANUAL.md`, `README.md`, `README.pt-BR.md`,
+  `CLAUDE.md` e o comentário do worker no compose.
+- **IIC-AUD-405 — quebra de compatibilidade local:** no modo container a
+  persistência é **opt-in**. `DATABASE_URL` da API, do worker e do reporter vem
+  só de `CONTAINER_DATABASE_URL`; vazio = sem banco. Antes, o default apontava
+  sempre para o serviço `postgres`, que só existe no perfil `observability`: sem
+  ele, cada `/diagnose` tentava gravar num host inexistente e o boot exigia
+  `LLM_CREDENTIALS_MASTER_KEY`. **Ação:** quem usa o perfil `observability`
+  com a API em container precisa definir no `.env`
+  `CONTAINER_DATABASE_URL=postgresql+asyncpg://iic:<senha>@postgres:5432/iic`
+  (`scripts/start-docker.sh` já deriva o valor do `DATABASE_URL` nativo).
+  O job `compose-smoke` passou a subir com `.env` vazio, provando que a API
+  sobe sem master key e sem banco.
+- **IIC-AUD-406** DA-86: a prosa (DECISOES §77, índice, `CLAUDE.md`, registro
+  em inglês) agora descreve os 4 endpoints de registro de versões que existem
+  em `/admin/api/knowledge/...`, e diz que eles **não alteram o índice RAG**.
+  A DA continua candidata.
+- **IIC-AUD-407** DA-70: nomes das métricas Prometheus alinhados com
+  `app/metrics.py` (`iic_*`; `iic_diagnosis_latency_seconds` em vez de
+  `diagnosis_duration_seconds`, que não existia). Registrado que os dashboards
+  fornecidos são SQL e que `/metrics` exige um Prometheus externo; KPI do
+  `ROADMAP.md` reescrito como PromQL.
+- **IIC-AUD-408** Testes que nunca rodavam no CI passam a rodar:
+  `test_checkpointing_postgres.py` e `test_bloco3_observabilidade.py` no job
+  `migrations_and_dashboards` (24 testes verdes contra Postgres real nesta
+  rodada), `test_admin_ui_browser.py` no novo job `browser` (Playwright via
+  `uv run --with`, 6 testes verdes) e `test_security.py` com master key gerada
+  por teste. A duplicata de cifra em `test_security_audit.py` foi removida.
+- **IIC-AUD-409** Testes herméticos: `test_contracts_observe.py` não roda mais
+  o pipeline real ao emitir drift (a emissão é registrada), e
+  `test_ingest.py` não abre conexão com o Qdrant de `:6333`. A suíte termina
+  sem aviso de conexão do `qdrant_client`.
+- **IIC-AUD-410** `REQUIRE_AUTH=true` passa a exigir também `ADMIN_API_KEY`;
+  `secret.example.yaml` ganhou `ADMIN_API_KEY` e `SESSION_SECRET`, e
+  `scripts/k3d-validate.sh` cria a chave admin.
+- **IIC-AUD-411** Worker do compose recebe a URL do Redis por `RQ_REDIS_URL`,
+  não mais por `--url` na linha de comando.
+- **IIC-AUD-412** Healthcheck do Postgres usa `POSTGRES_USER`/`POSTGRES_DB`.
+- **IIC-AUD-413** `USER_GUIDE.md` (pt/en) e o docstring do ingest registram que
+  `--reset` não remove chunks de arquivos apagados/encolhidos (use
+  `--reset-collection`); `scripts/start-docker.sh --reset-rag` passou a usar
+  `--reset-collection`, como a mensagem já prometia. O `INGEST_REFERENCE.md` do
+  Project foi reescrito contra o `--help` atual.
+- **IIC-AUD-414** Scripts de tradução avulsos (4 `.py` com caminho absoluto da
+  máquina local e 2 `.txt`) movidos para `docs/interno/` (ignorado); os três
+  scripts manuais restantes estão listados em `CLAUDE.md`.
+- **IIC-AUD-415** `DEPLOYMENT.md` declarado fonte de verdade de implantação;
+  `DEPLOY.md` (pt/en) escopado como detalhe e troubleshooting do Compose.
+- **IIC-AUD-416** `EMBEDDING_MODEL` removido do ConfigMap Kyma (ignorado com
+  `EMBEDDING_BACKEND=fastembed`).
+- **IIC-AUD-418** Números de testes e cobertura atualizados no `README.md` e no
+  `MANUAL.md` (1957 passed, 17 skipped; 83 %).
+- **IIC-AUD-419** (achado durante a validação da R6) Com o embedder (Ollama)
+  fora do ar, `/diagnose` respondia 500 mesmo nos casos que o rule engine
+  resolve. A DA-65 passou a cobrir o embedder: falha de **transporte**
+  (`ConnectionError`, `httpx.TransportError`) degrada para "sem contexto";
+  erro de aplicação continua propagando
+  (`app/rag/retriever.py::_embed_query_or_none`). Verificado com a imagem real
+  no compose sem Ollama: diagnóstico `rule_engine:sap_idoc_status_51`, sem 500.
+
+### Sem mudança de código
+- **IIC-AUD-417** (Info) `mypy app` completo tem 114 erros em 34 arquivos;
+  segue a adoção incremental do `[tool.mypy]`.
+
+### Pendente
+- **IIC-AUD-402:** validar o APIRule v2 num cluster Kyma
+  (`kubectl apply --dry-run=server -k deploy/kyma`) quando o trial liberar.
+- Cabeçalhos `source commit` dos docs de `docs/en/` alterados nesta rodada
+  apontam para o commit anterior até o próximo commit.
+
 
 ## [1.4.0] — 2026-10-20
 

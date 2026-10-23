@@ -64,12 +64,12 @@ log "1/6 Verificando pré-requisitos..."
 command -v docker >/dev/null || die "docker não encontrado."
 command -v ollama >/dev/null || warn "ollama não encontrado — inferência pode falhar se LLM_PROVIDER=ollama"
 [[ -f "$PROJECT_DIR/.env" ]] || die ".env não encontrado. Execute: cp .env.example .env e preencha."
-# O compose interpola TODOS os serviços, inclusive os de perfis que não vão
-# subir: sem estas variáveis qualquer `docker compose` falha (fail-closed,
-# sem senha default). Melhor dizer aqui do que no meio do passo 3.
+# Sem estas variáveis o compose interpola o sentinela público
+# REQUIRED_SET_IN_ENV, e Postgres/Grafana/Neo4j recusam subir com ele
+# (IIC-AUD-403). Melhor dizer aqui do que no meio do passo 3.
 for var in POSTGRES_PASSWORD GRAFANA_PASSWORD NEO4J_PASSWORD; do
   grep -Eq "^${var}=.+" "$PROJECT_DIR/.env" \
-    || die "$var vazia no .env - o docker-compose.yml exige (mesmo sem usar o serviço)."
+    || die "$var vazia no .env - o serviço correspondente recusa subir com o sentinela do compose."
 done
 ok "Pré-requisitos OK"
 
@@ -120,6 +120,10 @@ else
     # quando POSTGRES_HOST_PORT publica outra porta no host (antes so o host
     # era trocado e a migracao tentava postgres:<porta do host>).
     CONTAINER_URL=$(echo "$DATABASE_URL" | sed -E 's#@(localhost|127\.0\.0\.1)(:[0-9]+)?/#@postgres:5432/#')
+    # IIC-AUD-405: no modo container a API so recebe DATABASE_URL via
+    # CONTAINER_DATABASE_URL; derivamos do DATABASE_URL nativo quando o .env
+    # nao define uma (o valor do shell vence o .env na interpolacao).
+    export CONTAINER_DATABASE_URL="${CONTAINER_DATABASE_URL:-$CONTAINER_URL}"
     (cd "$PROJECT_DIR" && \
       docker compose --profile observability run --rm \
         -e DATABASE_URL="$CONTAINER_URL" \
@@ -151,7 +155,9 @@ else
   # A-06: --reset só com a flag explícita --reset-rag.
   INGEST_FLAGS=(--target incidents)
   if [[ "$RESET_RAG" == "true" ]]; then
-    INGEST_FLAGS+=(--reset)
+    # IIC-AUD-413: --reset so limpa o estado local; recriar a collection
+    # (o que a mensagem promete) e --reset-collection.
+    INGEST_FLAGS+=(--reset-collection)
     warn "RAG reset solicitado — collection sera recriada"
   fi
   docker compose run --rm --entrypoint /app/.venv/bin/python api -m app.rag.ingest "${INGEST_FLAGS[@]}"

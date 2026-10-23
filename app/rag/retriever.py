@@ -17,6 +17,7 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
+import httpx
 import numpy as np
 from fastembed import SparseTextEmbedding, TextEmbedding
 from langchain_ollama import OllamaEmbeddings
@@ -161,6 +162,32 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
     return float(np.dot(a_arr, b_arr) / denom)
 
 
+# IIC-AUD-419: falhas de TRANSPORTE do embedder (Ollama fora do ar ou
+# inalcancavel). O cliente `ollama` converte httpx.ConnectError em
+# `ConnectionError` builtin; timeouts chegam como httpx.TimeoutException.
+# Erro de aplicacao (modelo inexistente, resposta invalida) NAO entra aqui -
+# mesmo criterio do DA-20 (learnings: transporte degrada, aplicacao propaga).
+EMBEDDER_UNAVAILABLE_EXCEPTIONS: tuple[type[BaseException], ...] = (
+    ConnectionError,
+    httpx.TransportError,
+)
+
+
+def _embed_query_or_none(query: str, collection_name: str) -> list[float] | None:
+    """DA-65 estendida (IIC-AUD-419): sem embedder o RAG degrada para "sem
+    contexto", como ja fazia sem Qdrant. Antes, Ollama fora do ar derrubava
+    /diagnose com 500 inclusive nos casos que o rule engine resolve sem LLM."""
+    try:
+        return _get_embeddings().embed_query(query)
+    except EMBEDDER_UNAVAILABLE_EXCEPTIONS as exc:
+        _logger.warning(
+            "[retriever] embedder indisponivel (%s) — continuando sem contexto: %s",
+            collection_name,
+            exc,
+        )
+        return None
+
+
 def _retrieve_hybrid(query: str, collection_name: str, top_k: int) -> list[dict]:
     client = _get_qdrant_client()
     # DA-45: um vetor de consulta de um modelo comparado com pontos de
@@ -169,7 +196,9 @@ def _retrieve_hybrid(query: str, collection_name: str, top_k: int) -> list[dict]
     # query.
     _prov, _modelo = embedding_identity()
     verify_once(client, collection_name, _modelo, provider=_prov)
-    dense_query = _get_embeddings().embed_query(query)
+    dense_query = _embed_query_or_none(query, collection_name)
+    if dense_query is None:
+        return []
     sparse_query = _sparse_query_vector(query)
 
     # DA-25: pool de candidatos da fusao RRF maior que top_k - antes,
@@ -269,7 +298,9 @@ def _retrieve_dense_only(
     # DA-45: mesma verificacao da perna hibrida - ver _retrieve_hybrid.
     _prov, _modelo = embedding_identity()
     verify_once(client, collection_name, _modelo, provider=_prov)
-    query_vector = _get_embeddings().embed_query(query)
+    query_vector = _embed_query_or_none(query, collection_name)
+    if query_vector is None:
+        return []
 
     try:
         results = client.query_points(

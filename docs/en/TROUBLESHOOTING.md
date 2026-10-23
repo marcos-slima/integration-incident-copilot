@@ -38,7 +38,7 @@ uv run python -c "from app.config import settings; print(settings.llm_provider, 
 | Boot message | Cause and fix |
 |---|---|
 | `ValidationError` from pydantic | Value out of domain. Examples: `LLM_PROVIDER` accepts `ollama`, `openai` and `azure_openai`; `DATA_SOVEREIGNTY_MODE` accepts `strict` and `cloud_with_dlp`; `EMBEDDING_BACKEND` accepts `ollama` and `fastembed`. Booleans are `true`/`false`. |
-| Refuses to start due to missing key | With `REQUIRE_AUTH=true`, `API_KEY`, `A2A_API_KEY` and `EVENT_MESH_API_KEY` must be defined. Without `REQUIRE_AUTH`, the empty key is generated at boot and only appears in the log. |
+| Refuses to start due to missing key | With `REQUIRE_AUTH=true`, `API_KEY`, `A2A_API_KEY`, `EVENT_MESH_API_KEY` and `ADMIN_API_KEY` must be defined. Without `REQUIRE_AUTH`, the empty key is generated at boot and only appears in the log. |
 | `ConfigurationError` about the evidence key | With `DATABASE_URL` filled, `LLM_CREDENTIALS_MASTER_KEY` is mandatory (DA-60). |
 | Variable "ignored" | Pydantic **ignores** names that are not fields of `Settings`. Check the exact name in `app/config.py` or in the `.env.example`. The connection to Qdrant is by `QDRANT_URL` (full URL), and there is no separate port variable. |
 | `.env` with BOM or CRLF | `sed -i 's/\r//' .env` |
@@ -188,7 +188,7 @@ Postgres, Grafana and API.
 | "Migrations failed" | The script stops on purpose: bringing up the API with the old schema would be worse. Read the error above the message. |
 | `PermissionError: '.env'` in the container | The container reads the `.env` as uid 1000. With `chmod 600` and another owner, it cannot read; use `chmod 644` or adjust the owner. |
 | Ingestion tries the Ollama without it installed | Set `EMBEDDING_BACKEND=fastembed` in the `.env`. |
-| Container tries `127.0.0.1` for the database | In container mode, the compose injects `postgres:5432`. For an external database, use `CONTAINER_DATABASE_URL`, not `DATABASE_URL`. |
+| Container tries `127.0.0.1` for the database | In container mode, the API only uses `CONTAINER_DATABASE_URL` (opt-in, IIC-AUD-405): `…@postgres:5432/iic` for the compose database or the host of an external database — never `DATABASE_URL`. |
 
 ## 12. Language: screen or diagnosis in the wrong language
 

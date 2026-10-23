@@ -32,14 +32,16 @@ uv sync
 The `docker-compose.yml` uses `${VAR:-REQUIRED_SET_IN_ENV}` for
 `POSTGRES_PASSWORD`, `GRAFANA_PASSWORD`, `GRAFANA_DB_PASSWORD` and
 `NEO4J_PASSWORD`. Compose interpolates **all** services, even those of inactive
-profiles, but the sentinel `REQUIRED_SET_IN_ENV` is not a valid password: the
-API and Postgres start with the same placeholder and authentication fails
-explicitly. `.env.example` leaves these variables empty/commented on purpose.
-Generate the passwords before the first compose command.
+profiles, so interpolation never fails — but the sentinel `REQUIRED_SET_IN_ENV`
+is public: Postgres, Grafana and Neo4j **refuse to start** with it, and the API
+refuses a `DATABASE_URL`/`NEO4J_PASSWORD` that contains it (IIC-AUD-403).
+`.env.example` leaves these variables empty/commented on purpose. Generate the
+passwords before starting those profiles.
 
 Also generate `LLM_CREDENTIALS_MASTER_KEY` (Fernet key): with `DATABASE_URL`
-configured the API **does not start** without it (DA-60), and in container mode
-the compose always injects `DATABASE_URL`.
+configured the API **does not start** without it (DA-60). In container mode
+persistence is opt-in: the API only receives `DATABASE_URL` when
+`CONTAINER_DATABASE_URL` is set (IIC-AUD-405, see step 5b).
 
 ```bash
 for v in POSTGRES_PASSWORD GRAFANA_PASSWORD NEO4J_PASSWORD; do
@@ -139,12 +141,19 @@ NEO4J_URI=bolt://127.0.0.1:7687     # only if GRAPH_RAG_ENABLED=true
 docker compose --profile observability --profile graphrag up -d
 ```
 
+First set in `.env` the database URL **as the container sees it**
+(persistence in container mode is opt-in, IIC-AUD-405):
+
+```bash
+echo "CONTAINER_DATABASE_URL=postgresql+asyncpg://iic:$(grep ^POSTGRES_PASSWORD= .env | cut -d= -f2-)@postgres:5432/iic" >> .env
+```
+
 Access http://localhost:8000. Here the `.env` **does not** define the hosts: the
-`x-common-env` of `docker-compose.yml` injects `QDRANT_URL`, `DATABASE_URL`
-and `NEO4J_URI` with the internal names (`qdrant`, `postgres`, `neo4j`) as
-environment variables, which take precedence over the `.env` built in
-the container. The container does not see the host loopback, so `127.0.0.1`
-only works in native mode.
+`x-common-env` of `docker-compose.yml` injects `QDRANT_URL` and `NEO4J_URI` with
+the internal names (`qdrant`, `neo4j`) and `DATABASE_URL` from
+`CONTAINER_DATABASE_URL`, as environment variables, which take precedence over
+the `.env` mounted in the container. The container does not see the host
+loopback, so `127.0.0.1` only works in native mode.
 
 The Ollama is from the host, via `OLLAMA_HOST=http://host.docker.internal:11434`
 (fixed in `x-common-env`). This only works if the native Ollama listens on
@@ -334,11 +343,11 @@ docker compose up -d qdrant
 
 **`could not translate host name "postgres"` (container mode)**
 The `postgres` service is not up. In container mode the `DATABASE_URL` of
-the `.env` is not used: `x-common-env` always injects `DATABASE_URL` pointing
-to `postgres` (or to `CONTAINER_DATABASE_URL`), and the environment variable
-takes precedence over the `.env`. Start the database with
-`docker compose --profile observability up -d postgres`, or define
-`CONTAINER_DATABASE_URL` for an external Postgres (see step 5b).
+the `.env` is not used: `x-common-env` injects `DATABASE_URL` from
+`CONTAINER_DATABASE_URL`, and the environment variable takes precedence over
+the `.env`. Start the database with
+`docker compose --profile observability up -d postgres`, or point
+`CONTAINER_DATABASE_URL` to an external Postgres (see step 5b).
 
 **Native Postgres refuses connection**
 The `.env` needs `127.0.0.1:5432`, not `postgres:5432` — `postgres` is the

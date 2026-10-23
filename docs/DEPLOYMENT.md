@@ -1,8 +1,12 @@
 # Deploy do Integration Incident Copilot — todos os cenários
 
-Documento único de implantação. Substitui a necessidade de juntar `GETTING_STARTED.md`,
-`DEPLOY.md` e `deploy/kyma/README.md`: aqui estão todos os cenários, cada um com o
-próprio passo a passo e **o status honesto do que já foi validado**.
+Fonte de verdade de implantação: aqui estão todos os cenários, cada um com o próprio
+passo a passo e **o status honesto do que já foi validado**. Os outros três documentos
+continuam, com escopo próprio e subordinado a este (IIC-AUD-415):
+[`GETTING_STARTED.md`](GETTING_STARTED.md) é o primeiro contato (desenvolvimento local),
+[`DEPLOY.md`](DEPLOY.md) é o detalhe e o troubleshooting do Docker Compose e
+[`deploy/kyma/README.md`](../deploy/kyma/README.md) é o leia-me dos manifests. Em caso de
+divergência, vale este arquivo.
 
 | Cenário | Status | Seção |
 |---|---|---|
@@ -43,9 +47,11 @@ serviço, não hosts. No modo nativo, `DATABASE_URL=…@postgres:5432/iic` dá
 `could not translate host name "postgres"`, e a falha parece ser de rede quando é de
 configuração.
 
-Para apontar um container a um banco **externo** (RDS, Cloud SQL, BTP), use
-`CONTAINER_DATABASE_URL` e `CONTAINER_NEO4J_URI` — elas não colidem com as variáveis
-do modo nativo. Ver `.env.example:337`.
+No modo container a persistência é **opt-in** (IIC-AUD-405): a API só recebe
+`DATABASE_URL` quando `CONTAINER_DATABASE_URL` está definida — `…@postgres:5432/iic`
+para o Postgres do compose (perfil `observability`) ou o host de um banco **externo**
+(RDS, Cloud SQL, BTP). `CONTAINER_DATABASE_URL` e `CONTAINER_NEO4J_URI` não colidem
+com as variáveis do modo nativo. Ver `.env.example:337`.
 
 ### Decisão 2 — Ollama é **nativo** ou containerizado, e é a Decisão 1 de novo
 
@@ -65,15 +71,10 @@ inaceitável em produção.
 Por isso existe `REQUIRE_AUTH` (`.env.example:217`):
 
 - `REQUIRE_AUTH=false` (default) → gera chave efêmera e **avisa em log ALTO**.
-- `REQUIRE_AUTH=true` → o processo **recusa subir** se `API_KEY`, `A2A_API_KEY` ou
-  `EVENT_MESH_API_KEY` estiverem vazias. Não há geração automática.
-
-> ⚠️ **`REQUIRE_AUTH` não cobre `ADMIN_API_KEY`.** A verificação em
-> `app/main.py::_ensure_api_keys_configured` lista as 3 chaves de máquina; a admin é
-> tratada separadamente em `app/admin/security.py::ensure_admin_key_configured`, que
-> **também só avisa** e gera efêmera. Com `REQUIRE_AUTH=true` e `ADMIN_API_KEY` vazia, o
-> `/admin` sobe com chave que só existe no log de startup. **Configure `ADMIN_API_KEY`
-> manualmente** — é a única forma de fixá-la.
+- `REQUIRE_AUTH=true` → o processo **recusa subir** se `API_KEY`, `A2A_API_KEY`,
+  `EVENT_MESH_API_KEY` ou `ADMIN_API_KEY` estiverem vazias. Não há geração automática.
+  (`ADMIN_API_KEY` entrou na lista com a IIC-AUD-410; antes ela ficava efêmera mesmo
+  com `REQUIRE_AUTH=true`.)
 
 ---
 
@@ -489,7 +490,7 @@ REQUIRE_AUTH=true
 API_KEY=<token forte>
 A2A_API_KEY=<token forte>
 EVENT_MESH_API_KEY=<token forte>
-ADMIN_API_KEY=<token forte>      # NÃO coberto pelo REQUIRE_AUTH — configure à mão
+ADMIN_API_KEY=<token forte>      # coberto pelo REQUIRE_AUTH desde a IIC-AUD-410
 ```
 
 Gere tokens com `python -c "import secrets;print(secrets.token_urlsafe(32))"`.
@@ -579,7 +580,7 @@ Bundle completo em `deploy/kyma/` (10 arquivos: `deployment.yaml`, `service.yaml
 ```bash
 # 1. build + push da imagem para registry acessível pelo cluster
 # 2. deployment.yaml: troque <REGISTRY>/<TAG>
-# 3. apirule.yaml: troque <CLUSTER_DOMAIN>
+# 3. apirule.yaml: nada a trocar (short host name; o domínio vem do gateway)
 # 4. segredos: NUNCA commitar preenchido — copie secret.example.yaml
 kubectl apply -f deploy/kyma/namespace.yaml
 cp deploy/kyma/secret.example.yaml /tmp/secret.yaml   # edite com valores reais
@@ -603,18 +604,20 @@ kubectl -n integration-incident-copilot rollout status deployment/integration-in
 - **Neo4j** — continua opt-in; ligar exigiria implantá-lo fora do bundle.
 - **Indexação** — rode o ingest contra o Qdrant do cluster **uma vez**, depois que ele
   estiver de pé.
-- **`accessStrategy: noop`** no `APIRule` assume que a API key por endpoint (DA-18/DA-23)
+- **`noAuth: true`** no `APIRule` assume que a API key por endpoint (DA-18/DA-23)
   basta. Migrar para `jwt`/XSUAA seria a evolução natural, mas foi
   **escopo explicitamente descartado** nesta fase. Não anuncie XSUAA como implementado.
 
 ### E.3. Conferir o schema do `APIRule`
 
-O schema do CRD mudou mais de uma vez na história do Kyma. O `apiVersion:
-gateway.kyma-project.io/v1beta1` é o correto até onde vai o conhecimento deste projeto.
-**Confira contra o cluster alvo antes de aplicar:**
+O manifest usa `gateway.kyma-project.io/v2` (IIC-AUD-402). O v1beta1 foi removido do
+módulo API Gateway: não aceita create/edit e, desde a release 3.10, não é reconciliado.
+O arquivo foi conferido contra o schema do CRD publicado em `kyma-project/api-gateway`,
+não contra um cluster. **Confira contra o cluster alvo antes de aplicar:**
 
 ```bash
-kubectl explain apirule.spec
+kubectl explain apirule.spec --api-version=gateway.kyma-project.io/v2
+kubectl apply --dry-run=server -k deploy/kyma/
 ```
 
 ---
@@ -829,8 +832,8 @@ Praticamente o mesmo código. O que muda:
    serviço), **não** `127.0.0.1`.
 2. **Neo4j**: a senha do volume só vale na primeira subida; se o volume já existiu, a
    senha do `.env` não muda a do banco (ver B.3).
-3. **Chaveiras fixas** para o cliente — `REQUIRE_AUTH=true` e as 4 chaves (ver D.1,
-   incluindo a `ADMIN_API_KEY`, que o `REQUIRE_AUTH` não cobre).
+3. **Chaves fixas** para o cliente — `REQUIRE_AUTH=true` e as 4 chaves (ver D.1;
+   o `REQUIRE_AUTH` recusa subir sem qualquer uma delas).
 4. **Soberania**: `DATA_SOVEREIGNTY_MODE=strict` é o default e o que o on-prem pede.
 5. **Sem `reference_library` na imagem** — ela é ingerida, não copiada (ver C.5).
 

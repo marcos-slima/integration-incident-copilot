@@ -122,6 +122,15 @@ jobs:
           IIC_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
         run: uv run pytest tests/test_contracts_e2e.py -v
 
+      # IIC-AUD-408: estes testes pulam sem IIC_TEST_DATABASE_URL e por isso
+      # nunca rodavam no CI. Cobrem a retomada do grafo pelo PostgresSaver
+      # sem PII (DA-69/75) e o upsert atomico sob concorrencia (M-11). Usam
+      # o MESMO Postgres efemero, ja migrado acima.
+      - name: Checkpoint Postgres (DA-69/75) e concorrencia (M-11)
+        env:
+          IIC_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: uv run pytest tests/test_checkpointing_postgres.py tests/test_bloco3_observabilidade.py -v
+
   llm_eval:
     name: promptfoo — gate de LLM
     # Manual: o provider dos configs e local (exec:) e precisa de Ollama,

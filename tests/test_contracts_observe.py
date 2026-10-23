@@ -124,13 +124,29 @@ class TestSemBanco:
 
 
 class TestDiffAoLongoDoTempo:
+    @pytest.fixture(autouse=True)
+    def emissoes(self, monkeypatch):
+        """IIC-AUD-409: um drift breaking chama `emit_incident`, que roda o
+        pipeline de diagnostico inteiro (Qdrant, LLM, Postgres). Num teste
+        unitario isso tentava conectar no QDRANT_URL real - e, na maquina de
+        quem tem a stack de pe, poderia consultar o LLM e gravar incidente.
+        Aqui a emissao so e registrada."""
+        chamadas: list[tuple] = []
+
+        def _fake_emit(report, *, connector_type):
+            chamadas.append((report, connector_type))
+            return True
+
+        monkeypatch.setattr(observe_module, "emit_incident", _fake_emit)
+        return chamadas
+
     def test_segunda_observacao_identica_e_clean(self, monkeypatch):
         contract = parse_odata_metadata(EDMX_BEFORE)
         monkeypatch.setattr(observe_module, "_load_baseline", lambda key: contract)
         report = observe(system_key="cap_prod", contract=contract, connector_type="odata")
         assert report.status is ObservationStatus.CLEAN
 
-    def test_campo_removido_vira_breaking(self, monkeypatch):
+    def test_campo_removido_vira_breaking(self, monkeypatch, emissoes):
         before = parse_odata_metadata(EDMX_BEFORE)
         after = parse_odata_metadata(
             edmx_with('<Property Name="MessageId" Type="Edm.String" MaxLength="10"/>')
@@ -139,6 +155,7 @@ class TestDiffAoLongoDoTempo:
         report = observe(system_key="cap_prod", contract=after, connector_type="odata")
         assert report.status is ObservationStatus.DRIFT
         assert report.is_breaking
+        assert [ct for _, ct in emissoes] == ["odata"]
 
     def test_campo_novo_e_additive_sem_incidente(self, monkeypatch):
         before = parse_odata_metadata(EDMX_BEFORE)

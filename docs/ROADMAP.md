@@ -116,7 +116,7 @@ Este documento descreve o plano de execução para o Integration Incident Copilo
 | Métrica | Meta | Como medir |
 |---|---|---|
 | Hit@1 baseline | ≥90% | `promptfoo eval --filter-metadata path=llm` |
-| Tempo de diagnóstico (p95) | ≤15s | `diagnosis_duration_seconds` no Prometheus |
+| Tempo de diagnóstico (p95) | ≤15s | `histogram_quantile(0.95, sum by (le) (rate(iic_diagnosis_latency_seconds_bucket[5m])))` num Prometheus externo (`PROMETHEUS_ENABLED=true`) |
 | UI de RAG usada | ≥10 uploads/semana | Logs do Admin UI |
 | Comparison A/B testado | ≥1x/semana | Endpoint `/admin/models/compare` usage |
 | Deploy k3d validado | 100% dos merges | CI/CD status |

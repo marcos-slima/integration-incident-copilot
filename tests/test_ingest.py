@@ -119,6 +119,10 @@ def test_run_ingest_returns_zero_when_nothing_pending(tmp_path, monkeypatch):
     # identidade (se a collection existir), mas e' ruido para este teste
     # (queremos medir so o return code). Stub para no-op tambem.
     monkeypatch.setattr(ingest_module, "stamp_existing_collection", lambda *a, **kw: None)
+    # IIC-AUD-409: QdrantClient(url=...) consulta a versao do servidor ao ser
+    # criado - sem stub, o teste unitario tentava o Qdrant real em :6333.
+    monkeypatch.setattr(ingest_module, "QdrantClient", lambda **kw: object())
+    monkeypatch.setattr(ingest_module, "get_query_embeddings", lambda: object())
 
     result = ingest_module.run_ingest(
         "incidents", limit=None, excludes=[], reset_state=False, reset_collection=False

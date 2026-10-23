@@ -124,7 +124,7 @@ flowchart TB
 | Modo | O `.env` precisa de | O que quebra se errar |
 |---|---|---|
 | nativo | hosts de loopback: `DATABASE_URL=postgresql://…@127.0.0.1:5432/iic` | `postgres` **não resolve na máquina** — é nome de serviço da rede do compose |
-| container | nada: o compose injeta `postgres`, `qdrant` e `neo4j` por default em `x-common-env` | apontar o `.env` para `127.0.0.1` quebra o container |
+| container | nada para `qdrant` e `neo4j` (o compose injeta os nomes de serviço em `x-common-env`); persistência só com `CONTAINER_DATABASE_URL=postgresql+asyncpg://iic:<POSTGRES_PASSWORD>@postgres:5432/iic` (IIC-AUD-405) | apontar o `.env` para `127.0.0.1` quebra o container |
 
 Para apontar o container a um banco externo use
 `CONTAINER_DATABASE_URL` / `CONTAINER_NEO4J_URI` / `CONTAINER_REDIS_URL`, que
@@ -162,8 +162,10 @@ Duas escolhas foram feitas aí, de propósito:
   gera uma chave aleatória a cada boot e nenhum cliente MCP, A2A ou `curl`
   consegue autenticar duas vezes seguidas.
 
-O compose exige as três senhas (`POSTGRES_PASSWORD`, `GRAFANA_PASSWORD`,
-`NEO4J_PASSWORD`) mesmo para serviços que você não vai subir.
+Sem as senhas (`POSTGRES_PASSWORD`, `GRAFANA_PASSWORD`, `NEO4J_PASSWORD`) o
+compose interpola o sentinela público `REQUIRED_SET_IN_ENV`, e Postgres,
+Grafana e Neo4j **recusam subir** com ele (IIC-AUD-403). Gere-as antes de
+subir esses perfis.
 
 ### Veja executar — o ambiente responde antes de qualquer código
 
@@ -1612,7 +1614,7 @@ uv run pytest tests/ -m "not integration" --collect-only -q | tail -1   # total 
 ```
 
 O CI roda `-m "not integration"` com `--cov-fail-under=80`. No último build
-registrado no [`README.md`](../README.md): **1943 testes, 84 % de cobertura**.
+registrado no [`README.md`](../README.md): **1957 testes, 83 % de cobertura** (2026-10-21).
 O número muda a cada commit — use o `--collect-only` acima em vez de confiar em
 qualquer documento, inclusive este.
 

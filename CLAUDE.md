@@ -72,11 +72,13 @@ docker compose --profile graphrag up -d neo4j      # opt-in
 > compose; muda só onde o processo Python roda. No modo **nativo** o `.env`
 > precisa de hosts de loopback — `DATABASE_URL=…@127.0.0.1:5432/iic` — e
 > `postgres` **não resolve na máquina** (é nome de serviço na rede do
-> compose). No modo **container** é o inverso: o compose injeta `postgres`,
-> `qdrant` e `neo4j` por default em `x-common-env`, então apontar o `.env`
-> para `127.0.0.1` quebra o container. Para apontar o container a um banco
-> externo, use `CONTAINER_DATABASE_URL` / `CONTAINER_NEO4J_URI`, que não
-> colidem com as variáveis do modo nativo.
+> compose). No modo **container** é o inverso: o compose injeta `qdrant` e
+> `neo4j` por default em `x-common-env`, então apontar o `.env` para
+> `127.0.0.1` quebra o container. A persistência no container é **opt-in**
+> (IIC-AUD-405): a API só recebe `DATABASE_URL` com
+> `CONTAINER_DATABASE_URL=postgresql+asyncpg://iic:<senha>@postgres:5432/iic`
+> (ou o host de um banco externo). `CONTAINER_DATABASE_URL` /
+> `CONTAINER_NEO4J_URI` não colidem com as variáveis do modo nativo.
 >
 > O `NEO4J_URI`/`NEO4J_USER`/`NEO4J_PASSWORD` faltavam do `x-common-env`
 > até este estado: o serviço `neo4j` existia no perfil `graphrag` mas a API
@@ -86,8 +88,9 @@ docker compose --profile graphrag up -d neo4j      # opt-in
 > `NEO4J_AUTH` do Neo4j só vale na **primeira inicialização** do volume.
 > Trocar a senha no `.env` depois não troca a senha do banco — precisa
 > remover o volume `integration-incident-copilot_neo4j_data`. Sem
-> `NEO4J_PASSWORD` no `.env`, o serviço sobe com o placeholder
-> `neo4j/REQUIRED_SET_IN_ENV` e falha em `verify_connectivity()`.
+> `NEO4J_PASSWORD` no `.env`, o compose interpola o sentinela público
+> `REQUIRED_SET_IN_ENV` e o serviço **recusa subir** (IIC-AUD-403; o mesmo
+> vale para Postgres e Grafana).
 >
 > **`GRAPH_RAG_ENABLED=false` é o default** (`app/config.py`) e é a flag
 > real — o `CLAUDE.md` antigo citava uma flag USE_GRAPH_RAG, que não existe.
@@ -227,7 +230,11 @@ scripts/            # benchmark_rerankers.py, generate_reports.py,
                     # validate_dashboards.py (45 queries Grafana vs Postgres real),
                     # coverage_map.py (DA-58: gera docs/COVERAGE_MAP.md),
                     # graph_diagram.py (gera o grafo Mermaid de ARCHITECTURE.md e README.md),
-                    # quality_gate.py (DA-51)
+                    # quality_gate.py (DA-51). Manuais (precisam da API ou do
+                    # promptfoo no ar; NAO sao testes do pytest, que so coleta
+                    # tests/): test_sec03_rate_limit.py, test_hybrid_local.py,
+                    # run_test.sh. Os scripts de traducao avulsos foram para
+                    # docs/interno/ (ignorado) na IIC-AUD-414
 docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_ARQUITETURA.md, GETTING_STARTED.md,
                     # TUTORIAL_ARQUITETURA_DEBUG.md, TROUBLESHOOTING.md,
                     # QUALITY_GATES.md, COVERAGE_MAP.md (DA-58, GERADO),
@@ -301,7 +308,7 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
 | DA-67 | Token budgeting e orçamento por tarefa: tokenizer `cl100k_base` (aproximação; fallback `len//4` para qualquer falha de carga), preços do registry, orçamento por diagnóstico em memória por `incident_id` (`DIAGNOSIS_BUDGET_USD`, reserva `LLM_BUDGET_RESERVE_RATIO`), débito do custo real, `BudgetExhaustedError` → `BUDGET_EXHAUSTED`, ledger estimado × real (migration `018_create_llm_budget_ledger.py`) | `app/llm/budget.py`, `app/llm/gateway.py`, `app/llm/routing.py`, `app/admin/repository.py`, `tests/test_budget_ledger.py`, `tests/test_tokenizer_offline.py` |
 | DA-68 | Matriz de falhas e failover tipado: taxonomia fechada (`transient`, `rate_limited/quota`, `unavailable`, `timeout`, `context_limit`, `output_limit`, `budget_exhausted`, `validation_error`, `quality_failure`), mapear exceções → classe, definir retry/backoff/circuit/failover/escala por classe | `app/llm/factory.py`, `app/llm/gateway.py`, `tests/test_llm_gateway.py` |
 | DA-69 | Checkpointing opt-in (`CHECKPOINTING_ENABLED`, default OFF): `PostgresSaver` com redação de PII no `put`/`put_writes` (`RedactingCheckpointMixin`; valores inline no jsonb incluídos), URL SQLAlchemy normalizada para libpq, `thread_id` = `incident_id` passado por nome, retomada nativa do LangGraph sem reexecutar nós concluídos; retomada lê estado redigido | `app/agent/checkpointing.py`, `app/agent/graph.py`, `tests/test_checkpointing.py`, `tests/test_checkpointing_postgres.py` |
-| DA-70 | Métricas e FinOps: métricas Prometheus (`llm_requests_total`, `llm_tokens_total`, `llm_cost_usd_total`, `llm_budget_deviation_ratio`, `diagnosis_duration_seconds`), dashboards estendidos, validar com `scripts/validate_dashboards.py` | `app/metrics.py`, `app/admin/metering.py`, `deploy/grafana/dashboards/` |
+| DA-70 | Métricas e FinOps: métricas Prometheus (`iic_llm_requests_total`, `iic_llm_tokens_total`, `iic_llm_cost_usd_total`, `iic_llm_budget_deviation_ratio`, `iic_diagnosis_latency_seconds`), em `/metrics` (exige um Prometheus externo: os dashboards fornecidos leem só o Postgres — `llm_usage`/`incidents`), dashboards SQL validados com `scripts/validate_dashboards.py` | `app/metrics.py`, `app/admin/metering.py`, `deploy/grafana/dashboards/` |
 | DA-71 | Resultado de busca web sanitizado (`sanitize_untrusted_input`), limitado, URL reduzida e bloco delimitado como dado não confiável antes de voltar ao LLM — tool do ReAct e `web_search_node` | `app/agent/nodes.py::format_untrusted_web_hits`, `tests/test_web_search_injection.py` |
 | DA-72 | Roteamento por registro de modelos: no modo gerenciado cada modelo habilitado de `llm_models` é candidato do Policy Engine; parâmetros por modelo (transporte, janela, capacidades que só restringem a origem, domínios, nível, prioridade, limite mensal bloqueante), score custo × latência com pesos em configuração, circuito por origem, failover pela lista, simulador em `/admin/models` (migration 020) | `app/llm/routing.py`, `app/llm/registry_routing.py`, `app/llm/gateway.py`, `app/admin/` (models, repository, routes, `static/models.js`), `alembic/versions/020_registry_routing.py` |
 | DA-73 | UI web e Admin UI no idioma do navegador: `?lng` → cookie `iic_locale` (compartilhado) → `Accept-Language`/`navigator.languages` → `en`; catálogos pt-BR/en, `react-i18next` no React, `t()` + catálogo JSON embutido (CSP intacta) no admin, `Intl` para data/número/moeda, erros com `code` estável (`CodedHTTPException`), pseudo-locale `xx`, gate `ui_i18n` | `frontend/src/i18n/`, `app/i18n/` (`__init__`, `checks`, `inventory`, `locales/`), `app/api_errors.py`, `app/admin/ui.py`, `app/admin/templates/`, `app/admin/static/`, `scripts/i18n_inventory.py` |
@@ -310,7 +317,7 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
 | DA-76 | Aviso de IA — alerta de que o diagnóstico é produto de IA: chave `ai_warning` no catálogo de conteúdo (`pt-BR` default e `en`); campo obrigatório `ai_warning` em `DiagnosisResponse` (string vazia como default); texto do aviso embutido na template Markdown do `report.template`; UI exibe o aviso quando presente | `app/i18n/locales/content.*.json`, `app/models/models.py::DiagnosisResponse`, `app/agent/nodes.py::report_node`, `app/agent/graph.py` |
 | DA-82 | Rollback de deployment — tabelas `snapshot_table`/`rollback_log` (schema apenas); endpoint removido até existir mecanismo real de rollback | `alembic/versions/aa5bc901f443_da_82_rollback_de_deployment_com_.py` |
 | DA-83 | Explicabilidade XAI — campo `explanation` em `DiagnosisResponse` com texto Highlight dos chunks usados, função `_build_xai_explanation` | `app/models/models.py`, `app/agent/nodes.py`, `app/i18n/locales/content.*.json` |
-| DA-86 | UI versionamento RAG: tabela `knowledge_document_versions`, endpoints `/admin/knowledge/documents/{id}/versions`, `/rollback/{version}`, `/history/{id}` | `app/admin/models.py::KnowledgeDocumentVersion`, `app/admin/routes.py`, `alembic/versions/026_add_knowledge_document_versions_table.py` (schema apenas; DA-86 rebaixada em 2026-10-21) |
+| DA-86 | UI versionamento RAG: tabela `knowledge_document_versions` e API de registro de versões `/admin/api/knowledge/documents/{id}/versions` (POST/GET), `/history` (GET), `/rollback/{version}` (POST) — **sem efeito no índice RAG** (o retriever não lê a tabela) e sem UI (IIC-AUD-406) | `app/admin/models.py::KnowledgeDocumentVersion`, `app/admin/routes.py`, `alembic/versions/026_add_knowledge_document_versions_table.py` (DA-86 candidata desde 2026-10-21) |
 | DA-87 | Dashboard de Performance por Domínio: endpoint `/admin/metrics/domains` com janela `days` (default 30), métricas count/hit@1/latência/custo por domain (sap/saas/generic) | `app/admin/metrics.py`, `app/admin/routes.py`, `tests/test_domain_metrics.py` |
 | DA-88 | Testes de escalonamento: script `app/scripts/load_test.py` com métricas p50/p95/p99 e TPS, config `tests/load_test_config.py`, 3 testes em `tests/test_load_testing.py` | `app/scripts/load_test.py`, `tests/load_test_config.py`, `tests/test_load_testing.py` |
 | DA-89 | Relatórios automatizados de compliance export: endpoint `/admin/reports/compliance/export?format=pdf|xlsx`, relatório com resumo/quality/auditoria, export PDF e XLSX | `app/admin/reports.py`, `tests/test_compliance_reports.py` |
@@ -344,8 +351,13 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
     endpoints `/admin/api/prompt/...` não foram implementados. Permanece candidata.
   - **DA-85 (A/B testing).** Tabela, ORM e repositório existem; não há endpoint de
     experimentos nem `_run_ab_test()`. Permanece candidata.
+  - **DA-86 (versionamento RAG).** Tabela, ORM e quatro endpoints de **registro** de
+    versões (`/admin/api/knowledge/documents/{id}/versions|history|rollback/{v}`,
+    `X-API-Admin-Key`) existem; nada no ingest/retriever lê a tabela, então um
+    "rollback" só muda `is_current` e **não altera o índice** — e não há UI.
+    Permanece candidata até o ingest consumir a versão corrente (IIC-AUD-406).
   - **Histórico.** A prosa original continua em `docs/DECISOES_DE_ARQUITETURA.md`
-    §73, §75 e §76, marcada como candidata; não há force-push nem remoção de
+    §73, §75, §76 e §77, marcada como candidata; não há force-push nem remoção de
     commits.
 - **DA-80 — rebaixada para candidata (2026-10-21, R4-206).**
   - **O que existe.** `app/validation/pii.py` (`PIIValidator`) e

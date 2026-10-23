@@ -89,8 +89,9 @@ git clone https://github.com/marcos-slima/integration-incident-copilot.git
 cd integration-incident-copilot
 uv sync
 
-# Local configuration. The compose file requires the three passwords even for
-# services you do not start; API_KEY is fixed so the curl below can use it.
+# Local configuration. The compose services refuse to start with the public
+# placeholder password, so generate real ones; API_KEY is fixed so the curl
+# below can use it.
 cp .env.example .env
 echo "EMBEDDING_BACKEND=fastembed" >> .env   # in-process embeddings, no Ollama
 for v in API_KEY POSTGRES_PASSWORD GRAFANA_PASSWORD NEO4J_PASSWORD; do
@@ -195,7 +196,7 @@ Variables, demo identifiers and how to add a connector:
 | Retrieval on the bundled evaluation set (90 in-scope queries, 20 out of scope) | Hit@1 95.6 % (86/90, 95 % CI 89.1–98.3 %), Hit@3 97.8 %, MRR 0.967; 19 of 20 out-of-scope queries rejected | `scripts/eval_rag.py`, fastembed, local run 2026-10-18; CI job `rag-quality` re-measures |
 | Quality gates | 23 deterministic checks: dataset, reranker invariant, prompt digest vs. the measured prompt, documentation links, symbols and environment variables, connector reachability, UI and content i18n | CI job `deterministic` |
 | Database | migrations applied and checked; the 45 dashboard queries and the contract-drift end-to-end tests run against a real PostgreSQL | CI job `migrations_and_dashboards` |
-| Test coverage | 1943 tests passing, 84% code coverage (10 276 lines; 1 688 uncovered) | CI job `tests` |
+| Test coverage | 1957 tests passing, 83% code coverage (10 294 lines; 1 728 uncovered) | CI job `tests` |
 
 The evaluation set is small, and the chosen reranker's advantage over the
 baseline (ms-marco-L6) is one query out of 18, which is not statistically
@@ -241,8 +242,8 @@ The table below maps each capability to its implementation status and evidence.
 | HITL a posteriori | VER | `POST /incidents/{id}/verify`, `main.py:777-884` | SQL, `VERIFIED_AS` (if GraphRAG on), Langfuse score |
 | HITL before action | AUS | `policy.py: approval_required` exists; `approved` depends on "not implemented in v1" mechanism | No action to approve today |
 | Langfuse | VER | `observe_span` in retrieve, graph_enrich, graph_write, web_search, 3 specialists, report and root; CallbackHandler on LLM | supervisor and connector not instrumented |
-| Tests | VER | `-m "not integration"`: 1943 passed, 21 skipped, 17 deselected, 0 failures | Without Qdrant, Ollama and Neo4j |
-| Coverage | VER | 84% (10 276 lines; 1 688 uncovered); CI requires ≥80% | |
+| Tests | VER | `-m "not integration"`: 1957 passed, 17 skipped, 17 deselected, 0 failures (2026-10-21, IIC-AUD-418) | Without Qdrant, Ollama, Neo4j and Postgres; the Postgres and browser tests run in their own CI jobs |
+| Coverage | VER | 83% (10 294 lines; 1 728 uncovered), measured in the same hermetic run; CI requires ≥80% | The CI log of the `test` job is the reference number |
 | Quality gates | VER | 23 defined (`gates.py`); 21 PASS, 2 WARN, 0 FAIL | WARN: reranker, deployed model |
 | CI | VER | `tests.yml` (lint, tests, security, compose smoke, rag-quality, neo4j-smoke) and `quality.yml` | |
 | Kyma | PARC | `deploy/kyma/` + `deploy/local/` | Applied to real Kubernetes (k3d, 2026-10-18); APIRule/Istio/BTP OIDC not validated |
@@ -263,7 +264,7 @@ Each of these is documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 ## Current status (2026-10-20)
 
 - ✅ All 16 remediation phases completed
-- ✅ 1943 tests passing (unit, without integration), 84% code coverage
+- ✅ 1957 tests passing (unit, without integration), 83% code coverage
 - ✅ Quality gate: 21 PASS, 2 WARN
 - ✅ README corrected: 28 rules (22 hardcoded + 6 SKOS), 55 sections, CIO 2025 source
 - ✅ Evidence matrix added with implementation status (VER/NVAL/OPC/PARC/AUS)

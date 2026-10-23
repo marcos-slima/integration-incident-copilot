@@ -150,6 +150,13 @@ Se o hook rodar ruff e reformatar arquivos → `git add` novamente + re-commit.
 **Nunca usar** valores com prefixo `sk-` em testes (dispara gitleaks).
 **Nunca usar** nomes de campo como `api_key` ou `generic-api-key` em valores de teste.
 
+**Material sensível vai SÓ para `docs/secrets-local/`** (no `.gitignore`):
+senhas, chaves, tokens, certificados e URLs/usuários de teste com valores
+reais. Nunca gravar esse conteúdo em outro arquivo do repositório, nunca
+`git add -f` nessa pasta e nunca citar os valores em commit, PR ou issue.
+Documentação versionada cita só o **nome** da variável (`API_KEY`), nunca o
+valor. `docs/interno/` é para notas de trabalho **sem** segredo.
+
 ---
 
 ## Estrutura de pastas relevantes

@@ -223,6 +223,12 @@ PATH="$PWD/.venv/bin:$PATH" git commit -m "feat(DA-N): description"
 - **Never** use values with the `sk-` prefix in tests (triggers gitleaks).
 - **Never** use literal field names like `api_key` or `generic-api-key` as test
   values.
+- **Sensitive material goes ONLY to `docs/secrets-local/`** (gitignored):
+  passwords, keys, tokens, certificates and test URLs/users with real values.
+  Never write that content to any other repository file, never `git add -f`
+  that folder, never quote the values in commits, PRs or issues. Versioned docs
+  name the variable (`API_KEY`), never its value. `docs/interno/` is for work
+  notes **without** secrets.
 
 ---
 

@@ -216,6 +216,8 @@ echo "SESSION_SECRET=$(python3 -c 'import secrets;print(secrets.token_urlsafe(32
 - **Senha do volume.** Postgres e Neo4j só aplicam a senha na **primeira**
   inicialização do volume. Trocar no `.env` depois não muda a senha do
   banco; recrie o volume (`docker compose down -v` apaga os dados).
+- **Anotações com valores reais** (senhas, chaves, URLs de teste) ficam só em
+  `docs/secrets-local/`, que nunca é versionado.
 - **Ver os valores** no seu terminal (nunca em ticket ou chat):
   `grep -E '^(API_KEY|A2A_API_KEY|EVENT_MESH_API_KEY|ADMIN_API_KEY|POSTGRES_PASSWORD|GRAFANA_PASSWORD|NEO4J_PASSWORD)=' .env`
 

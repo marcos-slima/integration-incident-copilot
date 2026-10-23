@@ -87,10 +87,8 @@ docs/interno/
 # nao versionado. O conteudo continua no disco, mas fora do historico.
 docs/dossier/
 
-# Documentos de uso pessoal do mantenedor (2026-10-23): ficam no disco, fora
-# do versionamento. Novos documentos privados: preferir docs/interno/.
-docs/URLS_E_CREDENCIAIS.md
-
-# Documentos com segredos e credenciais (2026-10-23): senhas, chaves private,
-# tokens, certificados. Nunca versionados: apenas no disco local.
+# Documentos com segredos e credenciais (2026-10-23): senhas, chaves privadas,
+# tokens, certificados, URLs/usuarios de teste. Nunca versionados: apenas no
+# disco local. E o UNICO lugar para material sensivel do mantenedor
+# (docs/interno/ e para notas de trabalho sem segredo).
 docs/secrets-local/

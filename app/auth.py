@@ -92,7 +92,7 @@ class WebUser:
 
 
 def hash_password(password: str, iterations: int = PBKDF2_ITERATIONS) -> str:
-    """Gera a string `pbkdf2_sha256$iter$salt_hex$hash_hex` para o .env."""
+    """Gera a string `pbkdf2_sha256.iter.salt_hex.hash_hex` para o .env."""
     salt = secrets.token_bytes(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, iterations)
     return f"{HASH_SCHEME}.{iterations}.{salt.hex()}.{digest.hex()}"
@@ -115,7 +115,7 @@ def parse_web_users(raw: str) -> dict[str, WebUser]:
         if len(partes) != 4 or partes[0] != HASH_SCHEME:
             logger.warning(
                 "WEB_UI_USERS: entrada do usuario %r fora do formato "
-                "pbkdf2_sha256$iter$salt$hash — pulada",
+                "pbkdf2_sha256.iter.salt.hash — pulada",
                 nome,
             )
             continue

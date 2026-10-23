@@ -300,6 +300,8 @@ Serviços e profiles:
 | `mailpit` | `mailpit` | 8025 (UI) / 1025 (SMTP) |
 | `messagepit` | `messagepit` | 8026 (UI) / 1026 (SMTP) / 8200 (SMS) |
 
+URLs, usuários e de onde vem cada credencial: [USER_GUIDE.md › Acessos para teste](USER_GUIDE.md#acessos-para-teste--urls-usuários-e-credenciais).
+
 ### B.2. `.env` no modo **nativo** — loopback
 
 ```dotenv

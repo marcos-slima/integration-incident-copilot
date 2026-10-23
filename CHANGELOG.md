@@ -252,6 +252,35 @@ Python), **201/303** (sentinela de senha) e **205** (prosa da DA-86).
   apontam para o commit anterior até o próximo commit.
 
 
+---
+
+## Acessos para teste documentados (2026-10-23)
+
+### Adicionado
+- `docs/USER_GUIDE.md` §"Acessos para teste — URLs, usuários e credenciais"
+  (e `docs/en/USER_GUIDE.md` §"Test access"): todas as URLs da API, das UIs e
+  dos serviços do compose, o usuário de cada um e a variável do `.env` de onde
+  vem a credencial, mais o roteiro para gerar um `.env` de teste. Registra o
+  que não estava escrito em lugar nenhum: só o `.env` é lido (um `.env.local`
+  é ignorado), Grafana usa o usuário `admin` da imagem, Qdrant/Redis/Mailpit/
+  MessagePit/Ollama não têm autenticação (dependem do bind em `127.0.0.1`),
+  `/docs` é público por default (`EXPOSE_API_DOCS`) e a senha do volume de
+  Postgres/Neo4j só vale na primeira inicialização. `docs/DEPLOYMENT.md`
+  (tabela de portas) aponta para a seção.
+
+### Corrigido
+- Formato de `WEB_UI_USERS` com `$` em `docs/TROUBLESHOOTING.md` (pt/en), no
+  docstring de `app/auth.py::hash_password`, no aviso de entrada malformada e
+  no comentário de `app/config.py`. O formato aceito usa **ponto**
+  (`pbkdf2_sha256.<iter>.<salt>.<hash>`); com `$` o compose interpola o valor
+  e o login dá 401.
+- `python -m app.config` imprimia em claro a senha embutida em `DATABASE_URL`
+  e `REDIS_URL` e os hashes de `WEB_UI_USERS`; agora mascara
+  (`app/config.py::_mask_url_credentials`, testes em `tests/test_config.py`).
+- `docs/USER_GUIDE.md` (pt/en): o aviso de chave gerada não a exibe (não
+  "mascarada"), e `REQUIRE_AUTH=true` exige também `ADMIN_API_KEY`
+  (IIC-AUD-410).
+
 ## [1.4.0] — 2026-10-20
 
 > **Numeração.** A tag `v1.3.0` já existe no remoto apontando para um commit

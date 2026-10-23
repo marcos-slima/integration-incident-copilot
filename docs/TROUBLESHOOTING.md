@@ -147,7 +147,7 @@ HttpOnly, que o navegador reenvia sozinho. A UI não usa `X-API-Key`; a chave
 
 | Causa | Correção |
 |---|---|
-| Login sempre 401 | Os usuários vêm de `WEB_UI_USERS` no `.env` (bootstrap, formato `usuario:pbkdf2_sha256$…`) ou da tabela `web_users` com ativação concluída (DA-55). Sem nenhuma das duas fontes, o login fica **fechado** (fail-closed). |
+| Login sempre 401 | Os usuários vêm de `WEB_UI_USERS` no `.env` (bootstrap, formato `usuario:pbkdf2_sha256.<iterações>.<salt>.<hash>`, separador **ponto**; gere com `app.auth.hash_password`) ou da tabela `web_users` com ativação concluída (DA-55). Sem nenhuma das duas fontes, o login fica **fechado** (fail-closed). |
 | Cookie não volta | No dev, use o proxy do Vite (`npm run dev`), para manter a mesma origem. |
 | 429 no login | `/auth/login` e as rotas de ativação aceitam 5 tentativas por minuto por cliente. |
 

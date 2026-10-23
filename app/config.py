@@ -363,7 +363,7 @@ class Settings(BaseSettings):
 
     # DA-54 — login de sessao para a UI web (POST /auth/login).
     # Formato de web_ui_users (uma ou mais entradas separadas por
-    # virgula): "usuario:pbkdf2_sha256$iteracoes$salt_hex$hash_hex".
+    # virgula): "usuario:pbkdf2_sha256.iteracoes.salt_hex.hash_hex".
     # Vazio (default) = login FECHADO: /auth/login sempre responde 401
     # e a UI nao consegue autenticar por sessao — fail-closed, no
     # mesmo espirito de DA-18 (nunca "modo aberto" silencioso).
@@ -696,7 +696,24 @@ def _mask(value: str) -> str:
     return f"{value[:3]}...{value[-3:]}"
 
 
-_SENSITIVE_KEYWORDS = ("password", "secret", "key")
+# `users`: WEB_UI_USERS traz hashes de senha - nao sao a senha, mas tambem
+# nao precisam aparecer no terminal.
+_SENSITIVE_KEYWORDS = ("password", "secret", "key", "users")
+
+
+def _mask_url_credentials(value: str) -> str:
+    """Mascara a senha embutida em URL (`esquema://user:senha@host`).
+    DATABASE_URL e REDIS_URL carregam a senha na propria URL e nao batem
+    em nenhuma palavra de _SENSITIVE_KEYWORDS - sem isto, o comando de
+    diagnostico imprimia a senha do banco em claro."""
+    esquema, sep, resto = value.partition("://")
+    if not sep or "@" not in resto:
+        return value
+    credenciais, _, host = resto.rpartition("@")
+    usuario, tem_senha, _senha = credenciais.partition(":")
+    if not tem_senha:
+        return value
+    return f"{esquema}://{usuario}:***@{host}"
 
 
 def _print_effective_config() -> None:
@@ -704,7 +721,7 @@ def _print_effective_config() -> None:
     for field_name in settings.__class__.model_fields:
         value = str(getattr(settings, field_name))
         is_sensitive = any(kw in field_name for kw in _SENSITIVE_KEYWORDS)
-        display = _mask(value) if is_sensitive else (value or "(vazio)")
+        display = _mask(value) if is_sensitive else (_mask_url_credentials(value) or "(vazio)")
         print(f"  {field_name:22} = {display}")
     print(
         "\nSe algum valor nao bater com o esperado, confira o arquivo "

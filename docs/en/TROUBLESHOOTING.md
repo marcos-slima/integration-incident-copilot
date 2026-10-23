@@ -148,7 +148,7 @@ is for machine integrations.
 
 | Cause | Fix |
 |---|---|
-| Login always 401 | Users come from `WEB_UI_USERS` in the `.env` (bootstrap, format `user:pbkdf2_sha256$…`) or from the `web_users` table with completion of activation (DA-55). Without either source, the login is **closed** (fail-closed). |
+| Login always 401 | Users come from `WEB_UI_USERS` in the `.env` (bootstrap, format `user:pbkdf2_sha256.<iterations>.<salt>.<hash>`, **dot** separator; generate with `app.auth.hash_password`) or from the `web_users` table with completion of activation (DA-55). Without either source, the login is **closed** (fail-closed). |
 | Cookie does not return | In dev, use the Vite proxy (`npm run dev`), to keep the same origin. |
 | 429 on login | `/auth/login` and the activation routes accept 5 attempts per minute per client. |
 

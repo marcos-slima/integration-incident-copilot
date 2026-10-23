@@ -102,11 +102,11 @@ Cada credencial na camada dela (DA-18 + DA-54):
   login com aviso.
 - **Máquina/integração** — header `X-API-Key` em `/diagnose`,
   `/llm/policy` e `/incidents/{id}/verify` (DA-18). Se `API_KEY` estiver
-  vazia no `.env`, uma chave aleatória é gerada no startup e o WARNING a
-  loga **mascarada** (`****`) — o endpoint nunca fica aberto, mas a chave
+  vazia no `.env`, uma chave aleatória é gerada no startup e o WARNING
+  avisa **sem exibi-la** — o endpoint nunca fica aberto, mas a chave
   não é recuperável: fixe `API_KEY` no `.env`. Com `REQUIRE_AUTH=true`, o
-  processo **recusa subir** sem `API_KEY`, `A2A_API_KEY` e
-  `EVENT_MESH_API_KEY` configuradas.
+  processo **recusa subir** sem `API_KEY`, `A2A_API_KEY`,
+  `EVENT_MESH_API_KEY` e `ADMIN_API_KEY` configuradas.
 
 Chaves por superfície (credenciais de máquina — a UI web **não** usa
 nenhuma delas):
@@ -141,6 +141,83 @@ operador — o operador nunca fica trancado fora.
 O cookie de sessão **não** vale em MCP, A2A, Event Mesh ou admin — essas
 superfícies continuam exigindo as suas chaves dedicadas. O admin de
 usuários (`/admin/users`) usa a `X-API-Admin-Key` (DA-46), não a sessão.
+
+### Acessos para teste — URLs, usuários e credenciais
+
+Referência única de **onde** cada funcionalidade responde e **de onde** vem
+cada credencial. Nenhuma senha real fica no repositório: a coluna
+"Credencial" aponta a variável do `.env`. Portas são as defaults do
+`docker-compose.yml` (sobrescrevíveis por `*_HOST_PORT`).
+
+> **Só o `.env` é lido.** `app/config.py` carrega `env_file=".env"`, e o
+> compose monta só `./.env`. Um `.env.local` (ou qualquer outro arquivo)
+> **não** é lido: chaves que estejam só nele não existem para o app. Para
+> conferir o que está valendo:
+> `uv run python -m app.config` (mascara chaves, senhas e a senha embutida
+> em `DATABASE_URL`/`REDIS_URL`).
+
+**Copilot — API e UIs** (`uv run uvicorn app.main:app` ou serviço `api`, porta 8000)
+
+| Funcionalidade | URL | Credencial |
+|---|---|---|
+| UI web (diagnóstico) | `http://localhost:8000/` (precisa de `npm run build` em `frontend/`) · dev: `http://localhost:5173` (`npm run dev`, proxy para a 8000) | usuário e senha de `WEB_UI_USERS` (bootstrap) ou de `web_users` ativado em `/admin/users` |
+| Admin UI | `http://localhost:8000/admin` (`/models`, `/usage`, `/systems`, `/incidents`, `/users`, `/web-search`) | `ADMIN_API_KEY`, digitada na própria página |
+| Admin API | `/admin/api/*` | header `X-API-Admin-Key: $ADMIN_API_KEY` |
+| Diagnóstico | `POST /diagnose`, `POST /diagnose/async`, `GET /diagnose/async/{job_id}` | `X-API-Key: $API_KEY` ou cookie da UI |
+| Verificação / revisão humana | `POST /incidents/{id}/verify`, `POST /incidents/{id}/review` | `X-API-Key` ou cookie |
+| Política de LLM | `GET /llm/policy` | `X-API-Key` ou cookie |
+| MCP | `http://localhost:8000/mcp/` (**com** barra final) | `X-API-Key` |
+| A2A | `POST /a2a` · card público em `/.well-known/agent-card.json` | `X-A2A-Api-Key: $A2A_API_KEY` |
+| Eventos (CloudEvents) | `POST /events/incident` | `X-Event-Mesh-Api-Key: $EVENT_MESH_API_KEY` |
+| Sessão da UI | `POST /auth/login`, `POST /auth/logout`, `GET /auth/session` | usuário e senha |
+| OpenAPI | `http://localhost:8000/docs`, `/redoc` | **público** com `EXPOSE_API_DOCS=true` (default); em produção use `false` |
+| Saúde | `GET /health`, `GET /ready` | público |
+| Métricas | `GET /metrics` | só com `PROMETHEUS_ENABLED=true` **e** `METRICS_TOKEN` (`Authorization: Bearer`) |
+
+**Infraestrutura local** (`docker compose`, perfis entre parênteses)
+
+| Serviço | URL / endereço | Usuário | Credencial |
+|---|---|---|---|
+| Qdrant (sem perfil) | `http://localhost:6333/dashboard` (UI) · API na mesma porta | — | **sem autenticação** |
+| Postgres (`observability`) | `127.0.0.1:5432`, banco `POSTGRES_DB` (`iic`) | `POSTGRES_USER` (`iic`) | `POSTGRES_PASSWORD` |
+| Postgres, papel somente leitura | idem | `GRAFANA_DB_USER` (`iic_grafana_ro`, migration 013) | `GRAFANA_DB_PASSWORD` |
+| Grafana (`observability`) | `http://localhost:3002` | `admin` (default da imagem; o compose não define `GF_SECURITY_ADMIN_USER`) | `GRAFANA_PASSWORD` |
+| Neo4j (`graphrag`) | `http://localhost:7474` (Browser) · `bolt://localhost:7687` | `NEO4J_USER` (`neo4j`) | `NEO4J_PASSWORD` |
+| Redis (`async`) | `redis://127.0.0.1:6379/0` | — | `REDIS_PASSWORD` (vazio = **sem senha**) |
+| Mailpit (`mailpit`) | `http://localhost:8025` · SMTP `1025` | — | sem autenticação |
+| MessagePit (`messagepit`) | `http://localhost:8026` · SMTP `1026` · SMS `8200` | — | sem autenticação |
+| Ollama (nativo; ou perfil `container-ollama`) | `http://localhost:11434` | — | sem autenticação |
+| Langfuse | externo, `LANGFUSE_HOST` (não há serviço no compose) | — | `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY` |
+
+Todas as portas publicam só em `127.0.0.1`. Os serviços "sem autenticação"
+dependem disso: não troque o bind sem pôr autenticação na frente.
+
+**Preparar um `.env` de teste**
+
+```bash
+# chaves de máquina fixas (sem elas, cada boot gera uma chave que não é exibida)
+for v in API_KEY A2A_API_KEY EVENT_MESH_API_KEY ADMIN_API_KEY; do
+  echo "$v=$(python3 -c 'import secrets;print(secrets.token_urlsafe(32))')" >> .env
+done
+# senhas dos serviços (sem elas, Postgres/Grafana/Neo4j recusam subir)
+for v in POSTGRES_PASSWORD GRAFANA_PASSWORD GRAFANA_DB_PASSWORD NEO4J_PASSWORD; do
+  echo "$v=$(python3 -c 'import secrets;print(secrets.token_urlsafe(24))')" >> .env
+done
+# obrigatória quando DATABASE_URL estiver preenchida (DA-60)
+echo "LLM_CREDENTIALS_MASTER_KEY=$(python3 -c 'import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())')" >> .env
+# usuário da UI: guarde a senha; o .env só recebe o hash
+echo "WEB_UI_USERS=teste:$(uv run python -c "from app.auth import hash_password; print(hash_password('troque-esta-senha'))")" >> .env
+echo "SESSION_SECRET=$(python3 -c 'import secrets;print(secrets.token_urlsafe(32))')" >> .env
+```
+
+- **Senha da UI não é recuperável.** `WEB_UI_USERS` guarda só
+  `pbkdf2_sha256.<iterações>.<salt>.<hash>` (separador **ponto**; com `$`, o
+  compose interpola o valor e o login dá 401). Esqueceu: gere outro hash.
+- **Senha do volume.** Postgres e Neo4j só aplicam a senha na **primeira**
+  inicialização do volume. Trocar no `.env` depois não muda a senha do
+  banco; recrie o volume (`docker compose down -v` apaga os dados).
+- **Ver os valores** no seu terminal (nunca em ticket ou chat):
+  `grep -E '^(API_KEY|A2A_API_KEY|EVENT_MESH_API_KEY|ADMIN_API_KEY|POSTGRES_PASSWORD|GRAFANA_PASSWORD|NEO4J_PASSWORD)=' .env`
 
 ### Interface web
 

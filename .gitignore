@@ -86,3 +86,11 @@ docs/interno/
 # Dossie tecnico local (2026-10-21): material de trabalho do mantenedor,
 # nao versionado. O conteudo continua no disco, mas fora do historico.
 docs/dossier/
+
+# Documentos de uso pessoal do mantenedor (2026-10-23): ficam no disco, fora
+# do versionamento. Novos documentos privados: preferir docs/interno/.
+docs/URLS_E_CREDENCIAIS.md
+
+# Documentos com segredos e credenciais (2026-10-23): senhas, chaves private,
+# tokens, certificados. Nunca versionados: apenas no disco local.
+docs/secrets-local/

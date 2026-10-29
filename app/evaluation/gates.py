@@ -1238,6 +1238,9 @@ def check_docs_code_references(root: Path = REPO_ROOT) -> list[Finding]:
 
         for citacao in set(_MD_CITACAO.findall(texto)):
             citacao = citacao.lstrip("/")
+            # docs/secrets-local/ é gitignored por design (só guia doc)
+            if citacao.startswith("docs/secrets-local/"):
+                continue
             bases = (root, root / "docs", root / "data" / "sample_docs", doc.parent)
             if not any(_published(root, base / citacao) for base in bases):
                 problemas.append(
@@ -1257,6 +1260,9 @@ def check_docs_code_references(root: Path = REPO_ROOT) -> list[Finding]:
                     if _is_gitignored(caminho_path, root):
                         continue
                     if any(caminho.startswith(ra) for ra in _RUNTIME_ARTIFACTS):
+                        continue
+                    # docs/secrets-local/ é gitignored por design (só guia doc)
+                    if caminho.startswith("docs/secrets-local/"):
                         continue
                     problemas.append(f"{doc.relative_to(root)}: {caminho} nao existe")
 

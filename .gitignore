@@ -83,3 +83,4 @@ scripts/redact_docs_secrets.py
 # Documentos internos de trabalho (notas de implementacao, auditorias,
 # TODO): ficam so na maquina do mantenedor, fora do repositorio publico.
 docs/interno/
+docs/glossario-iic.pdf

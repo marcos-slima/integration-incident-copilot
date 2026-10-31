@@ -94,25 +94,25 @@
 
 ## Glossário de Termos
 
-| Termo |_sigla_ | Definição |
+| Termo |	extit{sigla} | Definição |
 |---|---|---|
-| **Circuit Breaker** | _DA-41_ | Proteção que interrompe chamadas a serviços com falhas |
-| **Context window** | _DA-20_ | Tamanho do contexto do modelo (128k tokens no qwen3.6) |
-| **Corpus coverage** | _DA-58_ | Quantidade de tópicos cobertos pelo RAG |
+| **Circuit Breaker** | 	extit{DA-41_ | Proteção que interrompe chamadas a serviços com falhas |
+| **Context window** | 	extit{DA-20_ | Tamanho do contexto do modelo (128k tokens no qwen3.6) |
+| **Corpus coverage** | 	extit{DA-58_ | Quantidade de tópicos cobertos pelo RAG |
 | **DA-XX** | _DA_ | Decisão de Arquitetura formal (regulamentada em `CLAUDE.md`) |
-| **Diagnóstico** | _DA-19_ | Output final do IIC com causa raiz e next steps |
-| **Evidência** | _DA-15_ | Fonte de dados que sustenta o diagnóstico |
-| **Fingerprint** | _DA-18_ | Hash de requisição para idempotência |
-| **Gate** | _DA-51_ | Validação automática (quality gate) |
-| **Hybrid search** | _DA-38_ | Combinação de Dense + Sparse search |
-| **LLM gateway** | _DA-26_ | Proxy com circuit breaker + orçamento |
-| **Model confidence** | _DA-20_ | Confiança do LLM (0-1) |
-| **Rule Engine** | _DA-33_ | Lógica pré-definida (ex: IDoc status 51) |
-| **Reranker** | _DA-29_ | Reordena resultados RAG com MiniLM v2 |
-| **Retrieval score** | _DA-38_ | Pontuação de busca (BM25) |
-| **RAG** | _DA-38_ | Retrieval-Augmented Generation (core do IIC) |
-| **Trust level** | _DA-15_ | Nível de confiança da evidência (system_observed, simulated, retrieved) |
-| **Vector database** | _DA-38_ | Qdrant para armazenar embeddings |
+| **Diagnóstico** | 	extit{DA-19_ | Output final do IIC com causa raiz e next steps |
+| **Evidência** | 	extit{DA-15_ | Fonte de dados que sustenta o diagnóstico |
+| **Fingerprint** | 	extit{DA-18_ | Hash de requisição para idempotência |
+| **Gate** | 	extit{DA-51_ | Validação automática (quality gate) |
+| **Hybrid search** | 	extit{DA-38_ | Combinação de Dense + Sparse search |
+| **LLM gateway** | 	extit{DA-26_ | Proxy com circuit breaker + orçamento |
+| **Model confidence** | 	extit{DA-20_ | Confiança do LLM (0-1) |
+| **Rule Engine** | 	extit{DA-33_ | Lógica pré-definida (ex: IDoc status 51) |
+| **Reranker** | 	extit{DA-29_ | Reordena resultados RAG com MiniLM v2 |
+| **Retrieval score** | 	extit{DA-38_ | Pontuação de busca (BM25) |
+| **RAG** | 	extit{DA-38_ | Retrieval-Augmented Generation (core do IIC) |
+| **Trust level** | 	extit{DA-15_ | Nível de confiança da evidência (system_observed, simulated, retrieved) |
+| **Vector database** | 	extit{DA-38_ | Qdrant para armazenar embeddings |
 
 ## Como Este Glossário é Gerado
 

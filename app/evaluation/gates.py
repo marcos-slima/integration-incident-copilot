@@ -1128,6 +1128,9 @@ def check_docs_code_references(root: Path = REPO_ROOT) -> list[Finding]:
 
         for citacao in set(_MD_CITACAO.findall(texto)):
             citacao = citacao.lstrip("/")
+            # artefatos gerados automaticamente (gitignored)
+            if citacao.startswith("data/.ingest_state_") and citacao.endswith(".json"):
+                continue
             bases = (root, root / "docs", root / "data" / "sample_docs", doc.parent)
             if not any(_published(root, base / citacao) for base in bases):
                 problemas.append(

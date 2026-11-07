@@ -2,9 +2,8 @@
 
 Último item do backlog priorizado pela segunda revisão arquitetural
 externa (P2), depois do modelo `VERIFIED_AS` do GraphRAG (DA-28, ver
-`docs/ARCHITECTURE.md`). A revisão apontou que o reranker de produção
-(`cross-encoder/ms-marco-MiniLM-L-6-v2`, ver
-`app/rag/retriever.py::RERANKER_MODEL`) nunca foi comparado
+`docs/ARCHITECTURE.md`). A revisão apontou que o reranker anterior ao benchmark
+(`cross-encoder/ms-marco-MiniLM-L-6-v2`) ainda não havia sido comparado
 formalmente contra alternativas — inclusive alternativas
 **multilíngues**, relevante aqui porque as queries reais são
 majoritariamente em português, enquanto `ms-marco-MiniLM-L-6-v2` foi

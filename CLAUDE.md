@@ -100,7 +100,7 @@ docker compose --profile graphrag up -d neo4j      # opt-in
 > o tamanho real fica em `data/index_manifest.json` (gerado pelo ingest, validação 2026-10-07, M-23) —
 > os números antigos (~767k, 28.962, 100.805) eram incompatíveis entre si.
 >
-> armadilha correlata: `data/.ingest_state_reference.json` é **um arquivo por
+> armadilha correlata: `.ingest_state_reference.json` em `data/` é **um arquivo por
 > target, sem URL dentro** (chave = `hash:filename`, `app/rag/ingest.py:167`).
 > Ele marca "já processado" sem registrar *onde*. Rodar a ingestão contra
 > um Qdrant e depois contra outro faz o segundo run **pular tudo** e o
@@ -316,7 +316,7 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
 | DA-89 | Relatórios automatizados de compliance export: endpoint `/admin/reports/compliance/export?format=pdf|xlsx`, relatório com resumo/quality/auditoria, export PDF e XLSX | `app/admin/reports.py`, `tests/test_compliance_reports.py` |
 | DA-90 | Documentação GRC (ISO 27001, SOC2): mapeamento, guia de auditoria, checklist | `docs/GRM_MAPPING.md`, `docs/GRM_AUDIT.md`, `docs/GRM_CHECKLIST.md`, `tests/test_grm_documentation.py` |
 | DA-91 | Testes RBAC completos para todos os endpoints | `tests/test_rbac_comprehensive.py` |
-| DA-92 | Modelo canônico `qwen3.6:35b-a3b` (35B MoE, 128k ctx) desde 2026-10-13, substituindo `qwen3-coder-next:latest`; re-baseline do promptfoo pendente (DA-51) | `app/config.py`, `.env.example`, `docker-compose.yml`, `promptfooconfig.yaml` |
+| DA-92 | Modelo canônico `qwen3.6:35b-a3b` (35B MoE, 128k ctx) desde 2026-10-13, substituindo `qwen3-coder-next:latest`; baseline histórica do promptfoo registra o Qwen; revalidação da revisão e do modelo dos manifests pendente (DA-51) | `app/config.py`, `.env.example`, `docker-compose.yml`, `promptfooconfig.yaml` |
 
 **DAs candidatas (não entregues ou com implementação parcial):**
 - **DA-31 — SAP AI Agent Hub registration (MCP + A2A)** · bloqueada: exige tenant Kyma.

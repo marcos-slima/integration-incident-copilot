@@ -139,7 +139,7 @@ Outras três armadilhas registradas, todas silenciosas:
    `NEO4J_PASSWORD` depois não troca a senha do banco — é preciso remover o
    volume `integration-incident-copilot_neo4j_data`.
 3. **O estado da ingestão não registra o destino.**
-   `data/.ingest_state_reference.json` tem chave `hash:filename` e nenhuma URL
+   `.ingest_state_reference.json` em `data/` tem chave `hash:filename` e nenhuma URL
    (`app/rag/ingest.py::load_state`). Indexar contra um Qdrant e depois contra
    outro faz o segundo run **pular tudo, sem erro**. Trocar de destino exige
    `--reset-state`.
@@ -1285,7 +1285,7 @@ flowchart LR
 | **MCP** [DA-19] | Streamable HTTP montado em `/mcp` **dentro** do app FastAPI — não é processo stdio. Exige a mesma `X-API-Key`, por isso ela precisa estar **fixa** no `.env`. `StreamableHTTPSessionManager.run()` só pode ser chamado uma vez por processo |
 | **A2A 0.3** [DA-14] | `POST /a2a` (JSON-RPC 2.0) + card em `/.well-known/agent-card.json`. Tarefa tem ciclo `submitted → working → completed/failed` (`app/a2a/task_manager.py::TERMINAL_STATES`) |
 | **Webhook** [DA-23] | `POST /events/incident` com CloudEvents 1.0, tipo `com.sap.integration.incident.detected.v1` |
-| **AMQP 1.0** [DA-40] | `python-qpid-proton` com wrapper asyncio. O diagnóstico roda **fora do reactor** (RQ quando há `REDIS_URL`, senão `ThreadPoolExecutor`); `AMQP_MAX_REDELIVERIES` manda para a DMQ |
+| **AMQP 1.0** [DA-40] | `python-qpid-proton` com wrapper asyncio. O diagnóstico roda **fora do reactor** (RQ quando há `REDIS_URL`, senão `ThreadPoolExecutor`); `AMQP_MAX_REDELIVERIES` provoca rejeição. O encaminhamento para DMQ depende do broker |
 | **Fila assíncrona** | `POST /diagnose/async` devolve `job_id`; `GET /diagnose/async/{job_id}` consulta. Precisa de `REDIS_URL` e do serviço `worker` (perfil `async`) |
 
 **Capability Registry é FAIL-CLOSED** [DA-27]: ferramenta sem entrada em
@@ -1329,8 +1329,9 @@ curl -s -X POST http://127.0.0.1:8000/events/incident \
                "identifier":"RFC-IDOC-51-DEMO"}}'
 ```
 
-Repita o último comando **com o mesmo `id`**: esperado é a idempotência
-reconhecer a duplicata em vez de diagnosticar de novo.
+Repita o último comando com a mesma origem e o mesmo ID. No modo
+local, a resposta pode indicar `duplicate` dentro da janela. Com Redis,
+a resposta confirma o enqueue e o worker aplica a deduplicação.
 
 | # | Breakpoint em | Linha (commit `79510c0`) | O que inspecionar |
 |---|---|---|---|
@@ -1944,3 +1945,72 @@ Limites aceitos e registrados. Lê-los é parte de usar o sistema com honestidad
 
 *Quando este manual divergir do código, o código vence. Corrija o manual no
 mesmo commit em que descobrir a divergência — e, se for decisão, registre a DA.*
+
+## Apêndice F — Requisições para explorar os contratos
+
+Corpos **ilustrativos**, sem saída medida. O contrato REST está em
+`app/models/models.py::IncidentRequest`; os handlers e as dependências
+de autenticação estão em `app/main.py`. Use os comandos do capítulo 0
+para iniciar as dependências e mantenha as chaves fora do histórico do shell.
+
+| Exercício | Entrada | JSON | Condição para observar o comportamento |
+|---|---|---|---|
+| Regra SAP em português | `POST /diagnose` | `{"description":"IDoc travado em status 51","interface_type":"rfc","identifier":"RFC-IDOC-51-DEMO","locale":"pt-BR"}` | Conector em demo e regra habilitada. Inspecione o resultado antes de atribuir a saída à regra. |
+| Conector configurável | `POST /diagnose` | `{"description":"Verificar mensagem de integração","interface_type":"odata","identifier":"MSG-EXEMPLO"}` | Configure o endpoint e OAuth em ambiente autorizado. Troque o identificador pelo da mensagem do ambiente. |
+| Identificador desconhecido | `POST /diagnose` | `{"description":"Verificar mensagem ausente no catálogo demo","interface_type":"odata","identifier":"MSG-DESCONHECIDA"}` | Com OData em demo, confira a evidência e o sinalizador de fallback retornado. |
+| Genérico em inglês | `POST /diagnose` | `{"description":"A custom integration intermittently times out","locale":"en"}` | Omita tipo e identificador. Use um modelo elegível e observe o domínio classificado. |
+| Evento | `POST /events/incident` | `{"specversion":"1.0","type":"com.sap.integration.incident.detected.v1","source":"urn:example:monitor","id":"event-example","data":{"description":"Falha de integração"}}` | Use a chave de eventos quando exigida. Reenvie com o mesmo par origem/ID para observar deduplicação conforme a janela e o backend. |
+| Fila | `POST /diagnose/async` | `{"description":"Timeout intermitente em integração de pedidos"}` | Redis configurado e worker ativo. Faça polling com o `job_id` retornado. |
+
+### Administração e operação por dependência
+
+Após configurar PostgreSQL e aplicar as migrations, abra `/admin` para
+o shell administrativo. A chave administrativa autoriza as chamadas
+protegidas. Consulte `/admin/api/effective-config` e
+`/admin/api/routing/preview` para distinguir configuração gravada de
+elegibilidade efetiva. As rotas de relatórios e métricas de domínio estão
+sob `/admin/reports` e `/admin/metrics`. A descrição das fronteiras de
+sessão, credenciais e ativação está em [Segurança](SECURITY.md).
+
+Para execução local, o Compose do projeto inclui API e Qdrant no
+conjunto padrão. Os perfis `container-ollama`, `async`, `graphrag`,
+`observability`, `mailpit` e `messagepit` habilitam dependências
+separadamente. A API usa Ollama no host quando configurada para esse
+destino. O perfil `async` sobe Redis e worker. Com
+`CHECKPOINTING_ENABLED=true`, confira também o banco e o checkpoint da
+thread antes de tentar `/review`.
+
+Em uma restauração, trate separadamente o backup do PostgreSQL, a chave
+Fernet e as coleções vetoriais. Após recuperar o banco em ambiente
+isolado, confira a revisão Alembic e a leitura de dados cifrados com a
+chave correspondente. Para reconstruir o índice, preserve corpus,
+manifests e a identidade de embedding e siga o procedimento de
+ingestão do capítulo 6. Esses são passos operacionais. A baseline
+inspecionada não comprova um ensaio de recuperação completo.
+
+### Diferenças entre os contratos de entrada
+
+- REST recebe `IncidentRequest`. `description` tem limite de 5.000
+  caracteres. `logs` e `payload` aceitam até 50.000 cada. O FastAPI
+  devolve 422 para falha de validação. Nas rotas limitadas, a cota e
+  a proteção contra tentativas de chave inválida são verificações
+  distintas.
+- MCP recebe os argumentos declarados em `diagnose_incident`, incluindo
+  `locale`. A ferramenta cria o modelo de requisição internamente.
+  Campos REST sem argumento correspondente não passam por essa porta.
+  `ToolPolicy` limita o tempo de espera e só repete em sobrecarga.
+- A2A 0.3.0 aceita `message/send` e `tasks/get`. O adaptador concatena
+  partes de texto e seleciona campos de partes de dados. Texto como
+  “RFC-IDOC-51-DEMO” no exemplo não configura, por si, os campos
+  estruturados do conector. Para usar o conector, envie uma parte
+  `{"kind":"data","data":{"interface_type":"rfc","identifier":"RFC-IDOC-51-DEMO","locale":"pt-BR"}}`.
+  `configuration.blocking=false` permite consultar depois com o ID
+  da tarefa. A resposta segue o contrato Task do adaptador.
+- CloudEvents aceita o envelope estruturado e valida `data` antes de
+  convertê-lo em `IncidentRequest`. Webhook e AMQP têm confirmações
+  diferentes. Com Redis, aceitar o enqueue é uma etapa anterior ao
+  processamento, que pode falhar e entrar no fluxo de retry.
+- `/health` informa liveness. `/ready` consulta as dependências
+  exigidas pela configuração efetiva. Ambos funcionam como probes
+  sem chave e expõem detalhes adicionais ao chamador autenticado.
+  `/llm/policy` descreve a política efetiva sem executar inferência.

@@ -225,7 +225,7 @@ rejected with exit 1 — never interpreted as "zero regressions".
   `connector_validation_matrix` and `connector_coverage` confirm presence and
   coherence: that every
   registered connector has a row in the matrix of
-  [docs/ARCHITECTURE.md](ARCHITECTURE.md#conectores---mock-vs-real-hoje)
+  [docs/ARCHITECTURE.md](ARCHITECTURE.md#connectors---mock-vs-real-today)
   and that no orphan row remains. None of the two confirms the **truth** of
   the claim "validated". `connector_validation_matrix` is the gate that prevents it from
   rotting, not the one that attests: it requires that the matrix * exists* and covers all

@@ -95,7 +95,7 @@ flowchart TB
 
 | Fora do ar | Efeito hoje |
 |---|---|
-| Qdrant | `/diagnose` responde 500, mesmo quando o rule engine resolveria (achado aberto da validacao de 2026-10-07; ver `TROUBLESHOOTING.md`) |
+| Qdrant | DA-65 trata falhas de consulta no retriever e devolve contexto vazio. O 500 observado em 07/10/2026 é histórico. O ensaio ASGI com Qdrant inacessível e embeddings sintéticos retornou 200 para a regra de IDoc e 503 em readiness. Ver [troubleshooting](TROUBLESHOOTING.md) para o alcance do ensaio. |
 | Ollama (sem fallback cloud permitido) | `ConfigurationError`; o rule engine continua respondendo o que casa antes do LLM |
 | PostgreSQL | o diagnostico continua (gravacao *best-effort*); `/admin` e o registro de LLM param |
 | Redis | volta ao estado em memoria por processo; com mais de uma replica, deduplicacao e circuito deixam de ser compartilhados |
@@ -171,7 +171,7 @@ O que o grafo **nao** mostra, porque acontece dentro de um no:
 
 - **Atalho do rule engine.** Os tres nos de diagnostico chamam
   `app/agent/rules.py::match_known_error` antes de qualquer LLM. Se uma das
-  22 regras casa, o no devolve sem chamar o gateway, e `prompt_version` sai
+  regras carregadas corresponde ao incidente, o nó retorna sem chamar o gateway, e `prompt_version` sai
   nulo (invariante 21).
 - **Loop ReAct.** Sem regra, o no roda um agente ReAct
   (`create_react_agent`, limite `REACT_AGENT_RECURSION_LIMIT`) que pode chamar
@@ -545,6 +545,26 @@ ferramenta do ReAct nao vira evidencia.
 
 Todas as portas sao publicadas so em 127.0.0.1. O passo a passo validado
 de ponta a ponta esta em `scripts/start-docker.sh`.
+
+O desenho mostra a topologia do Compose e o Ollama nativo.
+Setas tracejadas marcam dependências opcionais. A rede do Compose e
+o host são fronteiras distintas. Fonte: `docker-compose.yml`.
+
+```mermaid
+flowchart LR
+    client["Cliente local"] --> api
+    subgraph compose["Rede Compose"]
+        api["API"] --> qdrant["Qdrant"]
+        api -.-> redis["Redis, perfil async"]
+        worker["Worker RQ, perfil async"] -.-> redis
+        api -.-> postgres["PostgreSQL, perfil observability"]
+        grafana["Grafana, perfil observability"] -.-> postgres
+        api -.-> neo4j["Neo4j, perfil graphrag"]
+    end
+    api --> ollama["Ollama no host por padrão"]
+    worker -.-> qdrant
+    worker -.-> ollama
+```
 
 ### SAP BTP Kyma (`deploy/kyma/`)
 
@@ -1026,7 +1046,7 @@ tamanho da descricao (422, mesma regra de `/diagnose`) e geracao
 automatica da chave no startup - tudo com `run_diagnosis` mockado, sem
 depender de Ollama/Qdrant reais.
 
-## Deploy em produção - SAP BTP Kyma Runtime (DA-24)
+## Manifestos para SAP BTP Kyma Runtime (DA-24)
 
 Fecha o último item do roadmap arquitetural consolidado deste projeto.
 `deploy/kyma/` (manifests + `README.md` próprio com o passo a passo)
@@ -1825,7 +1845,7 @@ contem o bloco AMQP todo comentado como referencia de configuracao.
 
 **Commit:** `fec432d` | **Data:** 2026-09-22
 
-### Rule Engine: 14 → 21 regras (historico; hoje 22)
+### Rule Engine: expansão histórica de 14 para 21 regras
 
 O catálogo de `app/agent/rules.py` foi expandido de 14 para **21 regras**
 com 7 novas entradas cobrindo classes de erro SAP/integração frequentes:
@@ -1915,11 +1935,10 @@ incidentes. A solução tem que ser:
 - `ONTOLOGY_ENRICHMENT_ENABLED=true` → executa ontologia-aware quando
   `ontology_category` inferida; fallback para `retrieve` clássico caso contrário
 
-**Nós do grafo (DA-61 Fases 2–6):**
-- `retrieve_hybrid_ontology_aware()` (Opção C — ontologia integrada no `retrieve_node`)
-- `ontology_enrich_node` (removido: violava contrato ao tentar ler `state['diagnosis']` antes de existir)
-- `hitl_review_node` (opcional: pausa para revisão se confiança < 0.6)
-- `risk_assessment_node` (opcional: avaliação final com HITL/ontology)
+**Grafo atual.** A flag acrescenta `ontology_debug` após `report`.
+A recuperação com ontologia é uma chamada condicional dentro de
+`retrieve`. O HITL usa interrupção no especialista e retomada com
+checkpoint, sob configuração própria.
 
 ### Limitações (aceitas)
 
@@ -1954,3 +1973,278 @@ incidentes. A solução tem que ser:
 - **Testes de integração:** 1407/1407 passing (incluindo validação TTL com inferência
   `http_timeout`, `ssl_certificate_expired`, `sap_material_lock`, etc.)
 - **Simulação:** `uv run python -c "from app.agent.ontology_loader import load_error_rules_combined; rules = load_error_rules_combined(); assert len(rules) == 28"`
+
+## C4 nível 3 — componentes dos processos de diagnóstico
+
+O recorte mostra composição e dependências internas. Setas indicam chamada
+ou despacho. O worker depende do perfil `async` e do Redis. A persistência
+do estado interrompido depende de `CHECKPOINTING_ENABLED` e PostgreSQL.
+Referências: `app/main.py`, `app/queue.py`, `app/agent/graph.py`,
+`app/agent/nodes.py` e `app/llm/gateway.py`.
+
+```mermaid
+flowchart LR
+    clients["REST, SPA, MCP, A2A e eventos"] --> routes
+    subgraph api["Processo API"]
+        routes["Handlers e políticas por superfície"]
+        routes --> run["run_diagnosis"]
+        run --> graphEngine["StateGraph e nós"]
+        graphEngine --> tools["Conectores e retriever"]
+        graphEngine --> gateway["AI Gateway"]
+        graphEngine -.-> checkpoint["Checkpointer opcional"]
+    end
+    routes --> queue["Redis / RQ"]
+    subgraph worker["Processo worker"]
+        job["run_diagnosis_job"] --> engine["run_diagnosis e grafo no worker"]
+    end
+    queue --> job
+    gateway --> providers["Ollama, OpenAI ou Azure OpenAI"]
+    checkpoint --> postgres["PostgreSQL"]
+```
+
+### Interações com o pipeline
+
+Nos recortes abaixo, `Grafo` representa o caminho gerado acima.
+As setas mostram chamadas ou respostas de aplicação. O primeiro recorte
+depende de `RULE_ENGINE_ENABLED` e de correspondência com uma regra.
+O segundo depende de Redis e do worker. Fontes: `app/main.py`,
+`app/agent/nodes.py`, `app/agent/rules.py` e `app/queue.py`.
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente REST
+    participant A as FastAPI
+    participant G as Grafo
+    participant L as AI Gateway
+    C->>A: POST /diagnose
+    A->>G: run_diagnosis
+    alt Regra SAP aplicável
+        G->>G: Resultado determinístico
+    else Especialista usa LLM
+        G->>L: Solicitação com contexto admitido
+        L->>L: Elegibilidade, seleção e orçamento
+        L-->>G: Resultado ou falha governada
+    end
+    G-->>A: DiagnosisResponse
+    A-->>C: Resposta HTTP
+```
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente REST
+    participant A as FastAPI
+    participant Q as RQ e Redis
+    participant W as Worker
+    C->>A: POST /diagnose/async
+    A->>Q: Enfileirar IncidentRequest serializado
+    A-->>C: 202 com job_id
+    Q->>W: Job de diagnóstico
+    W->>W: run_diagnosis
+    W-->>Q: Resultado ou falha
+    C->>A: GET /diagnose/async/{job_id}
+    A->>Q: Consultar job
+    A-->>C: Estado e resultado ou erro
+```
+
+### Modelo persistido no Neo4j
+
+Recorte das relações escritas pelas consultas Cypher em
+`app/rag/graph_store.py`. Setas representam relações persistidas.
+O documento é condicional à fonte selecionada. A verificação é uma
+ação posterior. Requer `GRAPH_RAG_ENABLED` e Neo4j configurado.
+
+```mermaid
+flowchart LR
+    incident["Incident"] -->|AFFECTS| iface["Interface"]
+    iface -->|RUNS_ON| system["System"]
+    incident -->|HAS_ROOT_CAUSE_IN| doc["Document"]
+    incident -->|VERIFIED_AS| cause["RootCause"]
+```
+
+### Persistência relacional e correlação
+
+Recorte lógico do PostgreSQL. As cardinalidades indicam histórico por
+chave do catálogo. O vínculo é aplicado em código, sem FK de
+`system_contracts` para o catálogo. O incidente aceita uma origem livre
+e a correlação pode ficar indeterminada. Fontes:
+`app/contracts/baseline.py`, `app/admin/models.py` e
+`app/services/incident_repository.py`. A persistência requer
+`DATABASE_URL`.
+
+```mermaid
+erDiagram
+    INTEGRATION_SYSTEMS ||..o{ SYSTEM_CONTRACTS : "histórico por system_key"
+    INTEGRATION_SYSTEMS o|..o{ INCIDENTS : "correlação em aplicação"
+    INTEGRATION_SYSTEMS {
+        string system_key UK
+    }
+    SYSTEM_CONTRACTS {
+        string system_key
+        datetime observed_at
+    }
+    INCIDENTS {
+        uuid id PK
+        string tenant_id
+    }
+```
+
+### Seleção de conector
+
+O objetivo é distinguir seleção, disponibilidade e qualidade da
+evidência. As setas representam decisões de execução. A configuração
+varia por tipo e RFC tem dependência nativa adicional. Fontes:
+`app/agent/nodes.py`, `app/connectors/__init__.py` e
+`app/connectors/base.py`.
+
+```mermaid
+flowchart TD
+    req["IncidentRequest"] --> gate{"Tipo e identificador disponíveis?"}
+    gate -->|não| skip["Segue sem dado de conector"]
+    gate -->|sim| registry["Seleciona classe pelo registry"]
+    registry --> mode{"Configuração para modo real?"}
+    mode -->|sim| real["Tenta consulta autorizada"]
+    mode -->|não| demo["Consulta cenário demo ou fallback"]
+    real --> result["ConnectorResult ou caminho de erro"]
+    demo --> result
+    result --> evidence["Guardrails usam flags e proveniência"]
+```
+
+### Entradas de máquina
+
+Os três recortes mostram o ponto de despacho de cada transporte. Setas
+representam chamadas lógicas. Redis é opcional para tarefas A2A e para
+o webhook, e muda persistência e comportamento de entrega. MCP exige
+a política de execução para diagnóstico. Fontes: `app/mcp/server.py`,
+`app/a2a/server.py` e `app/events/consumer.py`.
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente MCP
+    participant M as Streamable HTTP
+    participant P as Política
+    participant G as Grafo
+    C->>M: diagnose_incident
+    M->>P: Validar execução da capability
+    alt Permitida
+        M->>G: Adaptar argumentos e executar
+        G-->>M: Resultado
+        M-->>C: Resultado da ferramenta
+    else Negada
+        M-->>C: Recusa
+    end
+```
+
+```mermaid
+sequenceDiagram
+    participant C as Agente remoto
+    participant A as A2A JSON-RPC
+    participant T as TaskManager
+    C->>A: message/send
+    A->>T: Despachar tarefa de diagnóstico
+    T-->>A: Estado e resultado disponíveis
+    A-->>C: Task
+    opt Execução em andamento
+        C->>A: tasks/get
+        A->>T: Consultar estado
+        A-->>C: Task atual
+    end
+```
+
+```mermaid
+sequenceDiagram
+    participant C as Publicador HTTP
+    participant H as Webhook
+    participant D as Idempotência
+    participant Q as RQ ou BackgroundTasks
+    C->>H: CloudEvent estruturado
+    alt Redis configurado
+        H->>Q: Enfileirar antes do 202
+        H-->>C: 202 queued com job_id
+        Q->>D: Worker verifica origem e ID
+    else Modo local
+        H->>D: Verificar origem e ID
+        opt Evento novo
+            H->>Q: Agendar BackgroundTasks
+        end
+        H-->>C: 202 accepted ou duplicate
+    end
+```
+
+### Revisão e verificação
+
+O recorte separa a retomada do grafo de efeitos posteriores sobre
+histórico e telemetria. Setas indicam ações explícitas. A retomada requer
+`CHECKPOINTING_ENABLED` e checkpoint recuperável. A verificação tem
+destinos independentes segundo `GRAPH_RAG_ENABLED`, banco e trace.
+Fontes: `app/main.py`, `app/agent/graph.py` e
+`app/agent/checkpointing.py`.
+
+```mermaid
+sequenceDiagram
+    participant O as Operador
+    participant A as API
+    participant G as Grafo
+    participant P as Checkpointer
+    O->>A: POST /diagnose
+    A->>G: Executar diagnóstico
+    G->>P: Persistir interrupção
+    A-->>O: Diagnóstico pendente
+    O->>A: POST /incidents/{incident_id}/review
+    A->>G: Command resume com thread do incidente
+    G->>P: Recuperar checkpoint
+    A-->>O: status reviewed e graph_updated
+```
+
+```mermaid
+sequenceDiagram
+    participant O as Operador
+    participant A as API
+    participant N as Neo4j
+    participant P as PostgreSQL
+    participant L as Langfuse
+    O->>A: POST /incidents/{incident_id}/verify
+    opt Incidente acessível no grafo
+        A->>N: Registrar VERIFIED_AS
+    end
+    opt Incidente relacional disponível
+        A->>P: Gravar verificação
+    end
+    opt Trace fornecido e tracing configurado
+        A->>L: Registrar feedback
+    end
+```
+
+### Contratos entre entrada, estado e saída
+
+A visão mostra os tipos reais e as transferências conceituais entre
+pacotes. Setas tracejadas indicam uso de dados, sem herança. O estado
+`CopilotState` é um TypedDict. Campos de conector e checkpoint dependem
+do caminho. Fontes: `app/models/models.py`, `app/agent/state.py`,
+`app/connectors/base.py` e `app/agent/graph.py`.
+
+```mermaid
+classDiagram
+    class IncidentRequest
+    class CopilotState {
+        <<TypedDict>>
+    }
+    class ConnectorResult
+    class DiagnosisModel
+    class DiagnosisResponse
+    IncidentRequest ..> CopilotState : entrada adaptada
+    CopilotState ..> ConnectorResult : contexto consultado
+    DiagnosisModel ..> CopilotState : saída estruturada do especialista
+    CopilotState ..> DiagnosisResponse : projeção HTTP
+```
+
+`DiagnosisModel` é a saída estruturada de inferência. A montagem de
+`DiagnosisResponse` usa estado e guardrails adicionais. `_assemble_evidence`
+em `app/agent/nodes.py` vincula fontes consultadas e distingue
+`system_observed`, `simulated`, `retrieved_document`, `web_untrusted`
+e `user_reported`. Na aplicação do guardrail, `is_fallback` limita a
+confiança a 0,4, enquanto `is_mock` participa da classificação da
+proveniência. A regra pode contribuir evidência própria quando a
+categoria e a fonte da regra concordam. Quando encerra o diagnóstico,
+a trilha do prompt fica vazia. A causa proposta continua uma hipótese
+mesmo quando há evidência observada. Confiança e força de evidência
+são sinais heurísticos.

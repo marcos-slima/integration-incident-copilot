@@ -133,3 +133,25 @@ Além disso:
   sistema fora do ar.
 - **Credenciais só por ambiente** (`.env` ou Secret Kyma). O registro
   cifrado do admin (DA-46/47) é para provedores de LLM, não para conectores.
+
+## Proveniência da validação real
+
+As datas abaixo identificam o registro no Git. A validação não foi
+reexecutada nesta atualização. Cassettes e `MockTransport` verificam
+contratos simulados e têm alcance separado.
+
+| Conector | Registro | Ambiente e recorte relatado | Limite |
+|---|---|---|---|
+| RFC | 11/09/2026, `285a216` | ABAP Cloud Developer Trial A4H rel. 754, logon e `RFC_SYSTEM_INFO`, pyrfc 3.3.1 e SDK 7.50 PL19 | O Trial não confirmou a leitura por `BAPI_IDOC_STATUS` |
+| ServiceNow | 04/09/2026, `8dffbc8` | PDI, consulta pela Table API com Basic Auth | O registro não estabelece cobertura das variantes da API ou de instâncias de clientes |
+| Salesforce | 04/09/2026, `b261564` | Developer Edition, OAuth2 Client Credentials e consulta SOQL | O registro não estabelece cobertura de políticas e schemas customizados |
+| CAP | 08/09/2026, `22b2280` | BTP Trial, OData v4 com XSUAA e correção do filtro e do mapeamento | O registro não estabelece compatibilidade com qualquer serviço CAP |
+
+Para drift OData, `ODataConnector.fetch_contract` reaproveita OAuth do
+conector, usa a URL administrativa do serviço com sufixo `/$metadata`,
+timeout HTTP e parsing dedicado. O operador deve apontar para o serviço
+autorizado e configurar HTTPS. Erros tratados retornam contrato ausente,
+que o observador classifica como `unverified`. O fingerprint representa
+o contrato normalizado, separado do XML recebido. A observação do CLI e
+a comparação do histórico são descritas no capítulo 14 do
+[manual](MANUAL.md).

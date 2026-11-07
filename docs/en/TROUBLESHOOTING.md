@@ -109,7 +109,7 @@ for nome in COLLECTIONS.values():
 | Cause | Fix |
 |---|---|
 | Empty collection | `uv run python -m app.rag.ingest --target incidents`. Use `--target reference` for the reference library and `--target all` for both. |
-| **Qdrant down** | Today the `/diagnose` responds **500**, even when the rule engine would resolve without RAG (finding of the 2026-10-07 validation, still open). Bring up the Qdrant before the API; the `/ready` reports `qdrant: degraded`. |
+| **Qdrant down** | Check `/ready` and logs. DA-65 returns empty results for handled query failures. The tests simulate query errors with stubbed embeddings. The HTTP 500 observed on 2026-10-07 is historical. An ASGI check with a refused Qdrant connection and synthetic embeddings returned readiness 503 and IDoc rule diagnosis 200. Real embedding initialization was outside the check. |
 | Embedding different from the one used in ingestion | The retriever checks the identity of the embedding (DA-45). Re-ingest with the same `EMBEDDING_BACKEND`/`EMBEDDING_MODEL`. Since the 2026-10-07 validation, `EMBEDDING_BACKEND` in the `.env` now works: before it only worked as exported variable in the shell. |
 | Reference fallback does not happen | Check `REFERENCE_LIBRARY_FALLBACK_ENABLED`. The Kyma deployment comes with `false` (M-24). |
 

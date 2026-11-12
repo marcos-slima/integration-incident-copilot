@@ -3535,6 +3535,21 @@ flag ligada e descarte com ela desligada.
   confirmada (`applicability=candidate_homologation_not_production_certified`).
 - As ferramentas ainda não são chamadas pelo grafo (nó fiscal: fase seguinte).
 
+**Fase 3 (2026-11-12): linha do tempo e regras fiscais.**
+- `app/fiscal/correlation.py`: eventos `sent`/`timeout`/`response`/`error`
+  normalizados para UTC (horário sem fuso é recusado) e correlacionados só
+  por identificador explícito (`document_ref` = chave de acesso).
+- `diagnose_duplicity()` (UC01, cStat 204): fato `F-204` com a regra
+  `NT2018.005_v1.51_sec4.5_2B08-20`; a hipótese `H1` (reenvio após timeout)
+  exige dois ou mais envios do mesmo documento **e** timeout entre o primeiro
+  e o último. Sem isso, fato `G-204` e causa `inconclusive`.
+- `diagnose_timeout()` (UC02): timeout sem resposta posterior gera
+  `processing_outcome=unknown` e hipótese de resposta perdida; nunca afirma
+  indisponibilidade do autorizador.
+- Nenhuma regra gera ação automática; a próxima ação é sempre consulta
+  autorizada antes de reenviar.
+- Testes: `tests/test_da93_fiscal_correlation.py`.
+
 ---
 
 **Fim do documento.**

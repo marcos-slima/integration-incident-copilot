@@ -406,6 +406,12 @@ class Settings(BaseSettings):
     # Faz parte da Fase 2/3 do DA-61. Exige ontology_ttl_path válido.
     ontology_enrichment_enabled: bool = False
 
+    # FISCAL_DOMAIN_ENABLED (app/agent/graph.py::run_diagnosis) - DA-93
+    # Desligado por default. Fase 1 do dominio fiscal DF-e: quando ligado, o
+    # `fiscal_context` da requisicao chega ao CopilotState; desligado, o campo
+    # e' aceito e descartado (grafo, prompt e roteamento identicos ao atual).
+    fiscal_domain_enabled: bool = False
+
     # CHECKPOINTING_ENABLED (app/agent/graph.py)
     # Opt-in para checkpointing LangGraph com PostgresSaver.
     # Quando ligado, o grafo pode ser interrompido e retomado a partir

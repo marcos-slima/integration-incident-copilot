@@ -262,6 +262,13 @@ def run_diagnosis(
         # sem esta chave no estado inicial, o valor era descartado pelo
         # StateGraph e o incidente era persistido com tenant_id=NULL.
         "tenant_id": request.tenant_id,
+        # DA-93: com a flag desligada o contexto fiscal e' descartado aqui,
+        # entao nenhum no a jusante muda de comportamento.
+        "fiscal_context": (
+            request.fiscal_context.model_dump(mode="json")
+            if settings.fiscal_domain_enabled and request.fiscal_context is not None
+            else None
+        ),
         # DA-50: propaga connector_source_system (system_key) do request para
         # o state - antes esse campo existia em IncidentRequest mas nunca
         # chegava ao pipeline, entao incidents.connector_source_system era

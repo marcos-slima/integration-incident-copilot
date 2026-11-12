@@ -101,6 +101,7 @@ final.
 | 90 | [81](#81-documentação-grc-da-90) | Documentação GRC (ISO 27001, SOC2): mapeamento, guia de auditoria, checklist |
 | 91 | [82](#82-testes-rbac-completos-da-91) | Testes RBAC completos para todos os endpoints |
 | 92 | [83](#83-modelo-canônico-qwen3635b-a3b-da-92) | Modelo canônico `qwen3.6:35b-a3b` desde 2026-10-13, substituindo `qwen3-coder-next:latest`; re-baseline do promptfoo pendente (DA-51) |
+| 93 | [85](#85-domínio-fiscal-df-e-fase-1-flag-e-contrato-de-contexto-da-93) | Domínio fiscal DF-e, fase 1: flag e contrato `FiscalContext` |
 | 64 | [84](#84-ontologia-quebrada-correção-de-bug-em-retrieve_node-da-64) | Ontologia quebrada (correção de bug em `retrieve_node`) |
 
 > **Ordenação da prosa:** as seções §42–§47 (DA-42, DA-38, DA-39, DA-40,
@@ -3471,6 +3472,41 @@ else:
   mudaria o digest do prompt, invariante 20), e `retrieve_node` continua
   tratando `error_code` de transporte como categoria SKOS sem mapeamento
   explícito — código sem correspondência apenas cai no retrieval base.
+
+---
+
+### 85. Domínio fiscal DF-e, fase 1: flag e contrato de contexto (DA-93)
+
+**O problema.** O estudo IIC → SAP AMS/DF-e (`ESTUDO_IIC_AMS_DFE_CONSOLIDADO_v3`)
+propõe especializar o copiloto em incidentes de documentos fiscais
+eletrônicos. Fazer isso num branch de longa duração quebraria os gates
+(`prompt_digest_measured`, `connector_reachable`, `da_registered`) a cada
+mudança do núcleo. E o domínio fiscal não é um mecanismo de transporte:
+reaproveitar `interface_type` para "nfe" misturaria dois eixos.
+
+**A solução.** Domínio plugável na `main`, atrás de flag:
+- `FISCAL_DOMAIN_ENABLED` (`app/config.py`, default `false`).
+- Contrato `FiscalContext` (`app/models/models.py`), versionado
+  (`schema_version="1"`) e restrito ao recorte do MVP: `family="nfe"`,
+  `model="55"`, `layout_version="4.00"`, `environment`
+  (`homologation`/`production`), `jurisdiction` (UF validada) e
+  `event_time` opcional para filtro de vigência.
+- `IncidentRequest.fiscal_context` opcional; `run_diagnosis()` só copia o
+  contexto para o `CopilotState` com a flag ligada. Desligada, o campo é
+  aceito e descartado — grafo, prompt (digest inalterado) e roteamento
+  ficam idênticos.
+
+**Validação.** `tests/test_da93_fiscal_context.py`: default da flag, recorte
+aceito e rejeitado (UF inválida, modelo 65, leiaute 3.10), propagação com a
+flag ligada e descarte com ela desligada.
+
+**Limitações (registradas de propósito).**
+- Fase 1 não tem nó fiscal: com a flag ligada o contexto só chega ao estado.
+  Ferramentas determinísticas (XSD, cStat, dígito da chave) e o especialista
+  fiscal são as fases seguintes do estudo (PRs 2–6).
+- Recorte definido para o MVP: SP, homologação. O contrato aceita outras UFs
+  e produção porque o recorte é de dados de teste, não de schema.
+- `IncidentEventData` (webhook/AMQP) ainda não carrega `fiscal_context`.
 
 ---
 

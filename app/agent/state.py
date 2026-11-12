@@ -67,6 +67,9 @@ class CopilotState(TypedDict, total=False):
     # descarta chaves fora do CopilotState, e sem esta o tenant nunca
     # chegava ao recorder (todo incidente era gravado com tenant_id=NULL).
     tenant_id: str | None
+    # DA-93: contexto fiscal (FiscalContext.model_dump(mode="json")) ou None.
+    # So e' preenchido quando FISCAL_DOMAIN_ENABLED=true.
+    fiscal_context: dict | None
     # DA-49/50: chave de sistema informado pelo cliente (opcional). Permite
     # correlacionar incident com integration_systems (system_key) sem FK hard
     # no contrato - propagado ate o recorder para populacao de

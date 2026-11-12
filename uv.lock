@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'linux'",
@@ -1411,6 +1411,7 @@ dependencies = [
     { name = "langfuse" },
     { name = "langgraph" },
     { name = "langgraph-checkpoint-postgres" },
+    { name = "lxml" },
     { name = "mcp" },
     { name = "neo4j" },
     { name = "numpy" },
@@ -1483,6 +1484,7 @@ requires-dist = [
     { name = "langfuse", specifier = ">=4.14" },
     { name = "langgraph", specifier = ">=1.2" },
     { name = "langgraph-checkpoint-postgres", specifier = ">=3.2.0" },
+    { name = "lxml", specifier = ">=6.1" },
     { name = "mcp", specifier = ">=1.9.0" },
     { name = "neo4j", specifier = ">=6.2" },
     { name = "numpy", specifier = ">=2.5.1" },

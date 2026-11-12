@@ -3508,6 +3508,31 @@ flag ligada e descarte com ela desligada.
   e produção porque o recorte é de dados de teste, não de schema.
 - `IncidentEventData` (webhook/AMQP) ainda não carrega `fiscal_context`.
 
+**Fase 2 (2026-11-11): ferramentas fiscais determinísticas.**
+- `app/fiscal/xml_tools.py`: parse seguro (sem DTD, entidades, rede ou
+  schema remoto; limite de 1 MB), decomposição da chave de acesso com dígito
+  verificador módulo 11 e cUF IBGE, leitura de `cStat`/`xMotivo`/`tpAmb` só em
+  `protNFe/infProt` (nunca status de lote), hash SHA-256 dos bytes originais e
+  `findings` do tipo `fact`.
+- Pacote oficial versionado em `data/fiscal/schemas/nfe/PL_010g_v1.03/`, com
+  manifesto (`PL_010g_v1.03.manifest.json`): URL do Portal Nacional NF-e,
+  publicação 26/10/2026, obtido em 11/11/2026, SHA-256 do ZIP e de cada XSD.
+  `SchemaPackage.load()` recusa o pacote se algum hash divergir.
+- Validação XSD compilada sem rede contra o entrypoint `NFe/nfe_v4.00.xsd`.
+  Sem pacote, sem entrypoint ou com versão desconhecida, o resultado é
+  `not_executed`, nunca `valid`.
+- Testes: `tests/test_da93_fiscal_xml.py`.
+
+**Limitações da fase 2.**
+- O PL 010g não traz schema de `protNFe`: protocolos de retorno ficam com
+  `xsd_validation=not_executed`.
+- Falta o **controle positivo** (NF-e completa e válida no XSD), que depende de
+  uma amostra de homologação autorizada; até lá só o caminho inválido está
+  provado.
+- Assinatura digital não é verificada; vigência do pacote em produção não foi
+  confirmada (`applicability=candidate_homologation_not_production_certified`).
+- As ferramentas ainda não são chamadas pelo grafo (nó fiscal: fase seguinte).
+
 ---
 
 **Fim do documento.**

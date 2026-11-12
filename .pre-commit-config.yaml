@@ -18,7 +18,9 @@ repos:
     rev: v5.0.0
     hooks:
       - id: trailing-whitespace
+        exclude: ^data/fiscal/schemas/  # XSD oficiais: bytes conferidos por hash (DA-93)
       - id: end-of-file-fixer
+        exclude: ^data/fiscal/schemas/
       - id: check-yaml
       - id: check-added-large-files
         args: ["--maxkb=5000"]  # bloqueia commit acidental de arquivo grande

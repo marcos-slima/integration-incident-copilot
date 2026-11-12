@@ -74,7 +74,7 @@ final.
 | 55 | [40](#40-manutenção-de-usuários-pelo-admin-com-ativação-por-e-mail-e-telefone-da-55) | Manutenção de usuários pelo admin com ativação em duas etapas: token por e-mail → código por telefone (out-of-band até haver SMTP/SMS) |
 | 56 | [41](#41-conector-sap-popi-o-middleware-on-premise-que-não-é-rest-first-da-56) | Conector SAP PO/PI on-premise: Basic Auth nativo contra o Message Monitor, com OAuth2 opcional para quando há API Management na frente |
 | 60 | [51](#51-criptografia-em-repouso-de-evidence_json-com-fernet-da-60) | Criptografia em repouso de `evidence_json` com Fernet (`LLM_CREDENTIALS_MASTER_KEY`) + migration idempotente `009_encrypt_evidence_json.py` |
-| 61 | [52](#52-taxonomia-de-erros-sap-com-ttl-rdflib-da-61) | Taxonomia de erros SAP com TTL/RDFLib (SKOS) para Rule Engine: carregamento dinâmico vs hardcoded, zero breaking changes (DA-61 Fase 1) |
+| 61 | [52](#52-taxonomia-de-erros-sap-com-ttlrdflib-skos-para-rule-engine-da-61) | Taxonomia de erros SAP com TTL/RDFLib (SKOS) para Rule Engine: carregamento dinâmico vs hardcoded, zero breaking changes (DA-61 Fase 1) |
 | 62 | [53](#53-neo4j-loader-para-skos-taxonomy-import-da-62) | Neo4j loader para SKOS taxonomy import (idempotent upsert, Cypher queries) |
 | 57 | [48](#48-fontes-de-busca-web-como-configuração-e-approved-que-não-era-no-op-da-57) | Fontes de busca web como configuração (`web_search_sources`): `WEB_SEARCH_POLICY=approved` deixa de ser no-op |
 | 58 | [49](#49-mapa-de-cobertura-dedicated-generic-e-absent-da-58) | Mapa de cobertura produto SAP × mecanismo, calculado de dados versionados: 3 níveis (`dedicated` / `generic` / `absent`) em vez de um booleano |
@@ -84,7 +84,7 @@ final.
 | 68 | [58](#58-matriz-de-falhas-e-failover-tipado-da-68) | Matriz de falhas e failover tipado: taxonomia fechada, mapear exceções → classe, definir retry/backoff/circuit/failover/escala |
 | 69 | [59](#59-checkpointing-e-execução-resumível-da-69) | Checkpointing e execução resumível: `checkpointer=PostgresSaver`, `thread_id` = id do incidente, retomada a partir do último nó concluído |
 | 70 | [60](#60-métricas-e-finops-da-70) | Métricas e FinOps: Prometheus (`llm_requests_total`, `llm_tokens_total`, `llm_cost_usd_total`, `llm_budget_deviation_ratio`, `diagnosis_duration_seconds`) |
-| 63 | [54](#54-skills-declarativas---yaml-como-fonte-de-verdade-para-capability-e-roteamento-da-63) | Skills declarativas — YAML como fonte de verdade para capability e roteamento (DA-63) |
+| 63 | [54](#54-skills-declarativas--yaml-como-fonte-de-verdade-para-capability-e-roteamento-da-63) | Skills declarativas — YAML como fonte de verdade para capability e roteamento (DA-63) |
 | 65 | [55](#55-degradação-graciosa-do-rag-quando-qdrant-cai-da-65) | Degradação graciosa do RAG: Qdrant cai → `_retrieve_hybrid` e `_retrieve_dense_only` retornam `[]` → rule engine ainda responde erros conhecidos; fluxo completo `/diagnose → run_diagnosis` pendente de teste de integração |
 | 71 | [66](#66-sanitização-do-resultado-de-busca-web-devolvido-ao-llm-da-71) | Resultado de busca web sanitizado e delimitado antes de voltar ao LLM (tool do ReAct e `web_search_node`) |
 | 74 | [69](#69-conteúdo-do-diagnóstico-no-idioma-pedido-da-74) | Conteúdo do diagnóstico (rule engine, avisos, relatório, prompt, ativação) no idioma pedido; pt-BR intacto e medido, `en` com digest próprio; gate `content_i18n` |
@@ -92,7 +92,7 @@ final.
 | 72 | [67](#67-roteamento-por-registro-de-modelos-da-72) | Roteamento por registro de modelos: cada modelo habilitado é candidato do Policy Engine, com parâmetros por modelo, score custo × latência e failover pela lista |
 | 75 | [70](#70-aprovação-humana-no-grafo-human-in-the-loop-da-75) | Human-in-the-Loop: interrupt no node de diagnóstico quando `escalation.should_escalate == True`, endpoint `/incidents/{id}/review` para retomada com `hitl_response` |
 | 76 | [71](#71-aviso-de-ia-no-relatório-e-api-da-76) | Aviso de IA — texto embutido no template do relatório, chave `ai_warning` no catálogo (pt-BR + en), campo `DiagnosisResponse.ai_warning` |
-| 82 | [72](#72-rollback-deployment-da-82) | Rollback de deployment — tabelas `snapshot_table`/`rollback_log` (schema apenas); endpoint removido até existir mecanismo real de rollback |
+| 82 | [72](#72-rollback-de-deployment-da-82) | Rollback de deployment — tabelas `snapshot_table`/`rollback_log` (schema apenas); endpoint removido até existir mecanismo real de rollback |
 | 83 | [74](#74-explicabilidade-xai-da-83) | Explicabilidade XAI — campo `explanation` em `DiagnosisResponse`, função `_build_xai_explanation` |
 | 86 | [77](#77-ui-versionamento-rag-da-86) | UI versionamento RAG: tabela `knowledge_document_versions`, endpoints `/admin/knowledge/documents/{id}/versions`, `/rollback/{version}`, `/history/{id}` |
 | 87 | [79](#79-dashboard-por-domínio-da-87) | Dashboard de Performance por Domínio: endpoint `/admin/metrics/domains` com janela `days` (default 30), métricas count/hit@1/latência/custo por domain (sap/saas/generic) |
@@ -101,7 +101,9 @@ final.
 | 90 | [81](#81-documentação-grc-da-90) | Documentação GRC (ISO 27001, SOC2): mapeamento, guia de auditoria, checklist |
 | 91 | [82](#82-testes-rbac-completos-da-91) | Testes RBAC completos para todos os endpoints |
 | 92 | [83](#83-modelo-canônico-qwen3635b-a3b-da-92) | Modelo canônico `qwen3.6:35b-a3b` desde 2026-10-13, substituindo `qwen3-coder-next:latest`; re-baseline do promptfoo pendente (DA-51) |
-| — | — | DA-64: número não utilizado (pulo intencional) |
+| 93 | [85](#85-fatos--hipóteses-e-domínio-fiscal-da-93) | Fatos × hipóteses (`findings`, `cause_status`, `rule_reference`); fases fiscais movidas para o DF-e Copilot |
+| 94 | [86](#86-separação-de-produto-core-compartilhado-e-df-e-copilot-da-94) | Separação de produto: core compartilhado + DF-e Copilot (monorepo, plugin de domínio) |
+| 64 | [84](#84-ontologia-quebrada-correção-de-bug-em-retrieve_node-da-64) | Ontologia quebrada (correção de bug em `retrieve_node`) |
 
 > **Ordenação da prosa:** as seções §42–§47 (DA-42, DA-38, DA-39, DA-40,
 > DA-41, DA-12) foram retro-registradas em bloco, fora da ordem crescente de
@@ -2113,12 +2115,12 @@ no resumo. Suíte completa e gates verdes.
 
 ### 42. Escala calibrada por sigmoid para o rerank score (DA-42)
 
-**O problema.** O score do cross-encoder de rerank ([DA-29](#decisoes-de-arquitetura))
+**O problema.** O score do cross-encoder de rerank ([DA-29](#decisões-de-arquitetura))
 é um logit, não uma probabilidade: ele não é comparável entre documentos, e
 `0.7` numa consulta e `0.7` em outra não significam a mesma coisa. Três
 consumidores o usavam direto e cada um tinha seu próprio corte — a
 `evidence_strength` (DA-15/16), o limiar de admissão pós-reranker (DA-25) e os
-tiers de escalonamento ([DA-44](#decisoes-de-arquitetura)). O mesmo par
+tiers de escalonamento ([DA-44](#decisões-de-arquitetura)). O mesmo par
 documento/consulta podia ser "evidência forte" para um e "descartável" para
 outro, dependendo do consumidor.
 
@@ -2264,7 +2266,7 @@ perde o estado compartilhado e ganha o de antes, que é o comportamento de
 ### 47. A troca de modelo que não tinha número (DA-12)
 
 **O problema.** O modelo canônico já tinha duas decisões de comparação
-registradas — [DA-4](#decisoes-de-arquitetura) e [DA-8](#decisoes-de-arquitetura) — e
+registradas — [DA-4](#decisões-de-arquitetura) e [DA-8](#decisões-de-arquitetura) — e
 mesmo assim a troca de produção não tinha registro próprio. O commit `0222b79`
 (que trocou `qwen2.5-coder:32b` por `qwen3-coder-next:latest`) foi commitado
 como `feat:` sem prefixo de DA, e por isso ficou anos sem linha na tabela. DAs
@@ -3167,10 +3169,15 @@ e seguro.
 
 ### 73. Multi-tenancy (DA-79 — candidata; histórico)
 
-> **Status (2026-10-20): candidata.** O schema (`tenant_id`) e os filtros de
-> repositório existem, mas o isolamento não é fail-closed em todos os caminhos.
-> O texto abaixo é o registro histórico da decisão original; a pendência vive
-> em `CLAUDE.md` (lista de DAs candidatas) e `docs/DIVIDAS_TECNICAS.md`.
+> **Status (2026-11-11): candidata, com o gap A5 parcialmente corrigido.**
+> O schema (`tenant_id`) e os filtros de repositório existem, mas o isolamento
+> não é fail-closed em todos os caminhos. O gap A5 do estudo IIC→SAP AMS/DF-e
+> (*"tenant_id não chega ao grafo"*) foi reproduzido e corrigido nesta data:
+> `run_diagnosis()` propaga `request.tenant_id` para o `CopilotState` e
+> `build_incident_row()` grava a coluna. Antes, todo incidente diagnosticado
+> era persistido com `tenant_id=NULL`. A pendência remanescente (tenant
+> derivado da identidade, não do corpo da requisição) continua registrada em
+> `CLAUDE.md` (DAs candidatas) e `docs/DIVIDAS_TECNICAS.md`.
 
 **Motivo.** Isolamento de tenants é essencial para produtos SaaS multi-tenant. Sem
 tenant_id em incidents e queries filtradas por tenant, dados de um cliente podem
@@ -3195,9 +3202,21 @@ vazar para outro.
 - `filter_by_tenant_id()` devolve só incidentes do tenant especificado.
 - `get_by_id_and_tenant()` falha silenciosamente se tenant_id não bater.
 - Tenant_id é gravado e recuperado com o incidente.
+- `tests/test_gap_a5_multitenancy.py` (gap A5): `tenant_id` da requisição chega
+  ao estado inicial do grafo (`app/agent/graph.py`), o `CopilotState` declara a
+  chave (`app/agent/state.py`) e `build_incident_row()` persiste o valor —
+  com teste de fallback para a requisição e de `None` sem tenant. Os filtros de
+  leitura por tenant são verificados no SQL gerado, não por filtragem em Python.
 
 **Limitações (registradas de propósito).**
-- Tenant_id não é obrigatório: quando None, usa tenant_id do usuário autenticado (quando disponível) ou é None (comportamento anterior).
+- Tenant_id não é obrigatório: quando None, o incidente é gravado com
+  `tenant_id=NULL` (comportamento anterior preservado — não se inventa escopo).
+- **O tenant ainda vem do corpo da requisição**, não da identidade
+  autenticada. Um chamador autenticado pode informar o tenant que quiser, e as
+  rotas de verificação/listagem da API pública não filtram por tenant. Por
+  isso o isolamento não pode ser alegado: em piloto com dados reais, usar
+  instância dedicada por cliente até que a identidade carregue o tenant
+  (G4 do estudo).
 
 ---
 
@@ -3388,10 +3407,142 @@ mudança não tinha rastro no livro-razão.
   `.env.example`, `docker-compose.yml` e `promptfooconfig.yaml`.
 - `qwen3-coder-next:latest` permanece registrado como histórico em DA-4/8 e
   DA-12; não é mais o default.
-- O re-baseline do promptfoo continua pendente (DA-51). Enquanto o baseline
-  medir outro modelo, o gate `deployed_model_evaluated` emite WARN.
+- A DA-51 exige revalidação quando modelo, prompt ou contexto de execução
+  mudam. A baseline versionada do promptfoo registra o Qwen em
+  13/10/2026. O gate compara esse artefato também com o modelo declarado
+  para implantação. O manifesto Kyma declara `gpt-4o-mini`.
 
 **Validação.** `tests/test_model_harness.py` cobre o harness de medição;
 `promptfooconfig.yaml` e `app/config.py` são a fonte do default. O gate
 `deployed_model_evaluated` é o lembrete de que a qualidade só está medida
 para o modelo que o baseline registra.
+
+---
+
+### 84. Ontologia quebrada (correção de bug em `retrieve_node`) (DA-64)
+
+**O problema.** O nó `retrieve_node` (`app/agent/nodes.py:164`) tentava acessar
+`error_code` de `connector_data` usando `state.get("connector_data", {}).get("error_code")`,
+mas `connector_data` é um `ConnectorResult` (dataclass), não um dicionário. Dataclasses
+não têm o método `.get()`, então quando `ontology_enrichment_enabled=true` e
+`connector_data` tem valor, isso causava `AttributeError: 'ConnectorResult' object has no attribute 'get'`.
+
+**O caso de uso.** Quando a flag `ONTOLOGY_ENRICHMENT_ENABLED=true`, o pipeline
+tenta extrair a categoria de erro do resultado do conector para enriquecer a
+recuperação com a ontologia SKOS (error_codes.ttl). Sem essa correção, qualquer
+incidente com dados reais do conector e ontologia ativada falhava com erro
+indefinido.
+
+**A solução.** Substituir o acesso por dicionário por `getattr(connector_data, "error_code", None)`:
+
+```python
+# Antes (quebrado):
+category = state.get("connector_data", {}).get("error_code")
+
+# Depois (corrigido):
+connector_data = state.get("connector_data")
+if connector_data is not None:
+    category = getattr(connector_data, "error_code", None)
+else:
+    category = None
+```
+
+**Validação.**
+- `tests/test_gap_a4_ontology_broken.py`: 8 testes passando (incluindo reprodução
+  do bug com `ConnectorResult` e validação da correção)
+- Quality gate: `da_registered` e `docs_code_references` validam a DA
+
+**Limitações (registradas de propósito).**
+- A correção não altera o comportamento funcional: `error_code=None` continua
+  levando ao `ontology_category=None` e ao uso do retrieval base.
+- O `ConnectorResult` já tem `error_code: str | None` no seu schema, então o
+  acesso direto é seguro e consistente com o resto do código (outros nós já
+  usam `connector_data.error_code` diretamente).
+
+**Complemento (2026-11-11, restante do gap A4).**
+- `ontology_inference` e `ontology_next_steps` passaram a ser declarados no
+  `CopilotState` (`app/agent/state.py`): antes o `StateGraph` descartava o
+  retorno do `ontology_enrich_node`.
+- O nó (renomeado `ontology_debug` → `ontology_enrich` em `app/agent/graph.py`)
+  roda **entre** o diagnóstico (de onde lê `rule_engine_category`) e o
+  `report`, nos dois caminhos (com e sem GraphRAG). Antes ele era ligado
+  depois do `report`, em paralelo ao `END`, e nunca influenciava o resultado.
+- Testes: `tests/test_gap_a4_a1_wiring.py` confere as arestas do grafo
+  compilado com a flag ligada e desligada.
+- **Ainda aberto:** o `report_node` e o prompt não consomem essas chaves (isso
+  mudaria o digest do prompt, invariante 20), e `retrieve_node` continua
+  tratando `error_code` de transporte como categoria SKOS sem mapeamento
+  explícito — código sem correspondência apenas cai no retrieval base.
+
+---
+
+### 85. Fatos × hipóteses e domínio fiscal (DA-93)
+
+**Origem.** O estudo IIC → SAP AMS/DF-e propôs especializar o copiloto em
+documentos fiscais eletrônicos. As fases 1–3 (contrato fiscal, ferramentas
+XML/XSD e regras de correlação) foram construídas no core e, pela **DA-94**,
+movidas para o produto independente **DF-e Copilot** (`packages/dfe/`); a
+decisão completa e o histórico estão em `packages/dfe/docs/DECISOES.md`.
+
+**O que fica no core (fase 4, genérico a qualquer domínio).**
+- `DiagnosisResponse.findings` (`Finding`: `fact`/`hypothesis`, fonte,
+  evidências, teste de confirmação, alternativas) e `cause_status`
+  (`hypothesis`/`inconclusive`; `confirmed` só por revisão humana).
+- `app/agent/findings.py::build_findings`: fatos dos plugins de domínio
+  (`CopilotState.domain_findings`) e a causa proposta como `hypothesis`; um
+  `fact` sem fonte determinística é rebaixado.
+- O `DiagnosisModel` (saída estruturada do LLM) não mudou: o LLM não declara
+  fatos e o digest do prompt fica igual (invariante 20).
+- `trust_level` **`rule_reference`**: a evidência do rule engine deixa de ser
+  `system_observed` (regra publicada não prova que o incidente a violou). No
+  relatório continua entre as evidências primárias; UI e catálogos pt-BR/en
+  ganharam o rótulo.
+- Testes: `tests/test_da93_findings.py`.
+
+---
+
+### 86. Separação de produto: core compartilhado e DF-e Copilot (DA-94)
+
+**O problema.** O domínio fiscal dentro do Integration Incident Copilot,
+mesmo atrás de flag, misturava dois produtos: um copiloto de incidentes de
+integração multi-vendor e um copiloto de documentos fiscais. Para o
+comprador e para a documentação, são soluções diferentes; tecnicamente,
+compartilham o mesmo core (gateway LLM, RAG, evidência, HITL, auth,
+observabilidade, gates).
+
+**A solução: monorepo com plugin de domínio.**
+- `app/` continua sendo o core **e** o produto IIC. O core não conhece
+  nenhum domínio: `app/agent/domain_plugins.py` define o protocolo
+  `DomainPlugin` (`validate_context`, `run`) e carrega plugins por
+  `DOMAIN_PLUGINS` (vazio por default; plugin que não carrega derruba o
+  build do grafo, fail-closed).
+- `IncidentRequest.domain_context` (opaco para o core) é validado pelo
+  plugin em `run_diagnosis()`; contexto recusado vira 422
+  `domain_context_invalid` em `/diagnose`. Sem plugin, é descartado.
+- Com plugin, o nó `domain_tools` roda entre `connector` e `retrieve` (antes
+  do RAG, resiliência A7) e escreve `domain_findings`. Falha do plugin vira
+  finding de lacuna, nunca exceção no grafo. Sem plugin, o grafo é idêntico.
+- O produto **DF-e Copilot** vive em `packages/dfe/` (pacote `dfe_copilot`,
+  `pyproject.toml` próprio, testes em `packages/dfe/tests`, documentação em
+  `packages/dfe/docs/`) e sobe com `uvicorn dfe_copilot.main:app`, que liga
+  `DOMAIN_PLUGINS=dfe_copilot.plugin`.
+- Substitui a flag `FISCAL_DOMAIN_ENABLED` e o `FiscalContext` no core
+  (DA-93 fase 1), que deixaram de existir.
+
+**Validação.** `tests/test_da94_domain_plugins.py` (plugin falso: default
+vazio, fail-closed, contexto aceito/recusado, isolamento de falha, grafo
+inalterado sem plugin, nó antes do retrieve, propagação em `run_diagnosis`,
+core sem import do produto) e `packages/dfe/tests/` (plugin real).
+
+**Limitações (registradas de propósito).**
+- O core ainda não foi movido para `packages/core`: `app/` acumula core e
+  IIC. A separação física é etapa posterior (`packages/dfe/docs/PENDENCIAS.md`).
+- Os dois produtos compartilham o `uv.lock` da raiz e o mesmo workflow de CI,
+  mas cada um roda a própria suíte com a própria config de pytest (o DF-e em
+  `packages/dfe/pyproject.toml`, `cd packages/dfe && pytest`). A
+  imagem Docker atual é só do IIC (`packages/` não é copiado).
+- Um plugin por requisição: o primeiro que aceitar o contexto.
+
+---
+
+**Fim do documento.**

@@ -11,19 +11,19 @@ Incident Copilot. Instalação e configuração inicial estão em
 
 ## Conteúdo
 
-1. [A API não sobe](#1-a-api-nao-sobe)
-2. [Consumidor AMQP não conecta](#2-consumidor-amqp-nao-conecta)
+1. [A API não sobe](#1-a-api-não-sobe)
+2. [Consumidor AMQP não conecta](#2-consumidor-amqp-não-conecta)
 3. [Kyma: CrashLoopBackOff ou readiness falhando](#3-kyma-crashloopbackoff-ou-readiness-falhando)
 4. [Redis e circuit breaker](#4-redis-e-circuit-breaker)
 5. [RAG sem contexto ou `/diagnose` com 500 por Qdrant](#5-rag-sem-contexto-ou-diagnose-com-500-por-qdrant)
-6. [LLM: autenticação ou `PolicyViolationError`](#6-llm-autenticacao-ou-policyviolationerror)
-7. [Busca web não acontece](#7-busca-web-nao-acontece)
+6. [LLM: autenticação ou `PolicyViolationError`](#6-llm-autenticação-ou-policyviolationerror)
+7. [Busca web não acontece](#7-busca-web-não-acontece)
 8. [Frontend: 401 ou tela de login em loop](#8-frontend-401-ou-tela-de-login-em-loop)
 9. [Build da imagem e `python-qpid-proton`](#9-build-da-imagem-e-python-qpid-proton)
-10. [GraphRAG: Neo4j inacessível](#10-graphrag-neo4j-inacessivel)
+10. [GraphRAG: Neo4j inacessível](#10-graphrag-neo4j-inacessível)
 11. [Ambiente em containers (`scripts/start-docker.sh`)](#11-ambiente-em-containers-scriptsstart-dockersh)
 12. [Kubernetes local (`scripts/k3d-validate.sh`)](#12-kubernetes-local-scriptsk3d-validatesh)
-13. [Idioma: tela ou diagnóstico no idioma errado](#13-idioma-tela-ou-diagnostico-no-idioma-errado)
+13. [Idioma: tela ou diagnóstico no idioma errado](#13-idioma-tela-ou-diagnóstico-no-idioma-errado)
 
 ---
 
@@ -110,7 +110,7 @@ for nome in COLLECTIONS.values():
 | Causa | Correção |
 |---|---|
 | Collection vazia | `uv run python -m app.rag.ingest --target incidents`. Use `--target reference` para o acervo de referência e `--target all` para os dois. |
-| **Qdrant fora do ar** | Hoje o `/diagnose` responde **500**, inclusive quando o rule engine resolveria sem RAG (achado da validação de 2026-10-07, ainda aberto). Suba o Qdrant antes da API; o `/ready` acusa `qdrant: degraded`. |
+| **Qdrant fora do ar** | Consulte `/ready` e os logs. DA-65 trata `ResponseHandlingException` e `UnexpectedResponse` nas consultas do retriever, devolvendo lista vazia. O teste simula a consulta com embeddings substituídos. O 500 observado em 07/10/2026 é histórico. No ensaio ASGI com conexão recusada e embeddings sintéticos, readiness respondeu 503 e a regra de IDoc respondeu 200. Consulte a [matriz](TRACEABILITY.md) para precondições e limites. |
 | Embedding diferente do usado na ingestão | O retriever confere a identidade do embedding (DA-45). Reingira com o mesmo `EMBEDDING_BACKEND`/`EMBEDDING_MODEL`. Desde a validação de 2026-10-07, `EMBEDDING_BACKEND` no `.env` passa a valer: antes só valia como variável exportada no shell. |
 | Fallback da referência não acontece | Confira `REFERENCE_LIBRARY_FALLBACK_ENABLED`. O deploy Kyma vem com `false` (M-24). |
 

@@ -230,7 +230,7 @@ def test_odata_connector_real_mode_success(monkeypatch):
         if "oauth/token" in str(request.url):
             return httpx.Response(200, json={"access_token": "fake-token"})
         assert request.headers["Authorization"] == "Bearer fake-token"
-        assert "MSG-001-DEMO" in request.url.params["$filter"]
+        assert request.url.params["$filter"] == "MessageGuid eq 'MSG-001-DEMO'"
         return httpx.Response(200, json=load_cassette("cpi_message_status"))
 
     client = httpx.Client(transport=httpx.MockTransport(handler))

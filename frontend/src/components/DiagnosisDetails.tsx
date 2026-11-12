@@ -9,6 +9,7 @@ import type { DiagnosisResponse, EscalationSignal, EvidenceItem } from '../types
 
 const TRUST_CLASS: Record<EvidenceItem['trust_level'], string> = {
   system_observed: 'trust-ok',
+  rule_reference: 'trust-ok',
   retrieved_document: 'trust-doc',
   web_untrusted: 'trust-warn',
   user_reported: 'trust-neutral',

@@ -161,7 +161,13 @@ def retrieve_node(state: CopilotState) -> CopilotState:
 
     if settings.ontology_enrichment_enabled and get_upper_categories_from_category is not None:
         try:
-            category = state.get("connector_data", {}).get("error_code")
+            # DA-64: connector_data é ConnectorResult (dataclass), não dict
+            # Usar getattr() para acessar error_code diretamente
+            connector_data = state.get("connector_data")
+            if connector_data is not None:
+                category = getattr(connector_data, "error_code", None)
+            else:
+                category = None
             if category:
                 upper_cats = get_upper_categories_from_category(category)
                 if upper_cats:
@@ -837,7 +843,8 @@ def _assemble_evidence(state: CopilotState) -> list[dict]:
                 "excerpt": diagnosis.get("probable_root_cause", "")[:500],
                 "retrieval_score": diagnosis.get("confidence"),
                 "rerank_score": None,
-                "trust_level": "system_observed",  # regra curada = confianca maxima
+                # DA-93: regra curada e' referencia, nao observacao do incidente.
+                "trust_level": "rule_reference",
             }
         )
 
@@ -1534,8 +1541,9 @@ def report_node(state: CopilotState) -> CopilotState:
     # Primary Evidence: sistema observou diretamente (conector real, rule engine)
     # Supporting Facts: inferencia/RAG/web/usuario (revisao humana recomendada)
     evidence_items = _assemble_evidence(state)
-    primary = [e for e in evidence_items if e["trust_level"] == "system_observed"]
-    supporting = [e for e in evidence_items if e["trust_level"] != "system_observed"]
+    _primary_levels = {"system_observed", "rule_reference"}
+    primary = [e for e in evidence_items if e["trust_level"] in _primary_levels]
+    supporting = [e for e in evidence_items if e["trust_level"] not in _primary_levels]
 
     def _evidence_line(item: dict) -> str:
         locator_suffix = f" `{item['locator']}`" if item.get("locator") else ""

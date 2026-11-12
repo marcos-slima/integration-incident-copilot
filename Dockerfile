@@ -49,7 +49,7 @@ ENV UV_LINK_MODE=copy \
 # fallback azure_openai; sem o extra, langchain-openai nao existia na
 # imagem e o primeiro diagnostico falhava com ImportError.
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project --extra reports --extra openai
+RUN uv sync --frozen --no-dev --no-install-project --extra openai
 
 # DEP-01: modelos baixados no build, nao no primeiro request. Antes o
 # primeiro /diagnose de cada pod baixava ~120 MB do reranker e os modelos

@@ -49,6 +49,8 @@ For the English version of this index, see [`docs/en/README.md`](en/README.md).
 
 ## Referência atual
 
+A [matriz de rastreabilidade](TRACEABILITY.md) registra a baseline, caminhos executáveis, divergências e alcance das verificações. Use o [manual](MANUAL.md) para reprodução e a [arquitetura](ARCHITECTURE.md) para os diagramas e decisões.
+
 Descrevem o sistema como ele é **agora**. Se divergirem do código, é bug
 deste documento.
 

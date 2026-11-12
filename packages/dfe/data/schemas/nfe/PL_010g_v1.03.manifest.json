@@ -1,0 +1,26 @@
+{
+  "package_id": "PL_010g_v1.03",
+  "family": "nfe",
+  "layout_version": "4.00",
+  "title": "Schemas XML NF-e - Pacote de Liberação nº 010g v.1.03 - NT 2026.006 v.1.00 e NT 2026.008 v.1.00",
+  "published_at": "2026-10-26",
+  "retrieved_at": "2026-11-11",
+  "source_url": "https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=EQhOQMgipXY=",
+  "source_list_url": "https://www.nfe.fazenda.gov.br/portal/listaConteudo.aspx?tipoConteudo=BMPFMBoln3w=",
+  "zip_sha256": "b329ecbe7e4c05a41bfbc1527f105defb7047328acfeada7c77e1666da485eaf",
+  "entrypoints": {
+    "NFe@4.00": "NFe/nfe_v4.00.xsd"
+  },
+  "applicability": "candidate_homologation_not_production_certified",
+  "notes": "Pacote sem schema de protNFe/retorno; validacao XSD cobre so o documento NFe. Vigencia em producao nao verificada.",
+  "files_sha256": {
+    "Evento/e110001_v1.00.xsd": "3a46fcc6db6c673ae7bbf9767df5fa99d1f4e5b7fbec6bb9575ae358c95b1616",
+    "Evento/e110300_v1.00.xsd": "3def9bd3e19dfb3e78688afc540c049dc77f6fb11ae2603d85b6e759a7908fa6",
+    "Evento/tiposBasico_v1.03.xsd": "88bae738184e4af32286a4825392adf7da458dc1fa763e2feca3b90708aa7fff",
+    "NFe/DFeTiposBasicos_v1.00.xsd": "2da0785a6c70db4f93571187a28514dde715cfd0b0f41e746176fbf3444549f2",
+    "NFe/leiauteNFe_v4.00.xsd": "e8470f5d85ded3d99010676087907214aef71c9626140b672abbafa72656c0f5",
+    "NFe/nfe_v4.00.xsd": "adce3646c13ceb54922ec3142fc1dc45bd4fb839ac35ad583e86c733c07d27df",
+    "NFe/tiposBasico_v4.00.xsd": "772619c85723e598840667ca66e7298a250442df47eeb94b397d2a333ce62047",
+    "NFe/xmldsig-core-schema_v1.01.xsd": "f56744a5f51c03f027de13f39f869307091781a9ef1d91b1ebe14719ce28e1ac"
+  }
+}

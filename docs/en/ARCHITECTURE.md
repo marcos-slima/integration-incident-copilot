@@ -21,7 +21,7 @@ which drew a non-existent graph.
 |---|---|---|---|
 | C4 level 1 - Context | who triggers the agent and where the data goes | [below](#c4-level-1---context) | manual review |
 | C4 level 2 - Containers | what is deployed and with which protocol/credential | [below](#c4-level-2---containers) | manual review |
-| Orchestration graph | how the multi-agent workflow flows | [below](#multi-agent-orchestration-graph-generated-from-code) | `tests/test_diagramas.py` |
+| Orchestration graph | how the multi-agent workflow flows | [below](#multi-agent-orchestration-graph) | `tests/test_diagramas.py` |
 | LLM routing | how the AI Gateway decides which provider to use | [below](#ai-gateway-routing-decision) | `tests/test_diagramas.py` |
 | Evidence confidence | how confidence is calculated from sources | [below](#evidence-confidence-calculation) | manual review |
 | Incident lifecycle | states and transitions of an incident | [below](#incident-lifecycle) | `tests/test_diagramas.py` |
@@ -77,35 +77,12 @@ Source: `docker-compose.yml`, `app/config.py`, `app/llm/factory.py`, `app/rag/re
 
 ---
 
-## Multi-agent orchestration graph (generated from code)
+## Multi-agent orchestration graph
 
-Source: `app/agent/graph.py::build_graph`.
-
-```mermaid
-flowchart TD
-    start["run_diagnosis"]
-    supervisor["supervisor<br/>classify_domain: sap / saas / generic<br/>(deterministic, no LLM)"]
-    connector["connector<br/>get_connector(interface_type)"]
-    retrieve["retrieve<br/>hybrid RAG (dense + sparse)"]
-    graph_enrich["graph_enrich<br/>GraphRAG (Neo4j, opt-in)"]
-    sap_diagnose["sap_diagnose<br/>SAP specialist"]
-    saas_diagnose["saas_diagnose<br/>SaaS specialist"]
-    generic_diagnose["generic_diagnose<br/>generic specialist"]
-    report["report<br/>assemble final answer"]
-
-    start --> supervisor
-    supervisor -->|agent_domain == "sap"| connector
-    supervisor -->|agent_domain == "saas"| connector
-    supervisor -->|agent_domain == "generic"| generic_diagnose
-    connector --> retrieve
-    retrieve --> graph_enrich
-    graph_enrich --> sap_diagnose
-    graph_enrich --> saas_diagnose
-    sap_diagnose --> report
-    saas_diagnose --> report
-    generic_diagnose --> report
-    report --> end["diagnosis result"]
-```
+See the [generated graph](../ARCHITECTURE.md#grafo-de-orquestracao-multiagente-gerado-do-codigo)
+for both variants. The default path runs supervisor, connector, retrieval,
+one domain specialist and report. GraphRAG adds history enrichment and
+writing. The optional ontology branch starts after report.
 
 ---
 
@@ -1851,11 +1828,10 @@ incidentes. A solução tem que ser:
 - `ONTOLOGY_ENRICHMENT_ENABLED=true` → executa ontologia-aware quando
   `ontology_category` inferida; fallback para `retrieve` clássico caso contrário
 
-**Nós do grafo (DA-61 Fases 2–6):**
-- `retrieve_hybrid_ontology_aware()` (Opção C — ontologia integrada no `retrieve_node`)
-- `ontology_enrich_node` (removido: violava contrato ao tentar ler `state['diagnosis']` antes de existir)
-- `hitl_review_node` (opcional: pausa para revisão se confiança < 0.6)
-- `risk_assessment_node` (opcional: avaliação final com HITL/ontology)
+**Current graph.** The flag adds `ontology_enrich` between the specialist (or `graph_write`) and `report` (DA-64).
+Ontology-aware retrieval is a conditional call inside `retrieve`.
+Human review uses an interrupt in the specialist and resumes from
+a checkpoint under separate configuration.
 
 ### Limitações (aceitas)
 

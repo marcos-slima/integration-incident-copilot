@@ -29,7 +29,7 @@ flowchart LR
     WK[Worker RQ] --> RD
   end
   KY[deploy/kyma<br/>bundle] --> LO[deploy/local<br/>overlay] --> K3D
-  API -. host.docker.internal .-> OL
+  API -. "host.docker.internal" .-> OL
   PF[port-forward<br/>:18000] --> API
   classDef h fill:#f1f5f9,stroke:#64748b,color:#1f2937
   classDef k fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e

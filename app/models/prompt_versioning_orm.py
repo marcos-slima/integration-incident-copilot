@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Index, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -38,6 +38,17 @@ class PromptVersion(Base):
 
     __table_args__ = (
         UniqueConstraint("prompt_id", "version", name="uq_prompt_versions_prompt_version"),
+        # Espelha a migration 024_add_prompt_versions_table.py: no maximo UMA
+        # versao corrente por prompt. Sem isto o `alembic check` do CI via o
+        # indice como "removido" e falhava (exit 255).
+        Index(
+            "uq_prompt_versions_current",
+            "prompt_id",
+            "is_current",
+            unique=True,
+            postgresql_where=text("is_current = true"),
+            sqlite_where=text("is_current = 1"),  # testes usam SQLite
+        ),
     )
 
     def __repr__(self) -> str:

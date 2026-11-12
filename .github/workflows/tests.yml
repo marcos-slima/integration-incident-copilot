@@ -57,6 +57,12 @@ jobs:
         # §3.10: --cov + --cov-fail-under=80 — CI falha se cobertura < 80%.
         run: uv run pytest -m "not integration" -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=80
 
+      - name: Pytest — produto DF-e Copilot (DA-94)
+        # Suite propria, com a config de packages/dfe/pyproject.toml.
+        working-directory: packages/dfe
+        timeout-minutes: 3
+        run: ../../.venv/bin/python -m pytest -v --tb=short -p no:cacheprovider
+
 
   security:
     name: security — pip-audit + bandit

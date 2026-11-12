@@ -82,6 +82,10 @@ def build_incident_row(
     return {
         "id": uuid.UUID(incident_id),
         "trace_id": response.trace_id,
+        # DA-79 (gap A5): o estado carrega o tenant que o pipeline de fato
+        # usou; `request.tenant_id` e' o fallback para estados antigos/testes
+        # que nao declaram a chave. None continua None - nao inventa escopo.
+        "tenant_id": final_state.get("tenant_id", request.tenant_id),
         "interface_type": request.interface_type,
         "description": redacted_description,
         "connector_source_system": connector_source_system,

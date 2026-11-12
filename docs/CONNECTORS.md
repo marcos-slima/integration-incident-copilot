@@ -62,6 +62,14 @@ fonte; o gate `connector_validation_matrix` exige que ela cubra todos.
 | `apim` | SAP API Management — **eventos de analytics** | `APIM_ANALYTICS_URL` | `APIM_OAUTH_TOKEN_URL`, `APIM_CLIENT_ID`, `APIM_CLIENT_SECRET` | `APIM-RATE-LIMIT-DEMO` | não; schema especulativo |
 | `po` | SAP PO/PI on-premise (Message Monitor, via fachada) | `PO_BASE_URL` | `PO_AUTH_MODE` (`basic`/`oauth2`), `PO_USERNAME`, `PO_PASSWORD`, `PO_OAUTH_TOKEN_URL`, `PO_OAUTH_CLIENT_ID`, `PO_OAUTH_CLIENT_SECRET` | `PO-FAILED-001`, `PO-HOLDING-001` | não; API não pública |
 
+> **`odata` — contrato do filtro (gap A1, 2026-11-11).** O filtro passou de
+> `MessageId eq '<id>'` para `MessageGuid eq '<id>'`, que é o identificador da
+> API de Message Processing Logs. Quem aponta `ODATA_SERVICE_URL` para uma
+> fachada própria que ainda filtra por `MessageId` precisa ajustá-la. A
+> mensagem é lida de `StatusText` → `LogText` → `CustomStatus`; o detalhe do
+> recurso `ErrorInformation`, a paginação por next-link e a janela temporal
+> ainda não são implementados, e nada disso foi validado contra tenant real.
+
 **Observações por conector** (as que mudam o resultado):
 
 - **RFC.** "Validado" significa logon (`RFC_SYSTEM_INFO`), não a leitura de
@@ -133,3 +141,25 @@ Além disso:
   sistema fora do ar.
 - **Credenciais só por ambiente** (`.env` ou Secret Kyma). O registro
   cifrado do admin (DA-46/47) é para provedores de LLM, não para conectores.
+
+## Proveniência da validação real
+
+As datas abaixo identificam o registro no Git. A validação não foi
+reexecutada nesta atualização. Cassettes e `MockTransport` verificam
+contratos simulados e têm alcance separado.
+
+| Conector | Registro | Ambiente e recorte relatado | Limite |
+|---|---|---|---|
+| RFC | 11/09/2026, `285a216` | ABAP Cloud Developer Trial A4H rel. 754, logon e `RFC_SYSTEM_INFO`, pyrfc 3.3.1 e SDK 7.50 PL19 | O Trial não confirmou a leitura por `BAPI_IDOC_STATUS` |
+| ServiceNow | 04/09/2026, `8dffbc8` | PDI, consulta pela Table API com Basic Auth | O registro não estabelece cobertura das variantes da API ou de instâncias de clientes |
+| Salesforce | 04/09/2026, `b261564` | Developer Edition, OAuth2 Client Credentials e consulta SOQL | O registro não estabelece cobertura de políticas e schemas customizados |
+| CAP | 08/09/2026, `22b2280` | BTP Trial, OData v4 com XSUAA e correção do filtro e do mapeamento | O registro não estabelece compatibilidade com qualquer serviço CAP |
+
+Para drift OData, `ODataConnector.fetch_contract` reaproveita OAuth do
+conector, usa a URL administrativa do serviço com sufixo `/$metadata`,
+timeout HTTP e parsing dedicado. O operador deve apontar para o serviço
+autorizado e configurar HTTPS. Erros tratados retornam contrato ausente,
+que o observador classifica como `unverified`. O fingerprint representa
+o contrato normalizado, separado do XML recebido. A observação do CLI e
+a comparação do histórico são descritas no capítulo 14 do
+[manual](MANUAL.md).

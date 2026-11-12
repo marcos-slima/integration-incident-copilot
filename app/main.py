@@ -23,6 +23,7 @@ from app.a2a.server import router as a2a_router
 from app.admin.routes import router as admin_router  # DA-46/47/48
 from app.admin.security import ensure_admin_key_configured
 from app.admin.ui import ui_router as admin_ui_router
+from app.agent.domain_plugins import DomainContextError
 from app.agent.graph import run_diagnosis
 from app.api_errors import CodedHTTPException, coded_http_exception_handler
 from app.auth import ensure_session_secret_configured, verify_session_cookie
@@ -717,7 +718,14 @@ def diagnose(request: Request, body: IncidentRequest) -> DiagnosisResponse:
     Rate limit: 10 requisicoes por minuto por IP.
     Autenticacao: X-API-Key header (se API_KEY configurado no .env).
     """
-    return run_diagnosis(body)
+    try:
+        return run_diagnosis(body)
+    except DomainContextError as exc:  # DA-94: contexto de dominio recusado pelo plugin
+        raise CodedHTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            code="domain_context_invalid",
+            detail=str(exc),
+        ) from exc
 
 
 @app.post(

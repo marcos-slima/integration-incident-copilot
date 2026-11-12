@@ -100,7 +100,7 @@ docker compose --profile graphrag up -d neo4j      # opt-in
 > o tamanho real fica em `data/index_manifest.json` (gerado pelo ingest, validação 2026-10-07, M-23) —
 > os números antigos (~767k, 28.962, 100.805) eram incompatíveis entre si.
 >
-> armadilha correlata: `data/.ingest_state_reference.json` é **um arquivo por
+> armadilha correlata: `.ingest_state_reference.json` em `data/` é **um arquivo por
 > target, sem URL dentro** (chave = `hash:filename`, `app/rag/ingest.py:167`).
 > Ele marca "já processado" sem registrar *onde*. Rodar a ingestão contra
 > um Qdrant e depois contra outro faz o segundo run **pular tudo** e o
@@ -150,6 +150,12 @@ Se o hook rodar ruff e reformatar arquivos → `git add` novamente + re-commit.
 ---
 
 ## Estrutura de pastas relevantes
+
+> **Monorepo (DA-94).** `app/` é o core compartilhado **e** o produto IIC.
+> O produto **DF-e Copilot** fica em `packages/dfe/` (pacote `dfe_copilot`,
+> testes e docs próprios) e só toca o core pelo protocolo
+> `app/agent/domain_plugins.py::DomainPlugin`. O core nunca importa
+> `dfe_copilot`. Documentação do DF-e: `packages/dfe/README.md`.
 
 ```
 app/
@@ -296,6 +302,7 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
 | DA-61 | Taxonomia de erros SAP com TTL/RDFLib (SKOS para Rule Engine) | `app/ontology/`, `app/agent/ontology_loader.py` |
 | DA-62 | Neo4j loader para SKOS taxonomy import (idempotent upsert, Cypher queries) | `app/ontology/neo4j_loader.py` |
 | DA-63 | Skills declarativas: cada skill é um artefato YAML em data/skills/*.yaml com schema, versão e capability contract; supervisor deriva domain index do registry ao invés de hardcoded sets; CAPABILITY_REGISTRY carregado de YAML quando disponível | `data/skills/`, `app/mcp/skill_registry.py`, `app/mcp/policy.py`, `app/agent/supervisor.py` |
+| DA-64 | Gap A4: `retrieve_node` lê `connector_data.error_code` com `getattr()` (`ConnectorResult` é dataclass); `ontology_inference`/`ontology_next_steps` declarados no `CopilotState`; nó `ontology_enrich` roda entre diagnóstico e `report` (antes ficava depois do `report`) | `app/agent/nodes.py::retrieve_node`, `app/agent/state.py`, `app/agent/graph.py`, `tests/test_gap_a4_ontology_broken.py`, `tests/test_gap_a4_a1_wiring.py` |
 | DA-65 | Degradação graciosa do RAG: quando Qdrant cai, `_retrieve_hybrid` e `_retrieve_dense_only` (app/rag/retriever.py) retornam lista vazia (não propaga exceção) → rule engine ainda responde erros conhecidos; fluxo completo `/diagnose → run_diagnosis` pendente de teste de integração | `app/rag/retriever.py::_retrieve_hybrid`, `app/rag/retriever.py::_retrieve_dense_only`, `tests/test_da65_rag_degradation.py` |
 | DA-66 | Policy Engine puro para roteamento LLM: extrai de `invoke_via_gateway` um Policy Engine com duas fases (elegibilidade rígida → scoring de preferências), decision auditável, `RoutingRequest`/`RoutingDecision` Pydantic models | `app/llm/routing.py`, `app/llm/gateway.py` (usa o engine) |
 | DA-67 | Token budgeting e orçamento por tarefa: tokenizer `cl100k_base` (aproximação; fallback `len//4` para qualquer falha de carga), preços do registry, orçamento por diagnóstico em memória por `incident_id` (`DIAGNOSIS_BUDGET_USD`, reserva `LLM_BUDGET_RESERVE_RATIO`), débito do custo real, `BudgetExhaustedError` → `BUDGET_EXHAUSTED`, ledger estimado × real (migration `018_create_llm_budget_ledger.py`) | `app/llm/budget.py`, `app/llm/gateway.py`, `app/llm/routing.py`, `app/admin/repository.py`, `tests/test_budget_ledger.py`, `tests/test_tokenizer_offline.py` |
@@ -316,7 +323,9 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
 | DA-89 | Relatórios automatizados de compliance export: endpoint `/admin/reports/compliance/export?format=pdf|xlsx`, relatório com resumo/quality/auditoria, export PDF e XLSX | `app/admin/reports.py`, `tests/test_compliance_reports.py` |
 | DA-90 | Documentação GRC (ISO 27001, SOC2): mapeamento, guia de auditoria, checklist | `docs/GRM_MAPPING.md`, `docs/GRM_AUDIT.md`, `docs/GRM_CHECKLIST.md`, `tests/test_grm_documentation.py` |
 | DA-91 | Testes RBAC completos para todos os endpoints | `tests/test_rbac_comprehensive.py` |
-| DA-92 | Modelo canônico `qwen3.6:35b-a3b` (35B MoE, 128k ctx) desde 2026-10-13, substituindo `qwen3-coder-next:latest`; re-baseline do promptfoo pendente (DA-51) | `app/config.py`, `.env.example`, `docker-compose.yml`, `promptfooconfig.yaml` |
+| DA-92 | Modelo canônico `qwen3.6:35b-a3b` (35B MoE, 128k ctx) desde 2026-10-13, substituindo `qwen3-coder-next:latest`; baseline histórica do promptfoo registra o Qwen; revalidação da revisão e do modelo dos manifests pendente (DA-51) | `app/config.py`, `.env.example`, `docker-compose.yml`, `promptfooconfig.yaml` |
+| DA-93 | Fatos × hipóteses: `DiagnosisResponse.findings`/`cause_status` montados por código (`build_findings`; LLM nunca declara fato) e `trust_level` `rule_reference` para o rule engine. As fases fiscais (contrato, XML/XSD, regras) foram movidas para o DF-e Copilot pela DA-94 | `app/agent/findings.py`, `app/models/models.py::Finding`, `app/agent/nodes.py::_assemble_evidence`, `tests/test_da93_findings.py` |
+| DA-94 | Separação de produto em monorepo: core (`app/`) com protocolo `DomainPlugin` carregado por `DOMAIN_PLUGINS` (vazio = core puro, fail-closed), `IncidentRequest.domain_context` validado pelo plugin (422 `domain_context_invalid`), nó `domain_tools` antes do `retrieve`; produto DF-e Copilot em `packages/dfe/` (`dfe_copilot`, docs próprias) | `app/agent/domain_plugins.py`, `app/agent/graph.py`, `app/main.py::diagnose`, `packages/dfe/`, `tests/test_da94_domain_plugins.py` |
 
 **DAs candidatas (não entregues ou com implementação parcial):**
 - **DA-31 — SAP AI Agent Hub registration (MCP + A2A)** · bloqueada: exige tenant Kyma.
@@ -338,7 +347,10 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
   - **DA-79 (multi-tenancy).** O schema (`tenant_id`, migration 022) e os filtros de
     repositório existem, mas o isolamento não é fail-closed em todos os caminhos
     (leituras diretas, exportações e credenciais). Permanece candidata até o
-    isolamento ponta a ponta ser verificável.
+    isolamento ponta a ponta ser verificável. **Gap A5 (2026-11-11):** a
+    propagação `IncidentRequest.tenant_id` → `CopilotState` → `build_incident_row()`
+    foi corrigida e coberta por `tests/test_gap_a5_multitenancy.py`; o que falta é
+    derivar o tenant da identidade (não do corpo) e filtrar verificação/exportações.
   - **DA-84 (versionamento de prompt).** Tabela, ORM e repositório existem; os
     endpoints `/admin/api/prompt/...` não foram implementados. Permanece candidata.
   - **DA-85 (A/B testing).** Tabela, ORM e repositório existem; não há endpoint de
@@ -393,7 +405,8 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
 
 | trust_level | Quando |
 |---|---|
-| `system_observed` | Conector real (não mock) OU rule engine (DA-33) |
+| `system_observed` | Conector real (não mock) OU ferramenta determinística sobre dado do incidente (DA-93) |
+| `rule_reference` | Regra curada do rule engine (DA-33) — referência, não observação do incidente (DA-93) |
 | `simulated` | Conector mock ou fallback |
 | `retrieved_document` | Chunk RAG (Qdrant) ou histórico GraphRAG |
 | `web_untrusted` | Resultado de busca web (DuckDuckGo) |

@@ -1,0 +1,105 @@
+"""Plugin DF-e sobre o core (DA-94): contexto, findings e integracao com o grafo."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import pytest
+from dfe_copilot.context import FiscalContext
+from dfe_copilot.fiscal.xml_tools import NS
+from dfe_copilot.plugin import PLUGIN
+from pydantic import ValidationError
+
+from app.agent import graph
+from app.agent.domain_plugins import load_plugins
+from app.models import IncidentRequest
+
+KEY = "35261111222333000181550010000000011000000014"
+PROT_204 = (
+    f'<protNFe xmlns="{NS}" versao="4.00"><infProt><tpAmb>2</tpAmb><chNFe>{KEY}</chNFe>'
+    "<cStat>204</cStat><xMotivo>Rejeicao: Duplicidade de NF-e</xMotivo></infProt></protNFe>"
+)
+EVENTS = [
+    {"evidence_id": "EV-A", "document_ref": KEY, "at": "2026-11-11T12:59:00Z", "event": "sent"},
+    {"evidence_id": "EV-T", "document_ref": KEY, "at": "2026-11-11T13:00:00Z", "event": "timeout"},
+    {"evidence_id": "EV-B", "document_ref": KEY, "at": "2026-11-11T13:00:01Z", "event": "sent"},
+]
+CTX = {"environment": "homologation", "jurisdiction": "SP", "events": EVENTS}
+POSITIVO = (Path(__file__).parent / "fixtures" / "nfe_controle_positivo_sp.xml").read_text(
+    encoding="utf-8"
+)
+
+
+def _ids(findings: list[dict[str, Any]]) -> list[str]:
+    return [f["id"] for f in findings]
+
+
+class TestContexto:
+    def test_recorte_aceito(self) -> None:
+        ctx = PLUGIN.validate_context(CTX)
+        assert ctx is not None and ctx["model"] == "55" and ctx["jurisdiction"] == "SP"
+
+    @pytest.mark.parametrize(
+        "override",
+        [{"jurisdiction": "XX"}, {"model": "65"}, {"layout_version": "3.10"}, {"environment": "x"}],
+    )
+    def test_fora_do_recorte_recusado(self, override: dict[str, str]) -> None:
+        with pytest.raises(ValidationError):
+            FiscalContext(**{**CTX, **override})
+
+    def test_outra_familia_nao_e_do_plugin(self) -> None:
+        assert PLUGIN.validate_context({"family": "cte"}) is None
+
+
+class TestRun:
+    def test_caso_204_completo(self) -> None:
+        f = PLUGIN.run({"payload": PROT_204, "domain_context": PLUGIN.validate_context(CTX)})
+        assert _ids(f) == ["F-cStat", "F-204", "H1"]
+        assert all(x["kind"] == "fact" for x in f[:2]) and f[2]["kind"] == "hypothesis"
+
+    def test_sem_xml_registra_lacuna(self) -> None:
+        assert _ids(PLUGIN.run({"domain_context": {}})) == ["G-noxml"]
+
+    def test_xml_hostil_registra_lacuna(self) -> None:
+        f = PLUGIN.run(
+            {"payload": '<!DOCTYPE x [<!ENTITY e SYSTEM "file:///etc/passwd">]><x>&e;</x>'}
+        )
+        assert _ids(f) == ["G-xml"]
+
+    def test_controle_positivo_sem_fatos_de_erro(self) -> None:
+        assert (
+            PLUGIN.run({"payload": POSITIVO, "domain_context": {"environment": "homologation"}})
+            == []
+        )
+
+    def test_timeout_sem_retorno(self) -> None:
+        ctx = PLUGIN.validate_context({**CTX, "events": EVENTS[:2]})
+        f = PLUGIN.run({"domain_context": ctx})
+        assert _ids(f) == ["G-noxml", "F-timeout", "H-timeout"]
+
+    def test_homologacao_em_contexto_de_producao(self) -> None:
+        f = PLUGIN.run({"payload": POSITIVO, "domain_context": {"environment": "production"}})
+        assert _ids(f) == ["G-amb"]
+
+
+def test_run_diagnosis_com_plugin_dfe(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, Any] = {}
+
+    def fake_invoke(initial_state, timeout_seconds=None, thread_id=None):
+        seen.update(initial_state)
+        findings = PLUGIN.run(initial_state)
+        return {**initial_state, "domain_findings": findings,
+                "diagnosis": {"probable_root_cause": "Duplicidade por reenvio", "confidence": 0.6}}  # fmt: skip
+
+    load_plugins.cache_clear()
+    monkeypatch.setattr(graph.settings, "domain_plugins", "dfe_copilot.plugin")
+    monkeypatch.setattr(graph, "_invoke_graph_with_timeout", fake_invoke)
+    monkeypatch.setattr(graph, "record_incident", lambda *a, **k: None)
+    r = graph.run_diagnosis(
+        IncidentRequest(description="NF-e 204", payload=PROT_204, domain_context=CTX)
+    )
+    assert seen["domain_plugin"] == "dfe"
+    assert [x.id for x in r.findings] == ["F-cStat", "F-204", "H1", "H-diagnosis"]
+    assert r.cause_status == "hypothesis"
+    load_plugins.cache_clear()

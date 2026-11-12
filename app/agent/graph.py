@@ -22,7 +22,9 @@ from uuid import uuid4
 
 from langfuse import get_client
 
+from app.agent.domain_plugins import load_plugins, make_domain_tools_node, resolve_context
 from app.agent.escalation import compute_escalation_signal
+from app.agent.findings import build_findings
 from app.agent.nodes import (
     _assemble_evidence,
     connector_node,
@@ -95,9 +97,19 @@ def build_graph(checkpointer=None):
     graph.add_node("generic_diagnose", generic_diagnosis_node)
     graph.add_node("report", report_node)
 
+    pre_report = "ontology_enrich" if settings.ontology_enrichment_enabled else "report"
+
     graph.set_entry_point("supervisor")
     graph.add_edge("supervisor", "connector")
-    graph.add_edge("connector", "retrieve")
+    # DA-94: ferramentas deterministicas do produto de dominio rodam ANTES do
+    # retrieval (resiliencia A7); sem plugin o grafo e' o do core.
+    plugins = load_plugins(settings.domain_plugins)
+    if plugins:
+        graph.add_node("domain_tools", make_domain_tools_node(plugins))
+        graph.add_edge("connector", "domain_tools")
+        graph.add_edge("domain_tools", "retrieve")
+    else:
+        graph.add_edge("connector", "retrieve")
 
     if settings.graph_rag_enabled:
         graph.add_node("graph_enrich", graph_enrich_node)
@@ -115,7 +127,7 @@ def build_graph(checkpointer=None):
         graph.add_edge("sap_diagnose", "graph_write")
         graph.add_edge("saas_diagnose", "graph_write")
         graph.add_edge("generic_diagnose", "graph_write")
-        graph.add_edge("graph_write", "report")
+        graph.add_edge("graph_write", pre_report)
     else:
         graph.add_conditional_edges(
             "retrieve",
@@ -126,15 +138,18 @@ def build_graph(checkpointer=None):
                 "generic_diagnose": "generic_diagnose",
             },
         )
-        graph.add_edge("sap_diagnose", "report")
-        graph.add_edge("saas_diagnose", "report")
-        graph.add_edge("generic_diagnose", "report")
+        graph.add_edge("sap_diagnose", pre_report)
+        graph.add_edge("saas_diagnose", pre_report)
+        graph.add_edge("generic_diagnose", pre_report)
+
+    # DA-64 (gap A4): o enriquecimento roda ENTRE o diagnostico (de onde le
+    # rule_engine_category) e o report - antes ficava depois do report, em
+    # paralelo ao END, e nunca chegava ao estado consumido pelo relatorio.
+    if settings.ontology_enrichment_enabled:
+        graph.add_node("ontology_enrich", ontology_enrich_node)
+        graph.add_edge("ontology_enrich", "report")
 
     graph.add_edge("report", END)
-
-    if settings.ontology_enrichment_enabled:
-        graph.add_node("ontology_debug", ontology_enrich_node)
-        graph.add_edge("report", "ontology_debug")
 
     return graph.compile(checkpointer=checkpointer)
 
@@ -247,12 +262,25 @@ def run_diagnosis(
     # nao havia como referenciar um incidente especifico depois pra
     # chamar verify_incident() (POST /incidents/{id}/verify).
     incident_id = str(uuid4())
+    # DA-94: o plugin de dominio valida o contexto antes do grafo; contexto
+    # recusado e' erro de entrada (DomainContextError -> 422 em /diagnose).
+    domain_plugin, domain_context = resolve_context(
+        load_plugins(settings.domain_plugins), request.domain_context
+    )
     initial_state: CopilotState = {
         "description": request.description,
         "logs": request.logs,
         "payload": request.payload,
         "interface_type": request.interface_type,
         "identifier": request.identifier,
+        # DA-79 (gap A5): o tenant informado precisa atravessar o grafo -
+        # sem esta chave no estado inicial, o valor era descartado pelo
+        # StateGraph e o incidente era persistido com tenant_id=NULL.
+        "tenant_id": request.tenant_id,
+        # DA-94: sem plugin configurado o contexto de dominio e' descartado
+        # aqui, entao nenhum no a jusante muda de comportamento.
+        "domain_plugin": domain_plugin,
+        "domain_context": domain_context,
         # DA-50: propaga connector_source_system (system_key) do request para
         # o state - antes esse campo existia em IncidentRequest mas nunca
         # chegava ao pipeline, entao incidents.connector_source_system era
@@ -348,7 +376,12 @@ def run_diagnosis(
     escalation = compute_escalation_signal(final_state).as_log_fields()
     _logger.info("[escalation] incident_id=%s %s", incident_id, escalation)
 
+    # DA-93: fatos de ferramentas + causa proposta como hipotese (nunca fato).
+    findings, cause_status = build_findings(diagnosis, final_state.get("domain_findings"))
+
     response = DiagnosisResponse(
+        findings=findings,
+        cause_status=cause_status,
         probable_root_cause=diagnosis.get("probable_root_cause", "N/A"),
         model_confidence=float(diagnosis.get("model_confidence", diagnosis.get("confidence", 0.0))),
         diagnosis_confidence=float(diagnosis.get("diagnosis_confidence", 0.0)),

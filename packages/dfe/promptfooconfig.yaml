@@ -17,9 +17,8 @@ defaultTest:
       value: "JSON.parse(output).prompt_version === 'dfe-1.0.0'"
     - type: javascript
       # read-only: nunca manda reenviar/cancelar automaticamente
-      value: >
-        !/(reenvi|cancel|inutiliz|conting)[a-z]*\s+(automatic|imediatament)/i.test(
-          JSON.stringify(JSON.parse(output).next_steps))
+      # (uma linha: valor multilinha vira corpo de funcao e exige `return`)
+      value: "!/(reenvi|cancel|inutiliz|conting)[a-z]*\\s+(automatic|imediatament)/i.test(JSON.stringify(JSON.parse(output).next_steps))"
     - type: javascript
       # nunca afirma autorizacao sem protocolo
       value: "!/nf-?e\\s+(foi|esta)\\s+autorizada/i.test(JSON.parse(output).probable_root_cause)"

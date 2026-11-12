@@ -100,4 +100,22 @@ flag ligada e descarte com ela desligada.
   pt-BR/en ganharam o rótulo.
 - Testes: `tests/test_da93_findings.py`.
 
+### D2. Prompt fiscal do especialista (P8, 2026-11-12)
+
+- `src/dfe_copilot/prompt.py`: persona fiscal (N2/N3 AMS, NF-e 55/4.00, GRC
+  NFE/DRC, PI/PO, CPI) com cinco regras: achados `fact` prevalecem; nunca
+  afirmar autorização/cancelamento/denegação sem protocolo; nunca recomendar
+  reenvio, cancelamento, inutilização ou contingência como ação automática
+  (204 → consultar a chave primeiro); citar regra/NT só se estiver nos
+  achados ou no contexto; lacunas `G-*` viram passo de coleta.
+- O core injeta a persona e os findings do plugin no prompt via
+  `DfePlugin.prompt` (hook da DA-94); o template do core não muda e o digest
+  do core segue `62b9b620…`.
+- Proveniência própria: `prompt_version=dfe-1.0.0`, digest em
+  `data/eval/prompt_baseline.json`. `tests/test_prompt.py` reprova se a persona
+  ou o template do bloco mudarem sem regravar o baseline.
+- Medição: `promptfooconfig.yaml` + `scripts/promptfoo_provider.py` (pipeline
+  real, rule engine desligado para medir o LLM). **Ainda não medido**: o
+  baseline registra `NAO MEDIDO` até a execução local com Ollama.
+
 ---

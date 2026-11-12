@@ -12,7 +12,7 @@ demais atividades.
 | P5 | Schema de `protNFe` | O PL 010g não traz; protocolos ficam com `xsd_validation=not_executed` | Localizar pacote de retorno vigente no Portal NF-e |
 | P6 | Tela da UI para `findings` e revisão de causa | Tipos e rótulos já existem no frontend do core; a tela do produto exige decisão de UX e marca próprias | Definir se o DF-e terá frontend próprio ou tema no frontend atual |
 | P7 | Dataset de 100 casos com gabarito revisado | Dataset v0 com 29 casos (`data/eval/cases_v0.jsonl`, gerado por `scripts/gen_dataset.py`), gabarito derivado das regras e `reviewed=false`; faltam casos de LLM, divisão dev/validação/teste cego e revisão fiscal | Curadoria fiscal (Marcos) |
-| P8 | Prompt/persona do especialista fiscal | Mudar prompt exige promptfoo com Ollama (invariante 20) | Rodar promptfoo localmente e regravar baseline |
+| P8 | Medir o prompt fiscal (implementado em 2026-11-12, `dfe-1.0.0`) | A medição precisa do Ollama local; o baseline diz `NAO MEDIDO` | `npx promptfoo eval -c promptfooconfig.yaml` em `packages/dfe` e `scripts/prompt_baseline.py --write --measurement ...` |
 | P9 | Verificação de assinatura XMLDSig | Fora do MVP; hoje sempre `not_executed` | Decidir biblioteca e escopo (read-only) |
 | P10 | Testes dependentes de Ollama, BM25 e SSL não rodaram no ambiente autônomo | Ambiente sem esses recursos; 5 testes do core falharam só por isso e passam na máquina local | Rodar `uv run pytest tests/ -m "not integration"` localmente antes do merge |
 

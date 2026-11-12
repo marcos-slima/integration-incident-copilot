@@ -3526,6 +3526,15 @@ observabilidade, gates).
   `pyproject.toml` próprio, testes em `packages/dfe/tests`, documentação em
   `packages/dfe/docs/`) e sobe com `uvicorn dfe_copilot.main:app`, que liga
   `DOMAIN_PLUGINS=dfe_copilot.plugin`.
+- **Prompt de domínio (opcional, P8 do DF-e).** Um plugin pode expor
+  `prompt` (`DomainPrompt`: `name`, `version`, `persona`). Com ele, o
+  especialista usa a persona do plugin e recebe os `domain_findings` como bloco
+  delimitado e sanitizado no slot `extras` (`render_domain_block`); a
+  proveniência vira `prompt_version=<plugin>-<versão>` com digest próprio
+  (`domain_prompt_digest`: digest do core + persona + template do bloco). O
+  template do core não muda, então o `prompt_digest_measured` (invariante 20)
+  continua valendo para o caminho sem plugin; o produto mede e confere o
+  próprio digest.
 - Substitui a flag `FISCAL_DOMAIN_ENABLED` e o `FiscalContext` no core
   (DA-93 fase 1), que deixaram de existir.
 

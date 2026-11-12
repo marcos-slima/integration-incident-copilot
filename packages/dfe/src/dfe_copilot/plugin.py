@@ -24,6 +24,7 @@ from dfe_copilot.fiscal import (
     diagnose_timeout,
     normalize_events,
 )
+from dfe_copilot.prompt import DFE_PROMPT
 
 _logger = logging.getLogger(__name__)
 
@@ -65,6 +66,7 @@ def _gap(fid: str, statement: str) -> dict[str, Any]:
 
 class DfePlugin:
     name = "dfe"
+    prompt = DFE_PROMPT  # P8: persona fiscal + bloco de achados no LLM
 
     def __init__(self, kb_lookup: KbLookup | None | str = "default") -> None:
         self._kb_lookup = kb_lookup

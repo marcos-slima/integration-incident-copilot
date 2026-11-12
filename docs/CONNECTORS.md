@@ -62,6 +62,14 @@ fonte; o gate `connector_validation_matrix` exige que ela cubra todos.
 | `apim` | SAP API Management — **eventos de analytics** | `APIM_ANALYTICS_URL` | `APIM_OAUTH_TOKEN_URL`, `APIM_CLIENT_ID`, `APIM_CLIENT_SECRET` | `APIM-RATE-LIMIT-DEMO` | não; schema especulativo |
 | `po` | SAP PO/PI on-premise (Message Monitor, via fachada) | `PO_BASE_URL` | `PO_AUTH_MODE` (`basic`/`oauth2`), `PO_USERNAME`, `PO_PASSWORD`, `PO_OAUTH_TOKEN_URL`, `PO_OAUTH_CLIENT_ID`, `PO_OAUTH_CLIENT_SECRET` | `PO-FAILED-001`, `PO-HOLDING-001` | não; API não pública |
 
+> **`odata` — contrato do filtro (gap A1, 2026-11-11).** O filtro passou de
+> `MessageId eq '<id>'` para `MessageGuid eq '<id>'`, que é o identificador da
+> API de Message Processing Logs. Quem aponta `ODATA_SERVICE_URL` para uma
+> fachada própria que ainda filtra por `MessageId` precisa ajustá-la. A
+> mensagem é lida de `StatusText` → `LogText` → `CustomStatus`; o detalhe do
+> recurso `ErrorInformation`, a paginação por next-link e a janela temporal
+> ainda não são implementados, e nada disso foi validado contra tenant real.
+
 **Observações por conector** (as que mudam o resultado):
 
 - **RFC.** "Validado" significa logon (`RFC_SYSTEM_INFO`), não a leitura de

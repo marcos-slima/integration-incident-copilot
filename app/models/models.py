@@ -57,7 +57,11 @@ class IncidentRequest(BaseModel):
     # DA-79: tenant identifier for multi-tenancy isolation
     tenant_id: str | None = Field(
         default=None,
-        description="DA-79: tenant identifier. Quando None, usa tenant_id do usuario autenticado.",
+        description=(
+            "DA-79: tenant informado pelo chamador. Quando None, o incidente e "
+            "gravado sem tenant - a identidade autenticada ainda nao carrega "
+            "tenant, entao este campo NAO e fronteira de autorizacao."
+        ),
     )
     # A-05: campos SOC/iPaaS — opcionais, permitem que clientes informem contexto de seguranca
     # diretamente (ex: sistemas de monitoracao que ja classificaram o incidente).
@@ -131,7 +135,11 @@ class IncidentEventData(BaseModel):
     # DA-79: tenant identifier for multi-tenancy isolation
     tenant_id: str | None = Field(
         default=None,
-        description="DA-79: tenant identifier. Quando None, usa tenant_id do usuario autenticado.",
+        description=(
+            "DA-79: tenant informado pelo chamador. Quando None, o incidente e "
+            "gravado sem tenant - a identidade autenticada ainda nao carrega "
+            "tenant, entao este campo NAO e fronteira de autorizacao."
+        ),
     )
     # A-05: mesmos campos SOC/iPaaS de IncidentRequest para consistencia
     connector_source_system: str | None = None

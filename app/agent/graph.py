@@ -95,6 +95,8 @@ def build_graph(checkpointer=None):
     graph.add_node("generic_diagnose", generic_diagnosis_node)
     graph.add_node("report", report_node)
 
+    pre_report = "ontology_enrich" if settings.ontology_enrichment_enabled else "report"
+
     graph.set_entry_point("supervisor")
     graph.add_edge("supervisor", "connector")
     graph.add_edge("connector", "retrieve")
@@ -115,7 +117,7 @@ def build_graph(checkpointer=None):
         graph.add_edge("sap_diagnose", "graph_write")
         graph.add_edge("saas_diagnose", "graph_write")
         graph.add_edge("generic_diagnose", "graph_write")
-        graph.add_edge("graph_write", "report")
+        graph.add_edge("graph_write", pre_report)
     else:
         graph.add_conditional_edges(
             "retrieve",
@@ -126,15 +128,18 @@ def build_graph(checkpointer=None):
                 "generic_diagnose": "generic_diagnose",
             },
         )
-        graph.add_edge("sap_diagnose", "report")
-        graph.add_edge("saas_diagnose", "report")
-        graph.add_edge("generic_diagnose", "report")
+        graph.add_edge("sap_diagnose", pre_report)
+        graph.add_edge("saas_diagnose", pre_report)
+        graph.add_edge("generic_diagnose", pre_report)
+
+    # DA-64 (gap A4): o enriquecimento roda ENTRE o diagnostico (de onde le
+    # rule_engine_category) e o report - antes ficava depois do report, em
+    # paralelo ao END, e nunca chegava ao estado consumido pelo relatorio.
+    if settings.ontology_enrichment_enabled:
+        graph.add_node("ontology_enrich", ontology_enrich_node)
+        graph.add_edge("ontology_enrich", "report")
 
     graph.add_edge("report", END)
-
-    if settings.ontology_enrichment_enabled:
-        graph.add_node("ontology_debug", ontology_enrich_node)
-        graph.add_edge("report", "ontology_debug")
 
     return graph.compile(checkpointer=checkpointer)
 
@@ -253,6 +258,10 @@ def run_diagnosis(
         "payload": request.payload,
         "interface_type": request.interface_type,
         "identifier": request.identifier,
+        # DA-79 (gap A5): o tenant informado precisa atravessar o grafo -
+        # sem esta chave no estado inicial, o valor era descartado pelo
+        # StateGraph e o incidente era persistido com tenant_id=NULL.
+        "tenant_id": request.tenant_id,
         # DA-50: propaga connector_source_system (system_key) do request para
         # o state - antes esse campo existia em IncidentRequest mas nunca
         # chegava ao pipeline, entao incidents.connector_source_system era

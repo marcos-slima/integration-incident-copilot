@@ -101,7 +101,7 @@ final.
 | 90 | [81](#81-documentação-grc-da-90) | Documentação GRC (ISO 27001, SOC2): mapeamento, guia de auditoria, checklist |
 | 91 | [82](#82-testes-rbac-completos-da-91) | Testes RBAC completos para todos os endpoints |
 | 92 | [83](#83-modelo-canônico-qwen3635b-a3b-da-92) | Modelo canônico `qwen3.6:35b-a3b` desde 2026-10-13, substituindo `qwen3-coder-next:latest`; re-baseline do promptfoo pendente (DA-51) |
-| — | — | DA-64: número não utilizado (pulo intencional) |
+| 64 | [84](#84-ontologia-quebrada-correção-de-bug-em-retrieve_node-da-64) | Ontologia quebrada (correção de bug em `retrieve_node`) |
 
 > **Ordenação da prosa:** as seções §42–§47 (DA-42, DA-38, DA-39, DA-40,
 > DA-41, DA-12) foram retro-registradas em bloco, fora da ordem crescente de
@@ -3167,10 +3167,15 @@ e seguro.
 
 ### 73. Multi-tenancy (DA-79 — candidata; histórico)
 
-> **Status (2026-10-20): candidata.** O schema (`tenant_id`) e os filtros de
-> repositório existem, mas o isolamento não é fail-closed em todos os caminhos.
-> O texto abaixo é o registro histórico da decisão original; a pendência vive
-> em `CLAUDE.md` (lista de DAs candidatas) e `docs/DIVIDAS_TECNICAS.md`.
+> **Status (2026-11-11): candidata, com o gap A5 parcialmente corrigido.**
+> O schema (`tenant_id`) e os filtros de repositório existem, mas o isolamento
+> não é fail-closed em todos os caminhos. O gap A5 do estudo IIC→SAP AMS/DF-e
+> (*"tenant_id não chega ao grafo"*) foi reproduzido e corrigido nesta data:
+> `run_diagnosis()` propaga `request.tenant_id` para o `CopilotState` e
+> `build_incident_row()` grava a coluna. Antes, todo incidente diagnosticado
+> era persistido com `tenant_id=NULL`. A pendência remanescente (tenant
+> derivado da identidade, não do corpo da requisição) continua registrada em
+> `CLAUDE.md` (DAs candidatas) e `docs/DIVIDAS_TECNICAS.md`.
 
 **Motivo.** Isolamento de tenants é essencial para produtos SaaS multi-tenant. Sem
 tenant_id em incidents e queries filtradas por tenant, dados de um cliente podem
@@ -3195,9 +3200,21 @@ vazar para outro.
 - `filter_by_tenant_id()` devolve só incidentes do tenant especificado.
 - `get_by_id_and_tenant()` falha silenciosamente se tenant_id não bater.
 - Tenant_id é gravado e recuperado com o incidente.
+- `tests/test_gap_a5_multitenancy.py` (gap A5): `tenant_id` da requisição chega
+  ao estado inicial do grafo (`app/agent/graph.py`), o `CopilotState` declara a
+  chave (`app/agent/state.py`) e `build_incident_row()` persiste o valor —
+  com teste de fallback para a requisição e de `None` sem tenant. Os filtros de
+  leitura por tenant são verificados no SQL gerado, não por filtragem em Python.
 
 **Limitações (registradas de propósito).**
-- Tenant_id não é obrigatório: quando None, usa tenant_id do usuário autenticado (quando disponível) ou é None (comportamento anterior).
+- Tenant_id não é obrigatório: quando None, o incidente é gravado com
+  `tenant_id=NULL` (comportamento anterior preservado — não se inventa escopo).
+- **O tenant ainda vem do corpo da requisição**, não da identidade
+  autenticada. Um chamador autenticado pode informar o tenant que quiser, e as
+  rotas de verificação/listagem da API pública não filtram por tenant. Por
+  isso o isolamento não pode ser alegado: em piloto com dados reais, usar
+  instância dedicada por cliente até que a identidade carregue o tenant
+  (G4 do estudo).
 
 ---
 
@@ -3397,3 +3414,64 @@ mudança não tinha rastro no livro-razão.
 `promptfooconfig.yaml` e `app/config.py` são a fonte do default. O gate
 `deployed_model_evaluated` é o lembrete de que a qualidade só está medida
 para o modelo que o baseline registra.
+
+---
+
+### 84. Ontologia quebrada (correção de bug em `retrieve_node`) (DA-64)
+
+**O problema.** O nó `retrieve_node` (`app/agent/nodes.py:164`) tentava acessar
+`error_code` de `connector_data` usando `state.get("connector_data", {}).get("error_code")`,
+mas `connector_data` é um `ConnectorResult` (dataclass), não um dicionário. Dataclasses
+não têm o método `.get()`, então quando `ontology_enrichment_enabled=true` e
+`connector_data` tem valor, isso causava `AttributeError: 'ConnectorResult' object has no attribute 'get'`.
+
+**O caso de uso.** Quando a flag `ONTOLOGY_ENRICHMENT_ENABLED=true`, o pipeline
+tenta extrair a categoria de erro do resultado do conector para enriquecer a
+recuperação com a ontologia SKOS (error_codes.ttl). Sem essa correção, qualquer
+incidente com dados reais do conector e ontologia ativada falhava com erro
+indefinido.
+
+**A solução.** Substituir o acesso por dicionário por `getattr(connector_data, "error_code", None)`:
+
+```python
+# Antes (quebrado):
+category = state.get("connector_data", {}).get("error_code")
+
+# Depois (corrigido):
+connector_data = state.get("connector_data")
+if connector_data is not None:
+    category = getattr(connector_data, "error_code", None)
+else:
+    category = None
+```
+
+**Validação.**
+- `tests/test_gap_a4_ontology_broken.py`: 8 testes passando (incluindo reprodução
+  do bug com `ConnectorResult` e validação da correção)
+- Quality gate: `da_registered` e `docs_code_references` validam a DA
+
+**Limitações (registradas de propósito).**
+- A correção não altera o comportamento funcional: `error_code=None` continua
+  levando ao `ontology_category=None` e ao uso do retrieval base.
+- O `ConnectorResult` já tem `error_code: str | None` no seu schema, então o
+  acesso direto é seguro e consistente com o resto do código (outros nós já
+  usam `connector_data.error_code` diretamente).
+
+**Complemento (2026-11-11, restante do gap A4).**
+- `ontology_inference` e `ontology_next_steps` passaram a ser declarados no
+  `CopilotState` (`app/agent/state.py`): antes o `StateGraph` descartava o
+  retorno do `ontology_enrich_node`.
+- O nó (renomeado `ontology_debug` → `ontology_enrich` em `app/agent/graph.py`)
+  roda **entre** o diagnóstico (de onde lê `rule_engine_category`) e o
+  `report`, nos dois caminhos (com e sem GraphRAG). Antes ele era ligado
+  depois do `report`, em paralelo ao `END`, e nunca influenciava o resultado.
+- Testes: `tests/test_gap_a4_a1_wiring.py` confere as arestas do grafo
+  compilado com a flag ligada e desligada.
+- **Ainda aberto:** o `report_node` e o prompt não consomem essas chaves (isso
+  mudaria o digest do prompt, invariante 20), e `retrieve_node` continua
+  tratando `error_code` de transporte como categoria SKOS sem mapeamento
+  explícito — código sem correspondência apenas cai no retrieval base.
+
+---
+
+**Fim do documento.**

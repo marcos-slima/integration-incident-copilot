@@ -296,6 +296,7 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
 | DA-61 | Taxonomia de erros SAP com TTL/RDFLib (SKOS para Rule Engine) | `app/ontology/`, `app/agent/ontology_loader.py` |
 | DA-62 | Neo4j loader para SKOS taxonomy import (idempotent upsert, Cypher queries) | `app/ontology/neo4j_loader.py` |
 | DA-63 | Skills declarativas: cada skill é um artefato YAML em data/skills/*.yaml com schema, versão e capability contract; supervisor deriva domain index do registry ao invés de hardcoded sets; CAPABILITY_REGISTRY carregado de YAML quando disponível | `data/skills/`, `app/mcp/skill_registry.py`, `app/mcp/policy.py`, `app/agent/supervisor.py` |
+| DA-64 | Gap A4: `retrieve_node` lê `connector_data.error_code` com `getattr()` (`ConnectorResult` é dataclass); `ontology_inference`/`ontology_next_steps` declarados no `CopilotState`; nó `ontology_enrich` roda entre diagnóstico e `report` (antes ficava depois do `report`) | `app/agent/nodes.py::retrieve_node`, `app/agent/state.py`, `app/agent/graph.py`, `tests/test_gap_a4_ontology_broken.py`, `tests/test_gap_a4_a1_wiring.py` |
 | DA-65 | Degradação graciosa do RAG: quando Qdrant cai, `_retrieve_hybrid` e `_retrieve_dense_only` (app/rag/retriever.py) retornam lista vazia (não propaga exceção) → rule engine ainda responde erros conhecidos; fluxo completo `/diagnose → run_diagnosis` pendente de teste de integração | `app/rag/retriever.py::_retrieve_hybrid`, `app/rag/retriever.py::_retrieve_dense_only`, `tests/test_da65_rag_degradation.py` |
 | DA-66 | Policy Engine puro para roteamento LLM: extrai de `invoke_via_gateway` um Policy Engine com duas fases (elegibilidade rígida → scoring de preferências), decision auditável, `RoutingRequest`/`RoutingDecision` Pydantic models | `app/llm/routing.py`, `app/llm/gateway.py` (usa o engine) |
 | DA-67 | Token budgeting e orçamento por tarefa: tokenizer `cl100k_base` (aproximação; fallback `len//4` para qualquer falha de carga), preços do registry, orçamento por diagnóstico em memória por `incident_id` (`DIAGNOSIS_BUDGET_USD`, reserva `LLM_BUDGET_RESERVE_RATIO`), débito do custo real, `BudgetExhaustedError` → `BUDGET_EXHAUSTED`, ledger estimado × real (migration `018_create_llm_budget_ledger.py`) | `app/llm/budget.py`, `app/llm/gateway.py`, `app/llm/routing.py`, `app/admin/repository.py`, `tests/test_budget_ledger.py`, `tests/test_tokenizer_offline.py` |
@@ -338,7 +339,10 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
   - **DA-79 (multi-tenancy).** O schema (`tenant_id`, migration 022) e os filtros de
     repositório existem, mas o isolamento não é fail-closed em todos os caminhos
     (leituras diretas, exportações e credenciais). Permanece candidata até o
-    isolamento ponta a ponta ser verificável.
+    isolamento ponta a ponta ser verificável. **Gap A5 (2026-11-11):** a
+    propagação `IncidentRequest.tenant_id` → `CopilotState` → `build_incident_row()`
+    foi corrigida e coberta por `tests/test_gap_a5_multitenancy.py`; o que falta é
+    derivar o tenant da identidade (não do corpo) e filtrar verificação/exportações.
   - **DA-84 (versionamento de prompt).** Tabela, ORM e repositório existem; os
     endpoints `/admin/api/prompt/...` não foram implementados. Permanece candidata.
   - **DA-85 (A/B testing).** Tabela, ORM e repositório existem; não há endpoint de

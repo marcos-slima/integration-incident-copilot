@@ -31,7 +31,7 @@ Este documento lista as dívidas técnicas identificadas no IIC com base na Aval
 |---|---|---|---|---|---|
 | **DA-77** | Validade de Testes de Segurança LLMs | Segurança | ⚠️ Testes implementados | 2-3 semanas | Falha em produção pode expor dados SAP |
 | **DA-78** | Monitors de drift de modelo/dados | MLOps | ⚠️ Testes implementados | 3-4 semanas | Degradation silenciosa → diagnósticos errados |
-| **DA-79** | Multi-tenancy não implementado | Pessoas/Processos | ❌ Pendente | 4-6 semanas | **CRÍTICO:** Vazamento de dados entre tenants |
+| **DA-79** | Multi-tenancy não implementado | Pessoas/Processos | ⚠️ Parcial (A5: tenant chega ao grafo/persistência; falta derivar da identidade) | 4-6 semanas | **CRÍTICO:** Vazamento de dados entre tenants |
 | **DA-80** | DLP/NER avançado (não-regex) | Segurança/Privacidade | ❌ Pendente | 3-4 semanas | Vazamento de PII não-regex (nomes, endereços) |
 | **DA-81** | Logging estruturado com audit_correlation_id | Auditoria | ⚠️ Testes implementados | 1 semana | Não é possível reconstruir cenários de segurança |
 | **DA-82** | Rollback automático de deployment | MLOps | ⚠️ Parcial | 1 semana | Recovery time alto sem automação |

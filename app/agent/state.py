@@ -62,6 +62,11 @@ class CopilotState(TypedDict, total=False):
     payload: str | None
     interface_type: str | None
     identifier: str | None
+    # DA-79 (gap A5): tenant informado na requisicao. Precisa estar no
+    # schema pelo mesmo motivo de sensitivity_level/locale - o StateGraph
+    # descarta chaves fora do CopilotState, e sem esta o tenant nunca
+    # chegava ao recorder (todo incidente era gravado com tenant_id=NULL).
+    tenant_id: str | None
     # DA-49/50: chave de sistema informado pelo cliente (opcional). Permite
     # correlacionar incident com integration_systems (system_key) sem FK hard
     # no contrato - propagado ate o recorder para populacao de
@@ -92,6 +97,10 @@ class CopilotState(TypedDict, total=False):
     retrieved_context: list[dict]
     ontology_candidates: dict
     graph_history: list
+    # DA-64 (gap A4): saidas do ontology_enrich_node. Sem estas chaves o
+    # StateGraph descartava o retorno do no e o enriquecimento era invisivel.
+    ontology_inference: str
+    ontology_next_steps: str
     diagnosis: dict
     hitl_request: dict
     hitl_response: dict

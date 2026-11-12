@@ -209,7 +209,7 @@ guardrail sobrescrevendo a evidencia que o rule engine tinha escrito.
 ```mermaid
 flowchart LR
     subgraph entrada["Entrada: run_diagnosis"]
-        e1["description, logs, payload<br/>interface_type, identifier<br/>connector_source_system<br/>sensitivity_level, pii_detected<br/>locale, llm_model, incident_id, debug"]
+        e1["description, logs, payload<br/>interface_type, identifier<br/>connector_source_system<br/>sensitivity_level, pii_detected<br/>locale, llm_model, incident_id, debug<br/>tenant_id"]
     end
     subgraph nos["Campo escrito por cada no"]
         sup["supervisor"] --> s1["agent_domain"]
@@ -221,7 +221,7 @@ flowchart LR
         gw["graph_write"] --> n4j[("Neo4j: efeito colateral,<br/>nao escreve no estado")]
     end
     morto["web_search_results<br/>(nenhum no do grafo escreve)"]
-    ont["ontology_enrich"] --> s7["ontology_candidates"]
+    ont["ontology_enrich"] --> s7["ontology_candidates,<br/>ontology_inference, ontology_next_steps"]
     hitl["hitl_review"] --> s8["hitl_request, hitl_response,<br/>hitl_interrupt_enabled, hitl_reviewed,<br/>confidence_adjustment"]
     risk["risk_assessment"] --> s9["risk_level, risk_confidence, risk_factors"]
     entrada --> nos
@@ -1935,7 +1935,7 @@ incidentes. A solução tem que ser:
 - `ONTOLOGY_ENRICHMENT_ENABLED=true` → executa ontologia-aware quando
   `ontology_category` inferida; fallback para `retrieve` clássico caso contrário
 
-**Grafo atual.** A flag acrescenta `ontology_debug` após `report`.
+**Grafo atual.** A flag acrescenta `ontology_enrich` entre o especialista (ou `graph_write`) e `report` (DA-64).
 A recuperação com ontologia é uma chamada condicional dentro de
 `retrieve`. O HITL usa interrupção no especialista e retomada com
 checkpoint, sob configuração própria.

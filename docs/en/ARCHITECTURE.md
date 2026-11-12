@@ -1828,7 +1828,7 @@ incidentes. A solução tem que ser:
 - `ONTOLOGY_ENRICHMENT_ENABLED=true` → executa ontologia-aware quando
   `ontology_category` inferida; fallback para `retrieve` clássico caso contrário
 
-**Current graph.** The flag adds `ontology_debug` after `report`.
+**Current graph.** The flag adds `ontology_enrich` between the specialist (or `graph_write`) and `report` (DA-64).
 Ontology-aware retrieval is a conditional call inside `retrieve`.
 Human review uses an interrupt in the specialist and resumes from
 a checkpoint under separate configuration.

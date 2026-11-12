@@ -151,9 +151,12 @@ class ODataConnector(SAPConnector):
         client = self._injected_client or httpx.Client(timeout=10.0)
         try:
             token = self._get_access_token(client)
+            # Gap A1 (estudo IIC->SAP AMS/DF-e): a API MPL documenta
+            # MessageGuid, ApplicationMessageId e CorrelationId - nao
+            # "MessageId". MessageGuid e' o identificador unico e imutavel.
             response = client.get(
                 settings.odata_service_url,
-                params={"$filter": f"MessageId eq '{identifier}'", "$format": "json"},
+                params={"$filter": f"MessageGuid eq '{identifier}'", "$format": "json"},
                 headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
             )
         except (httpx.HTTPStatusError, TokenResponseError) as exc:
@@ -213,7 +216,15 @@ class ODataConnector(SAPConnector):
             source_system="OData",
             status="ok" if status in {"COMPLETED", "PROCESSED"} else "error",
             error_code=status,
-            message=record.get("StatusText", record.get("LogText", "")),
+            # Gap A1: a entidade MPL nao tem StatusText/LogText (o detalhe de
+            # erro vem do recurso ErrorInformation, ainda nao lido). Mantem os
+            # campos antigos para fachadas existentes e cai para CustomStatus.
+            message=(
+                record.get("StatusText")
+                or record.get("LogText")
+                or record.get("CustomStatus")
+                or ""
+            ),
             raw=str(record),
             is_mock=False,
         )

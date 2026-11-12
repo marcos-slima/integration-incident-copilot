@@ -161,7 +161,13 @@ def retrieve_node(state: CopilotState) -> CopilotState:
 
     if settings.ontology_enrichment_enabled and get_upper_categories_from_category is not None:
         try:
-            category = state.get("connector_data", {}).get("error_code")
+            # DA-64: connector_data é ConnectorResult (dataclass), não dict
+            # Usar getattr() para acessar error_code diretamente
+            connector_data = state.get("connector_data")
+            if connector_data is not None:
+                category = getattr(connector_data, "error_code", None)
+            else:
+                category = None
             if category:
                 upper_cats = get_upper_categories_from_category(category)
                 if upper_cats:

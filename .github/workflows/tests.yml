@@ -58,8 +58,12 @@ jobs:
         # Diagnostico (2026-11-12): job cancelado por timeout nao guarda log.
         # `timeout --signal=INT` encerra o pytest ANTES do limite do job (o
         # step falha com log e resumo) e `faulthandler_timeout` imprime a
-        # stack de qualquer teste parado ha mais de 120 s.
-        run: timeout --signal=INT 480 uv run pytest -m "not integration" -v --tb=short -o faulthandler_timeout=120 --cov=app --cov-report=term-missing --cov-fail-under=80
+        # stack de qualquer teste parado ha mais de 60 s. Chama o python da
+        # .venv direto: com `uv run`, o timeout mataria so o uv e o pytest
+        # orfao seguiria segurando o step.
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: timeout --signal=INT --kill-after=30 420 .venv/bin/python -m pytest -m "not integration" -v --tb=short -o faulthandler_timeout=60 --cov=app --cov-report=term-missing --cov-fail-under=80
 
 
   security:

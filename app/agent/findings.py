@@ -1,7 +1,7 @@
 """DA-93: montagem deterministica de `findings` (fato x hipotese).
 
 Regra central: o LLM nunca produz `fact`. Fatos vem de ferramentas
-deterministicas (app/fiscal), conector real ou regra; a causa proposta pelo
+deterministicas (plugins de dominio, DA-94), conector real ou regra; a causa proposta pelo
 diagnostico entra sempre como `hypothesis`. `confirmed` nao e' produzido
 aqui - so por revisao humana registrada.
 """

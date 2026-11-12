@@ -209,7 +209,7 @@ guardrail sobrescrevendo a evidencia que o rule engine tinha escrito.
 ```mermaid
 flowchart LR
     subgraph entrada["Entrada: run_diagnosis"]
-        e1["description, logs, payload<br/>interface_type, identifier<br/>connector_source_system<br/>sensitivity_level, pii_detected<br/>locale, llm_model, incident_id, debug<br/>tenant_id, fiscal_context"]
+        e1["description, logs, payload<br/>interface_type, identifier<br/>connector_source_system<br/>sensitivity_level, pii_detected<br/>locale, llm_model, incident_id, debug<br/>tenant_id, domain_context, domain_plugin"]
     end
     subgraph nos["Campo escrito por cada no"]
         sup["supervisor"] --> s1["agent_domain"]
@@ -220,7 +220,8 @@ flowchart LR
         rep["report"] --> s6["report_markdown, explanation"]
         gw["graph_write"] --> n4j[("Neo4j: efeito colateral,<br/>nao escreve no estado")]
     end
-    morto["web_search_results, fiscal_findings<br/>(nenhum no do grafo escreve)"]
+    morto["web_search_results<br/>(nenhum no do grafo escreve)"]
+    dt["domain_tools (DA-94, opcional)"] --> s10["domain_findings"]
     ont["ontology_enrich"] --> s7["ontology_candidates,<br/>ontology_inference, ontology_next_steps"]
     hitl["hitl_review"] --> s8["hitl_request, hitl_response,<br/>hitl_interrupt_enabled, hitl_reviewed,<br/>confidence_adjustment"]
     risk["risk_assessment"] --> s9["risk_level, risk_confidence, risk_factors"]

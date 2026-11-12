@@ -154,7 +154,9 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# DA-94: monorepo - core em tests/, produto DF-e em packages/dfe/tests.
+testpaths = ["tests", "packages/dfe/tests"]
+pythonpath = ["packages/dfe/src"]
 markers = [
     "browser: precisa de Playwright + Chromium; pulado quando ausentes (tests/test_admin_ui_browser.py)",
     "integration: requer stack local viva (Qdrant/Ollama); pulado automaticamente se indisponivel",

@@ -210,6 +210,7 @@
     }
   },
   "errors": {
+    "domain_context_invalid": "O contexto de domínio foi recusado pelo plugin do produto (ex.: DF-e). Confira os campos enviados.",
     "budget_exhausted": "Orçamento do diagnóstico esgotado: nenhum provedor elegível cabe no limite configurado. Ajuste DIAGNOSIS_BUDGET_USD ou habilite um provedor local.",
     "policy_violation": "A política de soberania não permite nenhum provedor para a sensibilidade deste incidente. Veja \"Soberania do dado\" em Stack.",
     "overloaded": "Capacidade de diagnóstico esgotada no momento. Tente de novo em alguns segundos.",

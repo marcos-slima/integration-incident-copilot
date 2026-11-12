@@ -1,6 +1,5 @@
 """Modelos Pydantic do SAP Integration Copilot."""
 
-from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -33,27 +32,6 @@ def _coerce_locale(value: object) -> str | None:
     if loc not in DIAGNOSIS_LOCALES:
         raise ValueError(f"locale nao suportado: {value!r} (use {', '.join(DIAGNOSIS_LOCALES)})")
     return loc
-
-
-class FiscalContext(BaseModel):
-    """DA-93: contexto do dominio fiscal DF-e, versionado e opcional.
-
-    `interface_type` continua significando mecanismo de transporte; o dominio
-    fiscal entra aqui. Fase 1 aceita so o recorte do MVP (NF-e modelo 55,
-    leiaute 4.00) - ampliar e' decisao registrada, nao edicao de Literal."""
-
-    schema_version: Literal["1"] = "1"
-    family: Literal["nfe"] = "nfe"
-    model: Literal["55"] = "55"
-    layout_version: Literal["4.00"] = "4.00"
-    environment: Literal["homologation", "production"]
-    jurisdiction: str = Field(
-        pattern=r"^(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)$",
-        description="UF de contexto do documento (sigla).",
-    )
-    event_time: datetime | None = Field(
-        default=None, description="Instante do evento, com fuso; usado para filtrar vigencia."
-    )
 
 
 class IncidentRequest(BaseModel):
@@ -115,8 +93,12 @@ class IncidentRequest(BaseModel):
         description="Redacao ja aplicada ao payload/logs antes do envio? None = nao informado.",
     )
     locale: str | None = Field(default=None, description=_LOCALE_DESCRIPTION)
-    # DA-93: contexto fiscal opcional; so chega ao grafo com FISCAL_DOMAIN_ENABLED.
-    fiscal_context: FiscalContext | None = None
+    # DA-94: contexto de dominio opaco para o core; validado pelo plugin de
+    # dominio carregado (DOMAIN_PLUGINS). Sem plugin, e' aceito e descartado.
+    domain_context: dict | None = Field(
+        default=None,
+        description="Contexto do produto de dominio (ex.: DF-e); validado pelo plugin.",
+    )
 
     _normalize_locale = field_validator("locale", mode="before")(_coerce_locale)
 

@@ -151,6 +151,12 @@ Se o hook rodar ruff e reformatar arquivos → `git add` novamente + re-commit.
 
 ## Estrutura de pastas relevantes
 
+> **Monorepo (DA-94).** `app/` é o core compartilhado **e** o produto IIC.
+> O produto **DF-e Copilot** fica em `packages/dfe/` (pacote `dfe_copilot`,
+> testes e docs próprios) e só toca o core pelo protocolo
+> `app/agent/domain_plugins.py::DomainPlugin`. O core nunca importa
+> `dfe_copilot`. Documentação do DF-e: `packages/dfe/README.md`.
+
 ```
 app/
   agent/
@@ -318,7 +324,8 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
 | DA-90 | Documentação GRC (ISO 27001, SOC2): mapeamento, guia de auditoria, checklist | `docs/GRM_MAPPING.md`, `docs/GRM_AUDIT.md`, `docs/GRM_CHECKLIST.md`, `tests/test_grm_documentation.py` |
 | DA-91 | Testes RBAC completos para todos os endpoints | `tests/test_rbac_comprehensive.py` |
 | DA-92 | Modelo canônico `qwen3.6:35b-a3b` (35B MoE, 128k ctx) desde 2026-10-13, substituindo `qwen3-coder-next:latest`; baseline histórica do promptfoo registra o Qwen; revalidação da revisão e do modelo dos manifests pendente (DA-51) | `app/config.py`, `.env.example`, `docker-compose.yml`, `promptfooconfig.yaml` |
-| DA-93 | Domínio fiscal DF-e, fase 1: flag `FISCAL_DOMAIN_ENABLED` (default OFF) e contrato `FiscalContext` versionado (NF-e 55, leiaute 4.00, ambiente, UF, `event_time`) em `IncidentRequest.fiscal_context`; com a flag desligada o contexto é descartado em `run_diagnosis` e grafo/prompt/roteamento ficam idênticos. `interface_type` continua sendo transporte | `app/config.py`, `app/models/models.py::FiscalContext`, `app/agent/state.py`, `app/agent/graph.py::run_diagnosis`, `tests/test_da93_fiscal_context.py`. **Fase 2:** ferramentas determinísticas em `app/fiscal/xml_tools.py` (parse seguro, chave de acesso com DV, cStat do documento, XSD offline com pacote `PL_010g_v1.03` e manifesto com hashes), `tests/test_da93_fiscal_xml.py`. **Fase 3:** linha do tempo UTC e regras `diagnose_duplicity` (cStat 204, H1 só com timeout entre envios) e `diagnose_timeout` (`processing_outcome=unknown`) em `app/fiscal/correlation.py`, `tests/test_da93_fiscal_correlation.py` |
+| DA-93 | Fatos × hipóteses: `DiagnosisResponse.findings`/`cause_status` montados por código (`build_findings`; LLM nunca declara fato) e `trust_level` `rule_reference` para o rule engine. As fases fiscais (contrato, XML/XSD, regras) foram movidas para o DF-e Copilot pela DA-94 | `app/agent/findings.py`, `app/models/models.py::Finding`, `app/agent/nodes.py::_assemble_evidence`, `tests/test_da93_findings.py` |
+| DA-94 | Separação de produto em monorepo: core (`app/`) com protocolo `DomainPlugin` carregado por `DOMAIN_PLUGINS` (vazio = core puro, fail-closed), `IncidentRequest.domain_context` validado pelo plugin (422 `domain_context_invalid`), nó `domain_tools` antes do `retrieve`; produto DF-e Copilot em `packages/dfe/` (`dfe_copilot`, docs próprias) | `app/agent/domain_plugins.py`, `app/agent/graph.py`, `app/main.py::diagnose`, `packages/dfe/`, `tests/test_da94_domain_plugins.py` |
 
 **DAs candidatas (não entregues ou com implementação parcial):**
 - **DA-31 — SAP AI Agent Hub registration (MCP + A2A)** · bloqueada: exige tenant Kyma.

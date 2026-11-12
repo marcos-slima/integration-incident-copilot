@@ -22,7 +22,7 @@ from lxml import etree
 
 NS = "http://www.portalfiscal.inf.br/nfe"
 MAX_XML_BYTES = 1_000_000
-SCHEMAS_DIR = Path(__file__).resolve().parents[2] / "data" / "fiscal" / "schemas" / "nfe"
+SCHEMAS_DIR = Path(__file__).resolve().parents[3] / "data" / "schemas" / "nfe"
 DEFAULT_PACKAGE = "PL_010g_v1.03"
 
 XsdStatus = Literal["valid", "invalid", "not_executed"]

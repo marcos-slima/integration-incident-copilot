@@ -22,6 +22,7 @@ from uuid import uuid4
 
 from langfuse import get_client
 
+from app.agent.domain_plugins import load_plugins, make_domain_tools_node, resolve_context
 from app.agent.escalation import compute_escalation_signal
 from app.agent.findings import build_findings
 from app.agent.nodes import (
@@ -100,7 +101,15 @@ def build_graph(checkpointer=None):
 
     graph.set_entry_point("supervisor")
     graph.add_edge("supervisor", "connector")
-    graph.add_edge("connector", "retrieve")
+    # DA-94: ferramentas deterministicas do produto de dominio rodam ANTES do
+    # retrieval (resiliencia A7); sem plugin o grafo e' o do core.
+    plugins = load_plugins(settings.domain_plugins)
+    if plugins:
+        graph.add_node("domain_tools", make_domain_tools_node(plugins))
+        graph.add_edge("connector", "domain_tools")
+        graph.add_edge("domain_tools", "retrieve")
+    else:
+        graph.add_edge("connector", "retrieve")
 
     if settings.graph_rag_enabled:
         graph.add_node("graph_enrich", graph_enrich_node)
@@ -253,6 +262,11 @@ def run_diagnosis(
     # nao havia como referenciar um incidente especifico depois pra
     # chamar verify_incident() (POST /incidents/{id}/verify).
     incident_id = str(uuid4())
+    # DA-94: o plugin de dominio valida o contexto antes do grafo; contexto
+    # recusado e' erro de entrada (DomainContextError -> 422 em /diagnose).
+    domain_plugin, domain_context = resolve_context(
+        load_plugins(settings.domain_plugins), request.domain_context
+    )
     initial_state: CopilotState = {
         "description": request.description,
         "logs": request.logs,
@@ -263,13 +277,10 @@ def run_diagnosis(
         # sem esta chave no estado inicial, o valor era descartado pelo
         # StateGraph e o incidente era persistido com tenant_id=NULL.
         "tenant_id": request.tenant_id,
-        # DA-93: com a flag desligada o contexto fiscal e' descartado aqui,
-        # entao nenhum no a jusante muda de comportamento.
-        "fiscal_context": (
-            request.fiscal_context.model_dump(mode="json")
-            if settings.fiscal_domain_enabled and request.fiscal_context is not None
-            else None
-        ),
+        # DA-94: sem plugin configurado o contexto de dominio e' descartado
+        # aqui, entao nenhum no a jusante muda de comportamento.
+        "domain_plugin": domain_plugin,
+        "domain_context": domain_context,
         # DA-50: propaga connector_source_system (system_key) do request para
         # o state - antes esse campo existia em IncidentRequest mas nunca
         # chegava ao pipeline, entao incidents.connector_source_system era
@@ -366,7 +377,7 @@ def run_diagnosis(
     _logger.info("[escalation] incident_id=%s %s", incident_id, escalation)
 
     # DA-93: fatos de ferramentas + causa proposta como hipotese (nunca fato).
-    findings, cause_status = build_findings(diagnosis, final_state.get("fiscal_findings"))
+    findings, cause_status = build_findings(diagnosis, final_state.get("domain_findings"))
 
     response = DiagnosisResponse(
         findings=findings,

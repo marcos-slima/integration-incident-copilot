@@ -4,14 +4,14 @@ Nenhuma funcao deste pacote chama LLM, rede ou banco. Saidas sao
 `findings` do tipo "fact" (ver estudo IIC -> SAP AMS/DF-e, §6.1).
 """
 
-from app.fiscal.correlation import (
+from dfe_copilot.fiscal.correlation import (
     FiscalCorrelationError,
     TimelineEvent,
     diagnose_duplicity,
     diagnose_timeout,
     normalize_events,
 )
-from app.fiscal.xml_tools import (
+from dfe_copilot.fiscal.xml_tools import (
     AccessKey,
     FiscalXmlError,
     SchemaPackage,

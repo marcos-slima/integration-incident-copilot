@@ -5,8 +5,7 @@ from __future__ import annotations
 import copy
 
 import pytest
-
-from app.fiscal import (
+from dfe_copilot.fiscal import (
     FiscalCorrelationError,
     SchemaPackage,
     analyze_fiscal_xml,
@@ -14,7 +13,7 @@ from app.fiscal import (
     diagnose_timeout,
     normalize_events,
 )
-from app.fiscal.xml_tools import NS
+from dfe_copilot.fiscal.xml_tools import NS
 
 KEY = "35261111222333000181550010000000011000000014"
 OTHER = "35261111222333000181550010000000021000000011"

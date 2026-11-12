@@ -33,6 +33,7 @@ MARCA_FIM = "<!-- grafo-gerado:fim -->"
 DESCRICAO = {
     "__start__": "run_diagnosis",
     "supervisor": "supervisor<br/>classify_domain: sap / saas / generic<br/>(deterministico, sem LLM)",
+    "domain_tools": "domain_tools<br/>ferramentas do plugin de dominio<br/>(DA-94, so com DOMAIN_PLUGINS)",
     "connector": "connector<br/>get_connector(interface_type).fetch(identifier)<br/>real ou cenario demo",
     "retrieve": "retrieve<br/>RAG hibrido + reranker<br/>(fallback reference_library)",
     "ontology_enrich": "ontology_enrich<br/>SKOS/rdflib: upper categories + next steps<br/>(independente de GraphRAG)",
@@ -50,6 +51,7 @@ DESCRICAO = {
 DESCRICAO_EN = {
     "__start__": "run_diagnosis",
     "supervisor": "supervisor<br/>classify_domain: sap / saas / generic<br/>(deterministic, no LLM)",
+    "domain_tools": "domain_tools<br/>domain plugin tools<br/>(DA-94, only with DOMAIN_PLUGINS)",
     "connector": "connector<br/>get_connector(interface_type).fetch(identifier)<br/>real system or demo scenario",
     "retrieve": "retrieve<br/>hybrid RAG + reranker<br/>(reference_library fallback)",
     "ontology_enrich": "ontology_enrich<br/>SKOS/rdflib: upper categories + next steps<br/>(independent from GraphRAG)",

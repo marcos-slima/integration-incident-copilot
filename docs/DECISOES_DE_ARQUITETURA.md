@@ -101,7 +101,8 @@ final.
 | 90 | [81](#81-documentação-grc-da-90) | Documentação GRC (ISO 27001, SOC2): mapeamento, guia de auditoria, checklist |
 | 91 | [82](#82-testes-rbac-completos-da-91) | Testes RBAC completos para todos os endpoints |
 | 92 | [83](#83-modelo-canônico-qwen3635b-a3b-da-92) | Modelo canônico `qwen3.6:35b-a3b` desde 2026-10-13, substituindo `qwen3-coder-next:latest`; re-baseline do promptfoo pendente (DA-51) |
-| 93 | [85](#85-domínio-fiscal-df-e-fase-1-flag-e-contrato-de-contexto-da-93) | Domínio fiscal DF-e, fase 1: flag e contrato `FiscalContext` |
+| 93 | [85](#85-fatos--hipóteses-e-domínio-fiscal-da-93) | Fatos × hipóteses (`findings`, `cause_status`, `rule_reference`); fases fiscais movidas para o DF-e Copilot |
+| 94 | [86](#86-separação-de-produto-core-compartilhado-e-df-e-copilot-da-94) | Separação de produto: core compartilhado + DF-e Copilot (monorepo, plugin de domínio) |
 | 64 | [84](#84-ontologia-quebrada-correção-de-bug-em-retrieve_node-da-64) | Ontologia quebrada (correção de bug em `retrieve_node`) |
 
 > **Ordenação da prosa:** as seções §42–§47 (DA-42, DA-38, DA-39, DA-40,
@@ -3475,95 +3476,70 @@ else:
 
 ---
 
-### 85. Domínio fiscal DF-e, fase 1: flag e contrato de contexto (DA-93)
+### 85. Fatos × hipóteses e domínio fiscal (DA-93)
 
-**O problema.** O estudo IIC → SAP AMS/DF-e (`ESTUDO_IIC_AMS_DFE_CONSOLIDADO_v3`)
-propõe especializar o copiloto em incidentes de documentos fiscais
-eletrônicos. Fazer isso num branch de longa duração quebraria os gates
-(`prompt_digest_measured`, `connector_reachable`, `da_registered`) a cada
-mudança do núcleo. E o domínio fiscal não é um mecanismo de transporte:
-reaproveitar `interface_type` para "nfe" misturaria dois eixos.
+**Origem.** O estudo IIC → SAP AMS/DF-e propôs especializar o copiloto em
+documentos fiscais eletrônicos. As fases 1–3 (contrato fiscal, ferramentas
+XML/XSD e regras de correlação) foram construídas no core e, pela **DA-94**,
+movidas para o produto independente **DF-e Copilot** (`packages/dfe/`); a
+decisão completa e o histórico estão em `packages/dfe/docs/DECISOES.md`.
 
-**A solução.** Domínio plugável na `main`, atrás de flag:
-- `FISCAL_DOMAIN_ENABLED` (`app/config.py`, default `false`).
-- Contrato `FiscalContext` (`app/models/models.py`), versionado
-  (`schema_version="1"`) e restrito ao recorte do MVP: `family="nfe"`,
-  `model="55"`, `layout_version="4.00"`, `environment`
-  (`homologation`/`production`), `jurisdiction` (UF validada) e
-  `event_time` opcional para filtro de vigência.
-- `IncidentRequest.fiscal_context` opcional; `run_diagnosis()` só copia o
-  contexto para o `CopilotState` com a flag ligada. Desligada, o campo é
-  aceito e descartado — grafo, prompt (digest inalterado) e roteamento
-  ficam idênticos.
-
-**Validação.** `tests/test_da93_fiscal_context.py`: default da flag, recorte
-aceito e rejeitado (UF inválida, modelo 65, leiaute 3.10), propagação com a
-flag ligada e descarte com ela desligada.
-
-**Limitações (registradas de propósito).**
-- Fase 1 não tem nó fiscal: com a flag ligada o contexto só chega ao estado.
-  Ferramentas determinísticas (XSD, cStat, dígito da chave) e o especialista
-  fiscal são as fases seguintes do estudo (PRs 2–6).
-- Recorte definido para o MVP: SP, homologação. O contrato aceita outras UFs
-  e produção porque o recorte é de dados de teste, não de schema.
-- `IncidentEventData` (webhook/AMQP) ainda não carrega `fiscal_context`.
-
-**Fase 2 (2026-11-11): ferramentas fiscais determinísticas.**
-- `app/fiscal/xml_tools.py`: parse seguro (sem DTD, entidades, rede ou
-  schema remoto; limite de 1 MB), decomposição da chave de acesso com dígito
-  verificador módulo 11 e cUF IBGE, leitura de `cStat`/`xMotivo`/`tpAmb` só em
-  `protNFe/infProt` (nunca status de lote), hash SHA-256 dos bytes originais e
-  `findings` do tipo `fact`.
-- Pacote oficial versionado em `data/fiscal/schemas/nfe/PL_010g_v1.03/`, com
-  manifesto (`PL_010g_v1.03.manifest.json`): URL do Portal Nacional NF-e,
-  publicação 26/10/2026, obtido em 11/11/2026, SHA-256 do ZIP e de cada XSD.
-  `SchemaPackage.load()` recusa o pacote se algum hash divergir.
-- Validação XSD compilada sem rede contra o entrypoint `NFe/nfe_v4.00.xsd`.
-  Sem pacote, sem entrypoint ou com versão desconhecida, o resultado é
-  `not_executed`, nunca `valid`.
-- Testes: `tests/test_da93_fiscal_xml.py`.
-
-**Limitações da fase 2.**
-- O PL 010g não traz schema de `protNFe`: protocolos de retorno ficam com
-  `xsd_validation=not_executed`.
-- Controle positivo: `tests/fixtures/fiscal/nfe_controle_positivo_sp.xml`,
-  derivado de amostra do nfelib (MIT) e anonimizado (CNPJ/CPF/nomes/endereços
-  fictícios, `tpAmb=2`, chave e cDV recalculados). Valida no PL 010g; uma
-  mutação controlada (remoção do CNPJ do emitente) o torna inválido. A
-  assinatura do fixture não confere com o conteúdo, por construção.
-- Assinatura digital não é verificada; vigência do pacote em produção não foi
-  confirmada (`applicability=candidate_homologation_not_production_certified`).
-- As ferramentas ainda não são chamadas pelo grafo (nó fiscal: fase seguinte).
-
-**Fase 3 (2026-11-12): linha do tempo e regras fiscais.**
-- `app/fiscal/correlation.py`: eventos `sent`/`timeout`/`response`/`error`
-  normalizados para UTC (horário sem fuso é recusado) e correlacionados só
-  por identificador explícito (`document_ref` = chave de acesso).
-- `diagnose_duplicity()` (UC01, cStat 204): fato `F-204` com a regra
-  `NT2018.005_v1.51_sec4.5_2B08-20`; a hipótese `H1` (reenvio após timeout)
-  exige dois ou mais envios do mesmo documento **e** timeout entre o primeiro
-  e o último. Sem isso, fato `G-204` e causa `inconclusive`.
-- `diagnose_timeout()` (UC02): timeout sem resposta posterior gera
-  `processing_outcome=unknown` e hipótese de resposta perdida; nunca afirma
-  indisponibilidade do autorizador.
-- Nenhuma regra gera ação automática; a próxima ação é sempre consulta
-  autorizada antes de reenviar.
-- Testes: `tests/test_da93_fiscal_correlation.py`.
-
-**Fase 4 (2026-11-12): fatos × hipóteses na resposta.**
+**O que fica no core (fase 4, genérico a qualquer domínio).**
 - `DiagnosisResponse.findings` (`Finding`: `fact`/`hypothesis`, fonte,
   evidências, teste de confirmação, alternativas) e `cause_status`
   (`hypothesis`/`inconclusive`; `confirmed` só por revisão humana).
-- `app/agent/findings.py::build_findings` monta a lista por código: fatos das
-  ferramentas (`CopilotState.fiscal_findings`) e a causa proposta como
-  `hypothesis`; um `fact` sem fonte determinística é rebaixado.
-- O `DiagnosisModel` (saída estruturada do LLM) **não** mudou: o LLM continua
-  sem declarar fatos, e o digest do prompt fica igual (invariante 20).
-- Novo `trust_level` **`rule_reference`**: a evidência do rule engine deixa de
-  ser `system_observed` (regra publicada não prova que o incidente a violou).
-  No relatório ela continua entre as evidências primárias; UI e catálogos
-  pt-BR/en ganharam o rótulo.
+- `app/agent/findings.py::build_findings`: fatos dos plugins de domínio
+  (`CopilotState.domain_findings`) e a causa proposta como `hypothesis`; um
+  `fact` sem fonte determinística é rebaixado.
+- O `DiagnosisModel` (saída estruturada do LLM) não mudou: o LLM não declara
+  fatos e o digest do prompt fica igual (invariante 20).
+- `trust_level` **`rule_reference`**: a evidência do rule engine deixa de ser
+  `system_observed` (regra publicada não prova que o incidente a violou). No
+  relatório continua entre as evidências primárias; UI e catálogos pt-BR/en
+  ganharam o rótulo.
 - Testes: `tests/test_da93_findings.py`.
+
+---
+
+### 86. Separação de produto: core compartilhado e DF-e Copilot (DA-94)
+
+**O problema.** O domínio fiscal dentro do Integration Incident Copilot,
+mesmo atrás de flag, misturava dois produtos: um copiloto de incidentes de
+integração multi-vendor e um copiloto de documentos fiscais. Para o
+comprador e para a documentação, são soluções diferentes; tecnicamente,
+compartilham o mesmo core (gateway LLM, RAG, evidência, HITL, auth,
+observabilidade, gates).
+
+**A solução: monorepo com plugin de domínio.**
+- `app/` continua sendo o core **e** o produto IIC. O core não conhece
+  nenhum domínio: `app/agent/domain_plugins.py` define o protocolo
+  `DomainPlugin` (`validate_context`, `run`) e carrega plugins por
+  `DOMAIN_PLUGINS` (vazio por default; plugin que não carrega derruba o
+  build do grafo, fail-closed).
+- `IncidentRequest.domain_context` (opaco para o core) é validado pelo
+  plugin em `run_diagnosis()`; contexto recusado vira 422
+  `domain_context_invalid` em `/diagnose`. Sem plugin, é descartado.
+- Com plugin, o nó `domain_tools` roda entre `connector` e `retrieve` (antes
+  do RAG, resiliência A7) e escreve `domain_findings`. Falha do plugin vira
+  finding de lacuna, nunca exceção no grafo. Sem plugin, o grafo é idêntico.
+- O produto **DF-e Copilot** vive em `packages/dfe/` (pacote `dfe_copilot`,
+  `pyproject.toml` próprio, testes em `packages/dfe/tests`, documentação em
+  `packages/dfe/docs/`) e sobe com `uvicorn dfe_copilot.main:app`, que liga
+  `DOMAIN_PLUGINS=dfe_copilot.plugin`.
+- Substitui a flag `FISCAL_DOMAIN_ENABLED` e o `FiscalContext` no core
+  (DA-93 fase 1), que deixaram de existir.
+
+**Validação.** `tests/test_da94_domain_plugins.py` (plugin falso: default
+vazio, fail-closed, contexto aceito/recusado, isolamento de falha, grafo
+inalterado sem plugin, nó antes do retrieve, propagação em `run_diagnosis`,
+core sem import do produto) e `packages/dfe/tests/` (plugin real).
+
+**Limitações (registradas de propósito).**
+- O core ainda não foi movido para `packages/core`: `app/` acumula core e
+  IIC. A separação física é etapa posterior (`packages/dfe/docs/PENDENCIAS.md`).
+- Os dois produtos compartilham `pyproject.toml`/`uv.lock` da raiz e o mesmo
+  CI; a imagem Docker atual é só do IIC (`packages/` não é copiado).
+- Um plugin por requisição: o primeiro que aceitar o contexto.
 
 ---
 

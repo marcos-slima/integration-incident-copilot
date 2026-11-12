@@ -11,15 +11,14 @@ import shutil
 from pathlib import Path
 
 import pytest
-
-from app.fiscal import (
+from dfe_copilot.fiscal import (
     FiscalXmlError,
     SchemaPackage,
     analyze_fiscal_xml,
     parse_access_key,
     safe_parse,
 )
-from app.fiscal.xml_tools import NS, SCHEMAS_DIR, validate_xsd
+from dfe_copilot.fiscal.xml_tools import NS, SCHEMAS_DIR, validate_xsd
 
 KEY_SP = "35261111222333000181550010000000011000000014"  # DV 4 (mod 11)
 
@@ -51,7 +50,7 @@ class TestChaveDeAcesso:
 
     def test_cuf_inexistente_invalida(self) -> None:
         body = "99" + KEY_SP[2:43]
-        from app.fiscal.xml_tools import _mod11_dv
+        from dfe_copilot.fiscal.xml_tools import _mod11_dv
 
         assert parse_access_key(body + _mod11_dv(body)).dv_valid is False  # type: ignore[union-attr]
 
@@ -161,7 +160,7 @@ class TestXsd:
             validate_xsd(safe_parse(NFE_INCOMPLETA), remoto)
 
 
-FIXTURE_POSITIVO = Path(__file__).parent / "fixtures" / "fiscal" / "nfe_controle_positivo_sp.xml"
+FIXTURE_POSITIVO = Path(__file__).parent / "fixtures" / "nfe_controle_positivo_sp.xml"
 
 
 class TestControlePositivo:

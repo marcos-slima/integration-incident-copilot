@@ -406,11 +406,12 @@ class Settings(BaseSettings):
     # Faz parte da Fase 2/3 do DA-61. Exige ontology_ttl_path válido.
     ontology_enrichment_enabled: bool = False
 
-    # FISCAL_DOMAIN_ENABLED (app/agent/graph.py::run_diagnosis) - DA-93
-    # Desligado por default. Fase 1 do dominio fiscal DF-e: quando ligado, o
-    # `fiscal_context` da requisicao chega ao CopilotState; desligado, o campo
-    # e' aceito e descartado (grafo, prompt e roteamento identicos ao atual).
-    fiscal_domain_enabled: bool = False
+    # DOMAIN_PLUGINS (app/agent/domain_plugins.py) - DA-94
+    # Lista de modulos de produto de dominio separados por virgula (ex.:
+    # "dfe_copilot.plugin"). Vazio (default) = core puro: domain_context e'
+    # descartado e o grafo e' identico ao do IIC. Plugin que nao carrega
+    # falha no build do grafo (fail-closed).
+    domain_plugins: str = ""
 
     # CHECKPOINTING_ENABLED (app/agent/graph.py)
     # Opt-in para checkpointing LangGraph com PostgresSaver.

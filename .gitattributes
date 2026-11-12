@@ -1,1 +1,1 @@
-data/fiscal/schemas/** -text -diff
+packages/dfe/data/schemas/** -text -diff

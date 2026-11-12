@@ -156,8 +156,9 @@ class TestXsd:
         manifest = {"files_sha256": {}, "entrypoints": {"NFe@4.00": "remoto.xsd"}}
         (base / "PKG.manifest.json").write_text(json.dumps(manifest))
         remoto = SchemaPackage.load("PKG", base=base)
-        with pytest.raises(Exception):  # noqa: B017 - lxml embrulha o erro do resolver
+        with pytest.raises(FiscalXmlError) as exc:
             validate_xsd(safe_parse(NFE_INCOMPLETA), remoto)
+        assert exc.value.code == "schema_remote_forbidden"
 
 
 FIXTURE_POSITIVO = Path(__file__).parent / "fixtures" / "nfe_controle_positivo_sp.xml"

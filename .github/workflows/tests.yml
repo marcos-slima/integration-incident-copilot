@@ -53,9 +53,25 @@ jobs:
 
       # Diagnostico (2026-11-12): o Pytest trava so no CI e o runner ignora
       # timeouts. Steps separados mostram, pelo status, QUAL grupo trava.
-      - name: Pytest (diag) — produto DF-e
-        timeout-minutes: 3
-        run: .venv/bin/python -m pytest packages/dfe/tests -v --tb=short -p no:cacheprovider
+      - name: Pytest (diag) — dfe/test_fiscal_xml.py
+        timeout-minutes: 2
+        run: .venv/bin/python -m pytest packages/dfe/tests/test_fiscal_xml.py -v --tb=short -p no:cacheprovider
+
+      - name: Pytest (diag) — dfe/test_fiscal_correlation.py
+        timeout-minutes: 2
+        run: .venv/bin/python -m pytest packages/dfe/tests/test_fiscal_correlation.py -v --tb=short -p no:cacheprovider
+
+      - name: Pytest (diag) — dfe/test_corpus.py
+        timeout-minutes: 2
+        run: .venv/bin/python -m pytest packages/dfe/tests/test_corpus.py -v --tb=short -p no:cacheprovider
+
+      - name: Pytest (diag) — dfe/test_plugin.py
+        timeout-minutes: 2
+        run: .venv/bin/python -m pytest packages/dfe/tests/test_plugin.py -v --tb=short -p no:cacheprovider
+
+      - name: Pytest (diag) — dfe/test_regressao_dataset.py
+        timeout-minutes: 2
+        run: .venv/bin/python -m pytest packages/dfe/tests/test_regressao_dataset.py -v --tb=short -p no:cacheprovider
 
       - name: Pytest (diag) — testes novos do core
         timeout-minutes: 3

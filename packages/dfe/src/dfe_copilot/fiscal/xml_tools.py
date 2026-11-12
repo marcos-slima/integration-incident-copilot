@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -131,8 +132,23 @@ class SchemaPackage:
         return self.root / rel if rel else None
 
 
+_REMOTE_LOCATION = re.compile(rb'schemaLocation\s*=\s*["\'](?:https?|ftp|file):', re.IGNORECASE)
+
+
+def _assert_local_only(entry: Path) -> None:
+    """Recusa ANTES de compilar qualquer XSD do pacote que aponte para fora.
+
+    O resolver da lxml nao cobre todos os caminhos de include/import do
+    compilador de schema; sem esta checagem a libxml2 pode tentar a rede.
+    """
+    for xsd in sorted(entry.parent.parent.rglob("*.xsd")) or [entry]:
+        if _REMOTE_LOCATION.search(xsd.read_bytes()):
+            raise FiscalXmlError("schema_remote_forbidden", xsd.name)
+
+
 @lru_cache(maxsize=8)
 def _compiled(path: str) -> etree.XMLSchema:
+    _assert_local_only(Path(path))
     return etree.XMLSchema(etree.parse(path, _parser()))
 
 

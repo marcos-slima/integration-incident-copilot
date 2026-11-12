@@ -61,6 +61,14 @@ jobs:
           timeout -k 5 40 .venv/bin/python -c "import time,lxml.etree as e;print(e.LXML_VERSION,e.LIBXML_VERSION);t=time.time();s=e.XMLSchema(e.parse('packages/dfe/data/schemas/nfe/PL_010g_v1.03/NFe/nfe_v4.00.xsd'));print('xsd ok',round(time.time()-t,2))" || echo "diag1 rc=$?"
           free -m
 
+      - name: diag 1b — pytest collect-only de UM teste do core
+        timeout-minutes: 2
+        run: timeout -k 5 40 .venv/bin/python -m pytest tests/test_da93_findings.py --collect-only -q -p no:cacheprovider 2>&1 | tail -5 || echo "rc=$?"
+
+      - name: diag 1c — dfe collect-only SEM a config do pyproject da raiz
+        timeout-minutes: 2
+        run: PYTHONPATH=packages/dfe/src timeout -k 5 40 .venv/bin/python -m pytest -c /dev/null --rootdir=packages/dfe packages/dfe/tests/test_fiscal_correlation.py --collect-only -q -p no:cacheprovider --noconftest 2>&1 | tail -5 || echo "rc=$?"
+
       - name: diag 2 — pytest collect-only do test_fiscal_xml.py
         timeout-minutes: 2
         # diag 2 congelou o runner na rodada anterior (5fa4eba). Limites de

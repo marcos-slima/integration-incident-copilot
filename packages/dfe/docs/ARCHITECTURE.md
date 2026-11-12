@@ -64,7 +64,7 @@ Lacunas viram fatos explícitos: `G-noxml`, `G-xml`, `G-events`, `G-ref`,
 | Componente | Estado |
 |---|---|
 | Contrato `FiscalContext` | Implementado (NF-e 55, leiaute 4.00) |
-| XML seguro, chave, `cStat`, XSD PL 010g | Implementado; protocolo sem XSD (pacote não traz `protNFe`) |
+| XML seguro, chave, `cStat`, XSD PL 010g | Implementado; protocolo (`protNFe`, `nfeProc`, `retEnviNFe`, `retConsReciNFe`) validado por entrypoint local sobre o tipo oficial (D3) |
 | Regras 204 e timeout | Implementado |
 | Plugin no grafo do core | Implementado (`domain_tools`) |
 | Corpus e base de conhecimento | `data/corpus/` (NT 2018.005 + manifesto + regra 2B08-20) e `kb.py`: coleção híbrida `dfe_kb`, filtros de modelo/cStat/status antes da busca, abstenção sem fonte; ingestão real pendente de execução local (P3) |

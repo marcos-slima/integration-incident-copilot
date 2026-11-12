@@ -7,6 +7,7 @@ homologacao. Nenhum documento real, nenhuma chamada de rede.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -95,10 +96,66 @@ class TestProtocolo204:
         assert all(f["kind"] == "fact" for f in r["findings"])
         assert r["signature_validation"] == "not_executed"
 
-    def test_pacote_sem_schema_de_protocolo_nao_executa(self, package: SchemaPackage) -> None:
+    def test_protocolo_validado_por_entrypoint_local(self, package: SchemaPackage) -> None:
         r = analyze_fiscal_xml(PROT_204, package)
-        assert r["xsd_validation"] == "not_executed"
-        assert r["xsd"]["reason"] == "no_entrypoint:protNFe@4.00"
+        assert r["xsd_validation"] == "valid"
+        assert r["xsd"]["entrypoint"] == "protNFe_v4.00.xsd"
+        assert r["xsd"]["entrypoint_origin"] == "local_wrapper"
+
+    def test_protocolo_incompleto_e_invalido(self, package: SchemaPackage) -> None:
+        sem_dh = re.sub(rb"<dhRecbto>.*?</dhRecbto>", b"", PROT_204)
+        r = analyze_fiscal_xml(sem_dh, package)
+        assert r["xsd_validation"] == "invalid"
+        assert {"F-cStat", "F-xsd"} <= {f["id"] for f in r["findings"]}
+
+    def test_documento_nfe_e_entrypoint_oficial(self, package: SchemaPackage) -> None:
+        r = analyze_fiscal_xml(NFE_INCOMPLETA, package)
+        assert r["xsd"]["entrypoint_origin"] == "official"
+
+    def test_protocolo_dentro_de_retorno_de_lote(self, package: SchemaPackage) -> None:
+        inner = PROT_204.split(b"?>", 1)[1].strip()
+        ret = (
+            (
+                f'<retEnviNFe xmlns="{NS}" versao="4.00"><tpAmb>2</tpAmb><verAplic>DEMO_IIC</verAplic>'
+                "<cStat>104</cStat><xMotivo>Lote processado</xMotivo><cUF>35</cUF>"
+                "<dhRecbto>2026-11-11T10:00:03-03:00</dhRecbto>"
+            ).encode()
+            + inner
+            + b"</retEnviNFe>"
+        )
+        r = analyze_fiscal_xml(ret, package)
+        assert r["document_cStat"] == "204"  # do protocolo, nunca o 104 do lote
+        assert r["protocol_count"] == 1
+        assert r["xsd"]["entrypoint"] == "retEnviNFe_v4.00.xsd"
+
+    def test_lote_com_dois_protocolos_nao_escolhe(self, package: SchemaPackage) -> None:
+        inner = PROT_204.split(b"?>", 1)[1].strip()
+        ret = (
+            f'<retConsReciNFe xmlns="{NS}" versao="4.00">'.encode()
+            + inner
+            + inner
+            + b"</retConsReciNFe>"
+        )
+        r = analyze_fiscal_xml(ret, package)
+        assert r.get("document_cStat") is None
+        assert "G-lote" in {f["id"] for f in r["findings"]}
+
+    def test_nfeproc_com_protocolo_de_outra_nota(self, package: SchemaPackage) -> None:
+        inner = PROT_204.split(b"?>", 1)[1].strip()
+        outra = "35261111222333000181550010000000021000000020"
+        nfe = f'<NFe xmlns="{NS}"><infNFe versao="4.00" Id="NFe{outra}"/></NFe>'.encode()
+        proc = f'<nfeProc xmlns="{NS}" versao="4.00">'.encode() + nfe + inner + b"</nfeProc>"
+        r = analyze_fiscal_xml(proc, package)
+        assert r["document_cStat"] == "204"
+        assert "F-protkey" in {f["id"] for f in r["findings"]}
+
+    def test_hash_de_entrypoint_local_conferido(self, tmp_path) -> None:
+        base = tmp_path / "nfe"
+        shutil.copytree(SCHEMAS_DIR, base)
+        (base / "PL_010g_v1.03" / "Local" / "protNFe_v4.00.xsd").write_text("<x/>")
+        with pytest.raises(FiscalXmlError) as exc:
+            SchemaPackage.load(base=base)
+        assert exc.value.code == "schema_hash_mismatch"
 
     def test_status_de_lote_nao_e_lido(self, package: SchemaPackage) -> None:
         lote = f'<retEnviNFe xmlns="{NS}" versao="4.00"><cStat>103</cStat></retEnviNFe>'.encode()

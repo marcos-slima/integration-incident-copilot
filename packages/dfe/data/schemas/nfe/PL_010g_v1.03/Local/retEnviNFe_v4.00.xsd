@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- DF-e Copilot (P5): ponto de entrada LOCAL, nao oficial. Declara so o
+     elemento global retEnviNFe com o tipo oficial TRetEnviNFe de NFe/leiauteNFe_v4.00.xsd
+     (PL_010g_v1.03, hash conferido no manifesto). O pacote oficial nao traz este
+     arquivo; o equivalente oficial (ex.: procNFe_v4.00.xsd) faz o mesmo. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="http://www.portalfiscal.inf.br/nfe" targetNamespace="http://www.portalfiscal.inf.br/nfe" elementFormDefault="qualified" attributeFormDefault="unqualified">
+	<xs:include schemaLocation="../NFe/leiauteNFe_v4.00.xsd"/>
+	<xs:element name="retEnviNFe" type="TRetEnviNFe"/>
+</xs:schema>

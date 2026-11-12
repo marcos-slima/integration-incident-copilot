@@ -59,8 +59,8 @@ flag ligada e descarte com ela desligada.
 - Testes: `packages/dfe/tests/test_fiscal_xml.py`.
 
 **Limitações da fase 2.**
-- O PL 010g não traz schema de `protNFe`: protocolos de retorno ficam com
-  `xsd_validation=not_executed`.
+- O PL 010g não traz schema de `protNFe`: protocolos de retorno ficavam com
+  `xsd_validation=not_executed` (resolvido na D3).
 - Controle positivo: `packages/dfe/tests/fixtures/nfe_controle_positivo_sp.xml`,
   derivado de amostra do nfelib (MIT) e anonimizado (CNPJ/CPF/nomes/endereços
   fictícios, `tpAmb=2`, chave e cDV recalculados). Valida no PL 010g; uma
@@ -117,5 +117,28 @@ flag ligada e descarte com ela desligada.
 - Medição: `promptfooconfig.yaml` + `scripts/promptfoo_provider.py` (pipeline
   real, rule engine desligado para medir o LLM). **Ainda não medido**: o
   baseline registra `NAO MEDIDO` até a execução local com Ollama.
+
+### D3. Validação XSD do protocolo de retorno (P5, 2026-11-12)
+
+- **Fato verificado:** o ZIP do PL 010g v1.03 não tem entrypoint de retorno
+  (`procNFe`, `retEnviNFe`, `retConsReciNFe`), mas o `leiauteNFe_v4.00.xsd`
+  oficial define os tipos `TProtNFe`, `TNfeProc`, `TRetEnviNFe` e
+  `TRetConsReciNFe`.
+- **Decisão:** entrypoints **locais** em `data/schemas/nfe/PL_010g_v1.03/Local/`,
+  cada um com um único `xs:element` global do tipo oficial (o mesmo que o
+  `nfe_v4.00.xsd` oficial faz para `NFe`). Nenhuma regra própria é criada:
+  a validação é a do tipo oficial.
+- **Rastreabilidade:** o manifesto separa `files_sha256` (arquivos do ZIP) de
+  `local_wrappers` (hash, elemento, tipo oficial); `SchemaPackage.load` confere
+  os dois; o resultado XSD traz `entrypoint_origin=official|local_wrapper`, e o
+  finding `F-xsd` cita a origem.
+- **Leitura do protocolo:** `cStat` sai do `protNFe/infProt`, sozinho ou como
+  filho único de `nfeProc`/`retEnviNFe`/`retConsReciNFe`; nunca do `cStat` do
+  lote. Lote com 2+ protocolos → `G-lote` (nada é escolhido). `nfeProc` cujo
+  `chNFe` difere do `Id` da NF-e do mesmo arquivo → `F-protkey`.
+- **Fora do escopo:** `retConsSitNFe` (consulta situação) não tem tipo neste
+  pacote e continua `not_executed`; assinatura do protocolo segue P9.
+- Dataset e fixtures passaram a gerar `protNFe` conforme ao tipo oficial
+  (`verAplic`, `dhRecbto`). Testes: `tests/test_fiscal_xml.py`.
 
 ---

@@ -37,7 +37,9 @@ def chave(n: int, cuf: str = "35") -> str:
 
 def prot(key: str, cstat: str, motivo: str, tp_amb: str = "2") -> str:
     return (
-        f'<protNFe xmlns="{NS}" versao="4.00"><infProt><tpAmb>{tp_amb}</tpAmb><chNFe>{key}</chNFe>'
+        f'<protNFe xmlns="{NS}" versao="4.00"><infProt><tpAmb>{tp_amb}</tpAmb>'
+        f"<verAplic>DEMO_IIC</verAplic><chNFe>{key}</chNFe>"
+        f"<dhRecbto>2026-11-11T09:52:00-03:00</dhRecbto>"
         f"<cStat>{cstat}</cStat><xMotivo>{motivo}</xMotivo></infProt></protNFe>"
     )
 

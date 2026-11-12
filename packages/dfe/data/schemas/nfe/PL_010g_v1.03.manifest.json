@@ -9,10 +9,14 @@
   "source_list_url": "https://www.nfe.fazenda.gov.br/portal/listaConteudo.aspx?tipoConteudo=BMPFMBoln3w=",
   "zip_sha256": "b329ecbe7e4c05a41bfbc1527f105defb7047328acfeada7c77e1666da485eaf",
   "entrypoints": {
-    "NFe@4.00": "NFe/nfe_v4.00.xsd"
+    "NFe@4.00": "NFe/nfe_v4.00.xsd",
+    "protNFe@4.00": "Local/protNFe_v4.00.xsd",
+    "nfeProc@4.00": "Local/nfeProc_v4.00.xsd",
+    "retEnviNFe@4.00": "Local/retEnviNFe_v4.00.xsd",
+    "retConsReciNFe@4.00": "Local/retConsReciNFe_v4.00.xsd"
   },
   "applicability": "candidate_homologation_not_production_certified",
-  "notes": "Pacote sem schema de protNFe/retorno; validacao XSD cobre so o documento NFe. Vigencia em producao nao verificada.",
+  "notes": "O ZIP oficial nao traz entrypoints de retorno/protocolo. Os tipos TProtNFe, TNfeProc, TRetEnviNFe e TRetConsReciNFe estao no leiauteNFe oficial; Local/*.xsd sao entrypoints locais (P5) que so declaram o elemento global com o tipo oficial. retConsSitNFe (consulta situacao) nao tem tipo neste pacote. Vigencia em producao nao verificada.",
   "files_sha256": {
     "Evento/e110001_v1.00.xsd": "3a46fcc6db6c673ae7bbf9767df5fa99d1f4e5b7fbec6bb9575ae358c95b1616",
     "Evento/e110300_v1.00.xsd": "3def9bd3e19dfb3e78688afc540c049dc77f6fb11ae2603d85b6e759a7908fa6",
@@ -22,5 +26,31 @@
     "NFe/nfe_v4.00.xsd": "adce3646c13ceb54922ec3142fc1dc45bd4fb839ac35ad583e86c733c07d27df",
     "NFe/tiposBasico_v4.00.xsd": "772619c85723e598840667ca66e7298a250442df47eeb94b397d2a333ce62047",
     "NFe/xmldsig-core-schema_v1.01.xsd": "f56744a5f51c03f027de13f39f869307091781a9ef1d91b1ebe14719ce28e1ac"
+  },
+  "local_wrappers": {
+    "Local/protNFe_v4.00.xsd": {
+      "sha256": "85acbee77c9f5d5651db4c53a99030c30fc4ff35eaa0cebe8a276ade1c1cce84",
+      "element": "protNFe",
+      "official_type": "TProtNFe",
+      "type_source": "NFe/leiauteNFe_v4.00.xsd"
+    },
+    "Local/nfeProc_v4.00.xsd": {
+      "sha256": "f917996133ea6fb2e460750d4afb9803d9d0ff5acd65a816e52563ba4ef8b86b",
+      "element": "nfeProc",
+      "official_type": "TNfeProc",
+      "type_source": "NFe/leiauteNFe_v4.00.xsd"
+    },
+    "Local/retEnviNFe_v4.00.xsd": {
+      "sha256": "e344640c4ca4e6c684326fa5d6a0db2ac1f901b7e022293f493cb7500f5f1858",
+      "element": "retEnviNFe",
+      "official_type": "TRetEnviNFe",
+      "type_source": "NFe/leiauteNFe_v4.00.xsd"
+    },
+    "Local/retConsReciNFe_v4.00.xsd": {
+      "sha256": "e184d34f4805117e358ae66d019fb287c7af8ac9cbf9502830675c76c9b79cb6",
+      "element": "retConsReciNFe",
+      "official_type": "TRetConsReciNFe",
+      "type_source": "NFe/leiauteNFe_v4.00.xsd"
+    }
   }
 }

@@ -125,11 +125,24 @@ class SchemaPackage:
             got = hashlib.sha256((root / rel).read_bytes()).hexdigest()
             if got != expected:
                 raise FiscalXmlError("schema_hash_mismatch", rel)
+        # P5: entrypoints locais (nao oficiais) tambem tem hash conferido.
+        for rel, meta in manifest.get("local_wrappers", {}).items():
+            got = hashlib.sha256((root / rel).read_bytes()).hexdigest()
+            if got != meta["sha256"]:
+                raise FiscalXmlError("schema_hash_mismatch", rel)
         return cls(package_id=package_id, manifest=manifest, root=root)
 
     def entrypoint(self, element: str, version: str) -> Path | None:
         rel = self.manifest.get("entrypoints", {}).get(f"{element}@{version}")
         return self.root / rel if rel else None
+
+    def entrypoint_origin(self, element: str, version: str) -> str | None:
+        """`official` (arquivo do ZIP) ou `local_wrapper` (P5: so declara o
+        elemento global com o tipo oficial do leiaute)."""
+        rel = self.manifest.get("entrypoints", {}).get(f"{element}@{version}")
+        if rel is None:
+            return None
+        return "local_wrapper" if rel in self.manifest.get("local_wrappers", {}) else "official"
 
 
 _REMOTE_LOCATION = re.compile(rb'schemaLocation\s*=\s*["\'](?:https?|ftp|file):', re.IGNORECASE)
@@ -174,6 +187,7 @@ def validate_xsd(root: etree._Element, package: SchemaPackage | None) -> dict[st
         **base,
         "status": "valid" if ok else "invalid",
         "entrypoint": entry.name,
+        "entrypoint_origin": package.entrypoint_origin(local, version),
         "errors": errors,
     }
 
@@ -184,10 +198,28 @@ def _text(root: etree._Element, *path: str) -> str | None:
     return found[0].text if len(found) == 1 else None
 
 
+# Raizes que carregam protocolo de NF-e (P5).
+_PROTOCOL_CONTAINERS = ("protNFe", "nfeProc", "retEnviNFe", "retConsReciNFe")
+
+
+def _protocol(root: etree._Element) -> etree._Element | None:
+    """O `protNFe` do XML: a propria raiz, ou o unico filho `protNFe` de um
+    contêiner. Lote com 2+ protocolos devolve None (nao escolhe um)."""
+    local = etree.QName(root).localname
+    if local == "protNFe":
+        return root
+    if local in _PROTOCOL_CONTAINERS:
+        found = root.findall(f"{{{NS}}}protNFe")
+        return found[0] if len(found) == 1 else None
+    return None
+
+
 def analyze_fiscal_xml(xml_bytes: bytes, package: SchemaPackage | None = None) -> dict[str, Any]:
     """Fatos deterministicos sobre um XML NF-e (documento ou protocolo).
 
-    Le `cStat` somente em `protNFe/infProt` - nunca o status de lote.
+    Le `cStat` somente em `protNFe/infProt` - nunca o status de lote. O
+    protocolo pode vir sozinho ou dentro de `nfeProc`, `retEnviNFe` ou
+    `retConsReciNFe` (P5); com mais de um protocolo no lote, nenhum e' escolhido.
     Levanta FiscalXmlError para entrada recusada (DTD, malformado, grande).
     """
     root = safe_parse(xml_bytes)
@@ -202,16 +234,39 @@ def analyze_fiscal_xml(xml_bytes: bytes, package: SchemaPackage | None = None) -
         "findings": [],
     }
     key: str | None = None
-    if fiscal_ns and qname.localname == "protNFe":
-        out["document_cStat"] = _text(root, "infProt", "cStat")
-        out["xMotivo"] = _text(root, "infProt", "xMotivo")
-        out["tpAmb"] = _text(root, "infProt", "tpAmb")
-        key = _text(root, "infProt", "chNFe")
+    prot = _protocol(root) if fiscal_ns else None
+    if fiscal_ns and qname.localname in _PROTOCOL_CONTAINERS:
+        out["protocol_count"] = (
+            1 if qname.localname == "protNFe" else len(root.findall(f"{{{NS}}}protNFe"))
+        )
+    if prot is not None:
+        out["document_cStat"] = _text(prot, "infProt", "cStat")
+        out["xMotivo"] = _text(prot, "infProt", "xMotivo")
+        out["tpAmb"] = _text(prot, "infProt", "tpAmb")
+        out["nProt"] = _text(prot, "infProt", "nProt")
+        key = _text(prot, "infProt", "chNFe")
     elif fiscal_ns and qname.localname == "NFe":
         inf = root.find(f"{{{NS}}}infNFe")
         node_id = inf.get("Id") if inf is not None else None
         key = node_id[3:] if node_id and node_id.startswith("NFe") else None
         out["tpAmb"] = _text(root, "infNFe", "ide", "tpAmb")
+
+    if out.get("protocol_count", 0) > 1:
+        out["findings"].append({
+            "id": "G-lote", "kind": "fact", "source": "tool",
+            "statement": f"Retorno com {out['protocol_count']} protocolos; cStat por documento nao escolhido.",
+            "evidence_refs": [f"sha256:{out['raw_sha256']}"],
+        })  # fmt: skip
+    if fiscal_ns and qname.localname == "nfeProc" and prot is not None:
+        inf = root.find(f"{{{NS}}}NFe/{{{NS}}}infNFe")
+        node_id = inf.get("Id") if inf is not None else None
+        doc_key = node_id[3:] if node_id and node_id.startswith("NFe") else None
+        if doc_key and key and doc_key != key:
+            out["findings"].append({
+                "id": "F-protkey", "kind": "fact", "source": "tool",
+                "statement": "Protocolo do nfeProc nao pertence a NF-e do mesmo arquivo (chNFe difere do Id).",
+                "evidence_refs": [f"sha256:{out['raw_sha256']}"],
+            })  # fmt: skip
 
     parsed = parse_access_key(key)
     out["access_key"] = parsed.raw if parsed else None
@@ -236,7 +291,7 @@ def analyze_fiscal_xml(xml_bytes: bytes, package: SchemaPackage | None = None) -
     if xsd["status"] == "invalid":
         out["findings"].append({
             "id": "F-xsd", "kind": "fact", "source": "tool",
-            "statement": f"XML nao conforme ao {xsd.get('entrypoint')} ({xsd['package_id']}).",
+            "statement": f"XML nao conforme ao {xsd.get('entrypoint')} ({xsd['package_id']}, {xsd.get('entrypoint_origin')}).",
             "evidence_refs": [f"sha256:{out['raw_sha256']}"],
         })  # fmt: skip
     return out

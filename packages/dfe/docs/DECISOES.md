@@ -65,8 +65,8 @@ flag ligada e descarte com ela desligada.
   derivado de amostra do nfelib (MIT) e anonimizado (CNPJ/CPF/nomes/endereços
   fictícios, `tpAmb=2`, chave e cDV recalculados). Valida no PL 010g; uma
   mutação controlada (remoção do CNPJ do emitente) o torna inválido. A
-  assinatura do fixture não confere com o conteúdo, por construção.
-- Assinatura digital não é verificada; vigência do pacote em produção não foi
+  assinatura do fixture não conferia com o conteúdo (reassinado na D4).
+- Assinatura digital não era verificada (D4); vigência do pacote em produção não foi
   confirmada (`applicability=candidate_homologation_not_production_certified`).
 - As ferramentas ainda não são chamadas pelo grafo (nó fiscal: fase seguinte).
 
@@ -140,5 +140,38 @@ flag ligada e descarte com ela desligada.
   pacote e continua `not_executed`; assinatura do protocolo segue P9.
 - Dataset e fixtures passaram a gerar `protNFe` conforme ao tipo oficial
   (`verAplic`, `dhRecbto`). Testes: `tests/test_fiscal_xml.py`.
+
+### D4. Verificação da assinatura XMLDSig (P9, 2026-11-12)
+
+- **Sem dependência nova:** `src/dfe_copilot/fiscal/signature.py` usa `lxml`
+  (C14N) e `cryptography` (já no core). Um verificador XMLDSig genérico
+  (`signxml`, `xmlsec`) aceitaria transforms, referências e chaves que a NF-e
+  não usa, e isso é superfície de ataque.
+- **Perfil fechado da NF-e 4.00:** `ds:Signature` irmã do elemento assinado
+  (`infNFe` ou `infProt`), uma `Reference` com `URI="#<Id>"`, transforms
+  exatamente `enveloped-signature` + C14N 1.0, C14N 1.0 no `SignedInfo`,
+  RSA-SHA1 (ou RSA-SHA256), certificado X.509 embutido. Fora disso:
+  `unsupported` (`G-sig`), nunca `valid`.
+- **XSW:** o `Id` referenciado precisa ser único no documento e ser o do
+  elemento que a análise lê (`duplicate_id`, `reference_uri`).
+- **Estados:** `valid` (digest e assinatura conferem com o certificado
+  embutido), `invalid` (`F-sig`: `digest_mismatch`/`signature_mismatch`),
+  `unsupported` (`G-sig`), `not_executed` (sem assinatura). Com `valid`, o
+  certificado vira fatos: `F-sigcnpj` (CNPJ ICP-Brasil do certificado, OID
+  2.16.76.1.3.3, difere do emitente da chave) e `F-sigvalid` (`dhEmi` fora da
+  validade).
+- **O que `valid` não diz:** `certificate_trust=not_verified` sempre. Não há
+  cadeia ICP-Brasil, LCR/OCSP nem rede; o certificado embutido pode ser
+  autoassinado. A persona fiscal já proíbe afirmar autorização sem protocolo.
+- **Alvo:** a NF-e (`NFe` ou `nfeProc/NFe`); sem NF-e, o protocolo
+  (`protNFe`, sozinho ou filho único de retorno), quando assinado.
+- **Fixture:** o controle positivo foi reassinado (`scripts/sign_fixture.py`)
+  com chave efêmera e certificado autoassinado fictício; a chave privada não é
+  gravada. A versão anterior, com a assinatura do original do nfelib, dava
+  `digest_mismatch`, que é o comportamento correto para conteúdo alterado.
+  Mutações do dataset (UC03) passam a esperar `F-sig` + `F-xsd`.
+- Testes: `tests/test_fiscal_xml.py::TestAssinatura` (adulteração do conteúdo e
+  do `SignatureValue`, algoritmo fora do perfil, `Reference` trocada, XSW por
+  `Id` duplicado, CNPJ divergente, validade, ausência, protocolo assinado).
 
 ---

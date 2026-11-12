@@ -101,7 +101,9 @@ def casos() -> list[dict]:
         mut = POSITIVO.replace(alvo, novo, 1)
         if alvo == "<natOp>":
             mut = mut.replace("</natOp>", "</natOpX>", 1)
-        add(f"UC03-MUT-{i:02d}", "uc03_mutacao_xsd", mut, [], ["F-xsd"])
+        add(
+            f"UC03-MUT-{i:02d}", "uc03_mutacao_xsd", mut, [], ["F-sig", "F-xsd"]
+        )  # alterar o infNFe quebra o digest (P9)
     add("UC03-AMB-01", "uc03_homologacao_em_producao", POSITIVO, [], ["G-amb"], env="production")
     # Seguranca / lacunas
     add(

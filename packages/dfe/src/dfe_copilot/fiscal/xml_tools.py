@@ -21,6 +21,8 @@ from typing import Any, Literal
 
 from lxml import etree
 
+from dfe_copilot.fiscal.signature import verify_enveloped, within_validity
+
 NS = "http://www.portalfiscal.inf.br/nfe"
 MAX_XML_BYTES = 1_000_000
 SCHEMAS_DIR = Path(__file__).resolve().parents[3] / "data" / "schemas" / "nfe"
@@ -214,6 +216,69 @@ def _protocol(root: etree._Element) -> etree._Element | None:
     return None
 
 
+def _signature_target(
+    root: etree._Element, prot: etree._Element | None
+) -> tuple[etree._Element, etree._Element | None] | None:
+    """(pai da ds:Signature, elemento assinado). A NF-e tem prioridade sobre o
+    protocolo quando os dois estao no arquivo (nfeProc)."""
+    local = etree.QName(root).localname
+    nfe = root if local == "NFe" else root.find(f"{{{NS}}}NFe") if local == "nfeProc" else None
+    if nfe is not None:
+        return nfe, nfe.find(f"{{{NS}}}infNFe")
+    if prot is not None:
+        return prot, prot.find(f"{{{NS}}}infProt")
+    return None
+
+
+def _check_signature(
+    root: etree._Element, prot: etree._Element | None, out: dict[str, Any], key: str | None
+) -> None:
+    """P9: assinatura XMLDSig, perfil NF-e, read-only (dfe_copilot.fiscal.signature)."""
+    if etree.QName(root).namespace != NS:
+        return
+    target = _signature_target(root, prot)
+    if target is None:
+        return
+    result = verify_enveloped(*target)
+    out["signature_validation"] = result["status"]
+    out["signature"] = result
+    ref = [f"sha256:{out['raw_sha256']}"]
+    if result["status"] == "invalid":
+        out["findings"].append({
+            "id": "F-sig", "kind": "fact", "source": "tool",
+            "statement": f"Assinatura XMLDSig nao confere com o certificado embutido ({result['reason']}).",
+            "evidence_refs": ref,
+        })  # fmt: skip
+    elif result["status"] == "unsupported":
+        out["findings"].append({
+            "id": "G-sig", "kind": "fact", "source": "tool",
+            "statement": f"Assinatura fora do perfil NF-e ({result['reason']}); nao verificada.",
+            "evidence_refs": ref,
+        })  # fmt: skip
+    elif result["status"] == "valid":
+        cert = result["certificate"]
+        signer, doc_cnpj = cert.get("icp_cnpj"), (key or "")[6:20] or None
+        if (
+            signer
+            and doc_cnpj
+            and signer != doc_cnpj
+            and target[1] is not None
+            and (etree.QName(target[1]).localname == "infNFe")
+        ):
+            out["findings"].append({
+                "id": "F-sigcnpj", "kind": "fact", "source": "tool",
+                "statement": "CNPJ do certificado (ICP-Brasil) difere do CNPJ emitente da chave de acesso.",
+                "evidence_refs": ref,
+            })  # fmt: skip
+        dh = target[1].findtext(f"{{{NS}}}ide/{{{NS}}}dhEmi") if target[1] is not None else None
+        if within_validity(cert, dh) is False:
+            out["findings"].append({
+                "id": "F-sigvalid", "kind": "fact", "source": "tool",
+                "statement": "dhEmi fora da validade do certificado que assinou a NF-e.",
+                "evidence_refs": ref,
+            })  # fmt: skip
+
+
 def analyze_fiscal_xml(xml_bytes: bytes, package: SchemaPackage | None = None) -> dict[str, Any]:
     """Fatos deterministicos sobre um XML NF-e (documento ou protocolo).
 
@@ -267,6 +332,8 @@ def analyze_fiscal_xml(xml_bytes: bytes, package: SchemaPackage | None = None) -
                 "statement": "Protocolo do nfeProc nao pertence a NF-e do mesmo arquivo (chNFe difere do Id).",
                 "evidence_refs": [f"sha256:{out['raw_sha256']}"],
             })  # fmt: skip
+
+    _check_signature(root, prot, out, key)
 
     parsed = parse_access_key(key)
     out["access_key"] = parsed.raw if parsed else None

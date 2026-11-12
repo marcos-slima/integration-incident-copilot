@@ -20,6 +20,8 @@ from dfe_copilot.fiscal import (
     safe_parse,
 )
 from dfe_copilot.fiscal.xml_tools import NS, SCHEMAS_DIR, validate_xsd
+from lxml import etree
+from signing import make_cert, sign
 
 KEY_SP = "35261111222333000181550010000000011000000014"  # DV 4 (mod 11)
 
@@ -247,6 +249,111 @@ class TestControlePositivo:
         assert r["xsd_validation"] == "invalid"
         assert "F-xsd" in [f["id"] for f in r["findings"]]
 
-    def test_assinatura_nunca_declarada_valida(self, package: SchemaPackage) -> None:
+    def test_assinatura_confere_mas_confianca_nao_verificada(self, package: SchemaPackage) -> None:
         r = analyze_fiscal_xml(FIXTURE_POSITIVO.read_bytes(), package)
+        assert r["signature_validation"] == "valid"
+        assert r["signature"]["certificate_trust"] == "not_verified"
+        assert r["signature"]["certificate"]["icp_cnpj"] == "11222333000181"
+
+
+# --- P9: assinatura XMLDSig (perfil NF-e, read-only) -------------------------
+
+DS = "http://www.w3.org/2000/09/xmldsig#"
+
+
+def _assinado(mutate=None, **cert_kw) -> bytes:
+    root = safe_parse(FIXTURE_POSITIVO.read_bytes())
+    key, cert = make_cert(**cert_kw)
+    sign(root, root.find(f"{{{NS}}}infNFe"), key, cert)
+    if mutate:
+        mutate(root)
+    return etree.tostring(root)
+
+
+def _ids(r: dict) -> set[str]:
+    return {f["id"] for f in r["findings"]}
+
+
+class TestAssinatura:
+    def test_conteudo_alterado_apos_assinar(self, package: SchemaPackage) -> None:
+        def mut(root):
+            root.find(f".//{{{NS}}}natOp").text = "OUTRA NATUREZA"
+
+        r = analyze_fiscal_xml(_assinado(mut), package)
+        assert r["signature_validation"] == "invalid"
+        assert r["signature"]["reason"] == "digest_mismatch"
+        assert "F-sig" in _ids(r)
+
+    def test_signedinfo_alterado(self, package: SchemaPackage) -> None:
+        def mut(root):
+            sv = root.find(f".//{{{DS}}}SignatureValue")
+            sv.text = "AAAA" + sv.text[4:]  # digest intacto, assinatura nao
+
+        r = analyze_fiscal_xml(_assinado(mut), package)
+        assert r["signature"]["reason"] == "signature_mismatch"
+
+    def test_algoritmo_fora_do_perfil(self, package: SchemaPackage) -> None:
+        def mut(root):
+            root.find(f".//{{{DS}}}SignatureMethod").set(
+                "Algorithm", "http://www.w3.org/2001/04/xmldsig-more#rsa-md5"
+            )
+
+        r = analyze_fiscal_xml(_assinado(mut), package)
+        assert r["signature_validation"] == "unsupported"
+        assert "G-sig" in _ids(r) and "F-sig" not in _ids(r)
+
+    def test_reference_para_outro_elemento(self, package: SchemaPackage) -> None:
+        def mut(root):
+            root.find(f".//{{{DS}}}Reference").set("URI", "#outro")
+
+        r = analyze_fiscal_xml(_assinado(mut), package)
+        assert r["signature"]["reason"] == "reference_uri"
+
+    def test_xsw_id_duplicado(self, package: SchemaPackage) -> None:
+        def mut(root):
+            inf = root.find(f"{{{NS}}}infNFe")
+            clone = etree.SubElement(root.find(f".//{{{DS}}}KeyInfo"), f"{{{NS}}}infNFe")
+            clone.set("Id", inf.get("Id"))
+
+        r = analyze_fiscal_xml(_assinado(mut), package)
+        assert r["signature"]["reason"] == "duplicate_id"
+        assert r["signature_validation"] != "valid"
+
+    def test_cnpj_do_certificado_diverge(self, package: SchemaPackage) -> None:
+        r = analyze_fiscal_xml(_assinado(cnpj="99888777000166"), package)
+        assert r["signature_validation"] == "valid"
+        assert "F-sigcnpj" in _ids(r)
+
+    def test_emissao_fora_da_validade(self, package: SchemaPackage) -> None:
+        import datetime as dt
+
+        r = analyze_fiscal_xml(
+            _assinado(
+                not_before=dt.datetime(2020, 1, 1, tzinfo=dt.UTC),
+                not_after=dt.datetime(2021, 1, 1, tzinfo=dt.UTC),
+            ),
+            package,
+        )
+        assert "F-sigvalid" in _ids(r)
+
+    def test_sem_assinatura(self, package: SchemaPackage) -> None:
+        def mut(root):
+            root.remove(root.find(f"{{{DS}}}Signature"))
+
+        r = analyze_fiscal_xml(_assinado(mut), package)
+        assert r["signature_validation"] == "not_executed"
+        assert "F-xsd" in _ids(r)  # Signature e' obrigatoria no TNFe
+
+    def test_protocolo_assinado(self, package: SchemaPackage) -> None:
+        root = safe_parse(PROT_204)
+        inf = root.find(f"{{{NS}}}infProt")
+        inf.set("Id", "ID135260000000001")
+        key, cert = make_cert()
+        sign(root, inf, key, cert)
+        r = analyze_fiscal_xml(etree.tostring(root), package)
+        assert r["signature_validation"] == "valid"
+        assert r["xsd_validation"] == "valid"
+
+    def test_protocolo_sem_assinatura_nao_executa(self, package: SchemaPackage) -> None:
+        r = analyze_fiscal_xml(PROT_204, package)
         assert r["signature_validation"] == "not_executed"

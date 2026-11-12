@@ -409,7 +409,7 @@ Campos atuais mantidos; novos campos opcionais. Mudar `Field(description=)` alte
 ```python
 class Finding(BaseModel):
     finding_id: str
-    kind: Literal["fact", "hypothesis"]           # "fact" só é criado por ferramenta
+    kind: Literal["fact", "hypothesis"]  # "fact" só é criado por ferramenta
     statement: str
     source: Literal["tool", "connector", "rule_reference", "rag", "llm"]
     evidence_refs: list[str] = []
@@ -417,12 +417,13 @@ class Finding(BaseModel):
     gaps: list[str] = []
     confirmation_test: list[str] = []
 
+
 class DiagnosisModel(BaseModel):
-    matched_source: str | None                     # existente
-    probable_root_cause: str                       # existente
-    confidence: float                              # existente; não é probabilidade calibrada
-    next_steps: list[str]                          # existente
-    findings: list[Finding] = []                   # novo
+    matched_source: str | None  # existente
+    probable_root_cause: str  # existente
+    confidence: float  # existente; não é probabilidade calibrada
+    next_steps: list[str]  # existente
+    findings: list[Finding] = []  # novo
     cause_status: Literal["hypothesis", "confirmed", "inconclusive"] = "hypothesis"  # novo
 ```
 
@@ -1073,6 +1074,7 @@ Salvar como `caso_nfe_204.py` e executar `python3 caso_nfe_204.py`.
 
 ```python
 """Microensaio offline do estudo v3. NAO e modulo integrado ao IIC nem validador fiscal."""
+
 import copy
 import hashlib
 import json
@@ -1096,12 +1098,27 @@ XML = f"""<?xml version="1.0" encoding="UTF-8"?>
 </protNFe>"""
 
 EVENTS = [
-    {"evidence_id": "EV-A", "request_id": "REQ-A", "document_ref": "DOC-DEMO-001",
-     "at": "2026-11-11T12:59:00Z", "event": "sent"},
-    {"evidence_id": "EV-T", "request_id": "REQ-A", "document_ref": "DOC-DEMO-001",
-     "at": "2026-11-11T13:00:00Z", "event": "timeout"},
-    {"evidence_id": "EV-B", "request_id": "REQ-B", "document_ref": "DOC-DEMO-001",
-     "at": "2026-11-11T13:00:01Z", "event": "sent"},
+    {
+        "evidence_id": "EV-A",
+        "request_id": "REQ-A",
+        "document_ref": "DOC-DEMO-001",
+        "at": "2026-11-11T12:59:00Z",
+        "event": "sent",
+    },
+    {
+        "evidence_id": "EV-T",
+        "request_id": "REQ-A",
+        "document_ref": "DOC-DEMO-001",
+        "at": "2026-11-11T13:00:00Z",
+        "event": "timeout",
+    },
+    {
+        "evidence_id": "EV-B",
+        "request_id": "REQ-B",
+        "document_ref": "DOC-DEMO-001",
+        "at": "2026-11-11T13:00:01Z",
+        "event": "sent",
+    },
 ]
 
 
@@ -1119,8 +1136,9 @@ def chave_dv_ok(chave: str) -> bool:
 def diagnose(xml_bytes: bytes, events: list[dict]) -> dict:
     if len(xml_bytes) > 1_000_000:
         raise ValueError("input_too_large")
-    parser = etree.XMLParser(resolve_entities=False, load_dtd=False, no_network=True,
-                             huge_tree=False, recover=False)
+    parser = etree.XMLParser(
+        resolve_entities=False, load_dtd=False, no_network=True, huge_tree=False, recover=False
+    )
     root = etree.fromstring(xml_bytes, parser)
     if root.getroottree().docinfo.doctype:
         raise ValueError("dtd_forbidden")
@@ -1133,41 +1151,62 @@ def diagnose(xml_bytes: bytes, events: list[dict]) -> dict:
     status = field("cStat") if is_prot else None
     chave = field("chNFe") if is_prot else None
     out = {
-        "synthetic": True, "integrated_with_iic": False,
+        "synthetic": True,
+        "integrated_with_iic": False,
         "raw_sha256": hashlib.sha256(xml_bytes).hexdigest(),
-        "well_formed": True, "xsd_validation": "not_executed",
+        "well_formed": True,
+        "xsd_validation": "not_executed",
         "signature_validation": "not_executed",
         "access_key_dv_valid": chave_dv_ok(chave) if chave else None,
-        "document_cStat": status, "official_rule_ref": None,
+        "document_cStat": status,
+        "official_rule_ref": None,
         "rule_applicability": "fixed_demo_reference_not_production_certified",
-        "cause_status": "inconclusive", "resolution_status": "not_validated",
+        "cause_status": "inconclusive",
+        "resolution_status": "not_validated",
         "remote_authorization_confirmed": False,
-        "findings": [], "automatic_actions": [],
+        "findings": [],
+        "automatic_actions": [],
     }
     if status != "204" or field("tpAmb") != "2" or not out["access_key_dv_valid"]:
         out["next_step"] = "Obter retorno, chave e contexto aplicaveis."
         return out
 
     out["official_rule_ref"] = "NT2018.005_v1.51_sec4.5_2B08-20"
-    out["findings"].append({"id": "F1", "kind": "fact", "source": "tool",
-                            "statement": "Retorno do documento com cStat 204 em homologacao."})
+    out["findings"].append(
+        {
+            "id": "F1",
+            "kind": "fact",
+            "source": "tool",
+            "statement": "Retorno do documento com cStat 204 em homologacao.",
+        }
+    )
     doc = [e for e in events if e["document_ref"] == "DOC-DEMO-001"]
     sent = [e for e in doc if e["event"] == "sent"]
     timeouts = [e for e in doc if e["event"] == "timeout"]
     # H1 exige: >=2 envios do mesmo documento E timeout entre o 1o e o ultimo envio.
-    if len(sent) >= 2 and len({e["document_ref"] for e in sent}) == 1 and any(
-        sent[0]["at"] < t["at"] < sent[-1]["at"] for t in timeouts
+    if (
+        len(sent) >= 2
+        and len({e["document_ref"] for e in sent}) == 1
+        and any(sent[0]["at"] < t["at"] < sent[-1]["at"] for t in timeouts)
     ):
         out["cause_status"] = "hypothesis"
-        out["findings"].append({
-            "id": "H1", "kind": "hypothesis", "source": "tool",
-            "statement": "Reenvio apos timeout pode explicar a duplicidade.",
-            "evidence_refs": [e["evidence_id"] for e in doc],
-            "confirmation_test": ["Consulta autorizada de situacao/protocolo",
-                                  "Vinculo de IDs verificado",
-                                  "Confirmacao humana do mecanismo de reenvio"],
-        })
-    out["next_step"] = "Conciliar situacao/protocolo por leitura autorizada; nao reenviar cegamente."
+        out["findings"].append(
+            {
+                "id": "H1",
+                "kind": "hypothesis",
+                "source": "tool",
+                "statement": "Reenvio apos timeout pode explicar a duplicidade.",
+                "evidence_refs": [e["evidence_id"] for e in doc],
+                "confirmation_test": [
+                    "Consulta autorizada de situacao/protocolo",
+                    "Vinculo de IDs verificado",
+                    "Confirmacao humana do mecanismo de reenvio",
+                ],
+            }
+        )
+    out["next_step"] = (
+        "Conciliar situacao/protocolo por leitura autorizada; nao reenviar cegamente."
+    )
     return out
 
 
@@ -1207,7 +1246,9 @@ def self_check() -> dict:
 
 
 if __name__ == "__main__":
-    print(json.dumps({"self_checks": "passed", "result": self_check()}, indent=2, ensure_ascii=False))
+    print(
+        json.dumps({"self_checks": "passed", "result": self_check()}, indent=2, ensure_ascii=False)
+    )
 ```
 
 ### A.3 Resultado obtido (Python 3, lxml 6.1.3)

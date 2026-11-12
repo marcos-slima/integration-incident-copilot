@@ -22,6 +22,7 @@ automática.
 # na raiz do monorepo
 uv run uvicorn dfe_copilot.main:app --reload     # API do core com o plugin DF-e
 (cd packages/dfe && uv run pytest -q)              # testes do produto (config própria)
+(cd packages/dfe && uv run python -m dfe_copilot.kb ingest)   # base fiscal no Qdrant (dfe_kb)
 ```
 
 Requisição mínima (`POST /diagnose`):
@@ -54,6 +55,7 @@ A resposta traz `findings` (fatos das ferramentas + hipóteses) e
 | `src/dfe_copilot/fiscal/xml_tools.py` | Parse seguro, chave de acesso, `cStat`, XSD offline |
 | `src/dfe_copilot/fiscal/correlation.py` | Linha do tempo UTC, regras cStat 204 e timeout |
 | `src/dfe_copilot/main.py` | Ponto de entrada da API do produto |
+| `src/dfe_copilot/kb.py` | Base de conhecimento fiscal: ingestão e busca híbrida filtrada (`dfe_kb`) |
 | `data/schemas/nfe/` | Pacote oficial PL 010g v1.03 + manifesto com hashes |
 | `tests/` | Testes do produto e fixture de controle positivo |
 | `docs/` | Arquitetura, decisões, pendências e estudo de origem |

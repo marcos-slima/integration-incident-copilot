@@ -62,7 +62,7 @@ Lacunas viram fatos explícitos: `G-noxml`, `G-xml`, `G-events`, `G-ref`,
 | XML seguro, chave, `cStat`, XSD PL 010g | Implementado; protocolo sem XSD (pacote não traz `protNFe`) |
 | Regras 204 e timeout | Implementado |
 | Plugin no grafo do core | Implementado (`domain_tools`) |
-| Corpus fiscal v0 | Preparado em `data/corpus/` (NT 2018.005 + manifesto + regra 2B08-20); ingestão no Qdrant pendente (P3) |
+| Corpus e base de conhecimento | `data/corpus/` (NT 2018.005 + manifesto + regra 2B08-20) e `kb.py`: coleção híbrida `dfe_kb`, filtros de modelo/cStat/status antes da busca, abstenção sem fonte; ingestão real pendente de execução local (P3) |
 | UI de fatos × hipóteses | Tipos e rótulos no core; tela dedicada pendente |
 | Dataset e regressão | 29 casos sintéticos v0 + regressão offline (`tests/test_regressao_dataset.py`); revisão fiscal pendente (P7) |
 | Integração SAP / SEFAZ | Fora do MVP (read-only, por contrato) |

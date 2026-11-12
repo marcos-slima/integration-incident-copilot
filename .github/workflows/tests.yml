@@ -51,24 +51,31 @@ jobs:
       - name: Ruff — formatação
         run: uv run ruff format --check .
 
-      # Diagnostico (2026-11-12): test_fiscal_xml.py trava so no CI e o runner
-      # ignora timeouts. O watchdog roda o pytest em background, imprime
-      # memoria/processos a cada 10 s e mata tudo em 90 s, mostrando o log.
-      - name: Pytest (diag) — watchdog dfe/test_fiscal_xml.py
-        timeout-minutes: 4
+      # Diagnostico (2026-11-12): ate um loop bash de 90 s congelou junto com
+      # o pytest de test_fiscal_xml.py (runner sem resposta). Bisseccao em
+      # passos minimos, cada um com `timeout` do proprio comando.
+      - name: diag 1 — import lxml + compila XSD PL_010g (sem pytest)
+        timeout-minutes: 2
         run: |
-          free -m; nproc
-          PYTHONUNBUFFERED=1 .venv/bin/python -X faulthandler -m pytest packages/dfe/tests/test_fiscal_xml.py -v --tb=short -p no:cacheprovider -o faulthandler_timeout=30 > diag.log 2>&1 &
-          PID=$!
-          for i in $(seq 1 9); do
-            sleep 10
-            if ! kill -0 $PID 2>/dev/null; then break; fi
-            echo "--- t=${i}0s"; free -m | sed -n 2p; ps -o pid,rss,pcpu,etime,cmd --ppid $PID -p $PID | cut -c1-160; tail -3 diag.log
+          free -m
+          timeout -k 5 40 .venv/bin/python -c "import time,lxml.etree as e;print(e.LXML_VERSION,e.LIBXML_VERSION);t=time.time();s=e.XMLSchema(e.parse('packages/dfe/data/schemas/nfe/PL_010g_v1.03/NFe/nfe_v4.00.xsd'));print('xsd ok',round(time.time()-t,2))" || echo "diag1 rc=$?"
+          free -m
+
+      - name: diag 2 — pytest collect-only do test_fiscal_xml.py
+        timeout-minutes: 2
+        run: timeout -k 5 40 .venv/bin/python -m pytest packages/dfe/tests/test_fiscal_xml.py --collect-only -q -p no:cacheprovider || echo "diag2 rc=$?"
+
+      - name: diag 3 — pytest de testes novos do core
+        timeout-minutes: 2
+        run: timeout -k 5 60 .venv/bin/python -m pytest tests/test_da94_domain_plugins.py tests/test_da93_findings.py -q -p no:cacheprovider || echo "diag3 rc=$?"
+
+      - name: diag 4 — pytest test_fiscal_xml.py um teste por vez
+        timeout-minutes: 3
+        run: |
+          for t in $(.venv/bin/python -m pytest packages/dfe/tests/test_fiscal_xml.py --collect-only -q -p no:cacheprovider | grep '::'); do
+            echo ">>> $t"; free -m | sed -n 2p
+            timeout -k 3 15 .venv/bin/python -m pytest "$t" -q -p no:cacheprovider 2>&1 | tail -2 || echo "rc=$?"
           done
-          kill -9 $PID 2>/dev/null || true
-          pkill -9 -f pytest || true
-          echo "=== diag.log"; cat diag.log | tail -120
-          exit 0
 
       - name: Pytest
         # Exclui testes marcados como integration: eles exigem Qdrant e Ollama,

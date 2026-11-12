@@ -51,6 +51,16 @@ jobs:
       - name: Ruff — formatação
         run: uv run ruff format --check .
 
+      # Diagnostico (2026-11-12): o Pytest trava so no CI e o runner ignora
+      # timeouts. Steps separados mostram, pelo status, QUAL grupo trava.
+      - name: Pytest (diag) — produto DF-e
+        timeout-minutes: 3
+        run: .venv/bin/python -m pytest packages/dfe/tests -v --tb=short -p no:cacheprovider
+
+      - name: Pytest (diag) — testes novos do core
+        timeout-minutes: 3
+        run: .venv/bin/python -m pytest tests/test_gap_a4_ontology_broken.py tests/test_gap_a4_a1_wiring.py tests/test_gap_a5_multitenancy.py tests/test_da93_findings.py tests/test_da94_domain_plugins.py -v --tb=short -p no:cacheprovider
+
       - name: Pytest
         # Exclui testes marcados como integration: eles exigem Qdrant e Ollama,
         # que não existem no runner do GitHub.

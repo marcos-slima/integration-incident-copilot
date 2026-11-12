@@ -159,3 +159,29 @@ class TestXsd:
         remoto = SchemaPackage.load("PKG", base=base)
         with pytest.raises(Exception):  # noqa: B017 - lxml embrulha o erro do resolver
             validate_xsd(safe_parse(NFE_INCOMPLETA), remoto)
+
+
+FIXTURE_POSITIVO = Path(__file__).parent / "fixtures" / "fiscal" / "nfe_controle_positivo_sp.xml"
+
+
+class TestControlePositivo:
+    """NF-e completa derivada do nfelib (MIT), anonimizada, tpAmb=2, SP."""
+
+    def test_nfe_completa_valida_no_pl_010g(self, package: SchemaPackage) -> None:
+        r = analyze_fiscal_xml(FIXTURE_POSITIVO.read_bytes(), package)
+        assert r["xsd_validation"] == "valid", r["xsd"]["errors"]
+        assert r["tpAmb"] == "2"
+        assert r["access_key_dv_valid"] is True
+        assert r["findings"] == []
+
+    def test_mutacao_controlada_invalida(self, package: SchemaPackage) -> None:
+        original = FIXTURE_POSITIVO.read_bytes()
+        mutado = original.replace(b"<CNPJ>11222333000181</CNPJ>", b"", 1)
+        assert mutado != original
+        r = analyze_fiscal_xml(mutado, package)
+        assert r["xsd_validation"] == "invalid"
+        assert "F-xsd" in [f["id"] for f in r["findings"]]
+
+    def test_assinatura_nunca_declarada_valida(self, package: SchemaPackage) -> None:
+        r = analyze_fiscal_xml(FIXTURE_POSITIVO.read_bytes(), package)
+        assert r["signature_validation"] == "not_executed"

@@ -3526,9 +3526,11 @@ flag ligada e descarte com ela desligada.
 **Limitações da fase 2.**
 - O PL 010g não traz schema de `protNFe`: protocolos de retorno ficam com
   `xsd_validation=not_executed`.
-- Falta o **controle positivo** (NF-e completa e válida no XSD), que depende de
-  uma amostra de homologação autorizada; até lá só o caminho inválido está
-  provado.
+- Controle positivo: `tests/fixtures/fiscal/nfe_controle_positivo_sp.xml`,
+  derivado de amostra do nfelib (MIT) e anonimizado (CNPJ/CPF/nomes/endereços
+  fictícios, `tpAmb=2`, chave e cDV recalculados). Valida no PL 010g; uma
+  mutação controlada (remoção do CNPJ do emitente) o torna inválido. A
+  assinatura do fixture não confere com o conteúdo, por construção.
 - Assinatura digital não é verificada; vigência do pacote em produção não foi
   confirmada (`applicability=candidate_homologation_not_production_certified`).
 - As ferramentas ainda não são chamadas pelo grafo (nó fiscal: fase seguinte).

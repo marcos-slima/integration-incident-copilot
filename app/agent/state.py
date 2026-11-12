@@ -70,6 +70,9 @@ class CopilotState(TypedDict, total=False):
     # DA-93: contexto fiscal (FiscalContext.model_dump(mode="json")) ou None.
     # So e' preenchido quando FISCAL_DOMAIN_ENABLED=true.
     fiscal_context: dict | None
+    # DA-93: findings de ferramentas fiscais deterministicas (kind="fact"),
+    # escritos pelo no fiscal (fase seguinte). Hoje nenhum no os escreve.
+    fiscal_findings: list
     # DA-49/50: chave de sistema informado pelo cliente (opcional). Permite
     # correlacionar incident com integration_systems (system_key) sem FK hard
     # no contrato - propagado ate o recorder para populacao de

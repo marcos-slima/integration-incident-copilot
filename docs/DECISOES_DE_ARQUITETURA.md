@@ -3550,6 +3550,21 @@ flag ligada e descarte com ela desligada.
   autorizada antes de reenviar.
 - Testes: `tests/test_da93_fiscal_correlation.py`.
 
+**Fase 4 (2026-11-12): fatos × hipóteses na resposta.**
+- `DiagnosisResponse.findings` (`Finding`: `fact`/`hypothesis`, fonte,
+  evidências, teste de confirmação, alternativas) e `cause_status`
+  (`hypothesis`/`inconclusive`; `confirmed` só por revisão humana).
+- `app/agent/findings.py::build_findings` monta a lista por código: fatos das
+  ferramentas (`CopilotState.fiscal_findings`) e a causa proposta como
+  `hypothesis`; um `fact` sem fonte determinística é rebaixado.
+- O `DiagnosisModel` (saída estruturada do LLM) **não** mudou: o LLM continua
+  sem declarar fatos, e o digest do prompt fica igual (invariante 20).
+- Novo `trust_level` **`rule_reference`**: a evidência do rule engine deixa de
+  ser `system_observed` (regra publicada não prova que o incidente a violou).
+  No relatório ela continua entre as evidências primárias; UI e catálogos
+  pt-BR/en ganharam o rótulo.
+- Testes: `tests/test_da93_findings.py`.
+
 ---
 
 **Fim do documento.**

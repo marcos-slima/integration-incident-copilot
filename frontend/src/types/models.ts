@@ -36,10 +36,24 @@ export interface EvidenceItem {
   rerank_score?: number | null;
   trust_level:
     | 'system_observed'
+    | 'rule_reference'
     | 'retrieved_document'
     | 'web_untrusted'
     | 'user_reported'
     | 'simulated';
+}
+
+// espelho de app/models.py::Finding (DA-93): `fact` so vem de ferramenta,
+// conector ou regra; a causa proposta e' sempre `hypothesis`.
+export interface Finding {
+  id: string;
+  kind: 'fact' | 'hypothesis';
+  source: 'tool' | 'connector' | 'rule_reference' | 'rag' | 'llm';
+  statement: string;
+  evidence_refs?: string[];
+  confirmation_test?: string[];
+  alternatives?: string[];
+  rule_ref?: string;
 }
 
 // espelho de app/models.py::DiagnosisResponse. Campos nullable chegam
@@ -61,6 +75,8 @@ export interface DiagnosisResponse {
   prompt_digest?: string;
   locale?: 'pt-BR' | 'en'; // DA-74: idioma em que o diagnostico foi produzido
   evidence?: EvidenceItem[];
+  findings?: Finding[]; // DA-93
+  cause_status?: 'hypothesis' | 'confirmed' | 'inconclusive'; // DA-93
   incident_id?: string;
   trace_id?: string;
   escalation?: EscalationSignal;

@@ -398,7 +398,8 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
 
 | trust_level | Quando |
 |---|---|
-| `system_observed` | Conector real (não mock) OU rule engine (DA-33) |
+| `system_observed` | Conector real (não mock) OU ferramenta determinística sobre dado do incidente (DA-93) |
+| `rule_reference` | Regra curada do rule engine (DA-33) — referência, não observação do incidente (DA-93) |
 | `simulated` | Conector mock ou fallback |
 | `retrieved_document` | Chunk RAG (Qdrant) ou histórico GraphRAG |
 | `web_untrusted` | Resultado de busca web (DuckDuckGo) |

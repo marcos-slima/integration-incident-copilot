@@ -133,6 +133,7 @@
     },
     "trust": {
       "system_observed": "observado no sistema",
+      "rule_reference": "regra de referência",
       "retrieved_document": "documento da base",
       "web_untrusted": "web · não confiável",
       "user_reported": "relato do usuário",

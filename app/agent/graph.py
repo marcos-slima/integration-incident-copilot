@@ -23,6 +23,7 @@ from uuid import uuid4
 from langfuse import get_client
 
 from app.agent.escalation import compute_escalation_signal
+from app.agent.findings import build_findings
 from app.agent.nodes import (
     _assemble_evidence,
     connector_node,
@@ -364,7 +365,12 @@ def run_diagnosis(
     escalation = compute_escalation_signal(final_state).as_log_fields()
     _logger.info("[escalation] incident_id=%s %s", incident_id, escalation)
 
+    # DA-93: fatos de ferramentas + causa proposta como hipotese (nunca fato).
+    findings, cause_status = build_findings(diagnosis, final_state.get("fiscal_findings"))
+
     response = DiagnosisResponse(
+        findings=findings,
+        cause_status=cause_status,
         probable_root_cause=diagnosis.get("probable_root_cause", "N/A"),
         model_confidence=float(diagnosis.get("model_confidence", diagnosis.get("confidence", 0.0))),
         diagnosis_confidence=float(diagnosis.get("diagnosis_confidence", 0.0)),

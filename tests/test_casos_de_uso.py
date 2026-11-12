@@ -91,7 +91,7 @@ def test_uc01_idoc_51_resolvido_pelo_rule_engine(pipeline):
     assert r.llm_provider_used == "rule_engine"
     assert r.model_confidence == pytest.approx(0.9)
     assert r.prompt_version is None and r.prompt_digest is None  # invariante 21
-    assert ("rule_engine", "system_observed") in _evidencias(r)
+    assert ("rule_engine", "rule_reference") in _evidencias(r)  # DA-93
     assert ("connector", "simulated") in _evidencias(r)  # conector em modo demo
 
 

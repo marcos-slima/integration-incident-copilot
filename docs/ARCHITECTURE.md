@@ -220,7 +220,7 @@ flowchart LR
         rep["report"] --> s6["report_markdown, explanation"]
         gw["graph_write"] --> n4j[("Neo4j: efeito colateral,<br/>nao escreve no estado")]
     end
-    morto["web_search_results<br/>(nenhum no do grafo escreve)"]
+    morto["web_search_results, fiscal_findings<br/>(nenhum no do grafo escreve)"]
     ont["ontology_enrich"] --> s7["ontology_candidates,<br/>ontology_inference, ontology_next_steps"]
     hitl["hitl_review"] --> s8["hitl_request, hitl_response,<br/>hitl_interrupt_enabled, hitl_reviewed,<br/>confidence_adjustment"]
     risk["risk_assessment"] --> s9["risk_level, risk_confidence, risk_factors"]
@@ -483,12 +483,13 @@ flowchart LR
     end
     subgraph trust["trust_level"]
         so["system_observed"]
+        rr["rule_reference"]
         si["simulated"]
         rd["retrieved_document"]
         wu["web_untrusted"]
         ur["user_reported"]
     end
-    re --> so
+    re --> rr
     cr --> so
     cm --> si
     rag --> rd
@@ -1201,6 +1202,7 @@ GraphRAG, busca web, descricao do usuario), cada uma com um
 
 ```
 system_observed (conector real)
+  > rule_reference (regra curada do rule engine; DA-93)
   > retrieved_document (RAG/GraphRAG)
   > web_untrusted (busca web, nao curada)
   > user_reported (descricao do usuario, nunca verificada)

@@ -133,6 +133,7 @@
     },
     "trust": {
       "system_observed": "observed in the system",
+      "rule_reference": "reference rule",
       "retrieved_document": "knowledge base document",
       "web_untrusted": "web · untrusted",
       "user_reported": "user report",

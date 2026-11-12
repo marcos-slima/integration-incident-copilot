@@ -843,7 +843,8 @@ def _assemble_evidence(state: CopilotState) -> list[dict]:
                 "excerpt": diagnosis.get("probable_root_cause", "")[:500],
                 "retrieval_score": diagnosis.get("confidence"),
                 "rerank_score": None,
-                "trust_level": "system_observed",  # regra curada = confianca maxima
+                # DA-93: regra curada e' referencia, nao observacao do incidente.
+                "trust_level": "rule_reference",
             }
         )
 
@@ -1540,8 +1541,9 @@ def report_node(state: CopilotState) -> CopilotState:
     # Primary Evidence: sistema observou diretamente (conector real, rule engine)
     # Supporting Facts: inferencia/RAG/web/usuario (revisao humana recomendada)
     evidence_items = _assemble_evidence(state)
-    primary = [e for e in evidence_items if e["trust_level"] == "system_observed"]
-    supporting = [e for e in evidence_items if e["trust_level"] != "system_observed"]
+    _primary_levels = {"system_observed", "rule_reference"}
+    primary = [e for e in evidence_items if e["trust_level"] in _primary_levels]
+    supporting = [e for e in evidence_items if e["trust_level"] not in _primary_levels]
 
     def _evidence_line(item: dict) -> str:
         locator_suffix = f" `{item['locator']}`" if item.get("locator") else ""

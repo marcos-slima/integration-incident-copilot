@@ -235,17 +235,39 @@ class Evidence(BaseModel):
         default=None, description="Score do cross-encoder de reranking, quando aplicavel."
     )
     trust_level: Literal[
-        "system_observed", "retrieved_document", "web_untrusted", "user_reported", "simulated"
+        "system_observed",
+        "rule_reference",
+        "retrieved_document",
+        "web_untrusted",
+        "user_reported",
+        "simulated",
     ] = Field(
         description=(
             "Nivel de confianca da fonte, decidido pelo TIPO da fonte "
             "(nunca por afirmacao do LLM): system_observed (dado real "
-            "de conector) > retrieved_document (RAG/GraphRAG) > "
+            "de conector ou ferramenta deterministica sobre o incidente) > "
+            "rule_reference (regra publicada/curada; DA-93: nao prova que "
+            "o incidente a violou) > retrieved_document (RAG/GraphRAG) > "
             "web_untrusted (busca web nao curada) > user_reported "
             "(descricao textual do usuario, nunca verificada) - "
             "'simulated' quando o conector retornou dado mock/fallback."
         )
     )
+
+
+class Finding(BaseModel):
+    """DA-93: alegacao tipada do diagnostico. `fact` so vem de ferramenta,
+    conector ou regra (nunca do LLM); `hypothesis` precisa de revisao humana
+    para virar causa confirmada (POST /incidents/{id}/verify)."""
+
+    id: str
+    kind: Literal["fact", "hypothesis"]
+    source: Literal["tool", "connector", "rule_reference", "rag", "llm"]
+    statement: str
+    evidence_refs: list[str] = Field(default_factory=list)
+    confirmation_test: list[str] = Field(default_factory=list)
+    alternatives: list[str] = Field(default_factory=list)
+    rule_ref: str | None = None
 
 
 class DiagnosisResponse(BaseModel):
@@ -357,6 +379,15 @@ class DiagnosisResponse(BaseModel):
         description=(
             "DA-74: idioma em que o conteudo deste diagnostico foi produzido "
             "(causa raiz, proximos passos, relatorio)."
+        ),
+    )
+    # DA-93: fatos x hipoteses, montados por codigo (app/agent/findings.py).
+    findings: list[Finding] = Field(default_factory=list)
+    cause_status: Literal["hypothesis", "confirmed", "inconclusive"] = Field(
+        default="inconclusive",
+        description=(
+            "Estado da causa: 'confirmed' nunca e' produzido pelo pipeline - "
+            "so por revisao humana registrada."
         ),
     )
     evidence: list[Evidence] = Field(

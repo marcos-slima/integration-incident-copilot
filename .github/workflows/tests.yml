@@ -51,31 +51,24 @@ jobs:
       - name: Ruff — formatação
         run: uv run ruff format --check .
 
-      # Diagnostico (2026-11-12): o Pytest trava so no CI e o runner ignora
-      # timeouts. Steps separados mostram, pelo status, QUAL grupo trava.
-      - name: Pytest (diag) — dfe/test_fiscal_xml.py
-        timeout-minutes: 2
-        run: .venv/bin/python -m pytest packages/dfe/tests/test_fiscal_xml.py -v --tb=short -p no:cacheprovider
-
-      - name: Pytest (diag) — dfe/test_fiscal_correlation.py
-        timeout-minutes: 2
-        run: .venv/bin/python -m pytest packages/dfe/tests/test_fiscal_correlation.py -v --tb=short -p no:cacheprovider
-
-      - name: Pytest (diag) — dfe/test_corpus.py
-        timeout-minutes: 2
-        run: .venv/bin/python -m pytest packages/dfe/tests/test_corpus.py -v --tb=short -p no:cacheprovider
-
-      - name: Pytest (diag) — dfe/test_plugin.py
-        timeout-minutes: 2
-        run: .venv/bin/python -m pytest packages/dfe/tests/test_plugin.py -v --tb=short -p no:cacheprovider
-
-      - name: Pytest (diag) — dfe/test_regressao_dataset.py
-        timeout-minutes: 2
-        run: .venv/bin/python -m pytest packages/dfe/tests/test_regressao_dataset.py -v --tb=short -p no:cacheprovider
-
-      - name: Pytest (diag) — testes novos do core
-        timeout-minutes: 3
-        run: .venv/bin/python -m pytest tests/test_gap_a4_ontology_broken.py tests/test_gap_a4_a1_wiring.py tests/test_gap_a5_multitenancy.py tests/test_da93_findings.py tests/test_da94_domain_plugins.py -v --tb=short -p no:cacheprovider
+      # Diagnostico (2026-11-12): test_fiscal_xml.py trava so no CI e o runner
+      # ignora timeouts. O watchdog roda o pytest em background, imprime
+      # memoria/processos a cada 10 s e mata tudo em 90 s, mostrando o log.
+      - name: Pytest (diag) — watchdog dfe/test_fiscal_xml.py
+        timeout-minutes: 4
+        run: |
+          free -m; nproc
+          PYTHONUNBUFFERED=1 .venv/bin/python -X faulthandler -m pytest packages/dfe/tests/test_fiscal_xml.py -v --tb=short -p no:cacheprovider -o faulthandler_timeout=30 > diag.log 2>&1 &
+          PID=$!
+          for i in $(seq 1 9); do
+            sleep 10
+            if ! kill -0 $PID 2>/dev/null; then break; fi
+            echo "--- t=${i}0s"; free -m | sed -n 2p; ps -o pid,rss,pcpu,etime,cmd --ppid $PID -p $PID | cut -c1-160; tail -3 diag.log
+          done
+          kill -9 $PID 2>/dev/null || true
+          pkill -9 -f pytest || true
+          echo "=== diag.log"; cat diag.log | tail -120
+          exit 0
 
       - name: Pytest
         # Exclui testes marcados como integration: eles exigem Qdrant e Ollama,

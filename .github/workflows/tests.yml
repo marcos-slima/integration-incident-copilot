@@ -63,7 +63,15 @@ jobs:
 
       - name: diag 2 — pytest collect-only do test_fiscal_xml.py
         timeout-minutes: 2
-        run: timeout -k 5 40 .venv/bin/python -m pytest packages/dfe/tests/test_fiscal_xml.py --collect-only -q -p no:cacheprovider || echo "diag2 rc=$?"
+        # diag 2 congelou o runner na rodada anterior (5fa4eba). Limites de
+        # memoria e de processos transformam o congelamento em erro visivel.
+        run: |
+          ulimit -v 3000000; ulimit -u 300
+          timeout -k 5 40 .venv/bin/python -X faulthandler -m pytest packages/dfe/tests/test_fiscal_xml.py --collect-only -q -p no:cacheprovider 2>&1 | tail -60 || echo "diag2 rc=$?"
+          echo "--- sem conftest do produto"
+          timeout -k 5 40 .venv/bin/python -m pytest packages/dfe/tests/test_fiscal_xml.py --collect-only -q -p no:cacheprovider --noconftest 2>&1 | tail -20 || echo "diag2b rc=$?"
+          echo "--- core collect-only"
+          timeout -k 5 40 .venv/bin/python -m pytest tests/test_da93_findings.py --collect-only -q -p no:cacheprovider 2>&1 | tail -5 || echo "diag2c rc=$?"
 
       - name: diag 3 — pytest de testes novos do core
         timeout-minutes: 2

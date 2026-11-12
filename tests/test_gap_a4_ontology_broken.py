@@ -79,7 +79,10 @@ class TestGapA4OntologyBroken:
             "identifier": "test-id",
         }
 
-        result = retrieve_node(state)
+        # Sem mock, retrieve() real tenta Qdrant/embeddings/reranker: no CI
+        # isso baixava modelos e estourava o timeout do job.
+        with patch("app.agent.nodes.retrieve", return_value=[]):
+            result = retrieve_node(state)
         assert "retrieved_context" in result
 
     def test_retrieve_node_com_connector_result_none(self):
@@ -92,7 +95,10 @@ class TestGapA4OntologyBroken:
             "identifier": "test-id",
         }
 
-        result = retrieve_node(state)
+        # Sem mock, retrieve() real tenta Qdrant/embeddings/reranker: no CI
+        # isso baixava modelos e estourava o timeout do job.
+        with patch("app.agent.nodes.retrieve", return_value=[]):
+            result = retrieve_node(state)
         assert "retrieved_context" in result
 
     @pytest.mark.skipif(

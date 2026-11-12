@@ -17,7 +17,9 @@ from app.models import IncidentRequest
 
 KEY = "35261111222333000181550010000000011000000014"
 PROT_204 = (
-    f'<protNFe xmlns="{NS}" versao="4.00"><infProt><tpAmb>2</tpAmb><chNFe>{KEY}</chNFe>'
+    f'<protNFe xmlns="{NS}" versao="4.00"><infProt><tpAmb>2</tpAmb>'
+    f"<verAplic>DEMO_IIC</verAplic><chNFe>{KEY}</chNFe>"
+    "<dhRecbto>2026-11-11T09:52:00-03:00</dhRecbto>"
     "<cStat>204</cStat><xMotivo>Rejeicao: Duplicidade de NF-e</xMotivo></infProt></protNFe>"
 )
 EVENTS = [

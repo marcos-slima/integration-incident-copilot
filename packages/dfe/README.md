@@ -25,7 +25,7 @@ automática.
 uv run uvicorn dfe_copilot.main:app --reload       # API do core com o plugin DF-e
 cd packages/dfe
 uv run --project ../.. python -m pytest -q          # testes do produto (config própria)
-PYTHONPATH=src:../.. uv run --project ../.. python -m dfe_copilot.kb ingest
+PYTHONPATH=src:../.. uv run --project ../.. python -m dfe_copilot.kb ingest --reset
 PYTHONPATH=src:../.. uv run --project ../.. python -m dfe_copilot.kb search "duplicidade de NF-e" --cstat 204
 ```
 
@@ -49,6 +49,10 @@ Requisição mínima (`POST /diagnose`):
 
 A resposta traz `findings` (fatos das ferramentas + hipóteses) e
 `cause_status`; `confirmed` só existe depois de revisão humana.
+
+A API do produto (`dfe_copilot.main`) liga `DFE_KB_ENABLED=true`: o cStat do
+retorno é cruzado com a base fiscal e a regra aplicável entra como evidência
+`rule_reference`. Sem Qdrant, o diagnóstico continua e registra a lacuna `G-kb`.
 
 ## Estrutura
 

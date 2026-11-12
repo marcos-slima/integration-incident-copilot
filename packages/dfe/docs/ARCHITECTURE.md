@@ -48,11 +48,16 @@ Com `DOMAIN_PLUGINS=dfe_copilot.plugin`, o core insere `domain_tools` entre
      do mesmo documento **e** timeout entre eles;
    - sem retorno e com timeout → `processing_outcome=unknown`, hipótese de
      resposta perdida (nunca "SEFAZ indisponível");
-4. devolve `domain_findings`; o core junta com a causa proposta pelo LLM
+4. com `DFE_KB_ENABLED=true` (ligado por padrão em `dfe_copilot.main`),
+   consulta a base fiscal `dfe_kb` pelo cStat do retorno: trechos aplicáveis
+   viram o fato `F-kb` (`source=rule_reference`, `evidence_refs` com
+   `kb:arquivo#pNcM` e `rule_ref`, ex. `2B08-20`); base indisponível ou sem
+   trecho vira a lacuna `G-kb`;
+5. devolve `domain_findings`; o core junta com a causa proposta pelo LLM
    (sempre `hypothesis`) em `DiagnosisResponse.findings`.
 
 Lacunas viram fatos explícitos: `G-noxml`, `G-xml`, `G-events`, `G-ref`,
-`G-amb`.
+`G-amb`, `G-kb`.
 
 ## Estado por componente
 

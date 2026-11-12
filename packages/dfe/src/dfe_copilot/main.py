@@ -8,6 +8,7 @@ na importacao/primeira chamada.
 import os
 
 os.environ.setdefault("DOMAIN_PLUGINS", "dfe_copilot.plugin")
+os.environ.setdefault("DFE_KB_ENABLED", "true")  # base fiscal dfe_kb (P3)
 
 from app.main import app
 

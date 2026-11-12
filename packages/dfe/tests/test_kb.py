@@ -36,7 +36,11 @@ def sparse(text: str) -> SparseVector:
 
 def fake_pdf_pages(path: Path) -> list[dict]:
     return [
-        {"text": "Regra 2B08-20: rejeicao 204 duplicidade de NF-e pela chave.", "page_number": 22}
+        {
+            "text": "2B08-20 55/65 Acesso BD NFE chave duplicidade Obrig. 204 Rej. Rejeicao",
+            "page_number": 22,
+        },
+        {"text": "Outra secao sobre schema e protocolo sem regra de rejeicao.", "page_number": 5},
     ]
 
 
@@ -76,7 +80,10 @@ def test_ingest_idempotente(client: QdrantClient) -> None:
 def test_busca_hibrida_filtrada_traz_a_regra(client: QdrantClient) -> None:
     kb.ingest(client, dense, sparse, kb.load_corpus(pdf_pages=fake_pdf_pages))
     hits = kb.search(client, "duplicidade 204 chave", dense, sparse, cstat="204")
-    assert hits and all(h["cstat"] == "204" for h in hits)
+    assert hits and all("204" in h["cstats"] for h in hits)
+    assert {h["file"] for h in hits} == {"regra_2B08-20.md", "NT_2018.005_v1.51.pdf"}
+    assert any(h["evidence_id"] == "kb:NT_2018.005_v1.51.pdf#p22c0" for h in hits)
+    assert any(h["evidence_id"] == "kb:regra_2B08-20.md#c0" for h in hits)
     assert {h["trust_level"] for h in hits} <= {"rule_reference", "retrieved_document"}
     assert all(h["evidence_id"].startswith("kb:") for h in hits)
 
@@ -111,3 +118,12 @@ def test_manifesto_e_corpus_consistentes() -> None:
                 hashlib.sha256((kb.CORPUS_DIR / doc["file"]).read_bytes()).hexdigest()
                 == doc["content_sha256"]
             )
+
+
+def test_trecho_do_pdf_marcado_com_regra_e_cstat() -> None:
+    pdf = [
+        c for c in kb.load_corpus(pdf_pages=fake_pdf_pages) if c.payload["file"].endswith(".pdf")
+    ]
+    by_page = {c.payload["page_number"]: c.payload for c in pdf}
+    assert by_page[22]["rule_ids"] == ["2B08-20"] and by_page[22]["cstats"] == ["204"]
+    assert by_page[5]["rule_ids"] == [] and by_page[5]["cstats"] == []

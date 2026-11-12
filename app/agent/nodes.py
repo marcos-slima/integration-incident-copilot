@@ -36,6 +36,7 @@ from langgraph.prebuilt import create_react_agent
 from langgraph.types import interrupt
 
 from app.agent import prompts
+from app.agent.domain_plugins import domain_prompt_for, domain_provenance, render_domain_block
 from app.agent.escalation import compute_escalation_signal
 from app.agent.rules import match_known_error
 from app.agent.state import CopilotState, DiagnosisModel
@@ -763,6 +764,15 @@ Resultado de busca web (SAP Community / GitHub SAP) como contexto adicional:
     # `safe_description` ja vem sanitizado acima; `render` exige todos os
     # slots e falha alto, para que um bloco de contexto nunca desapareca
     # do prompt em silencio.
+    # P8: com plugin de dominio que expoe prompt, persona e bloco de achados
+    # vem do plugin (variaveis de slot; o template do core nao muda).
+    domain_prompt = domain_prompt_for(state)
+    if domain_prompt is not None:
+        persona = domain_prompt.persona
+        extras += render_domain_block(
+            domain_prompt.name, state.get("domain_findings"), sanitize_untrusted_input
+        )
+
     return prompts.render(
         persona=persona,
         description=safe_description,
@@ -1400,7 +1410,12 @@ def _run_diagnosis_agent(state: CopilotState, persona: str) -> dict:
     # produzido por prompt nenhum. Registrar o digest nesse caminho seria
     # afirmar uma origem falsa -- e foi exatamente por isso que a coluna
     # `incidents.prompt_digest` e' anulavel em vez de ter default.
-    diagnosis.update(prompts.get_spec(state.get("locale")).provenance())
+    base_spec = prompts.get_spec(state.get("locale"))
+    domain_prompt = domain_prompt_for(state)
+    if domain_prompt is not None:
+        diagnosis.update(domain_provenance(domain_prompt, base_spec.digest))
+    else:
+        diagnosis.update(base_spec.provenance())
     return diagnosis
 
 

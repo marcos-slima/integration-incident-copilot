@@ -54,6 +54,17 @@ A API do produto (`dfe_copilot.main`) liga `DFE_KB_ENABLED=true`: o cStat do
 retorno é cruzado com a base fiscal e a regra aplicável entra como evidência
 `rule_reference`. Sem Qdrant, o diagnóstico continua e registra a lacuna `G-kb`.
 
+Com o plugin ativo, o LLM recebe a persona fiscal e os findings do produto
+(`src/dfe_copilot/prompt.py`); a resposta registra `prompt_version=dfe-1.0.0`.
+Medição do prompt com o Ollama local:
+
+```bash
+cd packages/dfe
+npx promptfoo eval -c promptfooconfig.yaml
+PYTHONPATH=src:../.. uv run --project ../.. python scripts/prompt_baseline.py --write \
+  --measurement "promptfoo AAAA-MM-DD: qwen3.6:35b-a3b, N/5"
+```
+
 ## Estrutura
 
 | Caminho | Conteúdo |
@@ -62,6 +73,7 @@ retorno é cruzado com a base fiscal e a regra aplicável entra como evidência
 | `src/dfe_copilot/context.py` | Contrato `FiscalContext` (NF-e 55, leiaute 4.00, ambiente, UF, eventos) |
 | `src/dfe_copilot/fiscal/xml_tools.py` | Parse seguro, chave de acesso, `cStat`, XSD offline |
 | `src/dfe_copilot/fiscal/correlation.py` | Linha do tempo UTC, regras cStat 204 e timeout |
+| `src/dfe_copilot/prompt.py` | Persona fiscal e versão do prompt de domínio (P8) |
 | `src/dfe_copilot/main.py` | Ponto de entrada da API do produto |
 | `src/dfe_copilot/kb.py` | Base de conhecimento fiscal: ingestão e busca híbrida filtrada (`dfe_kb`) |
 | `data/schemas/nfe/` | Pacote oficial PL 010g v1.03 + manifesto com hashes |

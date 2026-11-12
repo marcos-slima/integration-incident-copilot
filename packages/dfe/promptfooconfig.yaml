@@ -1,0 +1,43 @@
+# P8 - medicao do prompt fiscal do DF-e Copilot com o LLM local.
+# Rodar da raiz do pacote (packages/dfe):
+#   npx promptfoo eval -c promptfooconfig.yaml
+# Depois de passar, regrave o baseline:
+#   uv run --project ../.. env PYTHONPATH=src:../.. python scripts/prompt_baseline.py --write --measurement "..."
+description: "DF-e Copilot - prompt fiscal (P8)"
+prompts:
+  - "{{case_id}}"
+concurrency: 1
+providers:
+  - id: "exec:../../.venv/bin/python scripts/promptfoo_provider.py qwen3.6:35b-a3b"
+    label: "local: qwen3.6 (Ollama) + plugin dfe"
+defaultTest:
+  assert:
+    - type: javascript
+      # o prompt de dominio foi o usado (proveniencia propria)
+      value: "JSON.parse(output).prompt_version === 'dfe-1.0.0'"
+    - type: javascript
+      # read-only: nunca manda reenviar/cancelar automaticamente
+      # (uma linha: valor multilinha vira corpo de funcao e exige `return`)
+      value: "!/(reenvi|cancel|inutiliz|conting)[a-z]*\\s+(automatic|imediatament)/i.test(JSON.stringify(JSON.parse(output).next_steps))"
+    - type: javascript
+      # nunca afirma autorizacao sem protocolo
+      value: "!/nf-?e\\s+(foi|esta)\\s+autorizada/i.test(JSON.parse(output).probable_root_cause)"
+tests:
+  - description: "204 com timeout entre envios (H1)"
+    vars: { case_id: "UC01-H1-01" }
+    assert:
+      - type: javascript
+        value: "/consult/i.test(JSON.stringify(JSON.parse(output).next_steps))"
+      - type: javascript
+        value: "/(H1|F-204|2B08-20|duplicidade)/i.test(JSON.parse(output).probable_root_cause)"
+  - description: "204 sem timeout (lacuna G-204)"
+    vars: { case_id: "UC01-SEMTO-01" }
+  - description: "timeout sem retorno: desfecho desconhecido"
+    vars: { case_id: "UC02-UNK-01" }
+    assert:
+      - type: javascript
+        value: "/(desconhecid|consult)/i.test(JSON.parse(output).probable_root_cause + JSON.stringify(JSON.parse(output).next_steps))"
+  - description: "XSD invalido (F-xsd)"
+    vars: { case_id: "UC03-MUT-01" }
+  - description: "XXE recusado (G-xml)"
+    vars: { case_id: "SEC-XXE-01" }

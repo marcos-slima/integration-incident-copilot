@@ -55,7 +55,11 @@ jobs:
         # Exclui testes marcados como integration: eles exigem Qdrant e Ollama,
         # que não existem no runner do GitHub.
         # §3.10: --cov + --cov-fail-under=80 — CI falha se cobertura < 80%.
-        run: uv run pytest -m "not integration" -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=80
+        # Diagnostico (2026-11-12): job cancelado por timeout nao guarda log.
+        # `timeout --signal=INT` encerra o pytest ANTES do limite do job (o
+        # step falha com log e resumo) e `faulthandler_timeout` imprime a
+        # stack de qualquer teste parado ha mais de 120 s.
+        run: timeout --signal=INT 480 uv run pytest -m "not integration" -v --tb=short -o faulthandler_timeout=120 --cov=app --cov-report=term-missing --cov-fail-under=80
 
 
   security:

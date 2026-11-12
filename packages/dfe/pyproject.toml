@@ -14,3 +14,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/dfe_copilot"]
+
+[tool.pytest.ini_options]
+# DA-94: o produto roda a propria suite, com a propria config, a partir de
+# packages/dfe (`cd packages/dfe && pytest`). "../.." expoe o core (`app`).
+testpaths = ["tests"]
+pythonpath = ["src", "../.."]

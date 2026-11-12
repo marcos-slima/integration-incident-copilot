@@ -21,7 +21,7 @@ automática.
 ```bash
 # na raiz do monorepo
 uv run uvicorn dfe_copilot.main:app --reload     # API do core com o plugin DF-e
-uv run pytest packages/dfe/tests -q               # testes do produto
+(cd packages/dfe && uv run pytest -q)              # testes do produto (config própria)
 ```
 
 Requisição mínima (`POST /diagnose`):

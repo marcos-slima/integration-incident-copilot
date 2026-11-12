@@ -51,71 +51,19 @@ jobs:
       - name: Ruff — formatação
         run: uv run ruff format --check .
 
-      # Diagnostico (2026-11-12): ate um loop bash de 90 s congelou junto com
-      # o pytest de test_fiscal_xml.py (runner sem resposta). Bisseccao em
-      # passos minimos, cada um com `timeout` do proprio comando.
-      - name: diag 1 — import lxml + compila XSD PL_010g (sem pytest)
-        timeout-minutes: 2
-        run: |
-          free -m
-          timeout -k 5 40 .venv/bin/python -c "import time,lxml.etree as e;print(e.LXML_VERSION,e.LIBXML_VERSION);t=time.time();s=e.XMLSchema(e.parse('packages/dfe/data/schemas/nfe/PL_010g_v1.03/NFe/nfe_v4.00.xsd'));print('xsd ok',round(time.time()-t,2))" || echo "diag1 rc=$?"
-          free -m
-
-      - name: diag 1b — pytest collect-only de UM teste do core
-        timeout-minutes: 2
-        run: timeout -k 5 40 .venv/bin/python -m pytest tests/test_da93_findings.py --collect-only -q -p no:cacheprovider 2>&1 | tail -5 || echo "rc=$?"
-
-      - name: diag 1c — dfe collect-only SEM a config do pyproject da raiz
-        timeout-minutes: 2
-        run: PYTHONPATH=packages/dfe/src timeout -k 5 40 .venv/bin/python -m pytest -c /dev/null --rootdir=packages/dfe packages/dfe/tests/test_fiscal_correlation.py --collect-only -q -p no:cacheprovider --noconftest 2>&1 | tail -5 || echo "rc=$?"
-
-      - name: diag 2 — pytest collect-only do test_fiscal_xml.py
-        timeout-minutes: 2
-        # diag 2 congelou o runner na rodada anterior (5fa4eba). Limites de
-        # memoria e de processos transformam o congelamento em erro visivel.
-        run: |
-          ulimit -v 3000000; ulimit -u 300
-          timeout -k 5 40 .venv/bin/python -X faulthandler -m pytest packages/dfe/tests/test_fiscal_xml.py --collect-only -q -p no:cacheprovider 2>&1 | tail -60 || echo "diag2 rc=$?"
-          echo "--- sem conftest do produto"
-          timeout -k 5 40 .venv/bin/python -m pytest packages/dfe/tests/test_fiscal_xml.py --collect-only -q -p no:cacheprovider --noconftest 2>&1 | tail -20 || echo "diag2b rc=$?"
-          echo "--- core collect-only"
-          timeout -k 5 40 .venv/bin/python -m pytest tests/test_da93_findings.py --collect-only -q -p no:cacheprovider 2>&1 | tail -5 || echo "diag2c rc=$?"
-
-      - name: diag 3 — pytest de testes novos do core
-        timeout-minutes: 2
-        run: timeout -k 5 60 .venv/bin/python -m pytest tests/test_da94_domain_plugins.py tests/test_da93_findings.py -q -p no:cacheprovider || echo "diag3 rc=$?"
-
-      - name: diag 4 — pytest test_fiscal_xml.py um teste por vez
-        timeout-minutes: 3
-        run: |
-          for t in $(.venv/bin/python -m pytest packages/dfe/tests/test_fiscal_xml.py --collect-only -q -p no:cacheprovider | grep '::'); do
-            echo ">>> $t"; free -m | sed -n 2p
-            timeout -k 3 15 .venv/bin/python -m pytest "$t" -q -p no:cacheprovider 2>&1 | tail -2 || echo "rc=$?"
-          done
-
       - name: Pytest
         # Exclui testes marcados como integration: eles exigem Qdrant e Ollama,
         # que não existem no runner do GitHub.
         # §3.10: --cov + --cov-fail-under=80 — CI falha se cobertura < 80%.
-        # Diagnostico (2026-11-12): o job era cancelado por timeout e o GitHub
-        # nao guarda log de job cancelado. Com timeout NO STEP o step falha
-        # (o runner mata a arvore de processos), o upload abaixo roda e o log
-        # completo fica como artefato. faulthandler imprime a stack de teste
-        # parado ha mais de 60 s.
-        timeout-minutes: 8
-        env:
-          PYTHONUNBUFFERED: "1"
-        run: |
-          set -o pipefail
-          .venv/bin/python -m pytest -m "not integration" -v --tb=short -o faulthandler_timeout=60 --cov=app --cov-report=term-missing --cov-fail-under=80 2>&1 | tee pytest.log
+        run: uv run pytest -m "not integration" -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=80
 
-      - name: Log do pytest (artefato)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pytest-log
-          path: pytest.log
-          if-no-files-found: ignore
+      - name: Pytest — produto DF-e Copilot (DA-94)
+        # Suite propria, com a config de packages/dfe/pyproject.toml. Coletar
+        # packages/dfe/tests com a config da raiz congelava o runner do
+        # GitHub (diagnostico de 2026-11-12, runs 43244103266..43261055989).
+        working-directory: packages/dfe
+        timeout-minutes: 3
+        run: ../../.venv/bin/python -m pytest -v --tb=short -p no:cacheprovider
 
 
   security:

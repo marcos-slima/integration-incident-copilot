@@ -32,6 +32,8 @@ COLLECTION = "dfe_kb"
 CORPUS_DIR = Path(__file__).resolve().parents[2] / "data" / "corpus"
 CHUNK_CHARS = 1200
 PREFETCH_LIMIT = 20
+_RULE_ID = re.compile(r"\b\d[A-Z]\d{2}-\d{2}\b")
+_CSTAT_REJ = re.compile(r"\b(\d{3})\s+Rej\.?")
 
 DenseFn = Callable[[list[str]], list[list[float]]]
 SparseFn = Callable[[str], Any]  # devolve qdrant_client.models.SparseVector
@@ -97,11 +99,29 @@ def _base_payload(meta: dict[str, Any]) -> dict[str, Any]:
         "license_scope": meta.get("license_scope", "public"),
         "rule_id": meta.get("rule_id"),
         "cstat": meta.get("cstat"),
+        "rule_ids": [meta["rule_id"]] if meta.get("rule_id") else [],
+        "cstats": [meta["cstat"]] if meta.get("cstat") else [],
         "model": models if isinstance(models, list) else ([models] if models else ["55"]),
         "jurisdiction": meta.get("jurisdiction", "nacional"),
         "status": meta.get("status", "vigente"),
         "reviewed_by": meta.get("reviewed_by"),
     }
+
+
+def _pypdf_pages(path: Path) -> list[dict]:
+    """Texto por pagina com pypdf (dependencia do core).
+
+    O extrator padrao do core (pymupdf4llm -> markdown) descarta as tabelas
+    de regras de validacao das NTs, justamente onde ficam regra e cStat.
+    """
+    from pypdf import PdfReader
+
+    pages = []
+    for n, page in enumerate(PdfReader(str(path)).pages, start=1):
+        text = (page.extract_text() or "").strip()
+        if text:
+            pages.append({"text": text, "page_number": n})
+    return pages
 
 
 def load_corpus(
@@ -111,7 +131,7 @@ def load_corpus(
     """Trechos com metadados a partir do manifesto (PDFs) e dos `.md` curados.
 
     `pdf_pages(path) -> [{"text", "page_number"}]` e' injetavel; o default usa
-    o extrator do core (`app.rag.ingest.extract_pages_with_metadata`).
+    pypdf (preserva as tabelas de regras das NTs).
     """
     manifest = json.loads((corpus_dir / "manifest.json").read_text(encoding="utf-8"))
     chunks: list[Chunk] = []
@@ -123,13 +143,18 @@ def load_corpus(
         if hashlib.sha256(path.read_bytes()).hexdigest() != doc["content_sha256"]:
             raise ValueError(f"hash divergente no corpus: {doc['file']}")
         if pdf_pages is None:
-            from app.rag.ingest import extract_pages_with_metadata as pdf_pages
+            pdf_pages = _pypdf_pages
         for page in pdf_pages(path):
             for i, text in enumerate(_split(page["text"])):
+                # Marca regra e cStat citados NO trecho (tabela de regras da
+                # NT: "2B08-20 ... Obrig. 204 Rej."), para o filtro por cStat
+                # alcancar o documento oficial e nao so a regra curada.
                 payload = _base_payload(doc) | {
                     "file": doc["file"],
                     "page_number": page.get("page_number"),
                     "chunk_index": i,
+                    "rule_ids": sorted(set(_RULE_ID.findall(text))),
+                    "cstats": sorted(set(_CSTAT_REJ.findall(text))),
                 }
                 chunks.append(Chunk(text=text, payload=payload))
 
@@ -210,9 +235,14 @@ def build_filter(model: str = "55", cstat: str | None = None):
 
     must = [FieldCondition(key="model", match=MatchAny(any=[model]))]
     if cstat:
-        must.append(FieldCondition(key="cstat", match=MatchValue(value=cstat)))
+        must.append(FieldCondition(key="cstats", match=MatchAny(any=[cstat])))
     must_not = [FieldCondition(key="status", match=MatchValue(value="revogado"))]
     return Filter(must=must, must_not=must_not)
+
+
+def _evidence_id(p: dict[str, Any]) -> str:
+    page = f"p{p['page_number']}" if p.get("page_number") is not None else ""
+    return f"kb:{p['file']}#{page}c{p['chunk_index']}"
 
 
 def search(
@@ -242,7 +272,7 @@ def search(
     ).points
     return [
         {
-            "evidence_id": f"kb:{h.payload['file']}#p{h.payload.get('page_number')}c{h.payload['chunk_index']}",
+            "evidence_id": _evidence_id(h.payload),
             "trust_level": "rule_reference"
             if h.payload.get("authority_class") == "oficial_gov"
             else "retrieved_document",

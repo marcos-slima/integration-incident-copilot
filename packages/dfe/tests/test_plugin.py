@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 from dfe_copilot.context import FiscalContext
@@ -103,3 +103,40 @@ def test_run_diagnosis_com_plugin_dfe(monkeypatch: pytest.MonkeyPatch) -> None:
     assert [x.id for x in r.findings] == ["F-cStat", "F-204", "H1", "H-diagnosis"]
     assert r.cause_status == "hypothesis"
     load_plugins.cache_clear()
+
+
+class TestBaseFiscal:
+    HIT: ClassVar[dict] = {"evidence_id": "kb:NT_2018.005_v1.51.pdf#p23c0", "rule_ids": ["2B08-20"]}
+
+    def _run(self, lookup) -> list[dict[str, Any]]:
+        from dfe_copilot.plugin import DfePlugin
+
+        plugin = DfePlugin(kb_lookup=lookup)
+        return plugin.run({"payload": PROT_204, "domain_context": plugin.validate_context(CTX)})
+
+    def test_trecho_vira_fato_de_regra(self) -> None:
+        f = self._run(lambda cstat: [self.HIT] if cstat == "204" else [])
+        kbf = next(x for x in f if x["id"] == "F-kb")
+        assert kbf["source"] == "rule_reference" and kbf["kind"] == "fact"
+        assert (
+            kbf["evidence_refs"] == ["kb:NT_2018.005_v1.51.pdf#p23c0"]
+            and kbf["rule_ref"] == "2B08-20"
+        )
+
+    def test_sem_trecho_registra_lacuna(self) -> None:
+        assert "G-kb" in _ids(self._run(lambda cstat: []))
+
+    def test_base_indisponivel_registra_lacuna(self) -> None:
+        def boom(cstat: str):
+            raise ConnectionError("qdrant fora")
+
+        assert "G-kb" in _ids(self._run(boom))
+
+    def test_base_desligada_nao_muda_o_resultado(self) -> None:
+        assert _ids(self._run(None)) == ["F-cStat", "F-204", "H1"]
+
+    def test_default_desligado_sem_env(self, monkeypatch) -> None:
+        monkeypatch.delenv("DFE_KB_ENABLED", raising=False)
+        from dfe_copilot.plugin import _default_kb_lookup
+
+        assert _default_kb_lookup() is None

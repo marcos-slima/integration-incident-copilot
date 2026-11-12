@@ -69,13 +69,21 @@ class TestParseSeguro:
                 "dtd_forbidden",
             ),
             (b"<x>", "malformed_xml"),
-            (b"<x>" + b"a" * 1_000_001 + b"</x>", "input_too_large"),
         ],
+        # ids explicitos: com bytes como parametro o pytest usa o conteudo como
+        # id do teste. Um payload de 1 MB virava uma linha de 1 MB no log do
+        # CI e congelava o runner do GitHub (diagnostico de 2026-11-12).
+        ids=["xxe", "entity_expansion", "malformado"],
     )
     def test_entrada_hostil_recusada(self, xml: bytes, code: str) -> None:
         with pytest.raises(FiscalXmlError) as exc:
             safe_parse(xml)
         assert exc.value.code == code
+
+    def test_entrada_grande_recusada(self) -> None:
+        with pytest.raises(FiscalXmlError) as exc:
+            safe_parse(b"<x>" + b"a" * 1_000_001 + b"</x>")
+        assert exc.value.code == "input_too_large"
 
 
 class TestProtocolo204:

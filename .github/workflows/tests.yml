@@ -58,9 +58,7 @@ jobs:
         run: uv run pytest -m "not integration" -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=80
 
       - name: Pytest — produto DF-e Copilot (DA-94)
-        # Suite propria, com a config de packages/dfe/pyproject.toml. Coletar
-        # packages/dfe/tests com a config da raiz congelava o runner do
-        # GitHub (diagnostico de 2026-11-12, runs 43244103266..43261055989).
+        # Suite propria, com a config de packages/dfe/pyproject.toml.
         working-directory: packages/dfe
         timeout-minutes: 3
         run: ../../.venv/bin/python -m pytest -v --tb=short -p no:cacheprovider

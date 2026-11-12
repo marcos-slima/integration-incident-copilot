@@ -3539,8 +3539,7 @@ core sem import do produto) e `packages/dfe/tests/` (plugin real).
   IIC. A separação física é etapa posterior (`packages/dfe/docs/PENDENCIAS.md`).
 - Os dois produtos compartilham o `uv.lock` da raiz e o mesmo workflow de CI,
   mas cada um roda a própria suíte com a própria config de pytest (o DF-e em
-  `packages/dfe/pyproject.toml`, `cd packages/dfe && pytest`): coletar os
-  testes do produto com a config da raiz congelava o runner do GitHub. A
+  `packages/dfe/pyproject.toml`, `cd packages/dfe && pytest`). A
   imagem Docker atual é só do IIC (`packages/` não é copiado).
 - Um plugin por requisição: o primeiro que aceitar o contexto.
 

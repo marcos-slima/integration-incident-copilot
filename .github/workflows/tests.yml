@@ -55,15 +55,25 @@ jobs:
         # Exclui testes marcados como integration: eles exigem Qdrant e Ollama,
         # que não existem no runner do GitHub.
         # §3.10: --cov + --cov-fail-under=80 — CI falha se cobertura < 80%.
-        # Diagnostico (2026-11-12): job cancelado por timeout nao guarda log.
-        # `timeout --signal=INT` encerra o pytest ANTES do limite do job (o
-        # step falha com log e resumo) e `faulthandler_timeout` imprime a
-        # stack de qualquer teste parado ha mais de 60 s. Chama o python da
-        # .venv direto: com `uv run`, o timeout mataria so o uv e o pytest
-        # orfao seguiria segurando o step.
+        # Diagnostico (2026-11-12): o job era cancelado por timeout e o GitHub
+        # nao guarda log de job cancelado. Com timeout NO STEP o step falha
+        # (o runner mata a arvore de processos), o upload abaixo roda e o log
+        # completo fica como artefato. faulthandler imprime a stack de teste
+        # parado ha mais de 60 s.
+        timeout-minutes: 8
         env:
           PYTHONUNBUFFERED: "1"
-        run: timeout --signal=INT --kill-after=30 420 .venv/bin/python -m pytest -m "not integration" -v --tb=short -o faulthandler_timeout=60 --cov=app --cov-report=term-missing --cov-fail-under=80
+        run: |
+          set -o pipefail
+          .venv/bin/python -m pytest -m "not integration" -v --tb=short -o faulthandler_timeout=60 --cov=app --cov-report=term-missing --cov-fail-under=80 2>&1 | tee pytest.log
+
+      - name: Log do pytest (artefato)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-log
+          path: pytest.log
+          if-no-files-found: ignore
 
 
   security:

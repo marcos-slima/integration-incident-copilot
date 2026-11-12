@@ -11,9 +11,9 @@ colecoes do core. Regras do estudo (§8.4) aplicadas aqui:
 - sem trecho aplicavel, a busca devolve lista vazia (abstencao), nunca
   um trecho qualquer.
 
-Uso local (Qdrant + Ollama vivos, config do core):
-    uv run python -m dfe_copilot.kb ingest [--reset]
-    uv run python -m dfe_copilot.kb search "duplicidade cStat 204"
+Uso local (Qdrant + Ollama vivos, config do core), a partir de packages/dfe:
+    PYTHONPATH=src:../.. uv run --project ../.. python -m dfe_copilot.kb ingest [--reset]
+    PYTHONPATH=src:../.. uv run --project ../.. python -m dfe_copilot.kb search "duplicidade" --cstat 204
 """
 
 from __future__ import annotations

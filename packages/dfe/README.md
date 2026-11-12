@@ -19,10 +19,14 @@ automática.
 ## Como rodar
 
 ```bash
-# na raiz do monorepo
-uv run uvicorn dfe_copilot.main:app --reload     # API do core com o plugin DF-e
-(cd packages/dfe && uv run pytest -q)              # testes do produto (config própria)
-(cd packages/dfe && uv run python -m dfe_copilot.kb ingest)   # base fiscal no Qdrant (dfe_kb)
+# sempre com o ambiente da RAIZ do monorepo (o pyproject de packages/dfe so
+# declara o pacote; `uv run` dentro de packages/dfe sem --project criaria um
+# ambiente separado, sem o core)
+uv run uvicorn dfe_copilot.main:app --reload       # API do core com o plugin DF-e
+cd packages/dfe
+uv run --project ../.. python -m pytest -q          # testes do produto (config própria)
+PYTHONPATH=src:../.. uv run --project ../.. python -m dfe_copilot.kb ingest
+PYTHONPATH=src:../.. uv run --project ../.. python -m dfe_copilot.kb search "duplicidade de NF-e" --cstat 204
 ```
 
 Requisição mínima (`POST /diagnose`):

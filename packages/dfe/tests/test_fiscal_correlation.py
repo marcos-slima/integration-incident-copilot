@@ -137,3 +137,12 @@ class TestTimeout:
     def test_timeout_de_outro_documento_ignorado(self) -> None:
         r = diagnose_timeout(OTHER, normalize_events(EVENTS))
         assert r["processing_outcome"] == "not_applicable"
+
+
+@pytest.mark.parametrize("valor", ["ontem a tarde", 1731326400, "2026-13-40T99:00:00Z"])
+def test_horario_ilegivel_vira_erro_de_correlacao(valor) -> None:
+    from dfe_copilot.fiscal import FiscalCorrelationError, normalize_events
+
+    with pytest.raises(FiscalCorrelationError) as exc:
+        normalize_events([{"evidence_id": "A", "document_ref": "x", "at": valor, "event": "sent"}])
+    assert exc.value.code == "invalid_timestamp"

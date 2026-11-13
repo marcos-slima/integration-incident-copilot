@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Provider do promptfoo do DF-e Copilot (P8): roda o pipeline real do core
-com o plugin DF-e ligado, para um caso de data/eval/cases_v0.jsonl.
+com o plugin DF-e ligado, para um caso de data/eval/cases_v1.jsonl.
 
 Prompt do promptfoo = case_id (ex.: "UC01-H1-01"). Saida = JSON com a
 proveniencia do prompt e o texto do diagnostico, para os asserts.
@@ -19,15 +19,18 @@ os.environ.setdefault("RULE_ENGINE_ENABLED", "false")  # mede o LLM, nao a regra
 from app.agent.graph import run_diagnosis
 from app.models import IncidentRequest
 
-CASES = ROOT / "data" / "eval" / "cases_v0.jsonl"
+CASES = ROOT / "data" / "eval" / "cases_v1.jsonl"
 
 
 def main() -> None:
     model = sys.argv[1]
     case_id = (sys.argv[2] if len(sys.argv) > 2 else sys.stdin.read()).strip()
-    case = next(json.loads(line) for line in CASES.read_text().splitlines() if case_id in line)
+    case = next(
+        c for c in map(json.loads, CASES.read_text().splitlines()) if c["case_id"] == case_id
+    )
     request = IncidentRequest(
-        description=f"Incidente NF-e (caso sintetico {case['case_id']}): rejeicao/erro na autorizacao",
+        description=case.get("description")
+        or f"Incidente NF-e (caso sintetico {case['case_id']}): rejeicao/erro na autorizacao",
         payload=case["payload"] or None,
         domain_context=case["domain_context"],
     )

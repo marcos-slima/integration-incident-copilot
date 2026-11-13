@@ -333,8 +333,6 @@ def analyze_fiscal_xml(xml_bytes: bytes, package: SchemaPackage | None = None) -
                 "evidence_refs": [f"sha256:{out['raw_sha256']}"],
             })  # fmt: skip
 
-    _check_signature(root, prot, out, key)
-
     parsed = parse_access_key(key)
     out["access_key"] = parsed.raw if parsed else None
     out["access_key_dv_valid"] = parsed.dv_valid if parsed else None
@@ -361,4 +359,5 @@ def analyze_fiscal_xml(xml_bytes: bytes, package: SchemaPackage | None = None) -
             "statement": f"XML nao conforme ao {xsd.get('entrypoint')} ({xsd['package_id']}, {xsd.get('entrypoint_origin')}).",
             "evidence_refs": [f"sha256:{out['raw_sha256']}"],
         })  # fmt: skip
+    _check_signature(root, prot, out, key)  # depois do XSD: estrutura antes de integridade
     return out

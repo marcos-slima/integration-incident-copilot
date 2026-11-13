@@ -70,5 +70,5 @@ Lacunas viram fatos explícitos: `G-noxml`, `G-xml`, `G-events`, `G-ref`,
 | Plugin no grafo do core | Implementado (`domain_tools`) |
 | Corpus e base de conhecimento | `data/corpus/` (NT 2018.005 + manifesto + regra 2B08-20) e `kb.py`: coleção híbrida `dfe_kb`, filtros de modelo/cStat/status antes da busca, abstenção sem fonte; ingestão real pendente de execução local (P3) |
 | UI de fatos × hipóteses | Tipos e rótulos no core; tela dedicada pendente |
-| Dataset e regressão | 29 casos sintéticos v0 + regressão offline (`tests/test_regressao_dataset.py`); revisão fiscal pendente (P7) |
+| Dataset e regressão | 100 casos sintéticos v1 (8 famílias, split dev/validation/blind) + regressão offline (`tests/test_regressao_dataset.py`); revisão fiscal pendente (P7, `docs/REVISAO_DATASET.md`) |
 | Integração SAP / SEFAZ | Fora do MVP (read-only, por contrato) |

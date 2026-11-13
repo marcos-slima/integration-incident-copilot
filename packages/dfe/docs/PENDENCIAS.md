@@ -10,7 +10,7 @@ demais atividades.
 | P2 | Imagem Docker e CI próprios do DF-e Copilot | Hoje o `Dockerfile` só empacota o IIC; o CI roda os dois produtos juntos | Definir pipeline de release do produto |
 | P3 | Rodar a ingestão do corpus fiscal no Qdrant local | Código pronto (`dfe_copilot.kb`: coleção híbrida própria `dfe_kb`, metadados por trecho, filtro de aplicabilidade antes da busca, `revogado` excluído, abstenção sem fonte), testado com Qdrant em memória; a ingestão real precisa de Qdrant e Ollama vivos | Marcos: comandos do `README.md` (ambiente da raiz: `--project ../..`) |
 | P6 | Tela da UI para `findings` e revisão de causa | Tipos e rótulos já existem no frontend do core; a tela do produto exige decisão de UX e marca próprias | Definir se o DF-e terá frontend próprio ou tema no frontend atual |
-| P7 | Dataset de 100 casos com gabarito revisado | Dataset v0 com 29 casos (`data/eval/cases_v0.jsonl`, gerado por `scripts/gen_dataset.py`), gabarito derivado das regras e `reviewed=false`; faltam casos de LLM, divisão dev/validação/teste cego e revisão fiscal | Curadoria fiscal (Marcos) |
+| P7 | Revisão fiscal do dataset v1 | 100 casos sintéticos em `data/eval/cases_v1.jsonl` (split dev/validation/blind, justificativa por cenário), todos `pendente` | Marcos: marcar `aprovado`/`corrigir` em `data/eval/revisao_v1.yaml` lendo `docs/REVISAO_DATASET.md`; depois `gen_dataset.py` e `review_sheet.py` |
 | P10 | Testes dependentes de Ollama, BM25 e SSL não rodaram no ambiente autônomo | Ambiente sem esses recursos; 5 testes do core falharam só por isso e passam na máquina local | Rodar `uv run pytest tests/ -m "not integration"` localmente antes do merge |
 
 ## Resolvidas

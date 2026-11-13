@@ -41,7 +41,10 @@ def normalize_events(raw: list[dict[str, Any]]) -> list[TimelineEvent]:
         for key in ("evidence_id", "document_ref", "at"):
             if not item.get(key):
                 raise FiscalCorrelationError("missing_field", key)
-        at = datetime.fromisoformat(str(item["at"]))  # 3.11+ aceita "Z"
+        try:
+            at = datetime.fromisoformat(str(item["at"]))  # 3.11+ aceita "Z"
+        except ValueError as exc:  # P7: horario ilegivel e' lacuna, nao excecao
+            raise FiscalCorrelationError("invalid_timestamp", item["evidence_id"]) from exc
         if at.tzinfo is None:
             raise FiscalCorrelationError("naive_timestamp", item["evidence_id"])
         out.append(

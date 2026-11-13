@@ -174,4 +174,33 @@ flag ligada e descarte com ela desligada.
   do `SignatureValue`, algoritmo fora do perfil, `Reference` trocada, XSW por
   `Id` duplicado, CNPJ divergente, validade, ausência, protocolo assinado).
 
+### D5. Dataset v1 com 100 casos e fluxo de revisão (P7, 2026-11-12)
+
+- `data/eval/cases_v1.jsonl` (renomeado do v0; os 29 casos originais mantêm
+  id e entrada) com 71 casos novos em 8 famílias: UC01 (204: reenvio
+  múltiplo, fuso local, retorno de lote, produção, bordas, protocolo fora do
+  XSD), UC02 (timeouts), UC03 (XSD/ambiente), UC04 (outros cStat, com e sem
+  timeout), UC05 (lote e `nfeProc`), UC06 (assinatura), SEC e GAP.
+- Cada caso traz `description` (texto de chamado por família, usado pelo
+  provider do promptfoo), `rationale` (por que o gabarito é esse) e `split`
+  determinístico pelo hash do id: dev 55 · validation 23 · blind 22. Casos
+  `blind` não entram em ajuste de regra nem de prompt.
+- **Revisão:** a decisão humana fica em `data/eval/revisao_v1.yaml`
+  (`pendente` | `aprovado` | `corrigir` + nota). `gen_dataset.py` só marca
+  `reviewed=true` com `aprovado`; `review_sheet.py` gera
+  `docs/REVISAO_DATASET.md`. Os testes reprovam se o dataset, a folha ou o
+  YAML ficarem fora de sincronia.
+- **O que o v1 achou:**
+  - um **bug**: horário ilegível em evento (`"ontem a tarde"`, epoch) levantava
+    `ValueError` fora do contrato e derrubava todos os achados do plugin
+    (`G-plugin`); agora é `FiscalCorrelationError("invalid_timestamp")` → `G-events`;
+  - quatro **gabaritos meus estavam errados** e o código certo: o XSD oficial já
+    recusa `rsa-md5`, transform extra, `Signature` vazia e `retEnviNFe` com dois
+    protocolos (`F-xsd` junto com `G-sig`/`G-lote`);
+  - a ordem dos achados passou a ser estrutura antes de integridade (`F-xsd`
+    antes de `F-sig`).
+- Variantes assinadas (`tests/fixtures/nfe_assinada_cnpj_divergente.xml`,
+  `nfe_assinada_cert_vencido.xml`) vêm de `scripts/sign_fixture.py variantes`,
+  com chave efêmera; o dataset é determinístico porque só lê esses arquivos.
+
 ---

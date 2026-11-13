@@ -1,0 +1,91 @@
+name: DF-e Copilot
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'packages/dfe/**'
+      - 'packages/core/**'
+      - 'packages/core-ui/**'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'package*.json'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.python-version'
+      - 'scripts/test_product_isolation.py'
+      - 'scripts/smoke_dfe_image.py'
+      - '.github/workflows/dfe.yml'
+  pull_request:
+    branches: [master, main]
+    paths:
+      - 'packages/dfe/**'
+      - 'packages/core/**'
+      - 'packages/core-ui/**'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'package*.json'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.python-version'
+      - 'scripts/test_product_isolation.py'
+      - 'scripts/smoke_dfe_image.py'
+      - '.github/workflows/dfe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dfe-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  product:
+    name: DF-e — pacotes, testes e imagem
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Dependências nativas do core
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cmake make gcc libssl-dev libffi-dev libsasl2-dev libsasl2-2
+      - run: uv python install
+      - run: uv sync --locked --dev
+      - run: uv run ruff check packages/dfe scripts/test_product_isolation.py scripts/smoke_dfe_image.py
+      - run: uv run ruff format --check packages/dfe scripts/test_product_isolation.py scripts/smoke_dfe_image.py
+      - run: npm ci
+      - run: npm run lint -w @copilot/core-ui -w @copilot/dfe-ui
+      - run: npm run typecheck -w @copilot/core-ui -w @copilot/dfe-ui
+      - run: npm test -w @copilot/core-ui
+      - run: npm run build -w @copilot/dfe-ui
+      - name: Testes fiscais contra core e produto instalados dos wheels
+        run: uv run python scripts/test_product_isolation.py
+      - name: Wheels de entrega (com UI)
+        run: |
+          uv build --package copilot-core --wheel --out-dir dist/dfe-release
+          DFE_BUILD_REQUIRE_UI=1 uv build --package dfe-copilot --wheel --out-dir dist/dfe-release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dfe-wheels-${{ github.sha }}
+          path: dist/dfe-release/*.whl
+          retention-days: 7
+          if-no-files-found: error
+      - name: Validar Compose próprio
+        run: docker compose -f packages/dfe/compose.yaml config --quiet
+      - name: Construir imagem própria sem download de modelos
+        run: docker build --target dfe --build-arg PRELOAD_MODELS=0 -t dfe-copilot:ci .
+      - name: Smoke da imagem (sem IIC, credenciais efêmeras, XML sintético)
+        run: uv run python scripts/smoke_dfe_image.py dfe-copilot:ci
+      - name: Smoke do Compose isolado (inclui Qdrant próprio)
+        run: uv run python scripts/smoke_dfe_image.py dfe-copilot:ci --compose

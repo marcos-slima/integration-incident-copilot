@@ -1,0 +1,32 @@
+name: dfe-copilot-review
+
+services:
+  dfe:
+    extends:
+      file: compose.yaml
+      service: dfe
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${DFE_POSTGRES_USER:-dfe}:${DFE_POSTGRES_PASSWORD:?DFE_POSTGRES_PASSWORD_REQUIRED}@postgres:5432/${DFE_POSTGRES_DB:-dfe}
+      CHECKPOINTING_ENABLED: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DFE_POSTGRES_DB:-dfe}
+      POSTGRES_USER: ${DFE_POSTGRES_USER:-dfe}
+      POSTGRES_PASSWORD: ${DFE_POSTGRES_PASSWORD:?DFE_POSTGRES_PASSWORD_REQUIRED}
+    volumes:
+      - dfe_review_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DFE_POSTGRES_USER:-dfe} -d ${DFE_POSTGRES_DB:-dfe}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+
+volumes:
+  dfe_review_postgres:

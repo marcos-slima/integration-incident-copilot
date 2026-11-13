@@ -104,6 +104,24 @@ depois; dois casos sintéticos revisados foram diagnosticados pelo Ollama real.
 O SHA identifica o estado observado nessa execução, não a origem histórica da
 ingestão nem a identidade dos embeddings anteriores.
 
+### Ativar retomada de revisão humana
+
+A revisão humana que aprova, edita ou rejeita um diagnóstico pausado exige um
+checkpointer persistente. Ela é opt-in e usa um Compose separado, para não
+adicionar PostgreSQL ao runtime fiscal padrão:
+
+```bash
+export DFE_POSTGRES_PASSWORD="$(openssl rand -hex 32)"
+docker compose --env-file packages/dfe/.env \
+  -f packages/dfe/compose.review.yaml up -d
+```
+
+Esse arquivo ativa `CHECKPOINTING_ENABLED=true`, cria o volume
+`dfe_review_postgres` e só libera o DF-e depois do healthcheck do PostgreSQL.
+Não use senha padrão nem a inclua em `.env` versionado. Sem esse Compose (ou
+um PostgreSQL externo equivalente), a API pode sinalizar `pending_review`, mas
+`can_resume=false` e não apresenta uma ação executável de aprovação.
+
 Para integrações máquina-a-máquina configure as chaves `DFE_API_KEY`,
 `DFE_A2A_API_KEY` e `DFE_EVENT_MESH_API_KEY`; a administração usa
 `DFE_ADMIN_API_KEY`. `DFE_REQUIRE_AUTH=true` exige as chaves de borda no startup.

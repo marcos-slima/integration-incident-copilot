@@ -70,6 +70,13 @@ Base fiscal completa: baixe o MOC 7.0 Anexo I (URL em `data/corpus/manifest.json
 para `data/corpus/MOC_7.0_Anexo_I.pdf` antes do `kb ingest --reset`; o hash é
 conferido. A tabela de cStat já vem versionada (`cstat_moc7_anexo_i.json`).
 
+## Interface
+
+`npm ci && npm run build -w @copilot/dfe-ui` (na raiz) gera a UI do produto em
+`frontend/dist`, servida por `uvicorn dfe_copilot.main:app`. Para desenvolver:
+`npm run dev -w @copilot/dfe-ui` (porta 5174, proxy para a API em :8000).
+Detalhes em [`frontend/README.md`](frontend/README.md).
+
 ## Estrutura
 
 | Caminho | Conteúdo |
@@ -79,6 +86,7 @@ conferido. A tabela de cStat já vem versionada (`cstat_moc7_anexo_i.json`).
 | `src/dfe_copilot/fiscal/xml_tools.py` | Parse seguro, chave de acesso, `cStat`, XSD offline |
 | `src/dfe_copilot/fiscal/correlation.py` | Linha do tempo UTC, regras cStat 204 e timeout |
 | `src/dfe_copilot/prompt.py` | Persona fiscal e versão do prompt de domínio (P8) |
+| `frontend/` | Shell de UI do produto (`@copilot/dfe-ui`) sobre `@copilot/core-ui` |
 | `src/dfe_copilot/main.py` | Ponto de entrada da API do produto |
 | `src/dfe_copilot/kb.py` | Base de conhecimento fiscal: ingestão e busca híbrida filtrada (`dfe_kb`) |
 | `data/schemas/nfe/` | Pacote oficial PL 010g v1.03 + manifesto com hashes |

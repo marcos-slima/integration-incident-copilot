@@ -7,8 +7,7 @@
 //   onFetch: () => Promise<Data>  → função assíncrona que retorna Data
 
 import { useTranslation } from 'react-i18next';
-import type { DiagnosisResponse } from '../types/models';
-import { LanguageSelect } from './LanguageSelect';
+import { LanguageSelect, type DiagnosisResponse } from '@copilot/core-ui';
 
 type ViewId = 'diagnose' | 'history' | 'status';
 

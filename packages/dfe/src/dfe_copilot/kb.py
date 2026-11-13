@@ -304,11 +304,9 @@ def search(
 
 
 def _core_backends():
-    from app.rag.ingest import _sparse_vector_for
-    from app.rag.retriever import _get_embeddings, _get_qdrant_client
+    from app import sdk
 
-    emb = _get_embeddings()
-    return _get_qdrant_client(), emb.embed_documents, _sparse_vector_for
+    return sdk.qdrant_client(), sdk.dense_embedder(), sdk.sparse_vector
 
 
 def main(argv: list[str] | None = None) -> int:

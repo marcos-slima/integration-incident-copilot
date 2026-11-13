@@ -4,8 +4,10 @@
 # hasheava node_modules/ inteiro (varios MB, irrelevante pro cache).
 .git/
 .venv/
-frontend/node_modules/
+node_modules/
+**/node_modules/
 frontend/dist/
+packages/dfe/frontend/dist/
 static/dist/
 __pycache__/
 *.pyc

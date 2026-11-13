@@ -21,6 +21,30 @@ SURFACES = {
     "web": (Path("frontend/src/i18n/locales"), "{locale}.json"),
     "admin": (Path("app/i18n/locales"), "admin.{locale}.json"),
 }
+# DA-95: toda UI do monorepo e' uma superficie web: o core-ui e os shells de
+# produto. Descoberta por padrao de diretorio, sem lista de produtos aqui.
+WEB_GLOBS = ("frontend/src", "packages/*/src", "packages/*/frontend/src")
+CORE_UI_SRC = Path("packages/core-ui/src")
+CORE_PREFIX = "core."
+
+
+def web_surfaces(root: Path) -> list[Path]:
+    """Diretorios `src` de UI com catalogo em i18n/locales (relativos a root)."""
+    out = []
+    for pattern in WEB_GLOBS:
+        for src in sorted(root.glob(pattern)):
+            if (src / "i18n" / "locales").is_dir() and "node_modules" not in src.parts:
+                out.append(src.relative_to(root))
+    return out
+
+
+def _load_dir(folder: Path) -> dict[str, dict[str, str]]:
+    return {
+        loc: flatten(json.loads((folder / f"{loc}.json").read_text(encoding="utf-8")))
+        for loc in LOCALES
+    }
+
+
 LOCALES = ("pt-BR", "en")
 _VARS = re.compile(r"\{\{\s*(\w+)\s*\}\}")
 _PLURAL = ("_zero", "_one", "_two", "_few", "_many", "_other")
@@ -93,16 +117,60 @@ def used_key_problems(root: Path, catalogs: dict[str, dict[str, str]], surface: 
     return problems
 
 
+def web_used_key_problems(
+    root: Path, src: Path, own: dict[str, str], core: dict[str, str]
+) -> list[str]:
+    """Chaves usadas numa superficie web. `core.*` resolve no catalogo do
+    core-ui; no proprio core-ui, o catalogo e' o do core sem o prefixo."""
+    is_core = src == CORE_UI_SRC
+    problems: list[str] = []
+    for path in sorted((root / src).rglob("*.ts*")):
+        if "i18n" in path.parts:
+            continue
+        text = path.read_text(encoding="utf-8")
+        rel = path.relative_to(root)
+        keys = [k for rx in (_WEB_STATIC, _WEB_DATA_KEYS) for k in rx.findall(text)]
+        for key in keys:
+            if "." not in key:
+                continue
+            if key.startswith(CORE_PREFIX):
+                ok = _exists(key[len(CORE_PREFIX) :], core)
+            else:
+                ok = not is_core and _exists(key, own)
+            if not ok:
+                problems.append(f"{src}: {rel} usa a chave '{key}', ausente do catalogo")
+        for prefix in _WEB_DYNAMIC.findall(text):
+            if prefix.startswith(CORE_PREFIX):
+                ok = _group_exists(prefix[len(CORE_PREFIX) :], core)
+            else:
+                ok = not is_core and _group_exists(prefix, own)
+            if not ok:
+                problems.append(f"{src}: {rel} usa o grupo '{prefix}.*', ausente do catalogo")
+    return problems
+
+
 def ui_i18n_problems(root: Path) -> list[str]:
     problems: list[str] = []
-    for surface in SURFACES:
+    try:
+        catalogs = _load(root, "admin")
+        problems += parity_problems(catalogs, "admin")
+        problems += used_key_problems(root, catalogs, "admin")
+    except (OSError, ValueError) as exc:
+        problems.append(f"admin: catalogo ilegivel ({exc})")
+    try:
+        core = _load_dir(root / CORE_UI_SRC / "i18n" / "locales")[LOCALES[0]]
+    except (OSError, ValueError) as exc:
+        return [*problems, f"{CORE_UI_SRC}: catalogo do core ilegivel ({exc})"]
+    for src in web_surfaces(root):
         try:
-            catalogs = _load(root, surface)
+            cats = _load_dir(root / src / "i18n" / "locales")
         except (OSError, ValueError) as exc:
-            problems.append(f"{surface}: catalogo ilegivel ({exc})")
+            problems.append(f"{src}: catalogo ilegivel ({exc})")
             continue
-        problems += parity_problems(catalogs, surface)
-        problems += used_key_problems(root, catalogs, surface)
+        problems += parity_problems(cats, str(src))
+        if src != CORE_UI_SRC and any(k.startswith(CORE_PREFIX) for k in cats[LOCALES[0]]):
+            problems.append(f"{src}: catalogo de produto nao pode definir 'core.*'")
+        problems += web_used_key_problems(root, src, cats[LOCALES[0]], core)
     problems += [f"texto fora do catalogo: {f}" for f in scan_repo(root)]
     return problems
 

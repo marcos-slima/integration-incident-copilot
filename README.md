@@ -143,7 +143,7 @@ Abridged response:
     and allow the origin as described in section 6 of the
     [troubleshooting guide](docs/TROUBLESHOOTING.md).
 - **Web UI:**
-  - build it with `cd frontend && npm ci && npm run build` and open <http://127.0.0.1:8000>;
+  - build it with `npm ci && npm run build -w @copilot/iic-ui` (repo root) and open <http://127.0.0.1:8000>;
   - create a login with
     `uv run python -c "from app.auth import hash_password; print(hash_password('your-password'))"`
     and add `WEB_UI_USERS=<user>:<hash>` to `.env`;

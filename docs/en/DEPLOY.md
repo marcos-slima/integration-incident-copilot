@@ -49,7 +49,7 @@ docker compose config -q   # no output = interpolation ok
 
 The `Dockerfile` builds the frontend (React/Vite) from source code in a dedicated stage (`frontend-build`, base `node:22-slim`) and copies the result (`frontend/dist`) to `static/dist` in the final image stage. No manual step: `docker compose build` (or `docker build .`) already builds the frontend alone.
 
-If you want to run the frontend outside Docker (local dev with hot-reload), use `cd frontend && npm install && npm run dev`.
+If you want to run the frontend outside Docker (local dev with hot-reload), use `npm install && npm run dev -w @copilot/iic-ui` at the repo root (npm workspaces, DA-95).
 
 ---
 

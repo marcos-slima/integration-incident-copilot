@@ -11,9 +11,8 @@ from dfe_copilot.fiscal.xml_tools import NS
 from dfe_copilot.plugin import PLUGIN
 from pydantic import ValidationError
 
-from app.agent import graph
-from app.agent.domain_plugins import load_plugins
-from app.models import IncidentRequest
+from app import sdk
+from app.sdk.testing import diagnosis_harness
 
 KEY = "35261111222333000181550010000000011000000014"
 PROT_204 = (
@@ -85,26 +84,22 @@ class TestRun:
         assert _ids(f) == ["F-amb"]
 
 
-def test_run_diagnosis_com_plugin_dfe(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_diagnosis_com_plugin_dfe() -> None:
     seen: dict[str, Any] = {}
 
-    def fake_invoke(initial_state, timeout_seconds=None, thread_id=None):
+    def fake_graph(initial_state):
         seen.update(initial_state)
         findings = PLUGIN.run(initial_state)
         return {**initial_state, "domain_findings": findings,
                 "diagnosis": {"probable_root_cause": "Duplicidade por reenvio", "confidence": 0.6}}  # fmt: skip
 
-    load_plugins.cache_clear()
-    monkeypatch.setattr(graph.settings, "domain_plugins", "dfe_copilot.plugin")
-    monkeypatch.setattr(graph, "_invoke_graph_with_timeout", fake_invoke)
-    monkeypatch.setattr(graph, "record_incident", lambda *a, **k: None)
-    r = graph.run_diagnosis(
-        IncidentRequest(description="NF-e 204", payload=PROT_204, domain_context=CTX)
-    )
+    with diagnosis_harness("dfe_copilot.plugin", fake_graph):
+        r = sdk.run_diagnosis(
+            sdk.incident_request(description="NF-e 204", payload=PROT_204, domain_context=CTX)
+        )
     assert seen["domain_plugin"] == "dfe"
     assert [x.id for x in r.findings] == ["F-cStat", "F-204", "H1", "H-diagnosis"]
     assert r.cause_status == "hypothesis"
-    load_plugins.cache_clear()
 
 
 class TestBaseFiscal:

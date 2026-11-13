@@ -181,7 +181,10 @@ def scan_literals(path: Path, src: str) -> list[Finding]:
 
 def scan_repo(root: Path) -> list[Finding]:
     findings: list[Finding] = []
-    for p in sorted((root / "frontend/src").rglob("*.ts*")):
+    from app.i18n.checks import web_surfaces  # DA-95: core-ui e shells de produto
+
+    web_files = sorted(p for src in web_surfaces(root) for p in (root / src).rglob("*.ts*"))
+    for p in web_files:
         if "i18n" in p.parts or p.name.endswith(".d.ts"):
             continue
         src = p.read_text(encoding="utf-8")

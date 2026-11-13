@@ -32,6 +32,28 @@ class DomainPlugin(Protocol):
     def run(self, state: dict[str, Any]) -> list[dict[str, Any]]:
         """Findings deterministicos para o estado (sem LLM, sem escrita externa)."""
 
+    def context_schema(self) -> dict[str, Any]:
+        """DA-95: JSON Schema do `domain_context` aceito pelo plugin. E' o
+        contrato que as UIs usam para gerar o formulario de entrada; o core
+        so o publica (GET /domain-plugins), nunca o interpreta."""
+
+
+def describe_plugins(plugins: tuple[DomainPlugin, ...]) -> list[dict[str, Any]]:
+    """Catalogo publico dos plugins carregados (DA-95), sem detalhe interno."""
+    out = []
+    for p in plugins:
+        prompt = getattr(p, "prompt", None)
+        out.append(
+            {
+                "name": p.name,
+                "context_schema": p.context_schema(),
+                "prompt_version": f"{prompt.name}-{prompt.version}"
+                if isinstance(prompt, DomainPrompt)
+                else None,
+            }
+        )
+    return out
+
 
 class DomainPluginError(RuntimeError):
     pass

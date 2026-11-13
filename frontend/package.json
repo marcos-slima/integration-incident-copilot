@@ -1,15 +1,17 @@
 {
-  "name": "frontend",
+  "name": "@copilot/iic-ui",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "lint": "oxlint",
-    "preview": "vite preview"
+    "lint": "oxlint src",
+    "preview": "vite preview",
+    "typecheck": "tsc -b"
   },
   "dependencies": {
+    "@copilot/core-ui": "0.1.0",
     "i18next": "26.5.2",
     "i18next-browser-languagedetector": "8.2.1",
     "react": "^19.2.8",

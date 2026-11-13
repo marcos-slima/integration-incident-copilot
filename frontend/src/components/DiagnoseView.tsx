@@ -8,17 +8,15 @@
 
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import ReactMarkdown from 'react-markdown';
-import { callDiagnose, ApiError, describeApiError } from '../api/diagnose';
-import type {
-  DiagnosisResponse,
-  HistoryItem,
-  IncidentRequest,
-  InterfaceType,
-} from '../types/models';
-import { Badge } from './Badge';
-import { EscalationBanner, EvidenceList, Provenance } from './DiagnosisDetails';
-import { diagnosisLocale } from '../i18n';
+import {
+  ApiError,
+  DiagnosisLoading,
+  DiagnosisResult,
+  describeApiError,
+  diagnose,
+  diagnosisLocale,
+} from '@copilot/core-ui';
+import type { DiagnosisResponse, HistoryItem, IncidentRequest, InterfaceType } from '../types/models';
 
 // Props do componente
 interface DiagnoseViewProps {
@@ -87,7 +85,6 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
   const [loading, setLoading]       = useState(false);
   const [result, setResult]         = useState<DiagnosisResponse | null>(null);
   const [error, setError]           = useState('');
-  const [showReport, setShowReport] = useState(false);
   const resultRef = useRef<HTMLDivElement>(null);
 
   // Submete o formulário ao backend
@@ -99,7 +96,6 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
     setError('');
     setLoading(true);
     setResult(null);
-    setShowReport(false);
 
     try {
       // Monta o payload — só inclui campos preenchidos
@@ -109,7 +105,7 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
       if (logs.trim())   body.logs           = logs.trim();
       if (payload.trim()) body.payload       = payload.trim();
 
-      const res = await callDiagnose(body);
+      const res = await diagnose(body);
       setResult(res);
       onResult({ description: desc, interface_type: sys, identifier: ident, result: res, ts: new Date() });
       setTimeout(() => resultRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
@@ -128,7 +124,7 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
         }
       } else {
         // Erro de rede (servidor offline, timeout)
-        setError(t('common.networkError'));
+        setError(t('core.common.networkError'));
       }
     } finally {
       setLoading(false);
@@ -344,100 +340,11 @@ export function DiagnoseView({ onResult, onSessionExpired }: DiagnoseViewProps) 
         </div>
       </div>
 
-      {/* Loading */}
-      {loading && (
-        <div className="loading-card">
-          <div className="spinner" style={{
-            width: 40, height: 40, borderRadius: '50%',
-            border: '2px solid #1E3A5F', borderTopColor: '#0EA5E9',
-            animation: 'spin .9s linear infinite',
-          }} />
-          <div className="loading-title">{t('diagnose.processingTitle')}</div>
-          <div className="loading-sub">{t('diagnose.processingSub')}</div>
-        </div>
-      )}
+      {loading && <DiagnosisLoading />}
 
-      {/* Resultado */}
       {result && !loading && (
-        <div className="result-card" ref={resultRef}>
-          <div className="result-header">
-            <span className="result-header-title">{t('diagnose.resultTitle')}</span>
-            <Badge value={result.diagnosis_confidence} />
-          </div>
-          <div className="result-body">
-            <EscalationBanner signal={result.escalation} />
-
-            <div className="section-label">{t('diagnose.rootCause')}</div>
-            <p className="root-cause">{result.probable_root_cause}</p>
-
-            {result.explanation && (
-              <div className="explanation-section">
-                <div className="section-label">{t('diagnose.explanation')}</div>
-                <p className="explanation-text">{result.explanation}</p>
-              </div>
-            )}
-
-            {result.ai_warning && (
-              <p className="ai-warning" role="note">
-                {result.ai_warning}
-              </p>
-            )}
-
-            <div className="section-label">{t('diagnose.nextSteps')}</div>
-            <ol className="steps-list">
-              {result.next_steps.map((step, i) => (
-                <li key={i} className="step-item">
-                  <span className="step-num">{i + 1}</span>
-                  <span className="step-text">{step}</span>
-                </li>
-              ))}
-            </ol>
-
-            {result.matched_source && (
-              <div className="ref-doc">
-                <span className="ref-label">{t('diagnose.referenceDoc')}</span>
-                <span className="ref-name">{result.matched_source}</span>
-              </div>
-            )}
-
-            <EvidenceList evidence={result.evidence} />
-            <Provenance result={result} />
-
-            {result.report_markdown && (
-              <div className="report-section">
-                <button
-                  className="report-toggle"
-                  onClick={() => setShowReport((v) => !v)}
-                >
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                    <path
-                      d={showReport ? 'M2 4l4 4 4-4' : 'M4 2l4 4-4 4'}
-                      stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"
-                    />
-                  </svg>
-                  {showReport ? t('diagnose.reportHide') : t('diagnose.reportShow')}
-                </button>
-                {showReport && (
-                  // Avaliacao externa (nova revisao, P1 - XSS): antes
-                  // disto, "report_markdown" (que pode conter texto
-                  // livre digitado pelo usuario - descricao, logs,
-                  // payload) era injetado como HTML CRU via
-                  // dangerouslySetInnerHTML, sem nenhuma sanitizacao -
-                  // um incidente com "<img src=x onerror=...>" na
-                  // descricao executava no browser de quem visse o
-                  // relatorio. react-markdown NAO interpreta tags HTML
-                  // embutidas no texto como HTML de verdade (viram
-                  // texto escapado por padrao, sem o plugin
-                  // rehype-raw, que deliberadamente NAO usamos aqui) -
-                  // so renderiza a sintaxe Markdown real (#, **, -,
-                  // etc.) para os elementos HTML correspondentes.
-                  <div className="report-body">
-                    <ReactMarkdown>{result.report_markdown}</ReactMarkdown>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+        <div ref={resultRef}>
+          <DiagnosisResult result={result} />
         </div>
       )}
 

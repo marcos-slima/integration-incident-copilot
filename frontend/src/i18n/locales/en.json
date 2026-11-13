@@ -1,13 +1,7 @@
 {
   "common": {
     "appName": "Incident Copilot",
-    "appSub": "SAP Integration · AI",
-    "language": "Language",
-    "networkError": "Could not reach the server. Check that the backend is running.",
-    "networkErrorShort": "Could not reach the server.",
-    "errorStatus": "Error {{status}}: {{message}}",
-    "checkingSession": "Checking session…",
-    "sessionExpired": "Your session has expired — please sign in again."
+    "appSub": "SAP Integration · AI"
   },
   "nav": {
     "diagnose": "Diagnosis",
@@ -22,40 +16,6 @@
     "unknownProvider": "unknown provider",
     "session": "session",
     "logout": "Sign out"
-  },
-  "login": {
-    "titleLogin": "Sign in",
-    "titleActivate": "Activate account",
-    "subLogin": "User authentication — the session is a signed HttpOnly cookie, valid for hours, sent by the browser on its own.",
-    "subActivate": "First access (DA-55): confirm the token sent to your e-mail, then the code sent to your phone.",
-    "username": "Username",
-    "usernamePlaceholder": "your username",
-    "password": "Password",
-    "passwordPlaceholder": "your password",
-    "emailToken": "E-mail token",
-    "emailTokenPlaceholder": "token received by e-mail (24h)",
-    "phoneCode": "Phone code",
-    "phoneCodePlaceholder": "6 digits (10 min)",
-    "fillUserPassword": "Enter username and password.",
-    "emailConfirmed": "E-mail confirmed — now the code sent to your phone.",
-    "accountActivated": "Account activated — sign in with username and password.",
-    "submitting": "Signing in…",
-    "submit": "Sign in",
-    "confirming": "Confirming…",
-    "confirmEmail": "Confirm e-mail",
-    "confirmPhone": "Confirm phone",
-    "toActivate": "Activate account (first access)",
-    "backToLogin": "Back to sign in",
-    "foot": "Integrations do not sign in here: they use the X-API-Key header (curl, MCP, A2A) — each credential in its own layer."
-  },
-  "auth": {
-    "sessionCheckFailed": "Could not check the session",
-    "tooManyLogin": "Too many attempts — wait a minute and try again",
-    "invalidCredentials": "invalid username or password",
-    "tooMany": "Too many attempts — wait a minute",
-    "invalidToken": "invalid token or unknown user",
-    "invalidCode": "invalid code or unknown user",
-    "activationRequiresDb": "Account activation requires persistence (DATABASE_URL)."
   },
   "diagnose": {
     "title": "Incident diagnosis",
@@ -78,15 +38,6 @@
     "payloadPlaceholder": "XML payload, error JSON, ABAP exception message, etc.",
     "analyzing": "Analyzing…",
     "start": "Start diagnosis",
-    "processingTitle": "Agent working",
-    "processingSub": "Connector → hybrid RAG → LLM → guardrails",
-    "resultTitle": "Diagnosis result",
-    "rootCause": "Probable root cause",
-    "nextSteps": "Next steps",
-    "referenceDoc": "Reference document",
-    "explanation": "Why this diagnosis",
-    "reportShow": "Show full report",
-    "reportHide": "Hide full report",
     "demoIds": "Demo identifiers",
     "needDescription": "Describe the incident to start the diagnosis.",
     "sessionExpired401": "Session expired (401) — sign in again.",
@@ -110,48 +61,6 @@
     "cpi401": "iFlow returning HTTP 401 when authenticating through OAuth2",
     "idoc51": "IDoc stuck in status 51",
     "connRefused": "SM59 cannot connect to the target system"
-  },
-  "badge": {
-    "high": "High",
-    "mid": "Medium",
-    "low": "Low",
-    "value": "{{label}} — {{pct}}"
-  },
-  "details": {
-    "okTitle": "Sufficient evidence",
-    "warnTitle": "Human review recommended",
-    "warnText": "{{reason}} Main evidence: {{pct}}{{connector}}.",
-    "connectorReal": " · real connector data",
-    "connectorNotReal": " · no real connector data",
-    "note": "Informative signal: no paid model was called because of it.",
-    "reasons": {
-      "grounded": "Sufficient evidence in the curated knowledge base.",
-      "no_context": "No context: no connector data and no retrieved document.",
-      "abstained": "The guardrails discarded the source: the answer is unsupported.",
-      "floor_tier_weak": "Only generic manuals support the answer, and the evidence is weak.",
-      "curated_tier_weak": "A curated document exists, but the reranker did not support the match."
-    },
-    "trust": {
-      "system_observed": "observed in the system",
-      "rule_reference": "reference rule",
-      "retrieved_document": "knowledge base document",
-      "web_untrusted": "web · untrusted",
-      "user_reported": "user report",
-      "simulated": "simulated (demo)"
-    },
-    "evidenceTitle": "Evidence ({{count}})",
-    "simulated_one": "{{count}} item of simulated data (connector in demo mode).",
-    "simulated_other": "{{count}} items of simulated data (connector in demo mode).",
-    "web_one": "{{count}} item from the web, treated as untrusted: check the source.",
-    "web_other": "{{count}} items from the web, treated as untrusted: check the source.",
-    "rerank": "rerank {{score}}",
-    "provenance": "Provenance",
-    "ruleEngine": "Deterministic rule",
-    "noLlm": "no LLM",
-    "zeroCost": "zero cost",
-    "unknownProvider": "unknown provider",
-    "prompt": "prompt {{version}}",
-    "domain": "domain {{domain}}"
   },
   "history": {
     "title": "Session history",
@@ -208,17 +117,6 @@
       "local": "local",
       "cloud": "cloud"
     }
-  },
-  "errors": {
-    "domain_context_invalid": "The domain context was rejected by the product plugin (e.g. DF-e). Check the submitted fields.",
-    "budget_exhausted": "Diagnosis budget exhausted: no eligible provider fits the configured limit. Adjust DIAGNOSIS_BUDGET_USD or enable a local provider.",
-    "policy_violation": "The sovereignty policy allows no provider for this incident's sensitivity. See \"Data sovereignty\" under Stack.",
-    "overloaded": "Diagnosis capacity is exhausted right now. Try again in a few seconds.",
-    "timeout": "The diagnosis exceeded the time limit. {{detail}}",
-    "validation": "Invalid data: {{message}}",
-    "rateLimited": "Request limit reached. Wait and try again.",
-    "generic": "Error {{status}}: {{message}}",
-    "ref": " (ref. {{id}})"
   },
   "sovereigntyReason": {
     "origin_unresolved": "origin not resolved for provider '{{provider}}'",

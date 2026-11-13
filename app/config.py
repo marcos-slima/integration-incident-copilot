@@ -413,6 +413,12 @@ class Settings(BaseSettings):
     # falha no build do grafo (fail-closed).
     domain_plugins: str = ""
 
+    # UI_DIST_DIR (app/main.py) - DA-95
+    # Diretorio do bundle de UI servido em "/" e "/assets". Cada produto
+    # aponta para o proprio build (o DF-e Copilot usa packages/dfe/frontend/dist);
+    # o core nao sabe qual produto esta servindo.
+    ui_dist_dir: str = "static/dist"
+
     # CHECKPOINTING_ENABLED (app/agent/graph.py)
     # Opt-in para checkpointing LangGraph com PostgresSaver.
     # Quando ligado, o grafo pode ser interrompido e retomado a partir

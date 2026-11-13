@@ -17,9 +17,9 @@ function getConfidenceInfo(value: number): {
   labelKey: string;
   colorClass: string;
 } {
-  if (value >= 0.7) return { labelKey: 'badge.high', colorClass: 'badge-high' };
-  if (value >= 0.4) return { labelKey: 'badge.mid',  colorClass: 'badge-mid'  };
-  return               { labelKey: 'badge.low',  colorClass: 'badge-low'  };
+  if (value >= 0.7) return { labelKey: 'core.badge.high', colorClass: 'badge-high' };
+  if (value >= 0.4) return { labelKey: 'core.badge.mid',  colorClass: 'badge-mid'  };
+  return               { labelKey: 'core.badge.low',  colorClass: 'badge-low'  };
 }
 
 // O componente recebe BadgeProps e retorna JSX (React.JSX.Element)
@@ -30,7 +30,7 @@ export function Badge({ value }: BadgeProps) {
   return (
     <span className={`badge ${colorClass}`}>
       <span className="badge-dot" />
-      {t('badge.value', { label: t(labelKey), pct: formatPercent(value) })}
+      {t('core.badge.value', { label: t(labelKey), pct: formatPercent(value) })}
     </span>
   );
 }

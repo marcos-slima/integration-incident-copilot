@@ -146,7 +146,7 @@ Resposta, resumida:
     libere a origem como na seção 6 do
     [guia de troubleshooting](docs/TROUBLESHOOTING.md).
 - **Interface web:**
-  - gere com `cd frontend && npm ci && npm run build` e abra <http://127.0.0.1:8000>;
+  - gere com `npm ci && npm run build -w @copilot/iic-ui` (na raiz) e abra <http://127.0.0.1:8000>;
   - crie um login com
     `uv run python -c "from app.auth import hash_password; print(hash_password('sua-senha'))"`
     e acrescente `WEB_UI_USERS=<usuario>:<hash>` ao `.env`;

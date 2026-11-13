@@ -6,8 +6,8 @@
 // X-API-Key permanece como credencial de máquina (curl/MCP/A2A), na camada
 // dela — não mais na mão do usuário da UI.
 
-import i18n from '../i18n';
-import { ApiError } from './diagnose';
+import i18n from 'i18next';
+import { ApiError, apiBase } from './http';
 
 export interface SessionState {
   authenticated: boolean;
@@ -22,7 +22,7 @@ async function authErrorMessage(res: Response, invalidKey: string, tooManyKey: s
     case 'too_many_attempts':
       return i18n.t(tooManyKey);
     case 'activation_requires_db':
-      return i18n.t('auth.activationRequiresDb');
+      return i18n.t('core.auth.activationRequiresDb');
     case 'invalid_credentials':
     case 'invalid_token':
     case 'invalid_code':
@@ -32,50 +32,50 @@ async function authErrorMessage(res: Response, invalidKey: string, tooManyKey: s
 }
 
 export async function getSession(): Promise<SessionState> {
-  const res = await fetch('/auth/session', { headers: { Accept: 'application/json' } });
-  if (!res.ok) throw new ApiError(res.status, i18n.t('auth.sessionCheckFailed'));
+  const res = await fetch(`${apiBase()}/auth/session`, { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new ApiError(res.status, i18n.t('core.auth.sessionCheckFailed'));
   return res.json();
 }
 
 export async function login(username: string, password: string): Promise<SessionState> {
-  const res = await fetch('/auth/login', {
+  const res = await fetch(`${apiBase()}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),
   });
   if (!res.ok) {
-    throw new ApiError(res.status, await authErrorMessage(res, 'auth.invalidCredentials', 'auth.tooManyLogin'));
+    throw new ApiError(res.status, await authErrorMessage(res, 'core.auth.invalidCredentials', 'core.auth.tooManyLogin'));
   }
   return res.json();
 }
 
 export async function logout(): Promise<void> {
-  await fetch('/auth/logout', { method: 'POST' });
+  await fetch(`${apiBase()}/auth/logout`, { method: 'POST' });
 }
 
 // DA-55: ativacao de conta em duas etapas (rotas publicas, rate-limited).
 // Respostas 401 sao GENERICAS de proposito: usuario inexistente ==
 // token/codigo errado — o servidor nao revela quem existe.
 export async function verifyEmail(username: string, token: string) {
-  const res = await fetch('/auth/verify/email', {
+  const res = await fetch(`${apiBase()}/auth/verify/email`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, token }),
   });
   if (!res.ok) {
-    throw new ApiError(res.status, await authErrorMessage(res, 'auth.invalidToken', 'auth.tooMany'));
+    throw new ApiError(res.status, await authErrorMessage(res, 'core.auth.invalidToken', 'core.auth.tooMany'));
   }
   return res.json();
 }
 
 export async function verifyPhone(username: string, code: string) {
-  const res = await fetch('/auth/verify/phone', {
+  const res = await fetch(`${apiBase()}/auth/verify/phone`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, code }),
   });
   if (!res.ok) {
-    throw new ApiError(res.status, await authErrorMessage(res, 'auth.invalidCode', 'auth.tooMany'));
+    throw new ApiError(res.status, await authErrorMessage(res, 'core.auth.invalidCode', 'core.auth.tooMany'));
   }
   return res.json();
 }

@@ -1752,8 +1752,8 @@ def check_ui_i18n(root: Path = REPO_ROOT) -> list[Finding]:
     catalogo (app/i18n/checks.py). Heuristico na 3a parte: texto montado por
     concatenacao de fragmentos de uma palavra escapa."""
     check = "ui_i18n"
-    if not (root / "frontend/src/i18n").is_dir():
-        return _fail(check, "frontend/src/i18n nao existe — UI sem i18n")
+    if not (root / "packages/core-ui/src/i18n").is_dir():
+        return _fail(check, "packages/core-ui/src/i18n nao existe — UI sem i18n")
     from app.i18n.checks import ui_i18n_problems
 
     problems = ui_i18n_problems(root)
@@ -1761,6 +1761,23 @@ def check_ui_i18n(root: Path = REPO_ROOT) -> list[Finding]:
         shown = "; ".join(problems[:8])
         more = f" (+{len(problems) - 8})" if len(problems) > 8 else ""
         return _fail(check, f"{len(problems)} problema(s): {shown}{more}")
+    return _ok(check)
+
+
+def check_import_boundaries(root: Path = REPO_ROOT) -> list[Finding]:
+    """DA-95: fronteiras de dependencia do monorepo (architecture/boundaries.toml).
+    Core nao importa produto; produto usa o core so pela superficie publica
+    (app.sdk, indice de @copilot/core-ui); um produto nao importa outro."""
+    check = "import_boundaries"
+    from app.evaluation.boundaries import POLICY, boundary_violations
+
+    if not (root / POLICY).is_file():
+        return _fail(check, f"{POLICY} nao existe")
+    found = boundary_violations(root)
+    if found:
+        shown = "; ".join(str(v) for v in found[:8])
+        more = f" (+{len(found) - 8})" if len(found) > 8 else ""
+        return _fail(check, f"{len(found)} import(s) fora da fronteira: {shown}{more}")
     return _ok(check)
 
 
@@ -1787,6 +1804,7 @@ GATES = {
     "docs_env_vars": check_docs_env_vars,
     "connector_reachable": check_connector_reachable,
     "ui_i18n": check_ui_i18n,
+    "import_boundaries": check_import_boundaries,
     "content_i18n": check_content_i18n,
 }
 

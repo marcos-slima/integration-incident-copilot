@@ -40,6 +40,9 @@ class _Fake:
             raise RuntimeError("falhou")
         return [{"id": "F1", "kind": "fact", "source": "tool", "statement": "fato"}]
 
+    def context_schema(self) -> dict[str, Any]:
+        return {"type": "object", "properties": {"kind": {"const": "fake"}}}
+
 
 @pytest.fixture
 def fake_module(monkeypatch: pytest.MonkeyPatch) -> str:

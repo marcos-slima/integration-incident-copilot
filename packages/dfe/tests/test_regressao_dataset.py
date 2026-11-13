@@ -73,11 +73,12 @@ def test_ferramentas_batem_com_o_gabarito(case: dict) -> None:
     assert not any(f["kind"] == "fact" and f["source"] == "llm" for f in findings)
 
 
-def test_promptfoo_validation_atualizado() -> None:
+@pytest.mark.parametrize("split", ["validation", "blind"])
+def test_promptfoo_split_atualizado(split: str) -> None:
     spec = importlib.util.spec_from_file_location(
         "promptfoo_split", ROOT / "scripts" / "promptfoo_split.py"
     )
     mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
     spec.loader.exec_module(mod)  # type: ignore[union-attr]
-    atual = (ROOT / "promptfooconfig.validation.yaml").read_text(encoding="utf-8")
-    assert atual == mod.build("validation"), "rode: scripts/promptfoo_split.py validation"
+    atual = (ROOT / f"promptfooconfig.{split}.yaml").read_text(encoding="utf-8")
+    assert atual == mod.build(split), f"rode: scripts/promptfoo_split.py {split}"

@@ -165,7 +165,8 @@ class TestProtocolo204:
 
     def test_namespace_alheio_nao_e_fiscal(self, package: SchemaPackage) -> None:
         r = analyze_fiscal_xml(PROT_204.replace(NS.encode(), b"urn:nao-fiscal"), package)
-        assert r["fiscal_namespace"] is False and r["findings"] == []
+        assert r["fiscal_namespace"] is False
+        assert [f["id"] for f in r["findings"]] == ["G-ns"]
 
     def test_dv_invalido_vira_fato(self, package: SchemaPackage) -> None:
         r = analyze_fiscal_xml(

@@ -82,7 +82,7 @@ class TestRun:
 
     def test_homologacao_em_contexto_de_producao(self) -> None:
         f = PLUGIN.run({"payload": POSITIVO, "domain_context": {"environment": "production"}})
-        assert _ids(f) == ["G-amb"]
+        assert _ids(f) == ["F-amb"]
 
 
 def test_run_diagnosis_com_plugin_dfe(monkeypatch: pytest.MonkeyPatch) -> None:

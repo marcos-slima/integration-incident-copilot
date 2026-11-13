@@ -8,6 +8,7 @@ from dfe_copilot.fiscal.correlation import (
     FiscalCorrelationError,
     TimelineEvent,
     diagnose_duplicity,
+    diagnose_key_divergence,
     diagnose_timeout,
     normalize_events,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "TimelineEvent",
     "analyze_fiscal_xml",
     "diagnose_duplicity",
+    "diagnose_key_divergence",
     "diagnose_timeout",
     "normalize_events",
     "parse_access_key",

@@ -299,6 +299,12 @@ def analyze_fiscal_xml(xml_bytes: bytes, package: SchemaPackage | None = None) -
         "findings": [],
     }
     key: str | None = None
+    if not fiscal_ns:  # P7: XML que nao e' NF-e nao passa calado
+        out["findings"].append({
+            "id": "G-ns", "kind": "fact", "source": "tool",
+            "statement": f"XML fora do namespace da NF-e (raiz '{qname.localname}'); nenhuma analise fiscal.",
+            "evidence_refs": [f"sha256:{out['raw_sha256']}"],
+        })  # fmt: skip
     prot = _protocol(root) if fiscal_ns else None
     if fiscal_ns and qname.localname in _PROTOCOL_CONTAINERS:
         out["protocol_count"] = (

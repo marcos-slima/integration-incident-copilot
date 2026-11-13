@@ -203,4 +203,27 @@ flag ligada e descarte com ela desligada.
   `nfe_assinada_cert_vencido.xml`) vêm de `scripts/sign_fixture.py variantes`,
   com chave efêmera; o dataset é determinístico porque só lê esses arquivos.
 
+### D6. Decisões da revisão do dataset (P7, 2026-11-12)
+
+Aprovadas por Marcos a partir da pré-revisão; **não** são parecer de
+especialista fiscal (P11) e devem mudar se ele discordar.
+
+1. **539 ganha regra (H539).** `fiscal/correlation.py::diagnose_key_divergence`:
+   hipótese de reenvio após timeout com chave regerada quando há envio de
+   **outra chave com o mesmo emitente/modelo/série/número** (posições 7–34 da
+   chave) e timeout dessa chave até o primeiro envio da chave do retorno. Sem
+   isso, lacuna `G-539`. Próximo passo sugerido: consultar a chave original;
+   nunca cancelar/inutilizar sem decisão humana.
+2. **`G-amb` → `F-amb`:** `tpAmb` divergente do contexto é observado no XML,
+   então é fato, não lacuna.
+3. **`G-ns`:** XML fora do namespace da NF-e não passa mais calado.
+4. **Mantido:** com retorno do autorizador, o timeout não vira `H-timeout`,
+   inclusive para 215/225.
+5. **H1 com `<=`:** timeout no mesmo instante do reenvio conta (logs com
+   precisão de segundo).
+
+Dataset: 104 casos (4 novos de 539), todos `aprovado` em
+`data/eval/revisao_v1.yaml`, com nota nos casos alterados. Testes:
+`tests/test_fiscal_correlation.py::TestRevisaoP7`.
+
 ---

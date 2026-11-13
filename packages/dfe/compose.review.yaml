@@ -8,6 +8,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${DFE_POSTGRES_USER:-dfe}:${DFE_POSTGRES_PASSWORD:?DFE_POSTGRES_PASSWORD_REQUIRED}@postgres:5432/${DFE_POSTGRES_DB:-dfe}
       CHECKPOINTING_ENABLED: "true"
+      LLM_CREDENTIALS_MASTER_KEY: ${DFE_LLM_CREDENTIALS_MASTER_KEY:?DFE_LLM_CREDENTIALS_MASTER_KEY_REQUIRED}
     depends_on:
       postgres:
         condition: service_healthy

@@ -112,11 +112,13 @@ adicionar PostgreSQL ao runtime fiscal padrão:
 
 ```bash
 export DFE_POSTGRES_PASSWORD="$(openssl rand -hex 32)"
+export DFE_LLM_CREDENTIALS_MASTER_KEY="$(uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
 docker compose --env-file packages/dfe/.env \
   -f packages/dfe/compose.review.yaml up -d
 ```
 
-Esse arquivo ativa `CHECKPOINTING_ENABLED=true`, cria o volume
+Esse arquivo ativa `CHECKPOINTING_ENABLED=true`, exige a chave Fernet
+`DFE_LLM_CREDENTIALS_MASTER_KEY` para cifragem em repouso e cria o volume
 `dfe_review_postgres` e só libera o DF-e depois do healthcheck do PostgreSQL.
 Não use senha padrão nem a inclua em `.env` versionado. Sem esse Compose (ou
 um PostgreSQL externo equivalente), a API pode sinalizar `pending_review`, mas

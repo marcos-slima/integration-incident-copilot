@@ -71,3 +71,13 @@ def test_ferramentas_batem_com_o_gabarito(case: dict) -> None:
     findings = PLUGIN.run({"payload": case["payload"], "domain_context": ctx})
     assert [f["id"] for f in findings] == case["expected_finding_ids"]
     assert not any(f["kind"] == "fact" and f["source"] == "llm" for f in findings)
+
+
+def test_promptfoo_validation_atualizado() -> None:
+    spec = importlib.util.spec_from_file_location(
+        "promptfoo_split", ROOT / "scripts" / "promptfoo_split.py"
+    )
+    mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    atual = (ROOT / "promptfooconfig.validation.yaml").read_text(encoding="utf-8")
+    assert atual == mod.build("validation"), "rode: scripts/promptfoo_split.py validation"

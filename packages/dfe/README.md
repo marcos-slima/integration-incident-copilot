@@ -55,12 +55,13 @@ retorno é cruzado com a base fiscal e a regra aplicável entra como evidência
 `rule_reference`. Sem Qdrant, o diagnóstico continua e registra a lacuna `G-kb`.
 
 Com o plugin ativo, o LLM recebe a persona fiscal e os findings do produto
-(`src/dfe_copilot/prompt.py`); a resposta registra `prompt_version=dfe-1.0.0`.
+(`src/dfe_copilot/prompt.py`); a resposta registra `prompt_version=dfe-1.1.0`.
 Medição do prompt com o Ollama local:
 
 ```bash
 cd packages/dfe
 npx promptfoo eval -c promptfooconfig.yaml
+npx promptfoo eval -c promptfooconfig.validation.yaml --no-cache -o p8_validation.json  # split validation (gerado)
 PYTHONPATH=src:../.. uv run --project ../.. python scripts/prompt_baseline.py --write \
   --measurement "promptfoo AAAA-MM-DD: qwen3.6:35b-a3b, N/5"
 ```

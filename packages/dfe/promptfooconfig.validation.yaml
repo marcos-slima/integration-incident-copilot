@@ -1,0 +1,238 @@
+# GERADO por scripts/promptfoo_split.py validation - nao editar.
+# Rodar em packages/dfe: npx promptfoo eval -c promptfooconfig.validation.yaml --no-cache -o p8_validation.json
+description: DF-e Copilot - prompt fiscal, split validation (23 casos)
+prompts:
+- '{{case_id}}'
+concurrency: 1
+providers:
+- id: exec:../../.venv/bin/python scripts/promptfoo_provider.py qwen3.6:35b-a3b
+  label: 'local: qwen3.6:35b-a3b (Ollama) + plugin dfe'
+defaultTest:
+  assert:
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return o.prompt_version.startsWith('dfe-'); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/(reenvi|cancel|inutiliz|conting)[a-z]*\s+(automatic|imediatament)/i.test(JSON.stringify(o.next_steps)); })()
+tests:
+- description: UC01-H1-03 (uc01_204_reenvio)
+  vars:
+    case_id: UC01-H1-03
+  assert:
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return ["F-cStat", "F-204", "H1"].every(i => o.finding_ids.includes(i)); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return /consult/i.test(JSON.stringify(o.next_steps)); })()
+- description: UC01-H1-04 (uc01_204_reenvio)
+  vars:
+    case_id: UC01-H1-04
+  assert:
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return ["F-cStat", "F-204", "H1"].every(i => o.finding_ids.includes(i)); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return /consult/i.test(JSON.stringify(o.next_steps)); })()
+- description: UC01-SEMTO-01 (uc01_204_sem_timeout)
+  vars:
+    case_id: UC01-SEMTO-01
+  assert:
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return ["F-cStat", "F-204", "G-204"].every(i => o.finding_ids.includes(i)); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return /(sem evid|n[aã]o h[aá] evid|inconclusiv|n[aã]o sustent|n[aã]o comprov|G-204|G-539)/i.test(o.probable_root_cause + JSON.stringify(o.next_steps));
+      })()
+- description: UC01-TARDE-01 (uc01_204_timeout_tardio)
+  vars:
+    case_id: UC01-TARDE-01
+  assert:
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return ["F-cStat", "F-204", "G-204"].every(i => o.finding_ids.includes(i)); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return /(sem evid|n[aã]o h[aá] evid|inconclusiv|n[aã]o sustent|n[aã]o comprov|G-204|G-539)/i.test(o.probable_root_cause + JSON.stringify(o.next_steps));
+      })()
+- description: UC01-DOCS-03 (uc01_204_documentos_distintos)
+  vars:
+    case_id: UC01-DOCS-03
+  assert:
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return ["F-cStat", "F-204", "G-204"].every(i => o.finding_ids.includes(i)); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return /(sem evid|n[aã]o h[aá] evid|inconclusiv|n[aã]o sustent|n[aã]o comprov|G-204|G-539)/i.test(o.probable_root_cause + JSON.stringify(o.next_steps));
+      })()
+- description: UC03-VALIDO-01 (uc03_controle_positivo)
+  vars:
+    case_id: UC03-VALIDO-01
+  assert:
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return [].every(i => o.finding_ids.includes(i)); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/cStat\s*\d{3}/i.test(o.probable_root_cause); })()
+- description: UC03-MUT-02 (uc03_mutacao_xsd)
+  vars:
+    case_id: UC03-MUT-02
+  assert:
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return ["F-xsd", "F-sig"].every(i => o.finding_ids.includes(i)); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/cStat\s*\d{3}/i.test(o.probable_root_cause); })()
+- description: UC03-MUT-03 (uc03_mutacao_xsd)
+  vars:
+    case_id: UC03-MUT-03
+  assert:
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return ["F-xsd", "F-sig"].every(i => o.finding_ids.includes(i)); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/cStat\s*\d{3}/i.test(o.probable_root_cause); })()
+- description: UC01-H1TZ-01 (uc01_204_reenvio_fuso_local)
+  vars:
+    case_id: UC01-H1TZ-01
+  assert:
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return ["F-cStat", "F-204", "H1"].every(i => o.finding_ids.includes(i)); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return /consult/i.test(JSON.stringify(o.next_steps)); })()
+- description: UC01-H1TZ-03 (uc01_204_reenvio_fuso_local)
+  vars:
+    case_id: UC01-H1TZ-03
+  assert:
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return ["F-cStat", "F-204", "H1"].every(i => o.finding_ids.includes(i)); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return /consult/i.test(JSON.stringify(o.next_steps)); })()
+- description: UC01-RET-03 (uc01_204_em_retorno_de_lote)
+  vars:
+    case_id: UC01-RET-03
+  assert:
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return ["F-cStat", "F-204", "H1"].every(i => o.finding_ids.includes(i)); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return /consult/i.test(JSON.stringify(o.next_steps)); })()
+- description: UC01-PROD-03 (uc01_204_reenvio_producao)
+  vars:
+    case_id: UC01-PROD-03
+  assert:
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return ["F-cStat", "F-204", "H1"].every(i => o.finding_ids.includes(i)); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return /consult/i.test(JSON.stringify(o.next_steps)); })()
+- description: UC01-XSD-01 (uc01_204_protocolo_fora_do_xsd)
+  vars:
+    case_id: UC01-XSD-01
+  assert:
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return ["F-cStat", "F-xsd", "F-204", "G-204"].every(i => o.finding_ids.includes(i)); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return /(sem evid|n[aã]o h[aá] evid|inconclusiv|n[aã]o sustent|n[aã]o comprov|G-204|G-539)/i.test(o.probable_root_cause + JSON.stringify(o.next_steps));
+      })()
+- description: UC04-CSTAT-01 (uc04_cstat_100)
+  vars:
+    case_id: UC04-CSTAT-01
+  assert:
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return ["F-cStat"].every(i => o.finding_ids.includes(i)); })()
+- description: UC04-CSTAT-06 (uc04_cstat_297)
+  vars:
+    case_id: UC04-CSTAT-06
+  assert:
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return ["F-cStat"].every(i => o.finding_ids.includes(i)); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+- description: UC05-LOTE-02 (uc05_lote_dois_protocolos)
+  vars:
+    case_id: UC05-LOTE-02
+  assert:
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return ["G-lote"].every(i => o.finding_ids.includes(i)); })()
+- description: UC06-SIG-01 (uc06_assinatura_valor_alterado)
+  vars:
+    case_id: UC06-SIG-01
+  assert:
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return ["F-sig"].every(i => o.finding_ids.includes(i)); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/cStat\s*\d{3}/i.test(o.probable_root_cause); })()
+- description: UC06-SIG-05 (uc06_comentario_fora_do_assinado)
+  vars:
+    case_id: UC06-SIG-05
+  assert:
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return [].every(i => o.finding_ids.includes(i)); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/cStat\s*\d{3}/i.test(o.probable_root_cause); })()
+- description: UC02-RESPANTES-02 (uc02_resposta_antes_do_ultimo_timeout)
+  vars:
+    case_id: UC02-RESPANTES-02
+  assert:
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return ["G-noxml", "F-timeout", "H-timeout"].every(i => o.finding_ids.includes(i)); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/cStat\s*\d{3}/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return /consult/i.test(JSON.stringify(o.next_steps)); })()
+- description: UC03-AMBPROT-01 (uc03_protocolo_homologacao_em_producao)
+  vars:
+    case_id: UC03-AMBPROT-01
+  assert:
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return ["F-cStat", "F-amb"].every(i => o.finding_ids.includes(i)); })()
+- description: SEC-BOMB-01 (sec_entity_expansion)
+  vars:
+    case_id: SEC-BOMB-01
+  assert:
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return ["G-xml"].every(i => o.finding_ids.includes(i)); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/cStat\s*\d{3}/i.test(o.probable_root_cause); })()
+- description: GAP-EVT-03 (gap_horario_invalido)
+  vars:
+    case_id: GAP-EVT-03
+  assert:
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return ["G-noxml", "G-events"].every(i => o.finding_ids.includes(i)); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/cStat\s*\d{3}/i.test(o.probable_root_cause); })()
+- description: GAP-EVT-04 (gap_horario_numerico)
+  vars:
+    case_id: GAP-EVT-04
+  assert:
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return ["G-noxml", "G-events"].every(i => o.finding_ids.includes(i)); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/cStat\s*\d{3}/i.test(o.probable_root_cause); })()

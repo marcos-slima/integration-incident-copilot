@@ -1,8 +1,8 @@
 {
   "base_prompt_digest": "62b9b62050c1d9b8757be656e5c1d4b625e713d611749b93cd5347b93e6a0851",
   "measured_by": "promptfoo (packages/dfe/promptfooconfig.yaml) via scripts/promptfoo_provider.py",
-  "measurement": "promptfoo 2026-11-12: qwen3.6:35b-a3b, 5/5 via LLM (rule engine desligado)",
-  "prompt_digest": "54fede01cd6ec379b95ebcb9dac85efe3a31d07a0c14651847aec9291e0fef97",
+  "measurement": "NAO MEDIDO: dfe-1.1.0 (regras 6-8 apos a medicao do split validation de 2026-11-12)",
+  "prompt_digest": "695c7d1bbc67cc2c612246dd36997815d31c96745549e43393d4c36bf7225600",
   "prompt_name": "dfe",
-  "prompt_version": "dfe-1.0.0"
+  "prompt_version": "dfe-1.1.0"
 }

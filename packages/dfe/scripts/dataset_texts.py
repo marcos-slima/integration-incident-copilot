@@ -5,13 +5,15 @@ A justificativa e' o que o revisor fiscal confere: se ela estiver errada, o
 gabarito esta errado.
 """
 
+# Descricoes NEUTRAS: nao sugerem a causa (medicao 2026-11-12: "apos
+# instabilidade" levava o LLM a afirmar reenvio em casos G-204).
 DESCRICAO = {
-    "uc01": "NF-e rejeitada com cStat 204 (duplicidade) apos instabilidade na comunicacao com a SEFAZ",
+    "uc01": "NF-e rejeitada com cStat 204 (duplicidade) na autorizacao",
     "uc02": "Envio de NF-e ficou sem retorno da SEFAZ (timeout); status do documento desconhecido",
     "uc03": "NF-e com erro de validacao/ambiente na integracao com o autorizador",
     "uc04": "Retorno da SEFAZ com cStat inesperado na autorizacao da NF-e",
     "uc05": "Retorno de lote/nfeProc da NF-e com resultado inconsistente no monitor de integracao",
-    "uc06": "Suspeita de problema na assinatura digital da NF-e",
+    "uc06": "NF-e com problema na validacao do documento enviado ao autorizador",
     "sec": "XML recebido na integracao fiscal com conteudo suspeito",
     "gap": "Incidente fiscal com dados de entrada incompletos ou inconsistentes",
 }

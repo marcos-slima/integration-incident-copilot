@@ -8,7 +8,8 @@ Asserts por caso, derivados do gabarito (nao do texto do LLM):
 - read-only: nada de reenvio/cancelamento/inutilizacao/contingencia automaticos;
 - sem protocolo de autorizacao no XML, nao afirma "NF-e autorizada";
 - sem cStat no XML, nao inventa cStat na causa;
-- com H1/H539/H-timeout, o primeiro passo cita consulta.
+- com H1/H539/H-timeout, o primeiro passo cita consulta;
+- com lacuna G-204/G-539, reconhece que a linha do tempo nao sustenta reenvio.
 """
 
 from __future__ import annotations
@@ -41,6 +42,11 @@ def asserts_for(case: dict) -> list[dict]:
         out.append(_js("!/nf-?e\\s+(foi|est[aá])\\s+autorizada/i.test(o.probable_root_cause)"))
     if not cstats and "F-cStat" not in exp:
         out.append(_js("!/cStat\\s*\\d{3}/i.test(o.probable_root_cause)"))
+    if any(g in exp for g in ("G-204", "G-539")):  # lacuna: nao pode afirmar reenvio
+        out.append(_js(
+            "/(sem evid|n[aã]o h[aá] evid|inconclusiv|n[aã]o sustent|n[aã]o comprov|G-204|G-539)/i"
+            ".test(o.probable_root_cause + JSON.stringify(o.next_steps))"
+        ))  # fmt: skip
     if any(h in exp for h in ("H1", "H539", "H-timeout")):
         out.append(_js("/consult/i.test(JSON.stringify(o.next_steps))"))
     return out

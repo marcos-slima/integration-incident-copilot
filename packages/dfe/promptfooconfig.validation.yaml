@@ -42,6 +42,9 @@ tests:
     value: (() => { const o = JSON.parse(output); return ["F-cStat", "F-204", "G-204"].every(i => o.finding_ids.includes(i)); })()
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return /(sem evid|n[aã]o h[aá] evid|inconclusiv|n[aã]o sustent|n[aã]o comprov|G-204|G-539)/i.test(o.probable_root_cause + JSON.stringify(o.next_steps));
+      })()
 - description: UC01-TARDE-01 (uc01_204_timeout_tardio)
   vars:
     case_id: UC01-TARDE-01
@@ -50,6 +53,9 @@ tests:
     value: (() => { const o = JSON.parse(output); return ["F-cStat", "F-204", "G-204"].every(i => o.finding_ids.includes(i)); })()
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return /(sem evid|n[aã]o h[aá] evid|inconclusiv|n[aã]o sustent|n[aã]o comprov|G-204|G-539)/i.test(o.probable_root_cause + JSON.stringify(o.next_steps));
+      })()
 - description: UC01-DOCS-03 (uc01_204_documentos_distintos)
   vars:
     case_id: UC01-DOCS-03
@@ -58,6 +64,9 @@ tests:
     value: (() => { const o = JSON.parse(output); return ["F-cStat", "F-204", "G-204"].every(i => o.finding_ids.includes(i)); })()
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return /(sem evid|n[aã]o h[aá] evid|inconclusiv|n[aã]o sustent|n[aã]o comprov|G-204|G-539)/i.test(o.probable_root_cause + JSON.stringify(o.next_steps));
+      })()
 - description: UC03-VALIDO-01 (uc03_controle_positivo)
   vars:
     case_id: UC03-VALIDO-01
@@ -136,6 +145,9 @@ tests:
     value: (() => { const o = JSON.parse(output); return ["F-cStat", "F-xsd", "F-204", "G-204"].every(i => o.finding_ids.includes(i)); })()
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return /(sem evid|n[aã]o h[aá] evid|inconclusiv|n[aã]o sustent|n[aã]o comprov|G-204|G-539)/i.test(o.probable_root_cause + JSON.stringify(o.next_steps));
+      })()
 - description: UC04-CSTAT-01 (uc04_cstat_100)
   vars:
     case_id: UC04-CSTAT-01

@@ -226,4 +226,24 @@ Dataset: 104 casos (4 novos de 539), todos `aprovado` em
 `data/eval/revisao_v1.yaml`, com nota nos casos alterados. Testes:
 `tests/test_fiscal_correlation.py::TestRevisaoP7`.
 
+### D7. Medição do split validation e prompt fiscal 1.1.0 (2026-11-12)
+
+- **Medição de `dfe-1.0.0`:** os 23 casos do split validation passaram em 23/23
+  asserts (qwen3.6:35b-a3b, 16m49s). A leitura das respostas mostrou o que os
+  asserts não mediam:
+  - em 4 casos com `G-204` (UC01-SEMTO-01, TARDE-01, DOCS-03, XSD-01) o LLM
+    afirmou reenvio após timeout como causa, contra o fato da ferramenta. A
+    descrição da família UC01 ("após instabilidade na comunicação") sugeria
+    a hipótese;
+  - em 2 casos o LLM usou o comentário de procedência do fixture como fato;
+  - em 1 caso (`F-sig`) afirmou o motivo (chave errada) sem evidência.
+- **Correções:**
+  - descrições neutras no dataset;
+  - comentário de procedência removido dos payloads;
+  - assert novo: com `G-204`/`G-539`, a resposta tem de reconhecer a lacuna;
+  - persona `dfe-1.1.0` com as regras 6–8 (lacuna não vira causa, `F-sig` sem
+    motivo inventado, comentário e texto livre do XML não são fato).
+- Baseline regravado como **NÃO MEDIDO** até rodar
+  `promptfooconfig.validation.yaml` de novo.
+
 ---

@@ -15,6 +15,7 @@ Uso: uv run python packages/dfe/scripts/gen_dataset.py  (regrava data/eval/cases
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -28,8 +29,21 @@ FIXTURES = ROOT / "tests" / "fixtures"
 POSITIVO = (ROOT / "tests" / "fixtures" / "nfe_controle_positivo_sp.xml").read_text(
     encoding="utf-8"
 )
-VARIANTE_CNPJ = (FIXTURES / "nfe_assinada_cnpj_divergente.xml").read_text(encoding="utf-8")
-VARIANTE_VENCIDO = (FIXTURES / "nfe_assinada_cert_vencido.xml").read_text(encoding="utf-8")
+
+
+def _sem_comentario(xml: str) -> str:
+    """Tira o comentario de procedencia do fixture: e' metadado de teste, e o
+    LLM o lia como fato ("certificado ficticio") na medicao de 2026-11-12."""
+    return re.sub(r"<!--.*?-->\s*", "", xml, count=1, flags=re.DOTALL)
+
+
+POSITIVO = _sem_comentario(POSITIVO)
+VARIANTE_CNPJ = _sem_comentario(
+    (FIXTURES / "nfe_assinada_cnpj_divergente.xml").read_text(encoding="utf-8")
+)
+VARIANTE_VENCIDO = _sem_comentario(
+    (FIXTURES / "nfe_assinada_cert_vencido.xml").read_text(encoding="utf-8")
+)
 NS = "http://www.portalfiscal.inf.br/nfe"
 DS = "http://www.w3.org/2000/09/xmldsig#"
 CNPJ = "11222333000181"  # ficticio

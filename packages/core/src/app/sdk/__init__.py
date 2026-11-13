@@ -24,6 +24,12 @@ from app.agent.domain_plugins import (
     DomainPrompt,
     domain_prompt_digest,
 )
+from app.contracts.versioning import (
+    HTTP_CONTRACT_VERSION,
+    PLUGIN_CONTRACT_VERSION,
+    SDK_CONTRACT_VERSION,
+    compatible_version,
+)
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -33,10 +39,14 @@ if TYPE_CHECKING:
 
 __all__ = [
     "DOMAIN_BLOCK_TEMPLATE",
+    "HTTP_CONTRACT_VERSION",
+    "PLUGIN_CONTRACT_VERSION",
+    "SDK_CONTRACT_VERSION",
     "DomainPlugin",
     "DomainPrompt",
     "asgi_app",
     "base_prompt_digest",
+    "compatible_version",
     "dense_embedder",
     "domain_prompt_digest",
     "domain_prompt_provenance",

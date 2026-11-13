@@ -66,6 +66,7 @@ def _gap(fid: str, statement: str) -> dict[str, Any]:
 
 
 class DfePlugin:
+    contract_version = "1.0"
     name = "dfe"
     prompt = DFE_PROMPT  # P8: persona fiscal + bloco de achados no LLM
 

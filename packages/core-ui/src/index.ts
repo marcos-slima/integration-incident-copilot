@@ -1,7 +1,7 @@
 // @copilot/core-ui - API publica (DA-95). Shells de produto importam SO
 // daqui (o gate import_boundaries reprova import profundo de src/*).
 
-export { ApiError, apiErrorFrom, apiJson, configureApi, describeApiError } from './api/http';
+export { HTTP_CONTRACT_VERSION, ApiError, apiErrorFrom, apiJson, configureApi, describeApiError } from './api/http';
 export { getSession, login, logout, verifyEmail, verifyPhone, type SessionState } from './api/auth';
 export { diagnose, getDomainPlugins } from './api/diagnosis';
 export type {

@@ -19,6 +19,8 @@ from collections.abc import Callable
 from functools import lru_cache
 from typing import Any, Protocol, runtime_checkable
 
+from app.contracts.versioning import PLUGIN_CONTRACT_VERSION, compatible_version
+
 _logger = logging.getLogger(__name__)
 
 
@@ -75,6 +77,11 @@ def load_plugins(spec: str) -> tuple[DomainPlugin, ...]:
             ) from exc
         if not isinstance(plugin, DomainPlugin):
             raise DomainPluginError(f"{module_name}.PLUGIN nao implementa DomainPlugin")
+        required = getattr(plugin, "contract_version", "1.0")
+        if not isinstance(required, str) or not compatible_version(
+            required, PLUGIN_CONTRACT_VERSION
+        ):
+            raise DomainPluginError(f"{module_name}: contrato de plugin incompatível: {required!r}")
         plugins.append(plugin)
     return tuple(plugins)
 

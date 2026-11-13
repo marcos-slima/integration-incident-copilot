@@ -30,6 +30,11 @@ from app.auth import ensure_session_secret_configured, verify_session_cookie
 from app.auth import router as auth_router
 from app.config import settings
 from app.connectors import connector_status
+from app.contracts.versioning import (
+    HTTP_CONTRACT_VERSION,
+    PLUGIN_CONTRACT_VERSION,
+    compatible_version,
+)
 from app.events import idempotency
 from app.events.amqp_consumer import amqp_consumer  # DA-32
 from app.events.consumer import handle_incident_event_async
@@ -1018,13 +1023,34 @@ def review_incident_endpoint(
     }
 
 
+@app.middleware("http")
+async def contract_version_middleware(request: Request, call_next):
+    required = request.headers.get("X-Core-Contract-Version", "1.0")
+    if not compatible_version(required, HTTP_CONTRACT_VERSION):
+        return JSONResponse(
+            status_code=409,
+            content={
+                "code": "incompatible_contract",
+                "detail": "Versão do contrato HTTP incompatível",
+            },
+            headers={"X-Core-Contract-Version": HTTP_CONTRACT_VERSION},
+        )
+    response = await call_next(request)
+    response.headers["X-Core-Contract-Version"] = HTTP_CONTRACT_VERSION
+    return response
+
+
 @app.get("/domain-plugins", dependencies=[Depends(verify_session_or_api_key)])
 def domain_plugins_catalog() -> dict:
     """DA-95: plugins de dominio carregados e o JSON Schema do `domain_context`
     de cada um. E' o contrato que os shells de UI usam para gerar o formulario
     de entrada; o core publica o schema sem interpreta-lo. Sem plugin: lista
     vazia (core puro)."""
-    return {"plugins": describe_plugins(load_plugins(settings.domain_plugins))}
+    return {
+        "contract_version": HTTP_CONTRACT_VERSION,
+        "plugin_contract_version": PLUGIN_CONTRACT_VERSION,
+        "plugins": describe_plugins(load_plugins(settings.domain_plugins)),
+    }
 
 
 @app.get("/llm/policy", dependencies=[Depends(verify_session_or_api_key)])

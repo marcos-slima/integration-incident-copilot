@@ -66,6 +66,10 @@ PYTHONPATH=src:../.. uv run --project ../.. python scripts/prompt_baseline.py --
   --measurement "promptfoo AAAA-MM-DD: qwen3.6:35b-a3b, N/5"
 ```
 
+Base fiscal completa: baixe o MOC 7.0 Anexo I (URL em `data/corpus/manifest.json`)
+para `data/corpus/MOC_7.0_Anexo_I.pdf` antes do `kb ingest --reset`; o hash é
+conferido. A tabela de cStat já vem versionada (`cstat_moc7_anexo_i.json`).
+
 ## Estrutura
 
 | Caminho | Conteúdo |

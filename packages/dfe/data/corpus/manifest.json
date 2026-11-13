@@ -25,11 +25,11 @@
       "published_at": "2020-11",
       "canonical_url": "https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=J+I+v4eN00E%3D",
       "authority_class": "oficial_gov",
-      "file": null,
+      "file": "MOC_7.0_Anexo_I.pdf",
       "content_sha256": "5eb4cf2010b10b0b62f78197c4eb64025f24535d4c6e61158bc7806dd008f55d",
       "license_scope": "public",
       "stored": false,
-      "notes": "4,1 MB; nao versionado no repo. Baixar pela URL e conferir o hash antes de ingerir."
+      "notes": "4,1 MB; nao versionado no repo (.gitignore). Baixar pela canonical_url para data/corpus/MOC_7.0_Anexo_I.pdf; o hash e' conferido na ingestao e em scripts/extract_cstat.py. A tabela de cStat (secao 4.4) e' versionada como cstat_moc7_anexo_i.json."
     }
   ]
 }

@@ -75,28 +75,28 @@ não devem ser usados para ajustar regra nem prompt.
 | UC03-MUT-02 | validation | `F-xsd`, `F-sig` | Alteracao no infNFe: XSD reprova (F-xsd) e o digest da assinatura deixa de conferir (F-sig). | aprovado |
 | UC03-MUT-03 | validation | `F-xsd`, `F-sig` | Alteracao no infNFe: XSD reprova (F-xsd) e o digest da assinatura deixa de conferir (F-sig). | aprovado |
 | UC03-AMB-01 | dev | `F-amb` | NF-e com tpAmb=2 num contexto declarado de producao: fato F-amb (observado; revisao P7). | aprovado |
-| UC03-AMBPROT-01 | validation | `F-cStat`, `F-amb` | Protocolo de homologacao (tpAmb=2) num contexto de producao: F-amb. | aprovado |
-| UC03-PRODOK-01 | blind | `F-cStat` | Protocolo de producao em contexto de producao: so o cStat. | aprovado |
-| UC03-AMBPROT-02 | dev | `F-cStat`, `F-amb` | Protocolo de homologacao (tpAmb=2) num contexto de producao: F-amb. | aprovado |
-| UC03-PRODOK-02 | dev | `F-cStat` | Protocolo de producao em contexto de producao: so o cStat. | aprovado |
+| UC03-AMBPROT-01 | validation | `F-cStat`, `F-prot`, `F-amb` | Protocolo de homologacao (tpAmb=2) num contexto de producao: F-prot (nProt) e F-amb. | aprovado |
+| UC03-PRODOK-01 | blind | `F-cStat`, `F-prot` | Protocolo de producao em contexto de producao: F-cStat e F-prot, sem F-amb. | aprovado |
+| UC03-AMBPROT-02 | dev | `F-cStat`, `F-prot`, `F-amb` | Protocolo de homologacao (tpAmb=2) num contexto de producao: F-prot (nProt) e F-amb. | aprovado |
+| UC03-PRODOK-02 | dev | `F-cStat`, `F-prot` | Protocolo de producao em contexto de producao: F-cStat e F-prot, sem F-amb. | aprovado |
 
 ## UC04 — outros cStat
 
 | Caso | Split | Esperado | Justificativa | Status |
 |---|---|---|---|---|
-| UC04-CSTAT-01 | validation | `F-cStat` | cStat sem regra local: so o fato F-cStat; a explicacao vem da base fiscal/LLM. | aprovado |
-| UC04-CSTAT-02 | dev | `F-cStat` | cStat sem regra local: so o fato F-cStat. | aprovado |
-| UC04-CSTAT-03 | dev | `F-cStat` | cStat sem regra local: so o fato F-cStat. | aprovado |
-| UC04-CSTAT-04 | blind | `F-cStat` | cStat sem regra local: so o fato F-cStat. | aprovado |
-| UC04-CSTAT-05 | blind | `F-cStat` | cStat sem regra local: so o fato F-cStat. | aprovado |
-| UC04-CSTAT-06 | validation | `F-cStat` | cStat sem regra local: so o fato F-cStat. | aprovado |
-| UC04-CSTAT-07 | dev | `F-cStat` | cStat sem regra local: so o fato F-cStat. | aprovado |
-| UC04-CSTAT-08 | blind | `F-cStat` | cStat sem regra local: so o fato F-cStat. | aprovado |
+| UC04-CSTAT-01 | validation | `F-cStat`, `F-prot` | Autorizado: F-cStat com o texto oficial e F-prot (nProt no XML comprova o desfecho). | aprovado |
+| UC04-CSTAT-02 | dev | `F-cStat`, `F-prot` | Resultado com nProt: F-cStat com o texto oficial e F-prot (o XML comprova o desfecho). | aprovado |
+| UC04-CSTAT-03 | dev | `F-cStat`, `F-prot` | Resultado com nProt: F-cStat com o texto oficial e F-prot (o XML comprova o desfecho). | aprovado |
+| UC04-CSTAT-04 | blind | `F-cStat` | cStat sem regra local: F-cStat com o texto oficial do MOC 7.0 Anexo I. | aprovado |
+| UC04-CSTAT-05 | blind | `F-cStat` | cStat sem regra local: F-cStat com o texto oficial do MOC 7.0 Anexo I. | aprovado |
+| UC04-CSTAT-06 | validation | `F-cStat` | cStat sem regra local: F-cStat com o texto oficial do MOC 7.0 Anexo I. | aprovado |
+| UC04-CSTAT-07 | dev | `F-cStat`, `F-prot` | Resultado com nProt: F-cStat com o texto oficial e F-prot (o XML comprova o desfecho). | aprovado |
+| UC04-CSTAT-08 | blind | `F-cStat`, `F-prot` | Resultado com nProt: F-cStat com o texto oficial e F-prot (o XML comprova o desfecho). | aprovado |
 | UC04-CSTAT-09 | blind | `F-cStat`, `G-539` | 539 sem linha do tempo: nao ha como sustentar H539, lacuna G-539. | aprovado |
-| UC04-CSTAT-10 | blind | `F-cStat` | cStat sem regra local: so o fato F-cStat. | aprovado |
-| UC04-COMTO-01 | dev | `F-cStat` | Ha retorno do autorizador: o timeout nao vira H-timeout (o XML e' a resposta). | aprovado |
-| UC04-COMTO-02 | blind | `F-cStat` | Ha retorno do autorizador: o timeout nao vira H-timeout. | aprovado |
-| UC04-COMTO-03 | dev | `F-cStat` | Ha retorno do autorizador: o timeout nao vira H-timeout. | aprovado |
+| UC04-CSTAT-10 | blind | `F-cStat` | cStat sem regra local: F-cStat com o texto oficial do MOC 7.0 Anexo I. | aprovado |
+| UC04-COMTO-01 | dev | `F-cStat`, `F-prot` | Ha retorno com nProt: F-prot; o timeout nao vira H-timeout (o XML e' a resposta). | aprovado |
+| UC04-COMTO-02 | blind | `F-cStat`, `F-prot` | Ha retorno com nProt (denegacao): F-prot; o timeout nao vira H-timeout. | aprovado |
+| UC04-COMTO-03 | dev | `F-cStat`, `F-prot` | Ha retorno com nProt: F-prot; o timeout nao vira H-timeout. | aprovado |
 | UC04-COMTO-04 | dev | `F-cStat` | Ha retorno do autorizador: o timeout nao vira H-timeout. | aprovado |
 | UC04-COMTO-05 | dev | `F-cStat` | Ha retorno do autorizador: o timeout nao vira H-timeout. | aprovado |
 | UC04-RECI-01 | dev | `F-cStat`, `G-539` | Protocolo unico dentro de retConsReciNFe: cStat 539 lido do protocolo; sem eventos, G-539. | aprovado |
@@ -112,10 +112,10 @@ não devem ser usados para ajustar regra nem prompt.
 | UC05-LOTE-01 | dev | `G-lote` | retConsReciNFe com 2 protocolos: nenhum cStat e' escolhido (G-lote). | aprovado |
 | UC05-LOTE-02 | validation | `G-lote` | retConsReciNFe com 2 protocolos: nenhum cStat e' escolhido (G-lote). | aprovado |
 | UC05-LOTE-03 | dev | `G-lote`, `F-timeout`, `H-timeout` | Lote ambiguo (G-lote) e timeout sem resposta da chave: H-timeout. | aprovado |
-| UC05-PROC-01 | dev | `F-cStat` | nfeProc com NF-e assinada e protocolo 100 da mesma chave: so o cStat. | aprovado |
-| UC05-PROCKEY-01 | dev | `F-protkey`, `F-cStat` | nfeProc cujo protocolo e' de outra chave: F-protkey. | aprovado |
-| UC05-PROC-02 | blind | `F-cStat` | nfeProc com NF-e assinada e protocolo 100 da mesma chave: so o cStat. | aprovado |
-| UC05-PROCKEY-02 | dev | `F-protkey`, `F-cStat` | nfeProc cujo protocolo e' de outra chave: F-protkey. | aprovado |
+| UC05-PROC-01 | dev | `F-cStat`, `F-prot` | nfeProc com NF-e assinada e protocolo 100 da mesma chave: F-cStat e F-prot. | aprovado |
+| UC05-PROCKEY-01 | dev | `F-protkey`, `F-cStat` | nfeProc cujo protocolo e' de outra chave: F-protkey, sem F-prot (o protocolo nao prova esta nota). | aprovado |
+| UC05-PROC-02 | blind | `F-cStat`, `F-prot` | nfeProc com NF-e assinada e protocolo 100 da mesma chave: F-cStat e F-prot. | aprovado |
+| UC05-PROCKEY-02 | dev | `F-protkey`, `F-cStat` | nfeProc cujo protocolo e' de outra chave: F-protkey, sem F-prot (o protocolo nao prova esta nota). | aprovado |
 
 ## UC06 — assinatura XMLDSig
 
@@ -128,7 +128,7 @@ não devem ser usados para ajustar regra nem prompt.
 | UC06-SIG-05 | validation | — | Comentario fora do infNFe nao altera o conteudo assinado: nenhum fato de erro. | aprovado |
 | UC06-SIG-06 | blind | `F-sigcnpj` | Assinatura confere, mas o CNPJ ICP-Brasil do certificado difere do emitente: F-sigcnpj. | aprovado |
 | UC06-SIG-07 | dev | `F-sigvalid` | Assinatura confere, mas dhEmi esta fora da validade do certificado: F-sigvalid. | aprovado |
-| UC06-SIG-08 | dev | `F-cStat`, `F-xsd`, `G-sig` | Signature vazia num protocolo sem Id: F-xsd e G-sig (signed_element_without_id). | aprovado |
+| UC06-SIG-08 | dev | `F-cStat`, `F-prot`, `F-xsd`, `G-sig` | Signature vazia num protocolo sem Id: F-xsd e G-sig (signed_element_without_id); o nProt ainda da F-prot. | aprovado |
 | UC06-SIG-09 | blind | `F-xsd` | NF-e sem Signature (obrigatoria no TNFe): F-xsd; assinatura not_executed. | aprovado |
 
 ## SEC — segurança da entrada
@@ -139,7 +139,7 @@ não devem ser usados para ajustar regra nem prompt.
 | SEC-MAL-01 | dev | `G-xml` | XML malformado: G-xml. | aprovado |
 | SEC-BOMB-01 | validation | `G-xml` | Expansao de entidades (DTD interna): G-xml. | aprovado |
 | SEC-DTDEXT-01 | dev | `G-xml` | DOCTYPE com DTD remota: G-xml, sem acesso a rede. | aprovado |
-| SEC-XSI-01 | dev | `F-cStat` | xsi:schemaLocation remoto e' ignorado; validacao so com o pacote local: F-cStat. | aprovado |
+| SEC-XSI-01 | dev | `F-cStat`, `F-prot` | xsi:schemaLocation remoto e' ignorado; validacao so com o pacote local: F-cStat e F-prot. | aprovado |
 | SEC-NS-01 | dev | `G-ns` | protNFe sem o namespace da NF-e nao e' tratado como fiscal: lacuna G-ns. | aprovado |
 | SEC-XINC-01 | dev | `G-ns` | XInclude nao e' processado; XML nao fiscal: lacuna G-ns. | aprovado |
 

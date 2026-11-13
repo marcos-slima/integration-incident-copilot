@@ -9,7 +9,9 @@ Asserts por caso, derivados do gabarito (nao do texto do LLM):
 - sem protocolo de autorizacao no XML, nao afirma "NF-e autorizada";
 - sem cStat no XML, nao inventa cStat na causa;
 - com H1/H539/H-timeout, o primeiro passo cita consulta;
-- com lacuna G-204/G-539, reconhece que a linha do tempo nao sustenta reenvio.
+- com lacuna G-204/G-539, reconhece que a linha do tempo nao sustenta reenvio;
+- dominio (D8): tpAmb com o significado certo, denegacao nao vira duplicidade,
+  com F-prot o desfecho nao e' "desconhecido", com H539 nao nega a hipotese.
 """
 
 from __future__ import annotations
@@ -47,6 +49,23 @@ def asserts_for(case: dict) -> list[dict]:
             "/(sem evid|n[aã]o h[aá] evid|inconclusiv|n[aã]o sustent|n[aã]o comprov|G-204|G-539)/i"
             ".test(o.probable_root_cause + JSON.stringify(o.next_steps))"
         ))  # fmt: skip
+    # Asserts de dominio (medicao cega 2026-11-13, D8): significado de campos.
+    texto = "(o.probable_root_cause + JSON.stringify(o.next_steps))"
+    amb = re.findall(r"<tpAmb>(\d)</tpAmb>", payload)
+    if "1" in amb:
+        out.append(_js(f"!/tpAmb\\W{{0,3}}1\\W{{0,3}}\\(?\\s*homolog/i.test({texto})"))
+    if "2" in amb:
+        out.append(_js(f"!/tpAmb\\W{{0,3}}2\\W{{0,3}}\\(?\\s*produ/i.test({texto})"))
+    if any(c in ("110", "301", "302") for c in cstats):
+        out.append(_js("/(denega|irregularidade)/i.test(o.probable_root_cause)"))
+        out.append(_js("!/duplicidade/i.test(o.probable_root_cause)"))
+    if "F-prot" in exp:  # o XML comprova o desfecho
+        out.append(
+            _js("!/(sem|aus[eê]ncia d[eo]|falta d[eo]) protocolo/i.test(o.probable_root_cause)")
+        )
+        out.append(_js("!/desfecho[^.]{0,40}desconhecid/i.test(o.probable_root_cause)"))
+    if "H539" in exp:
+        out.append(_js("!/n[aã]o sustent/i.test(o.probable_root_cause)"))
     if any(h in exp for h in ("H1", "H539", "H-timeout")):
         out.append(_js("/consult/i.test(JSON.stringify(o.next_steps))"))
     return out

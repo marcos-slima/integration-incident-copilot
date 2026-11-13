@@ -77,8 +77,11 @@ def test_ingest_idempotente(client: QdrantClient) -> None:
     assert client.count(kb.COLLECTION).count == n
 
 
-def test_busca_hibrida_filtrada_traz_a_regra(client: QdrantClient) -> None:
-    kb.ingest(client, dense, sparse, kb.load_corpus(pdf_pages=fake_pdf_pages))
+def test_busca_hibrida_filtrada_traz_a_regra(client: QdrantClient, tmp_path: Path) -> None:
+    # Corpus do repositorio, sem o MOC opcional (nao versionado): teste hermetico.
+    corpus = tmp_path / "corpus"
+    shutil.copytree(kb.CORPUS_DIR, corpus, ignore=shutil.ignore_patterns("MOC_7.0_Anexo_I.pdf"))
+    kb.ingest(client, dense, sparse, kb.load_corpus(corpus, pdf_pages=fake_pdf_pages))
     hits = kb.search(client, "duplicidade 204 chave", dense, sparse, cstat="204")
     assert hits and all("204" in h["cstats"] for h in hits)
     assert {h["file"] for h in hits} == {"regra_2B08-20.md", "NT_2018.005_v1.51.pdf"}

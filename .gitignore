@@ -92,3 +92,4 @@ docs/secrets-local/
 # DA-94: o produto DF-e usa o ambiente da raiz; ambiente/lock proprios sao acidente
 packages/dfe/uv.lock
 packages/dfe/p8_*
+packages/dfe/data/corpus/MOC_7.0_Anexo_I.pdf

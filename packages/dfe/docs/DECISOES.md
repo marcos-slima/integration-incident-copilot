@@ -277,4 +277,35 @@ Dataset: 104 casos (4 novos de 539), todos `aprovado` em
     "protocolo de autorização nProt … presente");
   - asserts de domínio para esses campos.
 
+### D9. Fatos com significado oficial e tabela de cStat do MOC (2026-11-13)
+
+Correções gerais para as causas da D8, sem ajuste nos casos blind.
+
+- **Tabela oficial de cStat:** o MOC 7.0 Anexo I (Portal Nacional da NF-e,
+  hash `5eb4cf20…f55d` conferido) tem a seção 4.4 extraída por
+  `scripts/extract_cstat.py` para `data/corpus/cstat_moc7_anexo_i.json`:
+  612 códigos, cada um com a tabela de origem (`resultado` 24, `rejeicao` 585,
+  `denegacao` 3) e a página. O JSON é versionado; o PDF (4,1 MB) não
+  (`.gitignore`), e é baixado pela `canonical_url` do manifesto.
+- **`F-cStat` com significado:** o fato traz o texto oficial, a tabela e a
+  página (`fiscal/cstat.py::describe`), e o `tpAmb` por extenso
+  ("tpAmb=1 (producao)"). Código ausente da tabela é dito explicitamente.
+- **`F-prot` (novo):** protocolo de autorização ou denegação com `nProt` no
+  próprio XML (sozinho, em lote ou em `nfeProc`) vira o fato de que o desfecho
+  está comprovado e não precisa de consulta. Fica suprimido quando há
+  `F-protkey` (o protocolo é de outra nota).
+- **Base fiscal:** o MOC entra na ingestão quando o PDF está no corpus local.
+  Os cStat passam a ser marcados também na forma `NNN Den.` (denegação) e nas
+  linhas da tabela 4.4. Exemplos: 110 → p. 143; 302 → p. 137 e 153.
+  Sem o PDF, a base é a de antes, e os testes passam nos dois casos.
+- **Dataset:** os protocolos sintéticos de autorização e denegação passam a ter
+  `nProt`, como os reais. 18 gabaritos ganharam `F-prot`.
+- **Asserts de domínio** (`scripts/promptfoo_split.py`):
+  - `tpAmb` com o significado certo;
+  - denegação explicada como irregularidade, não como duplicidade;
+  - com `F-prot`, o desfecho não é "desconhecido";
+  - com `H539`, a hipótese não é negada.
+- O prompt (`dfe-1.1.0`) não mudou. As entradas mudaram, então a medição no
+  split validation precisa ser refeita.
+
 ---

@@ -86,6 +86,9 @@ jobs:
       - name: Validar Compose para serviços existentes
         run: |
           DFE_EXISTING_NETWORK=ci-existing-net DFE_EXISTING_QDRANT_URL=http://qdrant:6333 DFE_EXISTING_EMBEDDING_MODEL=nomic-embed-text docker compose -f packages/dfe/compose.existing.yaml config --quiet
+      - name: Validar Compose de revisão humana persistente
+        run: |
+          DFE_POSTGRES_PASSWORD="$(openssl rand -hex 32)" docker compose -f packages/dfe/compose.review.yaml config --quiet
       - name: Construir imagem própria sem download de modelos
         run: docker build --target dfe --build-arg PRELOAD_MODELS=0 -t dfe-copilot:ci .
       - name: Smoke da imagem (sem IIC, credenciais efêmeras, XML sintético)

@@ -9,7 +9,10 @@
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
     "lint": "oxlint src",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "prebuild": "npm run build -w @copilot/core-ui",
+    "predev": "npm run build -w @copilot/core-ui",
+    "pretypecheck": "npm run build -w @copilot/core-ui"
   },
   "dependencies": {
     "@copilot/core-ui": "0.1.0",

@@ -36,7 +36,7 @@ def test_python_imports_inclui_import_tardio() -> None:
 
 def test_core_importando_produto_reprova(tmp_path: Path) -> None:
     root = _repo(tmp_path)
-    _write(root, "app/x.py", "import dfe_copilot.plugin\n")
+    _write(root, "packages/core/src/app/x.py", "import dfe_copilot.plugin\n")
     (v,) = boundary_violations(root)
     assert v.rule == "core nao importa produto" and v.target == "dfe_copilot.plugin"
 
@@ -99,7 +99,11 @@ def test_superficies_de_ui_descobertas() -> None:
 
 
 def test_i18n_reprova_chave_ausente_e_core_no_produto(tmp_path: Path) -> None:
-    for rel in ("app/i18n/locales", "app/admin/templates", "app/admin/static"):
+    for rel in (
+        "packages/core/src/app/i18n/locales",
+        "packages/core/src/app/admin/templates",
+        "packages/core/src/app/admin/static",
+    ):
         shutil.copytree(ROOT / rel, tmp_path / rel)
     shutil.copytree(ROOT / "packages/core-ui/src/i18n", tmp_path / "packages/core-ui/src/i18n")
     loc = tmp_path / "packages/x/frontend/src/i18n/locales"

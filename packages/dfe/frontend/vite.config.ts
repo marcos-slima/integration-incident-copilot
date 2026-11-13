@@ -2,8 +2,9 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 // Shell do DF-e Copilot (DA-95). No dev, a API do produto
-// (uvicorn dfe_copilot.main:app) responde em :8000.
-const api = 'http://localhost:8000';
+// usa :8001 para coexistir com o IIC em :8000. Pode ser sobrescrita
+// no ambiente do processo Vite (ex.: DFE_API_URL=http://127.0.0.1:8010).
+const api = process.env.DFE_API_URL || 'http://127.0.0.1:8001';
 
 export default defineConfig({
   plugins: [react()],

@@ -48,7 +48,7 @@ confidencial pode ir. A comparação de custo está em
 
 ## Arquitetura
 
-O grafo de orquestração abaixo é **gerado de `app/agent/graph.py`**, e um
+O grafo de orquestração abaixo é **gerado de `packages/core/src/app/agent/graph.py`**, e um
 teste reprova se ele divergir. As visões C4, o contrato de estado, as
 fronteiras de confiança, a árvore de decisão do AI Gateway, as máquinas de
 estado e a implantação estão em

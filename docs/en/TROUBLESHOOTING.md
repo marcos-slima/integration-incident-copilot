@@ -38,7 +38,7 @@ uv run python -c "from app.config import settings; print(settings.llm_provider, 
 | `ValidationError` from pydantic | Value out of domain. Examples: `LLM_PROVIDER` accepts `ollama`, `openai` and `azure_openai`; `DATA_SOVEREIGNTY_MODE` accepts `strict` and `cloud_with_dlp`; `EMBEDDING_BACKEND` accepts `ollama` and `fastembed`. Booleans are `true`/`false`. |
 | Refuses to start due to missing key | With `REQUIRE_AUTH=true`, `API_KEY`, `A2A_API_KEY` and `EVENT_MESH_API_KEY` must be defined. Without `REQUIRE_AUTH`, the empty key is generated at boot and only appears in the log. |
 | `ConfigurationError` about the evidence key | With `DATABASE_URL` filled, `LLM_CREDENTIALS_MASTER_KEY` is mandatory (DA-60). |
-| Variable "ignored" | Pydantic **ignores** names that are not fields of `Settings`. Check the exact name in `app/config.py` or in the `.env.example`. The connection to Qdrant is by `QDRANT_URL` (full URL), and there is no separate port variable. |
+| Variable "ignored" | Pydantic **ignores** names that are not fields of `Settings`. Check the exact name in `packages/core/src/app/config.py` or in the `.env.example`. The connection to Qdrant is by `QDRANT_URL` (full URL), and there is no separate port variable. |
 | `.env` with BOM or CRLF | `sed -i 's/\r//' .env` |
 
 ## 2. AMQP consumer does not connect
@@ -134,7 +134,7 @@ conditions hold:
    `interface_type` (`/admin/web-search` screen). Without `DATABASE_URL`, there is
    no line and, therefore, no search.
 
-The query passes through `app/agent/nodes.py::_sanitize_web_search_query`, which
+The query passes through `packages/core/src/app/agent/nodes.py::_sanitize_web_search_query`, which
 redacts URLs, IDoc numbers, GUIDs and tokens and truncates the text. DuckDuckGo
 limits by IP; search failure is logged and becomes absence of result, not diagnosis error.
 
@@ -199,7 +199,7 @@ DA-73 (screens) and DA-74 (content).
 | `/diagnose` returns 422 with `locale nao suportado` | Content exists in `pt-BR` and `en`. Browser tags such as `en-US` and `pt-PT` are accepted; other languages are not. |
 | Text between `⟦ ⟧` on screen | Review pseudo-locale (`?lng=xx`). Switch the language in the selector. |
 | `prompt_digest_measured` gate warns about the `en` prompt | The `en` digest is not in `locales.en` (or changed after the measurement). Measure and re-record it as described in [`CUSTOMIZACAO.md`](../CUSTOMIZACAO.md) ("Idioma das interfaces"). |
-| `content_i18n` gate fails after a new rule | The new category needs `rules.<category>` (cause and steps) in `app/i18n/locales/content.en.json`. |
+| `content_i18n` gate fails after a new rule | The new category needs `rules.<category>` (cause and steps) in `packages/core/src/app/i18n/locales/content.en.json`. |
 | Activation e-mail in the wrong language | It goes out in the Admin UI language of whoever created the user (or the `locale` sent on creation). Users created before migration 021 get pt-BR. |
 
 ## Did not solve?

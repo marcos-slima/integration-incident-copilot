@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 
-_ADMIN = Path(__file__).resolve().parents[1] / "app" / "admin"
+_ADMIN = Path(__file__).resolve().parents[1] / "packages" / "core" / "src" / "app" / "admin"
 _TEMPLATES = sorted((_ADMIN / "templates").glob("*.html"))
 _STATIC_JS = sorted((_ADMIN / "static").glob("*.js"))
 _INLINE_HANDLER = re.compile(r"\son[a-z]+\s*=\s*[\"']", re.IGNORECASE)

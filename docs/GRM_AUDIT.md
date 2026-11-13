@@ -212,7 +212,7 @@ psql -c "SELECT id, trace_id FROM incidents ORDER BY created_at DESC LIMIT 1;"
 | Evidência | Arquivo | Formato |
 |-----------|---------|---------|
 | `.env.example` | `.env.example` | Env |
-| Configuração | `app/config.py` | Python |
+| Configuração | `packages/core/src/app/config.py` | Python |
 | Docker config | `docker-compose.yml` | YAML |
 
 ## Relatório de Auditoria

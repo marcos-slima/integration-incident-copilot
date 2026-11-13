@@ -20,9 +20,9 @@ from app.evaluation.gates import (
 
 
 def _root(tmp_path: Path) -> Path:
-    (tmp_path / "docs").mkdir()
-    (tmp_path / "app").mkdir()
-    (tmp_path / "app/config.py").write_text(
+    (tmp_path / "docs").mkdir(parents=True)
+    (tmp_path / "packages" / "core" / "src" / "app").mkdir(parents=True)
+    (tmp_path / "packages/core/src/app/config.py").write_text(
         "class Settings:\n    odata_service_url: str = ''\n", encoding="utf-8"
     )
     return tmp_path
@@ -97,7 +97,7 @@ def test_repo_real_conhece_as_variaveis_dos_conectores():
 
 def test_intervalo_de_linhas_e_conferido(tmp_path):
     root = _root(tmp_path)
-    (root / "app/x.py").write_text("a = 1\nb = 2\n", encoding="utf-8")
+    (root / "packages/core/src/app/x.py").write_text("a = 1\nb = 2\n", encoding="utf-8")
     (root / "docs/T.md").write_text("veja `app/x.py:1-9`\n", encoding="utf-8")
     falhas = _falhas(check_docs_code_references(root))
     assert falhas and "cita a 9" in falhas[0].message

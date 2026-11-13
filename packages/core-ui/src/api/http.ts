@@ -5,6 +5,8 @@
 import i18n from 'i18next';
 import type { ApiErrorCode } from './contracts';
 
+export const HTTP_CONTRACT_VERSION = '1.0';
+
 let base = '';
 
 /** Base da API (vazio = mesma origem; no dev, o proxy do Vite). */
@@ -43,6 +45,7 @@ export async function apiErrorFrom(res: Response): Promise<ApiError> {
 export function describeApiError(e: ApiError): string {
   const ref = e.errorId ? i18n.t('core.errors.ref', { id: e.errorId }) : '';
   switch (e.code) {
+    case 'incompatible_contract':
     case 'budget_exhausted':
     case 'policy_violation':
     case 'domain_context_invalid':
@@ -63,6 +66,7 @@ export async function apiJson<T>(path: string, init: RequestInit = {}): Promise<
     credentials: 'same-origin',
     ...init,
     headers: {
+      'X-Core-Contract-Version': HTTP_CONTRACT_VERSION,
       Accept: 'application/json',
       ...(init.body ? { 'Content-Type': 'application/json' } : {}),
       ...init.headers,

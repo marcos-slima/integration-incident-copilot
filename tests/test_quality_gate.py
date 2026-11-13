@@ -37,7 +37,7 @@ CORPUS_DOC = "# SAP IDoc\n\nstatus 51 material centro BD87\n"
 def _minimal_root(tmp_path: Path) -> Path:
     (tmp_path / "data/eval").mkdir(parents=True)
     (tmp_path / "data/sample_docs").mkdir(parents=True)
-    (tmp_path / "app/rag").mkdir(parents=True)
+    (tmp_path / "packages/core/src/app/rag").mkdir(parents=True)
     (tmp_path / "docs").mkdir(parents=True)
     (tmp_path / "data/sample_docs/doc.md").write_text(CORPUS_DOC, encoding="utf-8")
     (tmp_path / "data/eval/rag_eval_dataset.json").write_text(
@@ -133,7 +133,7 @@ class TestCorpusCoverage:
 
     def test_documento_em_subdiretorio_e_encontrado(self, tmp_path):
         root = _minimal_root(tmp_path)
-        (root / "data/sample_docs/rfc").mkdir()
+        (root / "data/sample_docs/rfc").mkdir(parents=True)
         (root / "data/sample_docs/rfc/doc.md").write_text(CORPUS_DOC, encoding="utf-8")
         assert not [f for f in check_corpus_coverage(root) if f.is_failure]
 
@@ -173,7 +173,7 @@ class TestRerankerInvariant:
     MMARCO = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
 
     def _write(self, root, results, model=None):
-        (root / "app/rag/retriever.py").write_text(
+        (root / "packages/core/src/app/rag/retriever.py").write_text(
             f'RERANKER_MODEL = "{model or self.MMARCO}"\n', encoding="utf-8"
         )
         (root / "data/eval/reranker_benchmark_results.json").write_text(
@@ -261,7 +261,7 @@ class TestRerankerInvariant:
 
     def test_sem_baseline_no_benchmark_vira_aviso(self, tmp_path):
         root = _minimal_root(tmp_path)
-        (root / "app/rag/retriever.py").write_text(
+        (root / "packages/core/src/app/rag/retriever.py").write_text(
             'RERANKER_MODEL = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"\n', encoding="utf-8"
         )
         (root / "data/eval/reranker_benchmark_results.json").write_text(
@@ -282,7 +282,7 @@ class TestRerankerInvariant:
 
     def test_constante_ausente_falha(self, tmp_path):
         root = _minimal_root(tmp_path)
-        (root / "app/rag/retriever.py").write_text(
+        (root / "packages/core/src/app/rag/retriever.py").write_text(
             "RERANKER_MODEL_ANTIGO = 'x'\n", encoding="utf-8"
         )
         (root / "data/eval/reranker_benchmark_results.json").write_text(
@@ -324,7 +324,7 @@ class TestPromptfooConfigs:
 
 class TestCandidateDas:
     def _write(self, tmp_path: Path, candidates: str, architecture: str) -> None:
-        (tmp_path / "docs").mkdir(exist_ok=True)
+        (tmp_path / "docs").mkdir(parents=True, exist_ok=True)
         (tmp_path / "CLAUDE.md").write_text(
             f"**DAs candidatas (sem implementacao ainda):**\n{candidates}\n\n---\n",
             encoding="utf-8",
@@ -354,7 +354,7 @@ class TestCandidateDas:
         assert "fail" in _severities(check_candidate_das(tmp_path))
 
     def test_sem_lista_no_claude_md_vira_aviso(self, tmp_path):
-        (tmp_path / "docs").mkdir(exist_ok=True)
+        (tmp_path / "docs").mkdir(parents=True, exist_ok=True)
         (tmp_path / "CLAUDE.md").write_text("sem lista\n", encoding="utf-8")
         (tmp_path / "docs/ARCHITECTURE.md").write_text("# doc\n", encoding="utf-8")
         assert "warn" in _severities(check_candidate_das(tmp_path))
@@ -363,7 +363,7 @@ class TestCandidateDas:
         # Regressao real: a linha da DA-51 na tabela do CLAUDE.md citava
         # "das DAs candidatas" numa celula, e a busca pela primeira
         # ocorrencia casava ali e devolvia lista vazia (gate virava aviso).
-        (tmp_path / "docs").mkdir(exist_ok=True)
+        (tmp_path / "docs").mkdir(parents=True, exist_ok=True)
         (tmp_path / "CLAUDE.md").write_text(
             "| DA-51 | valida a lista das DAs candidatas |\n"
             "\n"
@@ -447,7 +447,7 @@ class TestPromptfooComparison:
 
 def _decisoes(root):
     """Prosa e indice das DAs (docs/DECISOES_DE_ARQUITETURA.md desde 2026-10-07)."""
-    (root / "docs").mkdir(exist_ok=True)
+    (root / "docs").mkdir(parents=True, exist_ok=True)
     return root / "docs" / "DECISOES_DE_ARQUITETURA.md"
 
 
@@ -471,7 +471,7 @@ class TestDocumentedDas:
         (tmp_path / "CLAUDE.md").write_text(
             "| DA | O que é |\n|---|---|\n| DA-1 | a |\n| DA-2 | b |\n", encoding="utf-8"
         )
-        (tmp_path / "docs").mkdir(exist_ok=True)
+        (tmp_path / "docs").mkdir(parents=True, exist_ok=True)
         (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
         falhas = [f for f in check_documented_das(tmp_path) if f.is_failure]
         assert len(falhas) == 1
@@ -486,7 +486,7 @@ class TestDocumentedDas:
         (tmp_path / "CLAUDE.md").write_text(
             "| DA | O que é |\n|---|---|\n| DA-1 | a |\n", encoding="utf-8"
         )
-        (tmp_path / "docs").mkdir(exist_ok=True)
+        (tmp_path / "docs").mkdir(parents=True, exist_ok=True)
         (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
         falhas = [f for f in check_documented_das(tmp_path) if f.is_failure]
         assert len(falhas) == 1
@@ -499,7 +499,7 @@ class TestDocumentedDas:
         (tmp_path / "CLAUDE.md").write_text(
             "| DA | O que é |\n|---|---|\n| DA-1 | a |\n| DA-32 | b |\n", encoding="utf-8"
         )
-        (tmp_path / "docs").mkdir(exist_ok=True)
+        (tmp_path / "docs").mkdir(parents=True, exist_ok=True)
         (tmp_path / "docs/ARCHITECTURE.md").write_text(
             "# arq\n\n## AMQP (DA-32)\n", encoding="utf-8"
         )
@@ -516,7 +516,7 @@ class TestDocumentedDas:
         (tmp_path / "CLAUDE.md").write_text(
             "| DA | O que é |\n|---|---|\n| DA-1 | a |\n| DA-2 | b |\n", encoding="utf-8"
         )
-        (tmp_path / "docs").mkdir(exist_ok=True)
+        (tmp_path / "docs").mkdir(parents=True, exist_ok=True)
         (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
         falhas = [f for f in check_index_current(tmp_path) if f.is_failure]
         assert len(falhas) == 1
@@ -542,7 +542,7 @@ class TestDocumentedDas:
         (tmp_path / "CLAUDE.md").write_text(
             "| DA | O que é |\n|---|---|\n| DA-1 | a |\n| DA-2 | b |\n", encoding="utf-8"
         )
-        (tmp_path / "docs").mkdir(exist_ok=True)
+        (tmp_path / "docs").mkdir(parents=True, exist_ok=True)
         (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
 
         assert not [f for f in check_index_current(tmp_path) if f.is_failure]
@@ -565,7 +565,7 @@ class TestDocumentedDas:
         (tmp_path / "CLAUDE.md").write_text(
             "| DA | O que é |\n|---|---|\n| DA-1 | a |\n", encoding="utf-8"
         )
-        (tmp_path / "docs").mkdir(exist_ok=True)
+        (tmp_path / "docs").mkdir(parents=True, exist_ok=True)
         (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
         falhas = [f for f in check_index_current(tmp_path) if f.is_failure]
         assert len(falhas) == 1
@@ -587,7 +587,7 @@ class TestDocumentedDas:
         (tmp_path / "CLAUDE.md").write_text(
             "| DA | O que é |\n|---|---|\n| DA-1 | a |\n| DA-2 | b |\n", encoding="utf-8"
         )
-        (tmp_path / "docs").mkdir(exist_ok=True)
+        (tmp_path / "docs").mkdir(parents=True, exist_ok=True)
         (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
         falhas = [f for f in check_index_current(tmp_path) if f.is_failure]
         assert len(falhas) == 1
@@ -606,7 +606,7 @@ class TestDocumentedDas:
         (tmp_path / "CLAUDE.md").write_text(
             "| DA | O que é |\n|---|---|\n| DA-1 | a |\n", encoding="utf-8"
         )
-        (tmp_path / "docs").mkdir(exist_ok=True)
+        (tmp_path / "docs").mkdir(parents=True, exist_ok=True)
         (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
         falhas = [f for f in check_index_current(tmp_path) if f.is_failure]
         assert len(falhas) == 1
@@ -628,7 +628,7 @@ class TestDocumentedDas:
         (tmp_path / "CLAUDE.md").write_text(
             "| DA | O que é |\n|---|---|\n| DA-1 | a |\n", encoding="utf-8"
         )
-        (tmp_path / "docs").mkdir(exist_ok=True)
+        (tmp_path / "docs").mkdir(parents=True, exist_ok=True)
         (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
 
         falhas = [f for f in check_index_current(tmp_path) if f.is_failure]
@@ -648,7 +648,7 @@ class TestDocumentedDas:
         (tmp_path / "CLAUDE.md").write_text(
             "| DA | O que é |\n|---|---|\n| DA-1 | a |\n| DA-2 | b |\n", encoding="utf-8"
         )
-        (tmp_path / "docs").mkdir(exist_ok=True)
+        (tmp_path / "docs").mkdir(parents=True, exist_ok=True)
         (tmp_path / "docs/ARCHITECTURE.md").write_text("# arq\n", encoding="utf-8")
         falhas = [f for f in check_index_current(tmp_path) if f.is_failure]
         assert len(falhas) == 1
@@ -731,8 +731,8 @@ def test_docs_code_references_acusa_simbolo_inexistente(tmp_path: Path) -> None:
     """O defeito real do tutorial: breakpoint em `structured_llm`, que
     nao existe em lugar nenhum do codigo."""
     root = _docs_root(tmp_path)
-    (root / "app").mkdir()
-    (root / "app/x.py").write_text("def real():\n    pass\n", encoding="utf-8")
+    (root / "packages" / "core" / "src" / "app").mkdir(parents=True)
+    (root / "packages/core/src/app/x.py").write_text("def real():\n    pass\n", encoding="utf-8")
     (root / "docs/T.md").write_text("ponha em `app/x.py::fantasma`\n", encoding="utf-8")
 
     falhas = [f for f in check_docs_code_references(root) if f.is_failure]
@@ -750,8 +750,10 @@ def test_docs_code_references_acusa_arquivo_que_nao_existe(tmp_path: Path) -> No
 def test_docs_code_references_acusa_arquivo_errado(tmp_path: Path) -> None:
     """`report_node` citado em graph.py, mas implementado em nodes.py."""
     root = _docs_root(tmp_path)
-    (root / "app").mkdir()
-    (root / "app/graph.py").write_text("def outra_coisa():\n    pass\n", encoding="utf-8")
+    (root / "packages" / "core" / "src" / "app").mkdir(parents=True)
+    (root / "packages/core/src/app/graph.py").write_text(
+        "def outra_coisa():\n    pass\n", encoding="utf-8"
+    )
     (root / "docs/T.md").write_text("`app/graph.py::report_node`\n", encoding="utf-8")
 
     falha = next(f for f in check_docs_code_references(root) if f.is_failure)
@@ -760,8 +762,8 @@ def test_docs_code_references_acusa_arquivo_errado(tmp_path: Path) -> None:
 
 def test_docs_code_references_acusa_linha_fora_do_arquivo(tmp_path: Path) -> None:
     root = _docs_root(tmp_path)
-    (root / "app").mkdir()
-    (root / "app/x.py").write_text("a = 1\nb = 2\n", encoding="utf-8")
+    (root / "packages" / "core" / "src" / "app").mkdir(parents=True)
+    (root / "packages/core/src/app/x.py").write_text("a = 1\nb = 2\n", encoding="utf-8")
     (root / "docs/T.md").write_text("`app/x.py:691`\n", encoding="utf-8")
 
     falha = next(f for f in check_docs_code_references(root) if f.is_failure)
@@ -770,8 +772,8 @@ def test_docs_code_references_acusa_linha_fora_do_arquivo(tmp_path: Path) -> Non
 
 def test_docs_code_references_aceita_ponto_de_debug_valido(tmp_path: Path) -> None:
     root = _docs_root(tmp_path)
-    (root / "app").mkdir()
-    (root / "app/x.py").write_text(
+    (root / "packages" / "core" / "src" / "app").mkdir(parents=True)
+    (root / "packages/core/src/app/x.py").write_text(
         "CONST = 0.25\n\n\ndef f():\n    return CONST\n", encoding="utf-8"
     )
     (root / "docs/T.md").write_text(
@@ -785,8 +787,8 @@ def test_docs_code_references_acusa_classe_inexistente(tmp_path: Path) -> None:
     r"""Regressao QA-01: o padrao anterior `^\s*(?:class|SIMBOLO)\b` aprovava
     qualquer linha `class X`, mesmo se o simbolo citado nao existia."""
     root = _docs_root(tmp_path)
-    (root / "app").mkdir()
-    (root / "app/x.py").write_text(
+    (root / "packages" / "core" / "src" / "app").mkdir(parents=True)
+    (root / "packages/core/src/app/x.py").write_text(
         "class Real:\n    pass\n\ndef outra_coisa():\n    pass\n", encoding="utf-8"
     )
     (root / "docs/T.md").write_text("`app/x.py::fantasma`\n", encoding="utf-8")
@@ -832,12 +834,12 @@ def test_docs_code_references_acusa_caminho_cru_em_docs(tmp_path: Path) -> None:
     caminhos quebrados em docs/SECURITY.md e docs/DECISOES."""
     root = _docs_root(tmp_path)
     (root / "docs/T.md").write_text(
-        "ver `data/skills/sumiu.yaml` e `deploy/kyma/sumiu.yaml`\n", encoding="utf-8"
+        "ver `packages/core/data/skills/sumiu.yaml` e `deploy/kyma/sumiu.yaml`\n", encoding="utf-8"
     )
 
     falhas = [f for f in check_docs_code_references(root) if f.is_failure]
     mensagem = " ".join(f.message for f in falhas)
-    assert "data/skills/sumiu.yaml nao existe" in mensagem
+    assert "packages/core/data/skills/sumiu.yaml nao existe" in mensagem
     assert "deploy/kyma/sumiu.yaml nao existe" in mensagem
 
 
@@ -872,8 +874,8 @@ def test_docs_code_references_nao_acusa_identificadores_em_prosa(tmp_path: Path)
     segundo e Function Module ABAP, o terceiro e variavel de shell). Um gate
     que accuse isso vira gate que ninguem ouve."""
     root = _docs_root(tmp_path)
-    (root / "app").mkdir()
-    (root / "app/x.py").write_text("a = 1\n", encoding="utf-8")
+    (root / "packages" / "core" / "src" / "app").mkdir(parents=True)
+    (root / "packages/core/src/app/x.py").write_text("a = 1\n", encoding="utf-8")
     (root / "docs/T.md").write_text(
         "Use `ANTHROPIC_API_KEY`, `RFC_SYSTEM_INFO` via pyrfc e `${QDRANT_HOST_PORT:-6333}`.\n",
         encoding="utf-8",
@@ -905,23 +907,31 @@ def _connector_root(
     form: str | None = None,
     skills: dict[str, str] | None = None,
 ) -> Path:
-    (tmp_path / "app/connectors").mkdir(parents=True)
-    (tmp_path / "app/agent").mkdir(parents=True)
-    (tmp_path / "app/admin").mkdir(parents=True)
-    (tmp_path / "app/models").mkdir(parents=True)
+    (tmp_path / "packages/core/src/app/connectors").mkdir(parents=True)
+    (tmp_path / "packages/core/src/app/agent").mkdir(parents=True)
+    (tmp_path / "packages/core/src/app/admin").mkdir(parents=True)
+    (tmp_path / "packages/core/src/app/models").mkdir(parents=True)
     (tmp_path / "frontend/src/components").mkdir(parents=True)
-    (tmp_path / "app/connectors/__init__.py").write_text(registry, encoding="utf-8")
-    (tmp_path / "app/models/models.py").write_text(literal, encoding="utf-8")
+    (tmp_path / "packages/core/src/app/connectors/__init__.py").write_text(
+        registry, encoding="utf-8"
+    )
+    (tmp_path / "packages/core/src/app/models/models.py").write_text(literal, encoding="utf-8")
     # O catalogo admin (DA-49) tem a PROPRIA tupla `CONNECTOR_TYPES` — e' a
     # sexta superficie do gate. O fixture precisa fornecer uma de verdade:
     # o arquivo do admin nao e' o Literal do pipeline.
-    (tmp_path / "app/admin/models.py").write_text(admin or _SANE_ADMIN, encoding="utf-8")
-    (tmp_path / "app/agent/supervisor.py").write_text(supervisor, encoding="utf-8")
-    (tmp_path / "app/agent/graph.py").write_text(cli or _SANE_CLI, encoding="utf-8")
+    (tmp_path / "packages/core/src/app/admin/models.py").write_text(
+        admin or _SANE_ADMIN, encoding="utf-8"
+    )
+    (tmp_path / "packages/core/src/app/agent/supervisor.py").write_text(
+        supervisor, encoding="utf-8"
+    )
+    (tmp_path / "packages/core/src/app/agent/graph.py").write_text(
+        cli or _SANE_CLI, encoding="utf-8"
+    )
     (tmp_path / "frontend/src/components/DiagnoseView.tsx").write_text(
         ui or _SANE_UI, encoding="utf-8"
     )
-    (tmp_path / "docs").mkdir(exist_ok=True)
+    (tmp_path / "docs").mkdir(parents=True, exist_ok=True)
     (tmp_path / "docs/ARCHITECTURE.md").write_text(matriz or _SANE_MATRIZ, encoding="utf-8")
     # Setima superficie (DA-57): o seed da migration das fontes de busca. Sem
     # ele a resolucao fail-closed deixa o conector sem fonte aprovada — o
@@ -932,17 +942,17 @@ def _connector_root(
     )
     # Oitava superficie (achado na DA-57): o <select name="connector_type">
     # do formulario de sistemas do admin.
-    (tmp_path / "app/admin/templates").mkdir(parents=True)
+    (tmp_path / "packages/core/src/app/admin/templates").mkdir(parents=True)
     (tmp_path / _ADMIN_SYSTEMS_FORM).write_text(form or _SANE_SISTEMS_FORM, encoding="utf-8")
-    # DA-63: se skills declarativas forem fornecidas, cria data/skills/*.yaml.
+    # DA-63: se skills declarativas forem fornecidas, cria packages/core/data/skills/*.yaml.
     if skills:
-        (tmp_path / "data/skills").mkdir(parents=True)
+        (tmp_path / "packages/core/data/skills").mkdir(parents=True)
         for name, content in skills.items():
-            (tmp_path / f"data/skills/{name}").write_text(content, encoding="utf-8")
+            (tmp_path / f"packages/core/data/skills/{name}").write_text(content, encoding="utf-8")
     return tmp_path
 
 
-_ADMIN_SYSTEMS_FORM = Path("app/admin/templates/systems.html")
+_ADMIN_SYSTEMS_FORM = Path("packages/core/src/app/admin/templates/systems.html")
 
 # Mesmo formato do arquivo real: <select name="connector_type"> com <option
 # value="...">. O gate ancora no nome do select e nos values, e' nao no texto
@@ -1299,10 +1309,12 @@ def test_connector_validation_matrix_ignora_prosa_que_mentiona_conector(tmp_path
 
 # ── gate da_registered: DA citada no codigo tem linha no CLAUDE.md ─────────
 def _da_root(tmp_path: Path, registro: str, extra: dict[str, str] | None = None) -> Path:
-    (tmp_path / "app/rag").mkdir(parents=True)
-    (tmp_path / "app/evaluation").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "packages/core/src/app/rag").mkdir(parents=True)
+    (tmp_path / "packages/core/src/app/evaluation").mkdir(parents=True, exist_ok=True)
     (tmp_path / "CLAUDE.md").write_text(registro, encoding="utf-8")
-    for nome, texto in (extra or {"app/rag/retriever.py": "# sem citacao\n"}).items():
+    for nome, texto in (
+        extra or {"packages/core/src/app/rag/retriever.py": "# sem citacao\n"}
+    ).items():
         caminho = tmp_path / nome
         caminho.parent.mkdir(parents=True, exist_ok=True)
         caminho.write_text(texto, encoding="utf-8")
@@ -1322,7 +1334,9 @@ _REGISTRO_OK = """# Contexto
 
 
 def test_da_registered_pass_quando_toda_citacao_tem_linha(tmp_path: Path) -> None:
-    root = _da_root(tmp_path, _REGISTRO_OK, {"app/rag/retriever.py": "# DA-39 no codigo\n"})
+    root = _da_root(
+        tmp_path, _REGISTRO_OK, {"packages/core/src/app/rag/retriever.py": "# DA-39 no codigo\n"}
+    )
     assert not [f for f in check_da_registered(root) if f.is_failure]
 
 
@@ -1332,17 +1346,21 @@ def test_da_registered_acusa_da_so_na_docstring(tmp_path: Path) -> None:
     nenhuma linha na tabela (DA-32, 34, 35). Nenhum gate anterior via o
     codigo — os dois gates de DA so' comparavam a tabela do CLAUDE.md com a
     prosa do README, e as duas pontas eram cegas a implementacao."""
-    root = _da_root(tmp_path, _REGISTRO_OK, {"app/rag/retriever.py": "# DA-41 no codigo\n"})
+    root = _da_root(
+        tmp_path, _REGISTRO_OK, {"packages/core/src/app/rag/retriever.py": "# DA-41 no codigo\n"}
+    )
     falhas = [f for f in check_da_registered(root) if f.is_failure]
     assert falhas
     assert "DA-41" in falhas[0].message
-    assert "app/rag/retriever.py" in falhas[0].message
+    assert "packages/core/src/app/rag/retriever.py" in falhas[0].message
 
 
 def test_da_registered_aceita_da_candidata(tmp_path: Path) -> None:
     """DA-31 esta na lista de candidatas e citada no codigo: e' o estado
     correto de uma decisao ainda nao tomada, nao uma DA nao registrada."""
-    root = _da_root(tmp_path, _REGISTRO_OK, {"app/rag/retriever.py": "# DA-31 citado\n"})
+    root = _da_root(
+        tmp_path, _REGISTRO_OK, {"packages/core/src/app/rag/retriever.py": "# DA-31 citado\n"}
+    )
     assert not [f for f in check_da_registered(root) if f.is_failure]
 
 
@@ -1350,7 +1368,9 @@ def test_da_registered_aceita_forma_agrupada_do_registro(tmp_path: Path) -> None
     """`DA-4/8` na tabela registra as duas. O gate nao pode acusar a forma
     que o proprio projeto ja usa."""
     registro = _REGISTRO_OK.replace("| DA-39 |", "| DA-4/8 |")
-    root = _da_root(tmp_path, registro, {"app/rag/retriever.py": "# DA-4 e DA-8 citados\n"})
+    root = _da_root(
+        tmp_path, registro, {"packages/core/src/app/rag/retriever.py": "# DA-4 e DA-8 citados\n"}
+    )
     assert not [f for f in check_da_registered(root) if f.is_failure]
 
 
@@ -1359,7 +1379,7 @@ def test_da_registered_ignora_tests(tmp_path: Path) -> None:
     caminho de falha. Exigir registro deles seria exigir documentacao de um
     numero que so existe dentro do fixture."""
     root = _da_root(tmp_path, _REGISTRO_OK)
-    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests").mkdir(parents=True)
     (tmp_path / "tests/test_algo.py").write_text("# DA-77 sintetico\n", encoding="utf-8")
     assert not [f for f in check_da_registered(root) if f.is_failure]
 
@@ -1431,7 +1451,7 @@ def _cobertura_root(
         _SANE_SUPERVISOR,
         admin='CONNECTOR_TYPES = ("ariba", "odata")\n',
     )
-    (root / "data").mkdir(exist_ok=True)
+    (root / "data").mkdir(parents=True, exist_ok=True)
     (root / "data/sap_products.yaml").write_text(
         yaml.safe_dump(
             {
@@ -1556,7 +1576,7 @@ def test_link_para_doc_git_ignored_conta_como_quebrado(tmp_path: Path) -> None:
 
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     (tmp_path / ".gitignore").write_text("docs/PRIVADO.md\n")
-    (tmp_path / "docs").mkdir(exist_ok=True)
+    (tmp_path / "docs").mkdir(parents=True, exist_ok=True)
     (tmp_path / "docs" / "PRIVADO.md").write_text("# privado\n")
     (tmp_path / "docs" / "PUBLICO.md").write_text("Veja [o privado](PRIVADO.md) e `PRIVADO.md`.\n")
     from app.evaluation import gates
@@ -1598,7 +1618,7 @@ domains: {}
 
 
 def test_connector_reachable_pass_com_padrao_declarativo(tmp_path: Path) -> None:
-    """O gate reconhece _DOMAIN_INDEX + data/skills/*.yaml como fonte de
+    """O gate reconhece _DOMAIN_INDEX + packages/core/data/skills/*.yaml como fonte de
     verdade para o mapeamento interface_type -> dominio."""
     root = _connector_root(
         tmp_path,
@@ -1641,12 +1661,12 @@ def test_connector_reachable_fallback_antigo_com_declarativo_pendente(tmp_path: 
 
 
 def test_connector_reachable_falha_sem_diretorio_de_skills(tmp_path: Path) -> None:
-    """Supervisor declarativo sem data/skills: o gate reprova (antes ele
+    """Supervisor declarativo sem packages/core/data/skills: o gate reprova (antes ele
     procurava em root.parent e, sem achar, so acusava orfaos)."""
     root = _connector_root(tmp_path, _SANE_REGISTRY, _literal_fiel(), _SANE_SUPERVISOR_DA63)
     falhas = [f for f in check_connector_reachable(root) if f.is_failure]
     assert falhas
-    assert "data/skills nao existe" in falhas[0].message
+    assert "packages/core/data/skills nao existe" in falhas[0].message
 
 
 def test_connector_reachable_falha_quando_dockerfile_nao_copia_skills(tmp_path: Path) -> None:
@@ -1662,9 +1682,10 @@ def test_connector_reachable_falha_quando_dockerfile_nao_copia_skills(tmp_path: 
     )
     falhas = [f for f in check_connector_reachable(root) if f.is_failure]
     assert falhas
-    assert "Dockerfile nao copia data/skills/" in falhas[0].message
+    assert "Dockerfile nao copia packages/core/data/skills/" in falhas[0].message
     (root / "Dockerfile").write_text(
-        "COPY --chown=appuser:appuser data/skills/ data/skills/\n", encoding="utf-8"
+        "COPY --chown=appuser:appuser packages/core/data/skills/ packages/core/data/skills/\n",
+        encoding="utf-8",
     )
     assert not [f for f in check_connector_reachable(root) if f.is_failure]
 
@@ -1691,7 +1712,7 @@ def test_connector_reachable_usa_o_parser_do_runtime(tmp_path: Path) -> None:
 def _llm_baseline_root(tmp_path: Path, generated_at: str | None = None) -> Path:
     """Cria um baseline minimo com `generated_at` controlado."""
     root = tmp_path
-    (root / "data").mkdir(exist_ok=True)
+    (root / "data").mkdir(parents=True, exist_ok=True)
     (root / "data/eval").mkdir(parents=True, exist_ok=True)
     baseline = {
         "generated_at": generated_at,

@@ -19,18 +19,18 @@ verificadas à mão, uma vez, e nunca mais.
 | `candidate_das_fresh` | nenhuma DA marcada como "candidata" no `CLAUDE.md` já entregue em `docs/ARCHITECTURE.md` | instantâneo | todo push/PR |
 | `implemented_das_documented` | toda DA registrada no `CLAUDE.md` tem prosa localizável (seção `### N. ... (DA-N)` em `docs/DECISOES_DE_ARQUITETURA.md`, ou `docs/ARCHITECTURE.md` como local alternativo declarado) — e, no sentido inverso, nenhuma seção `(DA-N)` órfã | instantâneo | todo push/PR |
 | `das_index_current` | o índice de DAs de `docs/DECISOES_DE_ARQUITETURA.md` é único (sem tabela colada duas vezes), lista exatamente o mesmo conjunto do registro do `CLAUDE.md`, cada linha aponta para seção que existe, e o número da coluna Seção é o do heading real (não o da seção vizinha) | instantâneo | todo push/PR |
-| `da_registered` | toda DA citada no código de produto (`app/`, `scripts/`, `alembic/`) tem linha na tabela de DAs do `CLAUDE.md`. Nove DAs estavam fora do livro-razão com a prosa só na docstring: três delas (soberania de dados, AMQP 1.0, circuit breaker Redis) são das mais arquiteturais do projeto e invisíveis para quem navega pelas DAs | instantâneo | todo push/PR |
+| `da_registered` | toda DA citada no código de produto (`packages/core/src/app/`, `scripts/`, `alembic/`) tem linha na tabela de DAs do `CLAUDE.md`. Nove DAs estavam fora do livro-razão com a prosa só na docstring: três delas (soberania de dados, AMQP 1.0, circuit breaker Redis) são das mais arquiteturais do projeto e invisíveis para quem navega pelas DAs | instantâneo | todo push/PR |
 | `da_table_unique` | nenhuma DA aparece em duas linhas do registro do `CLAUDE.md`; duplicatas eram invisíveis porque `_registered_das` usa `set` | instantâneo | todo push/PR |
-| `preflight_delegates` | o preflight de RAM do harness é `app/evaluation/ram_preflight.py`, não python inline no `scripts/promptfoo_remote.sh` | instantâneo | todo push/PR |
-| `prompt_digest_measured` | o prompt em produção (`app/agent/prompts.py`) tem o mesmo digest do prompt **medido** no `data/eval/prompt_baseline.json` | instantâneo | todo push/PR |
+| `preflight_delegates` | o preflight de RAM do harness é `packages/core/src/app/evaluation/ram_preflight.py`, não python inline no `scripts/promptfoo_remote.sh` | instantâneo | todo push/PR |
+| `prompt_digest_measured` | o prompt em produção (`packages/core/src/app/agent/prompts.py`) tem o mesmo digest do prompt **medido** no `data/eval/prompt_baseline.json` | instantâneo | todo push/PR |
 | `docs_markup_integrity` | fences de código balanceados e links relativos `.md` resolvendo, em `docs/`, `README.md` e `CLAUDE.md` | instantâneo | todo push/PR |
-| `docs_code_references` | referências `app/x.py::símbolo` e `app/x.py:N` citadas na documentação existem no código e na linha; caminhos crus em backticks (`app/…`, `tests/…`, `scripts/…`, `alembic/…`) existem no `CLAUDE.md`/`README.md`; e toda citação de arquivo .md em backticks existe em lugar real (raiz, `docs/`, `data/sample_docs/` ou ao lado do doc). Relatórios históricos de auditoria ficam fora da checagem de caminho cru: eles descrevem o commit auditado, não a árvore atual | instantâneo | todo push/PR |
+| `docs_code_references` | referências `packages/core/src/app/x.py::símbolo` e `packages/core/src/app/x.py:N` citadas na documentação existem no código e na linha; caminhos crus em backticks (`packages/core/src/app/…`, `tests/…`, `scripts/…`, `alembic/…`) existem no `CLAUDE.md`/`README.md`; e toda citação de arquivo .md em backticks existe em lugar real (raiz, `docs/`, `data/sample_docs/` ou ao lado do doc). Relatórios históricos de auditoria ficam fora da checagem de caminho cru: eles descrevem o commit auditado, não a árvore atual | instantâneo | todo push/PR |
 | `docs_env_vars` | toda variável de ambiente citada na documentação (`VAR=` em bloco de código ou em backticks, e nome em backticks com prefixo deste projeto) é lida pelo projeto: campo do `Settings`, compose, manifests, workflows ou `.env.example`. Motivo: o `CONNECTORS.md` antigo mandava configurar variáveis inexistentes e o conector ficava em modo demo sem aviso | instantâneo | todo push/PR |
-| `connector_reachable` | todo conector registrado em `app/connectors/__init__.py` é aceito pelo Literal de `interface_type`, pelas choices do `--interface` do CLI, pelo dropdown da UI web (`SYSTEMS` em `frontend/src/components/DiagnoseView.tsx`), é documentado em `app/models/models.py`/`app/admin/models.py`, e tem domínio em `data/skills/*.yaml` lido pelo mesmo parser do runtime (`app/mcp/skill_registry.py`; exceto `apim`, cross-vendor por decisão); com o supervisor declarativo (DA-63), reprova também se `data/skills/` faltar ou se o `Dockerfile` não copiar o diretório para a imagem | instantâneo | todo push/PR |
-| `ui_i18n` | as UIs prontas para i18n (DA-73; superfícies descobertas desde a DA-95: core-ui, shells de produto e admin): catálogos `pt-BR`/`en` com as mesmas chaves e as mesmas variáveis `{{x}}`; chave `core.*` resolve no catálogo do core-ui e produto não define `core`; toda chave usada no React, nos templates e no JS do admin existe; nenhum texto visível fora do catálogo (`app/i18n/inventory.py`; heurístico, `i18n-ignore` com motivo para falso positivo) | instantâneo | todo push/PR |
+| `connector_reachable` | todo conector registrado em `packages/core/src/app/connectors/__init__.py` é aceito pelo Literal de `interface_type`, pelas choices do `--interface` do CLI, pelo dropdown da UI web (`SYSTEMS` em `frontend/src/components/DiagnoseView.tsx`), é documentado em `packages/core/src/app/models/models.py`/`packages/core/src/app/admin/models.py`, e tem domínio em `packages/core/data/skills/*.yaml` lido pelo mesmo parser do runtime (`packages/core/src/app/mcp/skill_registry.py`; exceto `apim`, cross-vendor por decisão); com o supervisor declarativo (DA-63), reprova também se `packages/core/data/skills/` faltar ou se o `Dockerfile` não copiar o diretório para a imagem | instantâneo | todo push/PR |
+| `ui_i18n` | as UIs prontas para i18n (DA-73; superfícies descobertas desde a DA-95: core-ui, shells de produto e admin): catálogos `pt-BR`/`en` com as mesmas chaves e as mesmas variáveis `{{x}}`; chave `core.*` resolve no catálogo do core-ui e produto não define `core`; toda chave usada no React, nos templates e no JS do admin existe; nenhum texto visível fora do catálogo (`packages/core/src/app/i18n/inventory.py`; heurístico, `i18n-ignore` com motivo para falso positivo) | instantâneo | todo push/PR |
 | `content_i18n` | o conteúdo do diagnóstico existe em todo idioma suportado (DA-74): catálogos `content.<idioma>.json` com as mesmas chaves e variáveis, toda categoria do rule engine (TTL + `rules.py`) com causa raiz e passos em cada idioma não-default, e todo idioma com instrução de idioma no prompt | instantâneo | todo push/PR |
 | `import_boundaries` | fronteiras de dependência do monorepo (DA-95, `architecture/boundaries.toml`): o core não importa produto; o DF-e usa o core só por `app.sdk`; o `@copilot/core-ui` não importa shell; um shell não importa outro e usa o core-ui só pelo índice (+ `styles.css`). Python por `ast`, TypeScript por regex de import | instantâneo | todo push/PR |
-| `connector_validation_matrix` | todo conector registrado em `app/connectors/__init__.py` tem linha na matriz de validação de `docs/ARCHITECTURE.md` — a única fonte de verdade sobre o que foi testado contra instância real — e nenhuma linha órfã sobrou para conector removido. Apodreceu em silêncio uma vez: `successfactors` ficou meses sem linha, com todos os gates verdes | instantâneo | todo push/PR |
+| `connector_validation_matrix` | todo conector registrado em `packages/core/src/app/connectors/__init__.py` tem linha na matriz de validação de `docs/ARCHITECTURE.md` — a única fonte de verdade sobre o que foi testado contra instância real — e nenhuma linha órfã sobrou para conector removido. Apodreceu em silêncio uma vez: `successfactors` ficou meses sem linha, com todos os gates verdes | instantâneo | todo push/PR |
 | `connector_coverage` | o mapa de cobertura (DA-58) ainda corresponde ao código: todo conector registrado tem linha em `data/connector_coverage.yaml` (9ª superfície da invariante 23), nenhuma declaração aponta para produto ou conector inexistente, e `docs/COVERAGE_MAP.md` — que é **gerado**, não editado — está em dia com os dados. Reprova por **incoerência**, nunca por lacuna: exigir cobertura completa seria exigir 76 conectores novos para o CI ficar verde | instantâneo | todo push/PR |
 | `migrations_and_dashboards` (job) | `alembic upgrade head` em banco limpo + as 45 queries dos 4 dashboards | ~1 min | todo push/PR |
 | `llm_eval` (job) | promptfoo contra o baseline; falha em regressão de caso | runner com Ollama+Qdrant | manual (`workflow_dispatch`) |
@@ -214,7 +214,7 @@ recusado com exit 1 — nunca interpretado como "zero regressões".
 - **A legitimidade do local alternativo.** `implemented_das_documented` aceita
   `docs/ARCHITECTURE.md` para DA-32/33/34/35 sem perguntar se o texto de lá
   está atualizado. Ele confere presença, não atualidade.
-- **A prosa fora de `app/x.py::símbolo`.** `docs_code_references` só verifica a
+- **A prosa fora de `packages/core/src/app/x.py::símbolo`.** `docs_code_references` só verifica a
   forma precisa de citar código, que é a que a documentação de debug usa para
   mandar abrir um breakpoint. Identificadores em prosa solta
   (`ANTHROPIC_API_KEY`, `RFC_SYSTEM_INFO`, `${QDRANT_HOST_PORT:-6333}`) são
@@ -223,14 +223,14 @@ recusado com exit 1 — nunca interpretado como "zero regressões".
   um gate que alguém desliga.
 - **Se a documentação está *certa*, apenas está desatualizada.**
   `docs_code_references` prova que `report_node` é definido em
-  `app/agent/nodes.py`; não prova que o tutorial manda abrir o arquivo
+  `packages/core/src/app/agent/nodes.py`; não prova que o tutorial manda abrir o arquivo
   certo, nem que o texto em volta do link está correto. Ele pega referência
   quebrada, não equivalente errada.
 - **Fences balanceados não significam markdown válido.** `docs_markup_integrity`
   conta abre/fecha de bloco de código. Tabelas malformadas, listas aninhadas
   erradas e âncoras `#link` que não existem passam.
 - **Identificadores citados dentro de bloco de código.** O gate procura
-  `app/…py::símbolo` em qualquer lugar do markdown, inclusive dentro de
+  `packages/core/src/app/…py::símbolo` em qualquer lugar do markdown, inclusive dentro de
   blocos ``` ; um exemplo ilustrativo num fence pode ser acusado.
 - **Se a matriz de capacidade do produto SAP está certa.** `connector_coverage`
   (DA-58) confere que o mapa é **coerente com o código** — conector registrado
@@ -282,7 +282,7 @@ recusado com exit 1 — nunca interpretado como "zero regressões".
    heredoc de 92 linhas dentro de `scripts/promptfoo_remote.sh`, sem
    cobertura: a aritmética que decide se a suite carrega 48 G só podia ser
    conferida com a RAM à mão. O cálculo foi movido para
-   `app/evaluation/ram_preflight.py` (núcleo puro, 15 testes), e
+   `packages/core/src/app/evaluation/ram_preflight.py` (núcleo puro, 15 testes), e
    `preflight_delegates` vigia que o script continua delegando — sem ele, a
    matemática poderia voltar para dentro do shell com a suite ainda verde,
    testando um módulo que ninguém chama. E o inverso também vale: **o job que roda não
@@ -315,7 +315,7 @@ recusado com exit 1 — nunca interpretado como "zero regressões".
    **Atualização (validação 2026-10-07):** até o RAG-01, a *pipeline* não
    seguia esta lição: a admissão era `max(cosseno, sigmoid)`, e um caso fora
    de escopo com cosseno 0.753 e sigmoid 0.0067 era admitido enquanto o
-   gate reportava rejeição. Hoje `app/rag/retriever.py::_evidence_admission_score`
+   gate reportava rejeição. Hoje `packages/core/src/app/rag/retriever.py::_evidence_admission_score`
    usa só o sigmoid quando há reranker, e gate e pipeline medem o mesmo
    número. O dataset passou de 2 para **10** casos out-of-scope (M-19); 9 de
    10 são rejeitados.

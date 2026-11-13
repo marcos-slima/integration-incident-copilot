@@ -1,0 +1,124 @@
+[project]
+name = "copilot-core"
+version = "1.4.0"
+description = "Core compartilhado de diagnóstico, contratos e infraestrutura de agentes"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "langgraph>=1.2",
+    "langchain>=1.3",
+    "langchain-community>=0.4",
+    "langchain-ollama>=1.1",
+    "qdrant-client>=1.19",
+    "neo4j>=6.2",
+    "langfuse>=4.14",
+    "python-dotenv>=1.0",
+    "langchain-text-splitters>=1.1.2",
+    # >=6.16.1: PYSEC-2026-3910/3911/3913 (pypdf 6.15.0). A versao anterior
+    # estava pinada acima do piso com CVEs corrigidos; o job `security` do
+    # CI nao os enxergava (ver [tool.uv] e o comentário de constraint abaixo).
+    "pypdf>=6.16.1",
+    "pydantic-settings>=2.14.2",
+    # runtime (nao so teste): usado pelo ServiceNowConnector para
+    # chamadas HTTP reais contra a Table API
+    "httpx>=0.27",
+    "fastembed>=0.8.0",
+    # DA-52: parse do EDMX de $metadata (host remoto = entrada nao confiavel).
+    # bandit B314 exige defusedxml para nao estourar DTD/entidade; antes ele
+    # entrava so como transitiva e o fix dependia de outra dependencia.
+    "defusedxml>=0.7.1",
+    "numpy>=2.5.1",
+    "aiofiles>=25.1.0",
+    "ddgs>=9.16.0",
+    "pymupdf4llm>=1.28.2",
+    "sentence-transformers>=6.0.1",
+    # DEP-01 (validacao 2026-10-07): torch declarado direto so para poder
+    # apontar a fonte (index CPU, ver [tool.uv.sources]). O reranker roda em
+    # CPU; o torch padrao do PyPI trazia ~4,5 GB de CUDA (nvidia-*, triton)
+    # para dentro da imagem e de toda venv.
+    "torch>=2.14.1",
+    "slowapi>=0.1.10",
+    "mcp>=1.9.0",
+    # Opcional em runtime (REDIS_URL vazio = nao usado, ver
+    # app/a2a/task_store.py e app/queue.py) - declarado como
+    # dependencia principal (nao um extra) pelo mesmo motivo de
+    # "neo4j" acima: import tardio (so acontece se a feature estiver
+    # configurada), mas sem exigir um "pip install" extra do operador
+    # quando ele decide ligar REDIS_URL.
+    "redis>=5.2",
+    # Persistencia de incidentes (Fase 1 - Observabilidade Grafana)
+    # Opcional: so ativa se DATABASE_URL estiver configurada no .env.
+    # sqlalchemy async engine + Alembic migrations + psycopg2 driver.
+    # TimescaleDB e 100% compativel com esta stack (mesmo driver,
+    # mesma API) - basta apontar DATABASE_URL para uma instancia
+    # TimescaleDB em vez de PostgreSQL puro.
+    "sqlalchemy[asyncio]>=2.0",
+    "alembic>=1.13",
+    "asyncpg>=0.29",  # driver async nativo (psycopg3 compat)
+    "psycopg2-binary>=2.9",  # alembic CLI / migrations sync
+    # DA-47: cifra Fernet p/ credenciais de provedores em repouso no
+    # registro (/admin). Manager via MASTER_KEY em .env (único segredo
+    # restante depois que as chaves dos provedores migram pro banco).
+    "cryptography>=42",
+    # UI admin (/admin - DA-46/48): a interface de manutencao (substitui
+    # edicao manual do .env) e servida pelas proprias paginas Jinja2.
+    "jinja2>=3.1",
+    # AMQP 1.0 puro Python para Solace Cloud / SAP AEM (DA-32)
+    "python-qpid-proton>=0.39",  # DA-40: AMQP 1.0 (Solace/SAP Event Mesh); substituiu aiormq (0.9.1),
+    # Fila assincrona de diagnostico (app/queue.py) - mesmo Redis do
+    # REDIS_URL acima, so importado/usado se REDIS_URL estiver
+    # configurada. Sem isso o "worker" opt-in (docker-compose.yml,
+    # profile "async") nao teria o que rodar.
+    "rq>=2.12.0",
+    "rdflib>=7.6.0",
+    # DA-63: app/mcp/skill_registry.py le data/skills/*.yaml em runtime;
+    # antes so chegava como dependencia transitiva (huggingface-hub).
+    "pyyaml>=6.0",
+    # DA-67: tokenizer aproximado do budget (fallback len//4 sem rede).
+    "tiktoken>=0.14.0",
+    # DA-69: PostgresSaver + driver psycopg3 com libpq embutido (a imagem
+    # nao instala libpq; sem o binary o import falha com CHECKPOINTING_ENABLED).
+    "langgraph-checkpoint-postgres>=3.2.0",
+    "psycopg[binary]>=3.2",
+    "reportlab>=5.0.1",
+    # DA-89: export XLSX dos relatórios de compliance. Fica nas deps
+    # principais porque a rota /admin/reports/compliance/export depende
+    # dela em runtime (e o CI roda `uv sync --dev`, sem extras).
+    "openpyxl>=3.1",
+    "lxml>=6.1",
+]
+
+[project.optional-dependencies]
+# DA-26: Opcional: so necessario se LLM_PROVIDER=openai ou azure_openai no
+# .env (default e "ollama", que nao precisa disso). Mantido fora das
+# dependencias principais de proposito - o caminho local-first nao
+# deve exigir instalar SDK de nenhum provedor de nuvem.
+openai = [
+    "langchain-openai>=0.3",
+]
+# Observabilidade Prometheus (Fase 2): PROMETHEUS_ENABLED=true exige este extra.
+# pip install -e ".[prometheus]"
+prometheus = [
+    "prometheus-fastapi-instrumentator>=7.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/app"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"data/skills" = "app/_data/skills"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

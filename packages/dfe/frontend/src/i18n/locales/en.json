@@ -1,7 +1,7 @@
 {
   "common": {
-    "appName": "DF-e Copilot",
-    "appSub": "Electronic tax document diagnosis",
+    "appName": "FISC",
+    "appSub": "Fiscal Incident Support Copilot",
     "logout": "Sign out"
   },
   "fiscal": {
@@ -21,7 +21,7 @@
     "needDescription": "Describe the incident.",
     "fixFields": "Fix the highlighted tax context fields.",
     "submit": "Diagnose",
-    "readOnly": "Read-only: DF-e Copilot never resends, cancels, voids numbers or triggers contingency. Those decisions belong to the tax team."
+    "readOnly": "Read-only: FISC never resends, cancels, voids numbers or triggers contingency. Those decisions belong to the tax team."
   },
   "context": {
     "fields": {

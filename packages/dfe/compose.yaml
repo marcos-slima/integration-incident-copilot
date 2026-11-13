@@ -1,0 +1,50 @@
+name: dfe-copilot
+
+services:
+  dfe:
+    image: ${DFE_IMAGE:-dfe-copilot:local}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: dfe
+      args:
+        PRELOAD_MODELS: "${DFE_PRELOAD_MODELS:-0}"
+    ports:
+      - "127.0.0.1:${DFE_PORT:-8002}:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      OLLAMA_HOST: ${DFE_OLLAMA_HOST:-http://host.docker.internal:11434}
+      LLM_PROVIDER: ollama
+      LLM_MODEL: ${DFE_LLM_MODEL:-qwen3.6:35b-a3b}
+      EMBEDDING_MODEL: ${DFE_EMBEDDING_MODEL:-nomic-embed-text}
+      QDRANT_URL: http://qdrant:6333
+      REQUIRE_AUTH: ${DFE_REQUIRE_AUTH:-false}
+      WEB_UI_USERS: ${DFE_WEB_UI_USERS:-}
+      SESSION_COOKIE_NAME: ${DFE_SESSION_COOKIE_NAME:-dfe_container_session}
+      SESSION_SECRET: ${DFE_SESSION_SECRET:-}
+      API_KEY: ${DFE_API_KEY:-}
+      A2A_API_KEY: ${DFE_A2A_API_KEY:-}
+      EVENT_MESH_API_KEY: ${DFE_EVENT_MESH_API_KEY:-}
+      ADMIN_API_KEY: ${DFE_ADMIN_API_KEY:-}
+      DATABASE_URL: ""
+      REDIS_URL: ""
+      GRAPH_RAG_ENABLED: "false"
+      CHECKPOINTING_ENABLED: "false"
+      AMQP_ENABLED: "false"
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.19.0
+    volumes:
+      - dfe_qdrant:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  dfe_qdrant:

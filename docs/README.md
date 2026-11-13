@@ -42,7 +42,7 @@ For the English version of this index, see [`docs/en/README.md`](en/README.md).
 | Entender o que existe hoje | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
 | Entender *por que* foi feito assim | [`DECISOES_DE_ARQUITETURA.md`](DECISOES_DE_ARQUITETURA.md) (índice das 50 DAs registradas, numeradas de DA-1 a DA-60) |
 | Debugar um incidente real | [`TUTORIAL_ARQUITETURA_DEBUG.md`](TUTORIAL_ARQUITETURA_DEBUG.md) |
-| Mudar a base de conhecimento (RAG) | `python -m app.rag.ingest --help` (referência no docstring de `app/rag/ingest.py`) |
+| Mudar a base de conhecimento (RAG) | `python -m app.rag.ingest --help` (referência no docstring de `packages/core/src/app/rag/ingest.py`) |
 | Entender a qualidade do LLM | [`RERANKER_BENCHMARK.md`](RERANKER_BENCHMARK.md) |
 
 ---

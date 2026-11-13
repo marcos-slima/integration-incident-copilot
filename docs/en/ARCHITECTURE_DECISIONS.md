@@ -167,8 +167,8 @@ configuration present, tracing absent.
 `connector_node` has no decorator, `diagnose` node does not exist and spans
 are `retrieve`, `graph_enrich`, `graph_write`, `web_search`,
 `sap_specialist`, `saas_specialist`, `generic_specialist` and `report`, via
-`@observe_span` in `app/agent/nodes.py`, under the root span
-`sap_copilot_diagnosis` of `app/agent/graph.py`), and the LLM
+`@observe_span` in `packages/core/src/app/agent/nodes.py`, under the root span
+`sap_copilot_diagnosis` of `packages/core/src/app/agent/graph.py`), and the LLM
 call uses the LangChain `CallbackHandler` — capturing execution time,
 tokens and the complete input/output payload of each step,
 visible in `http://localhost:3000`.
@@ -176,7 +176,7 @@ visible in `http://localhost:3000`.
 **Bug found and fixed in the process:** the SDK did not do `flush()`
 automatically before the process ended, so traces stayed in the buffer
 and never reached Langfuse. Fixed by calling `get_client().flush()`
-at the two points where the process can end: in the FastAPI shutdown lifespan (`app/main.py`) and at the end of CLI execution (`app/agent/graph.py`, block `if __name__ == "__main__"`) - not a test fixture (`pytest` brings up/tears down the app via `TestClient`, which already passes through the same lifespan).
+at the two points where the process can end: in the FastAPI shutdown lifespan (`packages/core/src/app/main.py`) and at the end of CLI execution (`packages/core/src/app/agent/graph.py`, block `if __name__ == "__main__"`) - not a test fixture (`pytest` brings up/tears down the app via `TestClient`, which already passes through the same lifespan).
 
 ### 6. Centralized configuration (eliminating hardcoded) (informal note — no DA)
 
@@ -186,7 +186,7 @@ other configurations were fixed as Python constants, scattered
 in multiple files. Changing the model required editing source code
 (`sed` directly in the file), not changing an environment variable.
 
-**Solution:** `app/config.py`, a `Settings` class (via
+**Solution:** `packages/core/src/app/config.py`, a `Settings` class (via
 `pydantic-settings`) as the single source of truth, read from `.env`. A
 command (`uv run python -m app.config`) prints the effective configuration
 at any time, with secrets masked — allows
@@ -289,7 +289,7 @@ what was real from what was false alarm or had already been fixed:
   `create_react_agent(response_format=DiagnosisModel)` via tool-calling,
   in which the `Field(description=...)` are part of the schema that the LLM reads —
   and therefore enter the prompt digest of DA-53
-  (`app/agent/prompts.py`).
+  (`packages/core/src/app/agent/prompts.py`).
 
 ### 10. Pluggable LLM Gateway (not hardcoded in Ollama) (informal note — no DA)
 
@@ -299,7 +299,7 @@ which does not mean that every customer will run 100% local: some already have O
 more capacity than local hardware can handle for a specific case. `diagnose_node` instantiated `ChatOllama` directly,
 so changing providers would require editing the graph.
 
-**Decision:** extract the provider choice to `app/llm/factory.py`
+**Decision:** extract the provider choice to `packages/core/src/app/llm/factory.py`
 (`get_chat_model()`), selected via `Settings.llm_provider`
 (ollama/openai/azure_openai). Deliberately **not** created a
 custom interface (like a `LLMProvider.generate()` from scratch) — the
@@ -386,7 +386,7 @@ a configuration field without any implementation behind it, the exact type of th
 this project criticized in the `genai-engineering-template` (documentation describing
 functionality that the code does not deliver).
 
-**Decision:** implement real code (`app/rag/graph_store.py`) —
+**Decision:** implement real code (`packages/core/src/app/rag/graph_store.py`) —
 writes each diagnosis to Neo4j as relational graph
 (Incident/Interface/System/Document) and queries this graph for
 history of incidents on the same interface before generating a new
@@ -419,7 +419,7 @@ satisfy both.
 
 **Decision:** implement the A2A protocol subset needed
 for the original acceptance criteria — Agent Card (`GET
-/.well-known/agent-card.json`), task manager and JSON-RPC 2.0 server (`POST /a2a`, methods `message/send` and `tasks/get`) — in `app/a2a/`,
+/.well-known/agent-card.json`), task manager and JSON-RPC 2.0 server (`POST /a2a`, methods `message/send` and `tasks/get`) — in `packages/core/src/app/a2a/`,
 without depending on any external A2A SDK (the original proposal already
 cited the immaturity of these SDKs as a risk to validate before
 starting). The task manager calls the SAME function (`run_diagnosis`) that the
@@ -432,8 +432,8 @@ were implemented (`submitted -> working -> completed|failed`).
 Authentication is an optional static key via header, not OAuth2/JWT
 — documented as production gap, not hidden. **Update
 (2026-10-07):** the key ceased to be optional since DA-18 (generated at
-startup if absent, `app/main.py::_ensure_api_keys_configured`), and
-`message/send` accepts `blocking=false` (`app/a2a/task_manager.py`),
+startup if absent, `packages/core/src/app/main.py::_ensure_api_keys_configured`), and
+`message/send` accepts `blocking=false` (`packages/core/src/app/a2a/task_manager.py`),
 returning the task before completion.
 
 **Validation:** `tests/test_a2a.py` proves the original acceptance criteria
@@ -469,11 +469,11 @@ Neo4j, every incident records its `evidence_strength`/`is_grounded`, and
 silently becoming "confirmed previous root cause" (text of the time; today the label is `"HYPOTHESIS NOT CONFIRMED from previous diagnosis
 (low evidence - do not treat as fact)"` and, since AI-01 (2026-10-07),
 even `is_grounded` incidents are labeled as unverified — only `verified` (DA-28) enters as fact; see
-`app/rag/graph_store.py::format_graph_context_for_prompt`).
+`packages/core/src/app/rag/graph_store.py::format_graph_context_for_prompt`).
 
 **Real bugs found along the way (not left as debt):** a broken prompt injection detection regex (`re.error: global flags
 not at the start of the expression` — inline flags `(?i)` by default,
-invalid when concatenated via `"|".join()`) and two ranking bugs in `app/rag/retriever.py` (RRF+cosine composite score leaking
+invalid when concatenated via `"|".join()`) and two ranking bugs in `packages/core/src/app/rag/retriever.py` (RRF+cosine composite score leaking
 to the field that should be pure cosine; fallback to reference library being applied always, not only in the absence of match) that inflated the confidence of diagnoses with little or no real evidence
 — fixed at the root, not patched.
 
@@ -487,7 +487,7 @@ graph context and labeled as such when explicitly included.
 authentication completely disabled — a silent gap, only visible
 reading the source code, not a behavior documented as such.
 
-**Decision:** `app/main.py::_ensure_api_keys_configured()` runs in
+**Decision:** `packages/core/src/app/main.py::_ensure_api_keys_configured()` runs in
 the FastAPI `lifespan` and ensures that neither of the two keys stays empty
 in memory — if the operator did not configure one in `.env`, one is generated
 (`secrets.token_urlsafe(32)`) and notified in `WARNING` in the startup log.
@@ -511,7 +511,7 @@ catalog cache and enterprise authorization, which brings MCP closer to productio
 
 **Decision:** expose the Copilot as MCP SERVER (not client — the alternative reading, migrate the connectors to consume external MCP, is left for
 a subsequent phase and deliberately out of this scope) in `POST /mcp/`,
-via `app/mcp/server.py` (official `mcp` SDK, `MCPServer` class). Two
+via `packages/core/src/app/mcp/server.py` (official `mcp` SDK, `MCPServer` class). Two
 tools, both READ-ONLY by design ("read first" in
 roadmap): `diagnose_incident` (calls the SAME `run_diagnosis()` of
 `/diagnose`/`/a2a` — zero duplicate logic for the third time) and
@@ -544,20 +544,20 @@ complexity before calling the LLM. Chosen: **resilience**
 require calibrating a subjective threshold; resilience only acts when the
 primary provider is genuinely unavailable.
 
-**Decision:** `app/llm/factory.py::invoke_with_hybrid_fallback()` runs the
+**Decision:** `packages/core/src/app/llm/factory.py::invoke_with_hybrid_fallback()` runs the
 call with `settings.llm_provider` and, if `settings.llm_fallback_provider`
 is configured (empty by default — behavior identical to before
 this phase) **and** the failure is of transport (`ConnectionError`/
 `httpx.ConnectError`/`httpx.TimeoutException` at the time — Ollama down,
 network timeout; today `ConnectionError`, `httpx.TransportError`,
 `openai.APIConnectionError` and `openai.InternalServerError`, see
-`app/llm/factory.py::TRANSPORT_FAILURE_EXCEPTIONS`), repeats the SAME call with the fallback
+`packages/core/src/app/llm/factory.py::TRANSPORT_FAILURE_EXCEPTIONS`), repeats the SAME call with the fallback
 provider before giving up. Application error (malformed JSON, invalid prompt)
 never triggers the fallback — masking a real bug behind a second
 LLM call would be worse than letting it surface. The diagnosis
 sub-agents (`sap_diagnosis_node`/`saas_diagnosis_node`, see DA-22) were the consumers
 at the time (today the three sub-agents call the AI Gateway
-`app/llm/gateway.py::invoke_via_gateway`, which uses this function underneath —
+`packages/core/src/app/llm/gateway.py::invoke_via_gateway`, which uses this function underneath —
 no node calls it directly); which provider actually responded is exposed in
 `DiagnosisResponse.llm_provider_used` — transparency, not a silent
 fallback.
@@ -572,7 +572,7 @@ handling real unavailability.
 ### 19. GraphRAG as layer of operational knowledge - hardening (DA-21)
 
 **Context:** fifth item of the planned architectural roadmap. GraphRAG
-(`app/rag/graph_store.py`) already existed as real code since a previous
+(`packages/core/src/app/rag/graph_store.py`) already existed as real code since a previous
 phase, but disabled by default (`GRAPH_RAG_ENABLED=false`, see
 Decision #9) and without real Neo4j accessible in this development
 environment (no Docker daemon). The option considered here was not
@@ -588,7 +588,7 @@ disabled:**
 1. **Graceful degradation by exception type** — `GRAPH_UNAVAILABLE_EXCEPTIONS`
    (`neo4j.exceptions.DriverError` + `TransientError`) is the catch-tuple
    used now in `graph_enrich_node`/`graph_write_node`
-   (`app/agent/nodes.py`): an infrastructure failure of Neo4j
+   (`packages/core/src/app/agent/nodes.py`): an infrastructure failure of Neo4j
    (connection refused, timeout, server restart) no longer brings down the
    entire diagnosis — falls back to "no history"/"write skipped" with
    a warning log. Deliberately excludes `Neo4jError` in general: a
@@ -596,7 +596,7 @@ disabled:**
    wrong), not infrastructure unavailability, and should continue
    propagating — same principle of separating transport failure from application
    error used in Hybrid Inference (DA-20). `ensure_constraints()` also now runs alone in the FastAPI `lifespan` when the flag is
-   enabled (`app/main.py`), eliminating the manual `--init` step
+   enabled (`packages/core/src/app/main.py`), eliminating the manual `--init` step
    without blocking startup if Neo4j is temporarily down.
 2. **Formatting with deduplication by recurrence** —
    `format_graph_context_for_prompt()` groups CONSECUTIVE occurrences
@@ -622,11 +622,11 @@ existing diagnosis node (`diagnose_node`) used a fixed persona
 of "SAP integration specialist" for ANY connector — Salesforce webhook incident
 received the same "OData/IDoc/RFC/CPI" expertise as an RFC incident. This contradicted the design principle already recorded in this log (#8/#13): SAP is one connector among equals, not the architectural axis of the product.
 
-**Decision:** a `supervisor_node` (`app/agent/supervisor.py`) runs
+**Decision:** a `supervisor_node` (`packages/core/src/app/agent/supervisor.py`) runs
 FIRST in the graph — even before the `connector` — and classifies
 deterministically (no LLM) the incident domain from
 `interface_type` (or, in its absence, SAP keywords in
-description). The graph (`app/agent/graph.py::_route_to_specialist`, via
+description). The graph (`packages/core/src/app/agent/graph.py::_route_to_specialist`, via
 `add_conditional_edges`) routes to ONE of the two specialist sub-agents
 — never both in the same incident (at the time; today there are three:
 `generic` gained its own node, `generic_diagnosis_node`):
@@ -659,7 +659,7 @@ A2A, MCP) — to become a real copilot in production, it needs
 to react to events published by monitoring systems (CPI, Solution
 Manager, a queue/IDoc listener), not just wait for someone to call the API.
 
-**Decision:** `POST /events/incident` (`app/main.py` + `app/events/`)
+**Decision:** `POST /events/incident` (`packages/core/src/app/main.py` + `packages/core/src/app/events/`)
 receives a [CloudEvents](https://cloudevents.io/) envelope — the format
 that SAP Event Mesh uses in **REST/Webhook push subscription** mode
 (in addition to native AMQP 1.0) — and fires `run_diagnosis()` automatically.
@@ -678,7 +678,7 @@ of this project.
 rate limit as `/diagnose`) and there is no direct AMQP consumption — real
 queue/backpressure would be a natural evolution if volume justifies, not
 a hidden gap. **Update:** today the webhook responds `202` and
-processes in background (RQ job with `REDIS_URL`, `BackgroundTasks` without it), and there is the AMQP 1.0 consumer (`app/events/amqp_consumer.py`,
+processes in background (RQ job with `REDIS_URL`, `BackgroundTasks` without it), and there is the AMQP 1.0 consumer (`packages/core/src/app/events/amqp_consumer.py`,
 DA-32/DA-40).
 
 **Validation:** `tests/test_events.py` covers event→
@@ -732,7 +732,7 @@ survived DA-24: (1) the `Dockerfile` did not build the frontend
 `.gitignore` and does not exist in a clean clone, breaking exactly the build
 flow described in `deploy/kyma/README.md` (this was already self-reported as
 pending in `docs/DEPLOY.md`, but was not fixed during DA-24); (2) the default
-LLM model diverged between `app/config.py`
+LLM model diverged between `packages/core/src/app/config.py`
 (`qwen3-coder-next:latest`, canonical source) and `.env.example` /
 `docker-compose.yml` (both `qwen2.5-coder:32b`).
 
@@ -766,7 +766,7 @@ real one after the 2026-10-20 technical audit; the detailed findings are in
 | DA-85 | Candidate | Table, ORM and repository; experiments endpoints and `_run_ab_test()` are missing |
 | DA-86 | Delivered | Version/history/rollback endpoints; the history UI is still pending |
 | DA-87 | Delivered | `/admin/metrics/domains` with a `days` window; duplicate `/admin/dashboard/domains` removed |
-| DA-88 | Delivered | `app/scripts/load_test.py`, config and `tests/test_load_testing.py` (3 tests) |
+| DA-88 | Delivered | `packages/core/src/app/scripts/load_test.py`, config and `tests/test_load_testing.py` (3 tests) |
 | DA-89 | Delivered | PDF/XLSX compliance export |
 | DA-90 | Delivered | GRC documentation and conformance tests |
 | DA-91 | Delivered | RBAC tests assert exact statuses; DA-87/89 routes exercised |

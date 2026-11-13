@@ -19,17 +19,17 @@ verified by hand, once, and never again.
 | `candidate_das_fresh` | no DA marked as "candidate" in `CLAUDE.md` is already delivered in `docs/ARCHITECTURE.md` | instantaneous | every push/PR |
 | `implemented_das_documented` | every DA registered in `CLAUDE.md` has locatable prose (section `### N. ... (DA-N)` in `docs/DECISOES_DE_ARQUITETURA.md`, or `docs/ARCHITECTURE.md` as declared alternative location) — and, in the reverse sense, no orphan `(DA-N)` section | instantaneous | every push/PR |
 | `das_index_current` | the DA index of `docs/DECISOES_DE_ARQUITETURA.md` is unique (no pasted table twice), lists exactly the same set as the `CLAUDE.md` registry, each line points to an existing section, and the Section column number is the real heading number (not the neighbor section's) | instantaneous | every push/PR |
-| `da_registered` | every DA cited in product code (`app/`, `scripts/`, `alembic/`) has a row in the DA table of `CLAUDE.md`. Nine DAs were outside the ledger with the prose only in the docstring: three of them (data sovereignty, AMQP 1.0, Redis circuit breaker) are among the most architectural of the project and invisible to those navigating the DAs | instantaneous | every push/PR |
-| `preflight_delegates` | the RAM preflight of the harness is `app/evaluation/ram_preflight.py`, not python inline in `scripts/promptfoo_remote.sh` | instantaneous | every push/PR |
-| `prompt_digest_measured` | the production prompt (`app/agent/prompts.py`) has the same digest as the prompt **measured** in `data/eval/prompt_baseline.json` | instantaneous | every push/PR |
+| `da_registered` | every DA cited in product code (`packages/core/src/app/`, `scripts/`, `alembic/`) has a row in the DA table of `CLAUDE.md`. Nine DAs were outside the ledger with the prose only in the docstring: three of them (data sovereignty, AMQP 1.0, Redis circuit breaker) are among the most architectural of the project and invisible to those navigating the DAs | instantaneous | every push/PR |
+| `preflight_delegates` | the RAM preflight of the harness is `packages/core/src/app/evaluation/ram_preflight.py`, not python inline in `scripts/promptfoo_remote.sh` | instantaneous | every push/PR |
+| `prompt_digest_measured` | the production prompt (`packages/core/src/app/agent/prompts.py`) has the same digest as the prompt **measured** in `data/eval/prompt_baseline.json` | instantaneous | every push/PR |
 | `docs_markup_integrity` | balanced code fences and relative `.md` links resolving, in `docs/`, `README.md` and `CLAUDE.md` | instantaneous | every push/PR |
-| `docs_code_references` | referências `app/x.py::símbolo` e `app/x.py:N` citadas na documentação existem no código e na linha, e toda citação de arquivo .md em backticks existe em lugar real (raiz, `docs/`, `data/sample_docs/` ou ao lado do doc) | instantâneo | todo push/PR |
+| `docs_code_references` | referências `packages/core/src/app/x.py::símbolo` e `packages/core/src/app/x.py:N` citadas na documentação existem no código e na linha, e toda citação de arquivo .md em backticks existe em lugar real (raiz, `docs/`, `data/sample_docs/` ou ao lado do doc) | instantâneo | todo push/PR |
 | `docs_env_vars` | every environment variable cited in documentation (`VAR=` in code block or in backticks, and name in backticks with this project's prefix) is read by the project: field of `Settings`, compose, manifests, workflows or `.env.example`. Reason: the old `CONNECTORS.md` instructed to configure non-existent variables and the connector would fall into demo mode without warning | instantaneous | every push/PR |
-| `connector_reachable` | every connector registered in `app/connectors/__init__.py` is accepted by the `interface_type` Literal, by the `--interface` CLI choices, by the web UI dropdown (`SYSTEMS` in `frontend/src/components/DiagnoseView.tsx`), is documented in `app/models/models.py`/`app/admin/models.py`, and has domain in `data/skills/*.yaml` read by the same parser as runtime (`app/mcp/skill_registry.py`; except `apim`, cross-vendor by decision); with declarative supervisor (DA-63), also fails if `data/skills/` is missing or if the `Dockerfile` does not copy the directory to the image | instantaneous | every push/PR |
-| `ui_i18n` | the UIs ready for i18n (DA-73; surfaces discovered since DA-95: core-ui, product shells and admin): `pt-BR`/`en` catalogs with the same keys and the same `{{x}}` variables; `core.*` keys resolve in the core-ui catalog and a product never defines `core`; every key used in React, in the templates and in the admin JS exists; no visible text outside the catalog (`app/i18n/inventory.py`; heuristic, `i18n-ignore` with a reason for false positives) | instantaneous | every push/PR |
+| `connector_reachable` | every connector registered in `packages/core/src/app/connectors/__init__.py` is accepted by the `interface_type` Literal, by the `--interface` CLI choices, by the web UI dropdown (`SYSTEMS` in `frontend/src/components/DiagnoseView.tsx`), is documented in `packages/core/src/app/models/models.py`/`packages/core/src/app/admin/models.py`, and has domain in `packages/core/data/skills/*.yaml` read by the same parser as runtime (`packages/core/src/app/mcp/skill_registry.py`; except `apim`, cross-vendor by decision); with declarative supervisor (DA-63), also fails if `packages/core/data/skills/` is missing or if the `Dockerfile` does not copy the directory to the image | instantaneous | every push/PR |
+| `ui_i18n` | the UIs ready for i18n (DA-73; surfaces discovered since DA-95: core-ui, product shells and admin): `pt-BR`/`en` catalogs with the same keys and the same `{{x}}` variables; `core.*` keys resolve in the core-ui catalog and a product never defines `core`; every key used in React, in the templates and in the admin JS exists; no visible text outside the catalog (`packages/core/src/app/i18n/inventory.py`; heuristic, `i18n-ignore` with a reason for false positives) | instantaneous | every push/PR |
 | `content_i18n` | diagnosis content exists in every supported language (DA-74): `content.<language>.json` catalogs with the same keys and variables, every rule-engine category (TTL + `rules.py`) with root cause and steps in each non-default language, and every language with a language instruction in the prompt | instantaneous | every push/PR |
 | `import_boundaries` | monorepo dependency boundaries (DA-95, `architecture/boundaries.toml`): the core never imports a product; DF-e uses the core only through `app.sdk`; `@copilot/core-ui` never imports a shell; a shell never imports another and uses core-ui only through its index (+ `styles.css`). Python via `ast`, TypeScript via import regex | instantaneous | every push/PR |
-| `connector_validation_matrix` | every connector registered in `app/connectors/__init__.py` has a row in the validation matrix of `docs/ARCHITECTURE.md` — the only source of truth about what was tested against real instance — and no orphan row remains for removed connector. It rotted silently once: `successfactors` remained months without a row, with all gates green | instantaneous | every push/PR |
+| `connector_validation_matrix` | every connector registered in `packages/core/src/app/connectors/__init__.py` has a row in the validation matrix of `docs/ARCHITECTURE.md` — the only source of truth about what was tested against real instance — and no orphan row remains for removed connector. It rotted silently once: `successfactors` remained months without a row, with all gates green | instantaneous | every push/PR |
 | `connector_coverage` | the coverage map (DA-58) still corresponds to the code: every registered connector has a row in `data/connector_coverage.yaml` (9th surface of invariant 23), no declaration points to non-existent product or connector, and `docs/COVERAGE_MAP.md` — which is **generated**, not edited — is up to date with the data. Fails by **incoherence**, never by gap: requiring full coverage would require 76 new connectors for the CI to be green | instantaneous | every push/PR |
 | `migrations_and_dashboards` (job) | `alembic upgrade head` in clean DB + the 45 queries of the 4 dashboards | ~1 min | every push/PR |
 | `llm_eval` (job) | promptfoo against the baseline; fail on regression case | runner with Ollama+Qdrant | manual (`workflow_dispatch`) |
@@ -194,7 +194,7 @@ rejected with exit 1 — never interpreted as "zero regressions".
 - **The legitimacy of the alternative location.** `implemented_das_documented` accepts
   `docs/ARCHITECTURE.md` for DA-32/33/34/35 without asking if the text there
   is up to date. It confirms presence, not timeliness.
-- **A prosa fora de `app/x.py::símbolo`.** `docs_code_references` só verifica a
+- **A prosa fora de `packages/core/src/app/x.py::símbolo`.** `docs_code_references` só verifica a
   way to cite code, which is what the debug documentation uses to send
   opening a breakpoint. Identifiers in loose prose
   (`ANTHROPIC_API_KEY`, `RFC_SYSTEM_INFO`, `${QDRANT_HOST_PORT:-6333}`) are
@@ -203,14 +203,14 @@ rejected with exit 1 — never interpreted as "zero regressions".
   a gate that someone disables.
 - **If the documentation is *correct*, only outdated.**
   `docs_code_references` proves that `report_node` is defined in
-  `app/agent/nodes.py`; it does not prove that the tutorial tells to open the
+  `packages/core/src/app/agent/nodes.py`; it does not prove that the tutorial tells to open the
   right file, nor that the text around the link is correct. It catches broken
   reference, not equivalent wrong.
 - **Balanced fences do not mean valid markdown.** `docs_markup_integrity`
   counts open/close of code block. Malformed tables, nested lists
   wrong and `#link` anchors that do not exist pass.
 - **Identifiers cited inside code block.** The gate looks for
-  `app/...py::symbol` anywhere in the markdown, even inside
+  `packages/core/src/app/...py::symbol` anywhere in the markdown, even inside
   fences ```; an illustrative example in a fence can be accused.
 - **If the SAP product capability matrix is correct.** `connector_coverage`
   (DA-58) confirms that the map is **coherent with the code** — registered
@@ -262,7 +262,7 @@ rejected with exit 1 — never interpreted as "zero regressions".
    heredoc of 92 lines inside `scripts/promptfoo_remote.sh`, without
    coverage: the arithmetic that decides if the suite loads 48 G could only be
    confirmed with the RAM by hand. The calculation was moved to
-   `app/evaluation/ram_preflight.py` (pure core, 15 tests), and
+   `packages/core/src/app/evaluation/ram_preflight.py` (pure core, 15 tests), and
    `preflight_delegates` watches that the script continues delegating — without it, the
    math could return inside the shell with the suite still green,
    testing a module that no one calls. And the inverse also holds: **the job that runs does not
@@ -292,7 +292,7 @@ rejected with exit 1 — never interpreted as "zero regressions".
    forced to 0.99 the gate fails, and with the `rerank()` neutralized it raises `RuntimeError`.
    **Update (validation 2026-10-07):** until RAG-01, the *pipeline* did not
    follow this lesson: the admission was `max(cosine, sigmoid)`, and an out-of-scope case with cosine 0.753 and sigmoid 0.0067 was admitted while the
-   gate reported rejection. Today `app/rag/retriever.py::_evidence_admission_score`
+   gate reported rejection. Today `packages/core/src/app/rag/retriever.py::_evidence_admission_score`
    uses only the sigmoid when there is reranker, and gate and pipeline measure the same
    number. The dataset went from 2 to **10** out-of-scope cases (M-19); 9 of
    10 are rejected.

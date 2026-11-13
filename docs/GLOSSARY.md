@@ -60,7 +60,7 @@
 | Sigla | Significado | Uso no IIC |
 |---|---|---|
 | **FastAPI** | Framework Python para APIs | Backend do IIC |
-| **LangGraph** | Orquestração de agentes com Grafo | `app/agent/graph.py` |
+| **LangGraph** | Orquestração de agentes com Grafo | `packages/core/src/app/agent/graph.py` |
 | **LangChain** | Framework para apps com LLM | RAG com Qdrant |
 | **Qdrant** | Vector database | Armazena `sap_incident_docs`, `sap_reference_library` |
 | **Neo4j** | Graph database | GraphRAG (opcional) |
@@ -74,7 +74,7 @@
 | **HMAC** | Hash-based Message Authentication | Cookie de sessão da UI |
 | **PBKDF2** | Password-Based Key Derivation Function | Hash de senhas (SHA256) |
 | **Fernet** | Encryption algorithm | Credenciais no PostgreSQL (DA-47) |
-| **OpenAPI** | Especificação de API | `app/main.py:openapi_url="/docs"` |
+| **OpenAPI** | Especificação de API | `packages/core/src/app/main.py:openapi_url="/docs"` |
 
 ## Siglas de Arquitetura
 
@@ -120,7 +120,7 @@ Este documento é mantido manualmente com base em:
 
 1. Documentos de Arquitetura (`docs/DECISOES_DE_ARQUITETURA.md`)
 2. Arquivo `AGENTS.md` do repositório
-3. Códigos-fonte (`app/`, `scripts/`)
+3. Códigos-fonte (`packages/core/src/app/`, `scripts/`)
 4. Revisão de commits e PRs
 
 ---

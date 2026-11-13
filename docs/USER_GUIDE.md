@@ -290,7 +290,7 @@ descobrir como chamar este — está em
   autenticado por `X-Event-Mesh-Api-Key` (`EVENT_MESH_API_KEY`), e dispara
   `run_diagnosis()` sem ninguém chamar curl (DA-23). Com `REDIS_URL`, o
   evento é enfileirado e o 202 devolve `job_id`.
-- **AMQP 1.0:** consumidor assíncrono via Solace Cloud (`app/events/
+- **AMQP 1.0:** consumidor assíncrono via Solace Cloud (`packages/core/src/app/events/
   amqp_consumer.py`), para quem já tem event mesh corporativo.
 
 ### Fechar o loop: verificação
@@ -704,7 +704,7 @@ Não é log bruto: é o histórico **consultável** de cada diagnóstico.
 
 - **Worker RQ** (profile `async`, executa os `/diagnose/async`):
   `docker compose logs worker`.
-- **Consumidor AMQP 1.0** (Solace, `app/events/amqp_consumer.py`): stdout
+- **Consumidor AMQP 1.0** (Solace, `packages/core/src/app/events/amqp_consumer.py`): stdout
   do processo dele.
 - **Reporter:** além do log, escreve relatórios prontos em `reports/`
   (Markdown/Excel diários).

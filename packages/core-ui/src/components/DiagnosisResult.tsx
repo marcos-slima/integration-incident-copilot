@@ -9,6 +9,7 @@ import type { DiagnosisResponse } from '../api/contracts';
 import { Badge } from './Badge';
 import { EscalationBanner, EvidenceList, Provenance } from './DiagnosisDetails';
 import { FindingsPanel } from './FindingsPanel';
+import { HumanReviewPanel } from './HumanReviewPanel';
 
 interface DiagnosisResultProps {
   result: DiagnosisResponse;
@@ -45,6 +46,7 @@ export function DiagnosisResult({ result, extra }: DiagnosisResultProps) {
         )}
 
         <FindingsPanel findings={result.findings} causeStatus={result.cause_status} />
+        <HumanReviewPanel result={result} onReviewed={() => undefined} />
 
         <div className="section-label">{t('core.result.nextSteps')}</div>
         <ol className="steps-list">

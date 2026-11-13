@@ -37,13 +37,13 @@ ECC**.
 IncidentRequest (POST /diagnose)
         │
         ▼
-   app/agent/graph.py  (LangGraph, fluxo da Fase 8: connector → retrieve → diagnose → report)
+   packages/core/src/app/agent/graph.py  (LangGraph, fluxo da Fase 8: connector → retrieve → diagnose → report)
         │                    │              │            │
         │                    │              │            └─ Markdown final
-        │                    │              └─ app/llm/factory.py  ◄── NOVO
+        │                    │              └─ packages/core/src/app/llm/factory.py  ◄── NOVO
         │                    │                 (Ollama | OpenAI | Azure OpenAI)
-        │                    └─ app/rag/retriever.py (Qdrant, sem mudança)
-        └─ app/connectors/  (get_connector)
+        │                    └─ packages/core/src/app/rag/retriever.py (Qdrant, sem mudança)
+        └─ packages/core/src/app/connectors/  (get_connector)
               ├─ odata_connector.py     (mock, sem mudança)
               ├─ rfc_connector.py       ◄── AMPLIADO (use_real + novo cenário)
               └─ servicenow_connector.py ◄── NOVO (HTTP real)
@@ -52,7 +52,7 @@ IncidentRequest (POST /diagnose)
 *Histórico:* o diagrama acima é o fluxo da Fase 8. Hoje o grafo é
 `supervisor → connector → retrieve → [graph_enrich] → {sap|saas|generic}_diagnose → [graph_write] → report`
 (os nodes entre colchetes só existem com `GRAPH_RAG_ENABLED=true`), e as
-chamadas ao LLM passam pelo LLM Gateway (`app/llm/gateway.py`) — ver
+chamadas ao LLM passam pelo LLM Gateway (`packages/core/src/app/llm/gateway.py`) — ver
 [ARCHITECTURE.md](ARCHITECTURE.md).
 
 Nada na orquestração (`graph.py`) precisou saber *qual* provedor de
@@ -65,7 +65,7 @@ peças novas sem reescrever o que já funciona.
 
 ## 3. Cada artefato de código gerado
 
-### 3.1 `app/exceptions.py` (novo arquivo)
+### 3.1 `packages/core/src/app/exceptions.py` (novo arquivo)
 
 ```python
 class ConfigurationError(Exception):
@@ -77,7 +77,7 @@ Uma exceção compartilhada, para todo código novo (`llm/factory.py`,
 ConfigurationError`), em vez de cada módulo inventar seu próprio erro
 ou deixar um `AttributeError` genérico vazar.
 
-### 3.2 `app/llm/factory.py` + `app/llm/__init__.py` (novo pacote)
+### 3.2 `packages/core/src/app/llm/factory.py` + `packages/core/src/app/llm/__init__.py` (novo pacote)
 
 Função central: `get_chat_model(model_name=None, config=None, registry_resolved=False)`
 (o parâmetro `registry_resolved` foi adicionado depois da Fase 8, com o
@@ -110,7 +110,7 @@ código já depende do contrato `BaseChatModel` do LangChain
 mesmo contrato. Reaproveitar isso é menos código e menos lugar para
 bug do que reimplementar o mesmo polimorfismo com outro nome.
 
-**Onde entra no fluxo (histórico, Fase 8):** `app/agent/graph.py`,
+**Onde entra no fluxo (histórico, Fase 8):** `packages/core/src/app/agent/graph.py`,
 função `diagnose_node`, uma linha mudou:
 
 ```python
@@ -122,10 +122,10 @@ llm = get_chat_model(model_name)
 
 *Hoje:* `diagnose_node` não existe mais (foi dividido em
 `sap_diagnose`/`saas_diagnose`/`generic_diagnose`), e as chamadas ao LLM
-passam por `app/llm/gateway.py::invoke_via_gateway`, que usa
+passam por `packages/core/src/app/llm/gateway.py::invoke_via_gateway`, que usa
 `get_chat_model` internamente.
 
-### 3.3 `app/connectors/servicenow_connector.py` (novo arquivo)
+### 3.3 `packages/core/src/app/connectors/servicenow_connector.py` (novo arquivo)
 
 `ServiceNowConnector.fetch(identifier)`:
 
@@ -143,7 +143,7 @@ apontar pra uma instância de verdade. Testado com `httpx.MockTransport`
 (ver §5) exatamente para provar que o código HTTP funciona, sem
 depender de uma instância ServiceNow real.
 
-### 3.4 `app/connectors/rfc_connector.py` (arquivo existente, ampliado)
+### 3.4 `packages/core/src/app/connectors/rfc_connector.py` (arquivo existente, ampliado)
 
 Duas mudanças:
 
@@ -174,7 +174,7 @@ Duas mudanças:
    "connection refused": aqui o destino está no ar, só sem processo
    livre para atender).
 
-### 3.5 `app/connectors/base.py` (arquivo existente, ajustado)
+### 3.5 `packages/core/src/app/connectors/base.py` (arquivo existente, ajustado)
 
 Adicionado o alias `ExternalSystemConnector = SAPConnector` e
 atualizado o docstring do módulo — o contrato sempre foi genérico
@@ -184,16 +184,16 @@ herda de `ExternalSystemConnector` (nome mais correto pra quem lê o
 código novo); nada que já existia foi renomeado, para não quebrar
 import nenhum.
 
-### 3.6 `app/connectors/__init__.py` (arquivo existente, ajustado)
+### 3.6 `packages/core/src/app/connectors/__init__.py` (arquivo existente, ajustado)
 
 `_REGISTRY` ganhou uma entrada: `"servicenow": ServiceNowConnector`.
 
-### 3.7 `app/models/models.py` (arquivo existente, ajustado)
+### 3.7 `packages/core/src/app/models/models.py` (arquivo existente, ajustado)
 
 `IncidentRequest.interface_type` passou de
 `Literal["odata", "rfc"]` para `Literal["odata", "rfc", "servicenow"]`.
 
-### 3.8 `app/agent/graph.py`, bloco `__main__` (arquivo existente, ajustado)
+### 3.8 `packages/core/src/app/agent/graph.py`, bloco `__main__` (arquivo existente, ajustado)
 
 `--interface` do CLI de debug (`argparse`) também precisou aceitar
 `"servicenow"`, senão o debug config novo (§6) falharia na validação
@@ -210,11 +210,11 @@ recuperar quando alguém reportar esses dois cenários novos.
 
 ## 4. Cada configuração gerada
 
-### 4.1 `app/config.py` — novos campos em `Settings`
+### 4.1 `packages/core/src/app/config.py` — novos campos em `Settings`
 
 | Campo | Default | Usado por |
 |---|---|---|
-| `llm_provider` | `"ollama"` | `app/llm/factory.py` |
+| `llm_provider` | `"ollama"` | `packages/core/src/app/llm/factory.py` |
 | `openai_api_key`, `openai_base_url` | `""` | idem, provider `openai` |
 | `azure_openai_endpoint`, `azure_openai_api_key`, `azure_openai_deployment`, `azure_openai_api_version` | `""` / `"2024-10-21"` | idem, provider `azure_openai` |
 | `sap_ashost`, `sap_sysnr`, `sap_client`, `sap_user`, `sap_password` | `""` / `"00"` / `"100"` | `RFCConnector(use_real=True)` |
@@ -302,7 +302,7 @@ uv sync --extra openai         # se tambem quiser testar o provider OpenAI
 
 # 2. Rodar os testes que NAO precisam de stack nenhuma no ar
 uv run pytest tests/test_connectors.py tests/test_llm_factory.py -v
-uv run ruff check app/ tests/
+uv run ruff check packages/core/src/app/ tests/
 
 # 3. Ver a configuracao efetiva (nada hardcoded, tudo vem daqui)
 uv run python -m app.config
@@ -332,25 +332,25 @@ uv run python -m app.agent.graph "Alerta ServiceNow aberto automaticamente" \
 **Novo provedor de LLM** (ex: AWS Bedrock):
 
 1. adicionar `"bedrock"` ao `Literal` de `llm_provider` (e de
-   `llm_fallback_provider`, se ele puder ser fallback) em `app/config.py`,
+   `llm_fallback_provider`, se ele puder ser fallback) em `packages/core/src/app/config.py`,
    junto com os campos de configuração do provedor;
 2. adicionar um branch `if provider == "bedrock":` em `get_chat_model`
-   (`app/llm/factory.py`), seguindo o mesmo formato de validação +
+   (`packages/core/src/app/llm/factory.py`), seguindo o mesmo formato de validação +
    `ConfigurationError` + import tardio (lazy) do SDK opcional;
 3. adicionar o mapeamento correspondente em `_apply_registry_resolution`
-   (`app/llm/factory.py`), para que o registro de modelos (DA-46) consiga
+   (`packages/core/src/app/llm/factory.py`), para que o registro de modelos (DA-46) consiga
    sobrescrever modelo/endpoint/chave do novo provedor.
 
 **Novo conector** (ex. hipotético: Zendesk — Salesforce e Workday já
-existem): criar um arquivo em `app/connectors/` herdando de
+existem): criar um arquivo em `packages/core/src/app/connectors/` herdando de
 `ExternalSystemConnector`, seguindo exatamente o padrão do
 `ServiceNowConnector` (modo demo quando não configurado, HTTP real via
 `httpx` quando configurado, `client` injetável para teste). Hoje o
 conector precisa aparecer em **9 superfícies**, listadas em
 [CONNECTORS.md §4](CONNECTORS.md#4-como-adicionar-um-conector) — entre
 elas `_REGISTRY` **e** `_REAL_MODE_SETTING` em
-`app/connectors/__init__.py`, os `Literal` de `app/models/models.py` e os
-`choices` de `--interface` na CLI de `app/agent/graph.py`. A
+`packages/core/src/app/connectors/__init__.py`, os `Literal` de `packages/core/src/app/models/models.py` e os
+`choices` de `--interface` na CLI de `packages/core/src/app/agent/graph.py`. A
 orquestração do grafo em si não muda — é esse o ponto da interface
 comum.
 

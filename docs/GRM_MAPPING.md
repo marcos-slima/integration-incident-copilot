@@ -5,15 +5,15 @@
 Este documento descreve o mapeamento dos controles de segurança e governança
 do Integration Incident Copilot (IIC) para os frameworks ISO 27001 e SOC 2.
 As fontes de evidência são a documentação técnica do projeto (`docs/`) e o
-código-fonte em `app/`.
+código-fonte em `packages/core/src/app/`.
 
 ## Tríade CIA (Confidencialidade, Integridade e Disponibilidade)
 
 | Propriedade | Como o IIC atende | Evidência |
 |-------------|-------------------|-----------|
-| **Confidencialidade** | Credenciais cifradas com Fernet, chaves de API dedicadas (usuário e admin) e ausência de plaintext no banco | `app/admin/crypto.py`, `app/admin/security.py` |
-| **Integridade** | Rule Engine determinstico (DA-33), verificação humana via `/verify` e trilha de auditoria por `trace_id` | `app/agent/rules.py`, `app/services/incident_repository.py` |
-| **Disponibilidade** | `/health`, métricas Prometheus, circuit breaker do AI Gateway e checkpointing | `app/main.py`, `app/llm/gateway.py` |
+| **Confidencialidade** | Credenciais cifradas com Fernet, chaves de API dedicadas (usuário e admin) e ausência de plaintext no banco | `packages/core/src/app/admin/crypto.py`, `packages/core/src/app/admin/security.py` |
+| **Integridade** | Rule Engine determinstico (DA-33), verificação humana via `/verify` e trilha de auditoria por `trace_id` | `packages/core/src/app/agent/rules.py`, `packages/core/src/app/services/incident_repository.py` |
+| **Disponibilidade** | `/health`, métricas Prometheus, circuit breaker do AI Gateway e checkpointing | `packages/core/src/app/main.py`, `packages/core/src/app/llm/gateway.py` |
 
 ## Mapeamento ISO 27001
 
@@ -37,7 +37,7 @@ código-fonte em `app/`.
 | Controle ISO | Descrição | Implementação no IIC | Status |
 |--------------|-----------|---------------------|--------|
 | A.8.2 | Regras de acesso | X-API-Key e X-API-Admin-Key em todas as APIs | ✓ Implementado |
-| A.8.7 | Acesso de usuário | Sistema de usuários web em `app/webusers.py` | ✓ Implementado |
+| A.8.7 | Acesso de usuário | Sistema de usuários web em `packages/core/src/app/webusers.py` | ✓ Implementado |
 
 ### Cláusula A.12 - Operações de Segurança
 

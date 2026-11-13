@@ -89,7 +89,7 @@ flag ligada e descarte com ela desligada.
 - `DiagnosisResponse.findings` (`Finding`: `fact`/`hypothesis`, fonte,
   evidências, teste de confirmação, alternativas) e `cause_status`
   (`hypothesis`/`inconclusive`; `confirmed` só por revisão humana).
-- `app/agent/findings.py::build_findings` monta a lista por código: fatos das
+- `packages/core/src/app/agent/findings.py::build_findings` monta a lista por código: fatos das
   ferramentas (`CopilotState.fiscal_findings`) e a causa proposta como
   `hypothesis`; um `fact` sem fonte determinística é rebaixado.
 - O `DiagnosisModel` (saída estruturada do LLM) **não** mudou: o LLM continua
@@ -337,6 +337,7 @@ Correções gerais para as causas da D8, sem ajuste nos casos blind.
 
 ### D11. Interface própria e fronteira com o core (P6, 2026-11-13)
 
+- **Atualização de continuidade:** core extraído para `packages/core` (`copilot-core`), mantendo imports `app.*`; SDK, HTTP e plugin com contrato 1.0. O DF-e declara o core como dependência e passa sua suíte contra o wheel instalado fora do checkout. Política em `../../core/docs/CONTRACTS.md`.
 - **Decisão:** o DF-e Copilot tem shell de UI próprio
   (`packages/dfe/frontend`, `@copilot/dfe-ui`) sobre a biblioteca neutra do
   core (`@copilot/core-ui`). Não usa a tela do IIC e não tem frontend
@@ -356,3 +357,20 @@ Correções gerais para as causas da D8, sem ajuste nos casos blind.
   `packages/dfe/frontend/dist`.
 
 ---
+
+### D12. Distribuição e execução próprias (P2, 2026-11-13)
+
+- **Imagem:** alvo Docker `dfe`, sobre runtime compartilhado; sem shell IIC
+  nem documentos de exemplo do IIC. O alvo padrão do IIC permanece `final`.
+- **Distribuição:** wheels não editáveis de core e produto. Recursos fiscais
+  e UI via pacote, sem dependência de caminhos do checkout. O build de entrega
+  exige UI; o backend pode ser empacotado sozinho para testes.
+- **Operação local:** Compose próprio, porta 8002 em loopback, Qdrant/rede/volume
+  independentes, credenciais próprias e nomes de cookie configuráveis para
+  coexistência. Não há migração automática da base nativa para esse volume.
+- **CI:** workflow específico com testes de wheels e smoke autenticado da
+  imagem e do Compose. Artefatos de wheels; publicação e deploy continuam
+  ações explícitas, não automáticas.
+- **Validação:** XML sintético e credenciais efêmeras; inferência real,
+  serviços externos e homologação fiscal não são inferidos pelo smoke.
+- **Procedimento:** `DEPLOY.md` neste pacote.

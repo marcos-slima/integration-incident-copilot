@@ -27,7 +27,9 @@ from dfe_copilot.fiscal.signature import verify_enveloped, within_validity
 
 NS = "http://www.portalfiscal.inf.br/nfe"
 MAX_XML_BYTES = 1_000_000
-SCHEMAS_DIR = Path(__file__).resolve().parents[3] / "data" / "schemas" / "nfe"
+from dfe_copilot.resources import DATA_DIR
+
+SCHEMAS_DIR = DATA_DIR / "schemas" / "nfe"
 DEFAULT_PACKAGE = "PL_010g_v1.03"
 
 XsdStatus = Literal["valid", "invalid", "not_executed"]

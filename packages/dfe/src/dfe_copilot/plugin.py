@@ -66,6 +66,7 @@ def _gap(fid: str, statement: str) -> dict[str, Any]:
 
 
 class DfePlugin:
+    contract_version = "1.1"
     name = "dfe"
     prompt = DFE_PROMPT  # P8: persona fiscal + bloco de achados no LLM
 
@@ -149,6 +150,16 @@ class DfePlugin:
                 "statement": f"Base fiscal: {len(hits)} trecho(s) aplicavel(is) ao cStat {cstat}.",
                 "evidence_refs": [h["evidence_id"] for h in hits],
                 "rule_ref": next((r for h in hits for r in h.get("rule_ids", [])), None),
+                "references": [
+                    {
+                        "source_id": h["source_id"],
+                        "locator": h["evidence_id"],
+                        "excerpt": h["text"][:6000],
+                        "trust_level": h["trust_level"],
+                    }
+                    for h in hits
+                    if h.get("source_id") and h.get("text") and h.get("trust_level")
+                ],
             }
         ]
 

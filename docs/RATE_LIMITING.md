@@ -1,7 +1,7 @@
 # Rate limiting
 
-Implementação: [SlowAPI](https://slowapi.readthedocs.io/) em `app/rate_limit.py`,
-aplicada pelo `SlowAPIMiddleware` (`app/main.py`) e por decorators
+Implementação: [SlowAPI](https://slowapi.readthedocs.io/) em `packages/core/src/app/rate_limit.py`,
+aplicada pelo `SlowAPIMiddleware` (`packages/core/src/app/main.py`) e por decorators
 `@limiter.limit(...)` nas rotas.
 
 > Este documento substitui a versão de 2026-10-06, que descrevia "1000 RPS",
@@ -45,16 +45,16 @@ Também não há Redis aqui, mesmo com `REDIS_URL` configurada.
 ## Resolvido (SEC-03, validação 2026-10-07)
 
 - **Força bruta de chave de API.** As dependencies de chave recusam antes do
-  decorator contar, então `app/auth_guard.py` conta cada falha por IP e por
+  decorator contar, então `packages/core/src/app/auth_guard.py` conta cada falha por IP e por
   superfície (`api`, `event_mesh`, `admin`, `a2a`) numa janela fixa de 60 s;
   acima de `AUTH_FAILURES_PER_MINUTE` (default 10) a resposta vira 429. Com
   `REDIS_URL` o contador é compartilhado entre réplicas; sem Redis, fica em
   memória do processo.
 - **Enumeração de usuário por tempo.** Usuário inexistente agora roda
-  `burn_password_check` (`app/auth.py`): o mesmo PBKDF2 contra um sal
+  `burn_password_check` (`packages/core/src/app/auth.py`): o mesmo PBKDF2 contra um sal
   descartável, com custo igual ao de um usuário existente com senha errada.
 - **Código de telefone sem limite.** Cada código vigente aceita no máximo
-  `PHONE_CODE_MAX_ATTEMPTS` erros (default 5, `app/webusers.py`); depois é
+  `PHONE_CODE_MAX_ATTEMPTS` erros (default 5, `packages/core/src/app/webusers.py`); depois é
   invalidado e só o admin reemite, com a mesma resposta genérica.
 
 ## Teste manual

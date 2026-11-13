@@ -1,9 +1,9 @@
 // @copilot/core-ui - API publica (DA-95). Shells de produto importam SO
 // daqui (o gate import_boundaries reprova import profundo de src/*).
 
-export { ApiError, apiErrorFrom, apiJson, configureApi, describeApiError } from './api/http';
+export { HTTP_CONTRACT_VERSION, ApiError, apiErrorFrom, apiJson, configureApi, describeApiError } from './api/http';
 export { getSession, login, logout, verifyEmail, verifyPhone, type SessionState } from './api/auth';
-export { diagnose, getDomainPlugins } from './api/diagnosis';
+export { diagnose, getDomainPlugins, reviewIncident, type HumanReviewAction } from './api/diagnosis';
 export type {
   ApiErrorCode,
   CauseStatus,
@@ -15,6 +15,7 @@ export type {
   EscalationSignal,
   EvidenceItem,
   Finding,
+  HumanReviewState,
   JsonSchema,
 } from './api/contracts';
 
@@ -36,6 +37,7 @@ export { Badge } from './components/Badge';
 export { EscalationBanner, EvidenceList, Provenance } from './components/DiagnosisDetails';
 export { DiagnosisLoading, DiagnosisResult } from './components/DiagnosisResult';
 export { FindingsPanel } from './components/FindingsPanel';
+export { HumanReviewPanel } from './components/HumanReviewPanel';
 export { LanguageSelect } from './components/LanguageSelect';
 export { LoginView, type ProductBrand } from './components/LoginView';
 export {

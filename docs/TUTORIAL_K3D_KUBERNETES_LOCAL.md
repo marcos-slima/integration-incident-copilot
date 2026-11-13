@@ -172,7 +172,7 @@ kubectl -n $NS rollout restart deployment/integration-incident-copilot deploymen
 
 Por que `host.docker.internal` e não `host.k3d.internal`: a política de
 soberania trata `host.docker.internal` como origem local
-(`app/llm/origins.py::is_loopback_origin`). Com outro nome, o dado
+(`packages/core/src/app/llm/origins.py::is_loopback_origin`). Com outro nome, o dado
 confidencial seria bloqueado por ir a uma origem "remota".
 
 **4.6 Rollout e verificação do Pod**

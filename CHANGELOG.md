@@ -27,7 +27,7 @@ entregue, o que é schema-only e o que voltou para candidata.
 | DA-85 | Candidata | Tabela, ORM e repositório; endpoints e `_run_ab_test()` ausentes |
 | DA-86 | Entregue | Endpoints de versões/histórico/rollback; UI de histórico ainda pendente |
 | DA-87 | Entregue | `/admin/metrics/domains` com janela `days`; rota duplicada `/admin/dashboard/domains` removida |
-| DA-88 | Entregue | `app/scripts/load_test.py`, config e `tests/test_load_testing.py` (3 testes) |
+| DA-88 | Entregue | `packages/core/src/app/scripts/load_test.py`, config e `tests/test_load_testing.py` (3 testes) |
 | DA-89 | Entregue | Export PDF/XLSX de compliance |
 | DA-90 | Entregue | Documentação GRC e testes de conformidade |
 | DA-91 | Entregue | Testes RBAC com status exatos; rotas DA-87/89 exercitadas |
@@ -66,8 +66,8 @@ entregue, o que é schema-only e o que voltou para candidata.
 
 ### Versionamento
 
-A versão canônica desta release é **1.4.0** em `pyproject.toml`, `app/main.py`
-e `app/a2a/agent_card.py`. As entradas `2.0.0`/`2.0.1` abaixo são históricas de
+A versão canônica desta release é **1.4.0** em `pyproject.toml`, `packages/core/src/app/main.py`
+e `packages/core/src/app/a2a/agent_card.py`. As entradas `2.0.0`/`2.0.1` abaixo são históricas de
 uma numeração experimental anterior e não devem ser usadas para release; o
 próximo lote, quando houver, será **1.5.0** (minor). A tag `v1.3.0` também é
 histórica: aponta para a linha experimental antiga e não descreve este código.
@@ -95,13 +95,13 @@ mensagens de commit.
 ### Correções pós-DA-66/67/69/70 e posicionamento (2026-10-17/18, branch `docs/en-translation`)
 Contagens de testes conferidas com `pytest --collect-only` em 2026-10-18.
 
-- **DA-67** Orçamento por diagnóstico (`app/llm/budget.py`): reserva sobre o
+- **DA-67** Orçamento por diagnóstico (`packages/core/src/app/llm/budget.py`): reserva sobre o
   custo estimado, débito do custo real, `BudgetExhaustedError` →
   `FailureClass.BUDGET_EXHAUSTED`; `DIAGNOSIS_BUDGET_USD` e
   `LLM_BUDGET_RESERVE_RATIO`. Tokenizer com fallback `len//4` para qualquer
   falha de carga, sem retentativa. Testes: `test_budget_ledger.py` (15),
   `test_tokenizer_offline.py` (8).
-- **DA-69** Checkpoint sem PII em claro (`app/agent/checkpointing.py`, redação
+- **DA-69** Checkpoint sem PII em claro (`packages/core/src/app/agent/checkpointing.py`, redação
   no `put`/`put_writes`, inclusive valores inline no jsonb); `PostgresSaver`
   montado corretamente (`from_conn_string` era context manager; URL SQLAlchemy
   normalizada); `thread_id` passado por nome. Testes: `test_checkpointing.py`
@@ -223,7 +223,7 @@ Contagens de testes conferidas com `pytest --collect-only` em 2026-10-18.
 
 - **P1 — Prompt injection** — sanitização em todos os campos não confiáveis
   (`description`, `logs`, `payload`, chunks do RAG) via `sanitize_untrusted_input()`
-  em `app/agent/nodes.py`; neutraliza padrões conhecidos antes de entrar no prompt LLM
+  em `packages/core/src/app/agent/nodes.py`; neutraliza padrões conhecidos antes de entrar no prompt LLM
 - **P2 — Imagens Docker fixadas** — `ollama/ollama:0.34.1`, `neo4j:5.26.0-community`
   (qdrant:v1.19.0 já estava fixado); reprodutibilidade garantida em todos os serviços
 - **P2 — Ollama local** — atualizado para v0.34.1 (alinhado com docker-compose.yml)

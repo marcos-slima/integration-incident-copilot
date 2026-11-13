@@ -16,12 +16,13 @@
 
 [[python]]
 name = "core nao importa produto"
-paths = ["app", "scripts", "alembic"]
-forbid = ["dfe_copilot"]
+paths = ["packages/core/src/app", "scripts", "alembic"]
+forbid = ["dfe_copilot", "iic_copilot"]
 
 [[python]]
 name = "DF-e usa o core so por app.sdk"
 paths = ["packages/dfe/src", "packages/dfe/scripts", "packages/dfe/tests"]
+forbid = ["iic_copilot"]
 only_via = { root = "app", allow = ["app.sdk"] }
 
 [[typescript]]
@@ -43,3 +44,9 @@ paths = ["packages/dfe/frontend/src"]
 forbid_dirs = ["frontend", "packages/core-ui"]
 forbid_packages = ["@copilot/iic-ui"]
 public_entry = { package = "@copilot/core-ui", allow_subpaths = ["styles.css"] }
+
+[[python]]
+name = "IIC usa core público e não importa DF-e"
+paths = ["iic_copilot"]
+forbid = ["dfe_copilot"]
+only_via = { root = "app", allow = ["app.sdk"] }

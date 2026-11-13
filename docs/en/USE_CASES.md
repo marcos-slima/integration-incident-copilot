@@ -93,7 +93,7 @@ UC-01, UC-02 and UC-03 below.
 ### ReAct loop and tool call
 
 Inside the diagnosis node, no rule matched
-(`app/agent/nodes.py::_run_diagnosis_agent`):
+(`packages/core/src/app/agent/nodes.py::_run_diagnosis_agent`):
 
 ```mermaid
 sequenceDiagram
@@ -134,14 +134,14 @@ and the loop ends on the first LLM response.
 
 | Stage | Where | What it does |
 |---|---|---|
-| Domain | `app/agent/supervisor.py::classify_domain` | `sap`, `saas` or `generic`, no LLM (invariant 6) |
-| Connector | `app/agent/nodes.py::connector_node` | data from the source system; in demo mode, simulated scenario (`is_mock=True`) |
-| RAG | `app/agent/nodes.py::retrieve_node` → `app/rag/retriever.py::retrieve` | hybrid search + reranker; admission by calibrated score (DA-25/42) |
-| Diagnosis | `app/agent/nodes.py::_run_diagnosis_agent` | **rule engine first** (`app/agent/rules.py::match_known_error`); only without rule calls the LLM, via AI Gateway (`app/llm/gateway.py::invoke_via_gateway`) |
-| Guardrails | `app/agent/nodes.py::_apply_confidence_guardrails` | confidence ceiling by evidence, cited source must have been retrieved |
-| Evidence | `app/agent/nodes.py::_assemble_evidence` | list of sources with `trust_level` (never LLM self-assessment) |
-| Escalation | `app/agent/escalation.py::compute_escalation_signal` | deterministic signal returned in `escalation` (informative) |
-| Persistence | `app/services/incident_recorder.py::record_incident` | row in `incidents` (best-effort, only with `DATABASE_URL`) |
+| Domain | `packages/core/src/app/agent/supervisor.py::classify_domain` | `sap`, `saas` or `generic`, no LLM (invariant 6) |
+| Connector | `packages/core/src/app/agent/nodes.py::connector_node` | data from the source system; in demo mode, simulated scenario (`is_mock=True`) |
+| RAG | `packages/core/src/app/agent/nodes.py::retrieve_node` → `packages/core/src/app/rag/retriever.py::retrieve` | hybrid search + reranker; admission by calibrated score (DA-25/42) |
+| Diagnosis | `packages/core/src/app/agent/nodes.py::_run_diagnosis_agent` | **rule engine first** (`packages/core/src/app/agent/rules.py::match_known_error`); only without rule calls the LLM, via AI Gateway (`packages/core/src/app/llm/gateway.py::invoke_via_gateway`) |
+| Guardrails | `packages/core/src/app/agent/nodes.py::_apply_confidence_guardrails` | confidence ceiling by evidence, cited source must have been retrieved |
+| Evidence | `packages/core/src/app/agent/nodes.py::_assemble_evidence` | list of sources with `trust_level` (never LLM self-assessment) |
+| Escalation | `packages/core/src/app/agent/escalation.py::compute_escalation_signal` | deterministic signal returned in `escalation` (informative) |
+| Persistence | `packages/core/src/app/services/incident_recorder.py::record_incident` | row in `incidents` (best-effort, only with `DATABASE_URL`) |
 
 **Two confidences in the response:**
 
@@ -165,7 +165,7 @@ demo scenario).
 **Path.**
 
 1. `classify_domain` responds `sap`.
-2. `app/connectors/rfc_connector.py::RFCConnector` returns the simulated
+2. `packages/core/src/app/connectors/rfc_connector.py::RFCConnector` returns the simulated
    scenario. Without `SAP_ASHOST`, the mode is demo.
 3. `match_known_error` matches the rule `sap_idoc_status_51` (confidence 0.9). The
    text evaluated is the description **plus** the connector message.
@@ -185,7 +185,7 @@ demo scenario).
 
 - In demo mode the connector data is **simulated**.
 - In real mode, the function called (`BAPI_IDOC_STATUS`) was never executed
-  against a real SAP system. See the docstring of `app/connectors/rfc_connector.py`.
+  against a real SAP system. See the docstring of `packages/core/src/app/connectors/rfc_connector.py`.
 
 **Test:** `tests/test_casos_de_uso.py::test_uc01_idoc_51_resolvido_pelo_rule_engine`.
 
@@ -202,7 +202,7 @@ The Copilot crosses the call with the knowledge base.
 **Path.**
 
 1. `classify_domain` responds `saas`.
-2. `app/connectors/servicenow_connector.py::ServiceNowConnector` returns the
+2. `packages/core/src/app/connectors/servicenow_connector.py::ServiceNowConnector` returns the
    scenario.
 3. No rule matches, so `saas_diagnosis_node` calls the LLM via the gateway.
 4. `_apply_confidence_guardrails`:
@@ -217,7 +217,7 @@ retrieved document):
 - `model_confidence = 0.8`: the demo scenario is recognized and the evidence
   (0.88) supports this value;
 - `diagnosis_confidence = 0.88 × 0.8 ≈ 0.70`;
-- `prompt_version` = the one of `app/agent/prompts.py`;
+- `prompt_version` = the one of `packages/core/src/app/agent/prompts.py`;
 - `escalation.escalation = "grounded"`.
 
 **Variant: identifier that the connector does not recognize** (`INC9999999`). The
@@ -257,7 +257,7 @@ needs to **say it does not know**, instead of making it up.
 - `escalation.escalation = "no_context"`.
 
 **Web search.** It is *fail-closed*. With `WEB_SEARCH_POLICY=approved` (the
-default), `app/agent/nodes.py::_web_search_allowed` only allows if there is an
+default), `packages/core/src/app/agent/nodes.py::_web_search_allowed` only allows if there is an
 approved source for the `interface_type` in `web_search_sources` (DA-57). Without
 database, there is no search.
 
@@ -272,7 +272,7 @@ database, there is no search.
 
 **Objective.** Recurrent integration patterns are solved deterministically, auditably and without cost.
 
-**Catalog.** There are **22 rules** in `app/agent/rules.py::KNOWN_ERROR_RULES`.
+**Catalog.** There are **22 rules** in `packages/core/src/app/agent/rules.py::KNOWN_ERROR_RULES`.
 The source is the code; there is no table maintained by hand:
 
 ```bash
@@ -298,7 +298,7 @@ uv run python -c "from app.agent.rules import KNOWN_ERROR_RULES as R; print([r.c
 **Objective.** When the curated base has nothing strong, the system consults the
 reference library (DA-17).
 
-**Path.** In `app/rag/retriever.py::_retrieve_unified`:
+**Path.** In `packages/core/src/app/rag/retriever.py::_retrieve_unified`:
 
 1. If no candidate from `sap_incident_docs` passes the threshold, the search goes to
    `sap_reference_library` with its own fallback threshold (0.665).
@@ -323,10 +323,10 @@ registered. The `index_manifest` gate warns until `data/index_manifest.json` exi
 **Objective.** The diagnosis continues when the local LLM goes down, **without**
 confidential data going to the cloud.
 
-**Path** (`app/llm/gateway.py::invoke_via_gateway`):
+**Path** (`packages/core/src/app/llm/gateway.py::invoke_via_gateway`):
 
-1. **Sensitivity** (`app/llm/gateway.py::classify_sensitivity`): real connector data is `confidential`. What the client declares only **elevates** (GOV-01).
-2. **Eligible providers** (`app/llm/gateway.py::_select_allowed_providers`):
+1. **Sensitivity** (`packages/core/src/app/llm/gateway.py::classify_sensitivity`): real connector data is `confidential`. What the client declares only **elevates** (GOV-01).
+2. **Eligible providers** (`packages/core/src/app/llm/gateway.py::_select_allowed_providers`):
     - evaluated by **real origin** (DA-43), not by label;
     - `confidential` only goes to an origin in the allowlist
       (`CONFIDENTIAL_ALLOWED_ORIGINS`) or local.
@@ -334,7 +334,7 @@ confidential data going to the cloud.
     - opens the provider circuit;
     - applies backoff;
     - tries the next eligible provider (R01).
-4. **Effective policy:** `GET /llm/policy` (`app/llm/gateway.py::describe_effective_policy`).
+4. **Effective policy:** `GET /llm/policy` (`packages/core/src/app/llm/gateway.py::describe_effective_policy`).
 
 **Tests** (in `tests/test_llm_gateway.py`):
 
@@ -351,7 +351,7 @@ confidential data going to the cloud.
 the diagnosis without anyone opening a call.
 
 **Input.** `POST /events/incident` with `X-Event-Mesh-Api-Key`, or an
-AMQP 1.0 message (`app/events/amqp_consumer.py::AmqpConsumerTask`). The
+AMQP 1.0 message (`packages/core/src/app/events/amqp_consumer.py::AmqpConsumerTask`). The
 envelope is **strict CloudEvents 1.0** (M-16):
 
 ```json
@@ -366,10 +366,10 @@ envelope is **strict CloudEvents 1.0** (M-16):
 
 **Path.**
 
-1. `app/events/consumer.py::handle_incident_event_async` decides the execution:
+1. `packages/core/src/app/events/consumer.py::handle_incident_event_async` decides the execution:
     - with `REDIS_URL`, queues in RQ (durable);
     - without `REDIS_URL`, runs in background in the process.
-2. Deduplication uses the pair `(source, id)`: `app/events/idempotency.py::event_key`.
+2. Deduplication uses the pair `(source, id)`: `packages/core/src/app/events/idempotency.py::event_key`.
 
 **Observed result.**
 
@@ -393,7 +393,7 @@ envelope is **strict CloudEvents 1.0** (M-16):
 mainly, those **verified by human**.
 
 **Graph form.** It is decided in construction
-(`app/agent/graph.py::build_graph`):
+(`packages/core/src/app/agent/graph.py::build_graph`):
 
 - with `GRAPH_RAG_ENABLED=true` enter `graph_enrich` (before diagnosis) and
   `graph_write` (after);
@@ -402,11 +402,11 @@ mainly, those **verified by human**.
 **Rules (AI-01):**
 
 - **Fact:** only an incident verified by human
-  (`POST /incidents/{id}/verify` → `app/rag/graph_store.py::verify_incident`)
+  (`POST /incidents/{id}/verify` → `packages/core/src/app/rag/graph_store.py::verify_incident`)
   returns to the prompt as fact.
 - **Hypothesis:** the unverified hypothesis appears labeled as **NOT
-  verified** (`app/rag/graph_store.py::format_graph_context_for_prompt`).
-- **Prune:** `app/rag/graph_store.py::prune_ungrounded_hypotheses` never deletes
+  verified** (`packages/core/src/app/rag/graph_store.py::format_graph_context_for_prompt`).
+- **Prune:** `packages/core/src/app/rag/graph_store.py::prune_ungrounded_hypotheses` never deletes
   a verified incident.
 - **Redaction:** the description is redacted before going to Neo4j.
 
@@ -425,18 +425,18 @@ runs only in the CI `neo4j-smoke` job.
 **Objective.** Detect that the SAP republished an OData service with one less
 property **before** the consumer breaks in production.
 
-**Path** (`scripts/check_contract_drift.py` → `app/contracts/observe.py::check_connector`):
+**Path** (`scripts/check_contract_drift.py` → `packages/core/src/app/contracts/observe.py::check_connector`):
 
-1. `app/connectors/odata_connector.py::ODataConnector` reads `$metadata`
+1. `packages/core/src/app/connectors/odata_connector.py::ODataConnector` reads `$metadata`
    (`fetch_contract`).
-2. `app/contracts/odata.py::parse_odata_metadata` normalizes the contract. The
+2. `packages/core/src/app/contracts/odata.py::parse_odata_metadata` normalizes the contract. The
    fingerprint ignores namespace and version (invariant 18).
-3. `app/contracts/diff.py::diff_contracts` classifies the change:
+3. `packages/core/src/app/contracts/diff.py::diff_contracts` classifies the change:
     - **breaking:** property removed or renamed, type changed,
       `MaxLength` new or smaller;
     - **additive:** the rest.
 4. Only `breaking` becomes an incident, with a single emission point
-   (`app/contracts/observe.py::emit_incident`). If the delivery fails, the
+   (`packages/core/src/app/contracts/observe.py::emit_incident`). If the delivery fails, the
    old baseline remains and the next round detects it again.
 5. `system_contracts` is append-only, guaranteed by trigger (migration 011).
 
@@ -459,4 +459,4 @@ incident nor touches the baseline.
 - **Code references:** always in the format `file.py::symbol`. The gate
   `docs_code_references` fails on non-existent symbol.
 - **Environment variables:** the `docs_env_vars` gate checks the ones that appear
-  here against `app/config.py`, the compose and the manifests.
+  here against `packages/core/src/app/config.py`, the compose and the manifests.

@@ -15,7 +15,7 @@ o processo de desenvolvimento, documento interno fora do repositório).
 > conectores (4 validados contra sistema real; ver a matriz em
 > `docs/ARCHITECTURE.md`) e o grafo tem até 9 nodes. Os breakpoints abaixo
 > foram reconferidos contra o código e citam **símbolos**
-> (`app/agent/nodes.py::_run_diagnosis_agent`) em vez de números de linha,
+> (`packages/core/src/app/agent/nodes.py::_run_diagnosis_agent`) em vez de números de linha,
 > que mudam a cada commit. O caso guiado da Seção 5 mostra os dois caminhos
 > de diagnóstico: o **rule engine** (DA-33, ligado por default) e o **LLM**.
 >
@@ -33,12 +33,12 @@ o processo de desenvolvimento, documento interno fora do repositório).
 ### Fluxo ponta a ponta
 
 Da requisição HTTP ao relatório, com o grafo montado por
-`app/agent/graph.py::build_graph` (mesmo desenho do bloco gerado em
+`packages/core/src/app/agent/graph.py::build_graph` (mesmo desenho do bloco gerado em
 `docs/ARCHITECTURE.md`):
 
 ```mermaid
 flowchart TD
-    inicio(["app/agent/graph.py: run_diagnosis<br/>monta o CopilotState inicial"])
+    inicio(["packages/core/src/app/agent/graph.py: run_diagnosis<br/>monta o CopilotState inicial"])
     supervisor["supervisor<br/>classifica agent_domain: sap / saas / generic<br/>deterministico, sem LLM"]
     connector["connector<br/>10 conectores, real ou cenario demo"]
     retrieve["retrieve<br/>RAG hibrido Qdrant denso + BM25<br/>+ reranker mmarco-mMiniLMv2"]
@@ -50,7 +50,7 @@ flowchart TD
     report["report"]
     fim(["DiagnosisResponse<br/>+ report_markdown"])
     cliente(["Cliente HTTP: curl / HTTPie / Bruno"])
-    api["app/main.py: POST /diagnose<br/>Pydantic valida IncidentRequest<br/>antes do seu codigo rodar"]
+    api["packages/core/src/app/main.py: POST /diagnose<br/>Pydantic valida IncidentRequest<br/>antes do seu codigo rodar"]
     cliente -->|"description, interface_type, identifier"| api
     api -->|"run_diagnosis body"| inicio
     inicio --> supervisor
@@ -80,7 +80,7 @@ flowchart TD
 > `diagnose_node` por três especialistas, e quem decide entre eles **não é o
 > supervisor**: o supervisor roda primeiro e *classifica* o domínio, gravando
 > `agent_domain` no estado. O roteamento acontece depois de `retrieve`, na
-> aresta condicional `app/agent/graph.py::_route_to_specialist`, que lê esse
+> aresta condicional `packages/core/src/app/agent/graph.py::_route_to_specialist`, que lê esse
 > campo. Depurar com breakpoint só em `supervisor_node` não mostra a escolha
 > acontecendo — ela acontece na aresta, não no node. Para vê-la, coloque o
 > breakpoint dentro de `_route_to_specialist`.
@@ -89,49 +89,49 @@ Cada node e o arquivo que o implementa:
 
 | Node do grafo | Função | Arquivo |
 |---|---|---|
-| `supervisor` | `supervisor_node` | `app/agent/supervisor.py` |
-| `connector` | `connector_node` | `app/agent/nodes.py` |
-| `retrieve` | `retrieve_node` | `app/agent/nodes.py` |
-| `sap_diagnose` | `sap_diagnosis_node` | `app/agent/nodes.py` |
-| `saas_diagnose` | `saas_diagnosis_node` | `app/agent/nodes.py` |
-| `generic_diagnose` | `generic_diagnosis_node` | `app/agent/nodes.py` |
-| `graph_enrich`, `graph_write` | `graph_enrich_node`, `graph_write_node` | `app/agent/nodes.py` (só com GraphRAG) |
-| `report` | `report_node` | `app/agent/nodes.py` |
+| `supervisor` | `supervisor_node` | `packages/core/src/app/agent/supervisor.py` |
+| `connector` | `connector_node` | `packages/core/src/app/agent/nodes.py` |
+| `retrieve` | `retrieve_node` | `packages/core/src/app/agent/nodes.py` |
+| `sap_diagnose` | `sap_diagnosis_node` | `packages/core/src/app/agent/nodes.py` |
+| `saas_diagnose` | `saas_diagnosis_node` | `packages/core/src/app/agent/nodes.py` |
+| `generic_diagnose` | `generic_diagnosis_node` | `packages/core/src/app/agent/nodes.py` |
+| `graph_enrich`, `graph_write` | `graph_enrich_node`, `graph_write_node` | `packages/core/src/app/agent/nodes.py` (só com GraphRAG) |
+| `report` | `report_node` | `packages/core/src/app/agent/nodes.py` |
 
 Os três especialistas chamam o mesmo corpo de diagnóstico,
-`app/agent/nodes.py::_run_diagnosis_agent`, que tem dois caminhos:
+`packages/core/src/app/agent/nodes.py::_run_diagnosis_agent`, que tem dois caminhos:
 
 1. **Rule engine primeiro (DA-33).** Com `RULE_ENGINE_ENABLED=true` (default),
    a descrição + a mensagem do conector são testadas contra as regras de
-   `app/agent/rules.py::KNOWN_ERROR_RULES` via
-   `app/agent/rules.py::match_known_error`. Se uma regra casa, o node devolve
+   `packages/core/src/app/agent/rules.py::KNOWN_ERROR_RULES` via
+   `packages/core/src/app/agent/rules.py::match_known_error`. Se uma regra casa, o node devolve
    o diagnóstico **sem chamar o LLM** (`llm_provider_used = "rule_engine"`,
    `prompt_version` nulo).
 2. **Só sem regra, o LLM.** O prompt é montado e o agente ReAct
    (`create_react_agent(llm, tools, response_format=DiagnosisModel)`) é
-   executado através do AI Gateway, `app/llm/gateway.py::invoke_via_gateway`
+   executado através do AI Gateway, `packages/core/src/app/llm/gateway.py::invoke_via_gateway`
    (DA-26: policy, circuit breaker, budget, fallback híbrido). O gateway obtém
-   o modelo de `app/llm/factory.py::get_chat_model` — com o provider default,
+   o modelo de `packages/core/src/app/llm/factory.py::get_chat_model` — com o provider default,
    um `ChatOllama` apontando para o Ollama local (`qwen3-coder-next:latest`).
    O `structured_response` volta validado pelo Pydantic.
 
 Nos dois casos o resultado passa pelos guardrails
-(`app/agent/nodes.py::_apply_confidence_guardrails`) e a resposta HTTP sai
+(`packages/core/src/app/agent/nodes.py::_apply_confidence_guardrails`) e a resposta HTTP sai
 como `DiagnosisResponse` + `report_markdown`.
 
 ### Onde cada etapa vive (arquivo real)
 
 | Etapa | Arquivo | O que faz |
 |---|---|---|
-| Entrada HTTP + validação | `app/main.py` | Define `POST /diagnose`, delega pro grafo |
-| Contratos de dados | `app/models/models.py` | `IncidentRequest` (entrada), `DiagnosisResponse` (saída) |
-| Configuração central | `app/config.py` | Única fonte de verdade — URLs, modelo, credenciais, lida do `.env` |
-| Orquestração (o "workflow") | `app/agent/graph.py` | Define os 9 nodes e as arestas entre eles |
-| Busca de dados no sistema SAP + multi-vendor | `app/connectors/` | `base.py` (contrato comum), 10 conectores (OData, RFC, ServiceNow, Salesforce, Workday, Ariba, SuccessFactors, CAP, APIManagement, PO/PI) - modo real quando configurado; validação por conector em `docs/ARCHITECTURE.md` |
-| Busca de conhecimento (RAG) | `app/rag/ingest.py`, `app/rag/retriever.py` | Indexação e consulta no Qdrant |
+| Entrada HTTP + validação | `packages/core/src/app/main.py` | Define `POST /diagnose`, delega pro grafo |
+| Contratos de dados | `packages/core/src/app/models/models.py` | `IncidentRequest` (entrada), `DiagnosisResponse` (saída) |
+| Configuração central | `packages/core/src/app/config.py` | Única fonte de verdade — URLs, modelo, credenciais, lida do `.env` |
+| Orquestração (o "workflow") | `packages/core/src/app/agent/graph.py` | Define os 9 nodes e as arestas entre eles |
+| Busca de dados no sistema SAP + multi-vendor | `packages/core/src/app/connectors/` | `base.py` (contrato comum), 10 conectores (OData, RFC, ServiceNow, Salesforce, Workday, Ariba, SuccessFactors, CAP, APIManagement, PO/PI) - modo real quando configurado; validação por conector em `docs/ARCHITECTURE.md` |
+| Busca de conhecimento (RAG) | `packages/core/src/app/rag/ingest.py`, `packages/core/src/app/rag/retriever.py` | Indexação e consulta no Qdrant |
 | Testes | `tests/` | Regressão automatizada de tudo acima |
 
-**Sobre `app/services/`:** não está vazia, e é mais central do que parece. `incident_repository.py` faz a persistência PostgreSQL das tabelas `incidents` e `verifications`; `incident_recorder.py` grava **cada** diagnóstico concluído em `incidents` e é chamado por `run_diagnosis()` — o ponto comum a todos os caminhos de entrada (`/diagnose`, worker RQ, webhook/AMQP, A2A e MCP). Se você depurar por que um relatório aparece no Grafana e não na tabela, esse é o arquivo.
+**Sobre `packages/core/src/app/services/`:** não está vazia, e é mais central do que parece. `incident_repository.py` faz a persistência PostgreSQL das tabelas `incidents` e `verifications`; `incident_recorder.py` grava **cada** diagnóstico concluído em `incidents` e é chamado por `run_diagnosis()` — o ponto comum a todos os caminhos de entrada (`/diagnose`, worker RQ, webhook/AMQP, A2A e MCP). Se você depurar por que um relatório aparece no Grafana e não na tabela, esse é o arquivo.
 
 ### Analogia ABAP
 
@@ -149,16 +149,16 @@ Só o que o projeto **realmente usa** — não a API inteira de cada lib.
 | **Pydantic** | Validação de dados via type hints | Já vem embutido no FastAPI; garante que `IncidentRequest` malformado nunca chega no seu código | `BaseModel`, campos com `str \| None`, `Literal[...]` com os 10 tipos de conector em `IncidentRequest.interface_type` (`odata`, `rfc`, `servicenow`, `salesforce`, `workday`, `ariba`, `successfactors`, `po`, `cap`, `apim`), `Field(ge=0, le=1)` (validação de confidence), `Field(max_length=...)` (limite de entrada), `DiagnosisModel` como `response_format` do agente (saída do LLM validada) |
 | **pydantic-settings** | Extensão do Pydantic para configuração via `.env`/env vars | Elimina configuração hardcoded (gap real que encontramos e corrigimos) | `BaseSettings`, `SettingsConfigDict(env_file=".env")` |
 | **LangGraph** | Orquestração de agentes como máquina de estados (grafo) | Modela o fluxo (`supervisor→connector→retrieve→<domínio>_diagnose→report`) de forma explícita e visualizável, em vez de um script sequencial disfarçado de "agente" | `StateGraph`, `add_node`, `add_edge`, `add_conditional_edges`, `set_entry_point`, `compile()`, `.invoke()`; `create_react_agent(..., response_format=DiagnosisModel)` (`langgraph.prebuilt`) no diagnóstico |
-| **langchain-ollama** | Integração LangChain ↔ Ollama | Dá interface padronizada (`ChatOllama`, `OllamaEmbeddings`) em vez de chamar a API REST do Ollama na mão | `ChatOllama(model=..., temperature=0.0, seed=42, ...)` construído em `app/llm/factory.py::get_chat_model` e passado ao `create_react_agent`, `OllamaEmbeddings(model=...).embed_documents()/.embed_query()` |
+| **langchain-ollama** | Integração LangChain ↔ Ollama | Dá interface padronizada (`ChatOllama`, `OllamaEmbeddings`) em vez de chamar a API REST do Ollama na mão | `ChatOllama(model=..., temperature=0.0, seed=42, ...)` construído em `packages/core/src/app/llm/factory.py::get_chat_model` e passado ao `create_react_agent`, `OllamaEmbeddings(model=...).embed_documents()/.embed_query()` |
 | **langchain-text-splitters** | Divisão de texto em chunks | `MarkdownTextSplitter` respeita a estrutura Markdown dos documentos de incidente ao invés de cortar no meio de uma frase | `MarkdownTextSplitter(chunk_size=..., chunk_overlap=...).split_text()` |
 | **pymupdf4llm** | Extração de PDF com preservação de estrutura Markdown | Substitui PyPDFLoader na ingestão — preserva tabelas, headers, blocos de código dos PDFs técnicos SAP | `pymupdf4llm.to_markdown(path, page_chunks=True)` |
 | **qdrant-client** | Cliente Python do Qdrant (vector DB) | Busca por similaridade vetorial — é o "motor de busca" do RAG | `QdrantClient(url=...)`, `.create_collection()`, `.upsert()`, `.query_points()` |
 | **Ollama** (runtime) | Servidor de inferência local de LLMs | Roda modelo local (`qwen3-coder-next:latest`) sem depender de API paga/nuvem — decisão alinhada ao seu hardware (APU com ROCm) | Não é chamado diretamente pelo código do Copilot — o `langchain-ollama` fala com ele via HTTP em `settings.ollama_host`, sempre através do AI Gateway |
-| **LLM Gateway** (`app/llm/factory.py`) | Abstracao interna, nao uma lib externa | Permite trocar Ollama por OpenAI/Azure OpenAI via `Settings.llm_provider`, sem tocar no grafo | `get_chat_model()` retorna um `BaseChatModel` do LangChain, seja qual for o provedor escolhido; o grafo só o usa via `app/llm/gateway.py::invoke_via_gateway` (DA-26) |
+| **LLM Gateway** (`packages/core/src/app/llm/factory.py`) | Abstracao interna, nao uma lib externa | Permite trocar Ollama por OpenAI/Azure OpenAI via `Settings.llm_provider`, sem tocar no grafo | `get_chat_model()` retorna um `BaseChatModel` do LangChain, seja qual for o provedor escolhido; o grafo só o usa via `packages/core/src/app/llm/gateway.py::invoke_via_gateway` (DA-26) |
 | **Langfuse** | Observabilidade de agentes/LLM | Visibilidade de tempo/tokens/payload de cada etapa, sem isso o sistema era uma caixa-preta | `@observe` (decorator), `CallbackHandler` (LangChain), `get_client().flush()` |
 | **pytest** | Framework de testes | Padrão de mercado Python; `conftest.py` implementa skip automático de testes de integração se a stack estiver fora do ar | `@pytest.mark.parametrize`, `@pytest.mark.integration`, fixtures |
 | **promptfoo** | Comparação/regressão de prompt e modelo | Usado *fora* do código de produção — ferramenta de decisão, não dependência do Copilot em si | `providers` (exec customizado chamando `run_diagnosis` de verdade), `tests`/`assert` |
-| **pyRFC** | Binding Python pro SAP NetWeaver RFC SDK | O `RFCConnector` ja tem `use_real=True` implementado e pronto, mas **`pyrfc` foi arquivado pela propria SAP** (mai/2026) - bloqueio persiste, agora por falta de binding mantido, alem do SDK licenciado (que e gratuito pra cliente real com S-user, so nao para o ambiente de desenvolvimento deste produto) | Ver `app/connectors/rfc_connector.py`, docstring atualizada |
+| **pyRFC** | Binding Python pro SAP NetWeaver RFC SDK | O `RFCConnector` ja tem `use_real=True` implementado e pronto, mas **`pyrfc` foi arquivado pela propria SAP** (mai/2026) - bloqueio persiste, agora por falta de binding mantido, alem do SDK licenciado (que e gratuito pra cliente real com S-user, so nao para o ambiente de desenvolvimento deste produto) | Ver `packages/core/src/app/connectors/rfc_connector.py`, docstring atualizada |
 
 ### Analogia ABAP
 
@@ -175,7 +175,7 @@ Pra ir direto num símbolo, use `Ctrl+Shift+O` (Windows/Linux) com o arquivo abe
 
 ### BP1 — Entrada da requisição (validação Pydantic)
 
-**Símbolo:** `app/main.py::diagnose` — assinatura atual
+**Símbolo:** `packages/core/src/app/main.py::diagnose` — assinatura atual
 `diagnose(request: Request, body: IncidentRequest)`. O `request` é o objeto
 HTTP do Starlette (usado pelo rate limit); o incidente validado é o `body`.
 
@@ -189,7 +189,7 @@ HTTP do Starlette (usado pelo rate limit); o incidente validado é o `body`.
 
 ### BP2 — Montagem do estado inicial
 
-**Símbolo:** `app/agent/graph.py::run_diagnosis`, logo após a criação de `initial_state`
+**Símbolo:** `packages/core/src/app/agent/graph.py::run_diagnosis`, logo após a criação de `initial_state`
 
 **O que observar:** o dicionário `initial_state` — repare que `retrieved_context`, `diagnosis` e `report_markdown` **ainda não existem** nele. O `CopilotState` é um `TypedDict` com `total=False`, ou seja, cada node preenche só o que é responsabilidade dele.
 
@@ -197,13 +197,13 @@ HTTP do Starlette (usado pelo rate limit); o incidente validado é o `body`.
 
 ### BP3 — Node do conector
 
-**Símbolo:** `app/agent/nodes.py::connector_node`
+**Símbolo:** `packages/core/src/app/agent/nodes.py::connector_node`
 
 Coloque o breakpoint na linha `result = connector.fetch(...)`.
 
 **Passos:**
 1. Antes da chamada: inspecione `state.get("interface_type")` e `state.get("identifier")` — vieram da requisição original
-2. **Step Into** (F11) dentro de `connector.fetch()` — você cai em `app/connectors/rfc_connector.py` (ou `odata_connector.py`), dentro de `RFCConnector.fetch()`
+2. **Step Into** (F11) dentro de `connector.fetch()` — você cai em `packages/core/src/app/connectors/rfc_connector.py` (ou `odata_connector.py`), dentro de `RFCConnector.fetch()`
 3. Observe o dicionário `_MOCK_SCENARIOS` no escopo do módulo — é aqui que o "sistema SAP simulado" realmente vive
 4. Depois do `return`, volte pro `connector_node` (F5 ou Step Out) e veja `result` — um `ConnectorResult` com `source_system`, `status`, `error_code`, `message`, `raw`, `is_mock`, `is_fallback`
 
@@ -211,23 +211,23 @@ Coloque o breakpoint na linha `result = connector.fetch(...)`.
 
 ### BP4 — Node de retrieval (Qdrant + reranker)
 
-`retrieve_node` chama `app/rag/retriever.py::retrieve`, que para o target
-`incidents` despacha para `app/rag/retriever.py::_retrieve_unified`. Este,
-por sua vez, chama `app/rag/retriever.py::_retrieve_hybrid` (busca híbrida
+`retrieve_node` chama `packages/core/src/app/rag/retriever.py::retrieve`, que para o target
+`incidents` despacha para `packages/core/src/app/rag/retriever.py::_retrieve_unified`. Este,
+por sua vez, chama `packages/core/src/app/rag/retriever.py::_retrieve_hybrid` (busca híbrida
 na collection de incidentes), funde com o fallback da `sap_reference_library`
 quando não há match forte e passa tudo pelo reranker. Dois breakpoints:
 
-**4a.** Em `app/rag/retriever.py::_retrieve_hybrid`, na linha
+**4a.** Em `packages/core/src/app/rag/retriever.py::_retrieve_hybrid`, na linha
 `fused = client.query_points(...)`.
 
 1. Antes: inspecione `dense_query` — uma lista de ~768 floats (a dimensão do `nomic-embed-text`). É a "tradução" da sua pergunta em texto pra um ponto no espaço vetorial. A mesma chamada leva o vetor esparso BM25 num segundo `Prefetch`; o Qdrant funde os dois por RRF
 2. Step Over (F10) na chamada — é aqui que a rede vai até o Qdrant (`http://127.0.0.1:6333`)
 3. Depois: os hits saem com `source`, `text` e `score` (cosseno denso). Esse `score` **não** é o que decide a admissão hoje
 
-**4b.** Em `app/rag/retriever.py::_retrieve_unified`, na linha
+**4b.** Em `packages/core/src/app/rag/retriever.py::_retrieve_unified`, na linha
 `admitted = [c for c in candidates if _evidence_admission_score(c) >= score_threshold]`.
 
-- Expanda `candidates` (já reordenados por `app/rag/retriever.py::rerank`): cada um ganhou `rerank_score` (logit cru do cross-encoder) e **`rerank_score_calibrated`** (sigmoid, DA-42). **É este o número mais importante aqui** — `app/rag/retriever.py::_evidence_admission_score` usa o calibrado para decidir quem entra, e `_compute_evidence_strength` usa o do primeiro hit como `evidence_strength`
+- Expanda `candidates` (já reordenados por `packages/core/src/app/rag/retriever.py::rerank`): cada um ganhou `rerank_score` (logit cru do cross-encoder) e **`rerank_score_calibrated`** (sigmoid, DA-42). **É este o número mais importante aqui** — `packages/core/src/app/rag/retriever.py::_evidence_admission_score` usa o calibrado para decidir quem entra, e `_compute_evidence_strength` usa o do primeiro hit como `evidence_strength`
 - Compare o primeiro e o segundo candidato: a folga entre eles é o que diz se a correspondência é forte ou empatada
 
 **Pergunta:** "o retriever está de fato retornando o documento certo, com margem de confiança suficiente, ou está empatado com outro candidato?" — isso foi exatamente o que caçamos manualmente quando descobrimos o bug de mistura de contexto (ver o processo de desenvolvimento (documento interno), Fase 3).
@@ -235,13 +235,13 @@ quando não há match forte e passa tudo pelo reranker. Dois breakpoints:
 ### BP5 — Node de diagnóstico (rule engine ou LLM)
 
 **Símbolos:** `diagnose_node` **não existe mais**: a DA-22 (roteamento por
-domínio) o substituiu por três funções, `app/agent/nodes.py::sap_diagnosis_node`,
-`app/agent/nodes.py::saas_diagnosis_node` e
-`app/agent/nodes.py::generic_diagnosis_node` — o *node* do grafo se chama
+domínio) o substituiu por três funções, `packages/core/src/app/agent/nodes.py::sap_diagnosis_node`,
+`packages/core/src/app/agent/nodes.py::saas_diagnosis_node` e
+`packages/core/src/app/agent/nodes.py::generic_diagnosis_node` — o *node* do grafo se chama
 `saas_diagnose`, a *função* é `saas_diagnosis_node`. O supervisor só
 classifica `agent_domain`; quem escolhe qual especialista roda é a aresta
 condicional `_route_to_specialist`. As três chamam o mesmo corpo,
-`app/agent/nodes.py::_run_diagnosis_agent`.
+`packages/core/src/app/agent/nodes.py::_run_diagnosis_agent`.
 
 > **Atualizado após code review:** o código não usa `llm.invoke(prompt)`
 > direto nem `with_structured_output(..., include_raw=True)`. O caminho
@@ -276,7 +276,7 @@ dispara no caso guiado**.
   adicional devolvia o campo nulo (4 de 13 casos do promptfoo, todos com
   diagnóstico correto). O código trata isso logo abaixo: quando
   `matched_source` vem nulo, chama
-  `app/agent/nodes.py::_recover_matched_source_from_raw` sobre o texto cru —
+  `packages/core/src/app/agent/nodes.py::_recover_matched_source_from_raw` sobre o texto cru —
   que não é porta para alucinação porque `_apply_confidence_guardrails` (BP6)
   ainda valida o nome contra as fontes realmente recuperadas
 - Se `structured` vier `None`, o texto final (`raw`) vai **direto** para o
@@ -293,7 +293,7 @@ estruturada teve sucesso, ou caiu no fallback?"
 
 ### BP6 — Guardrails determinísticos
 
-**Símbolo:** `app/agent/nodes.py::_apply_confidence_guardrails` (chamado nos
+**Símbolo:** `packages/core/src/app/agent/nodes.py::_apply_confidence_guardrails` (chamado nos
 dois caminhos: logo depois do rule engine e logo depois do LLM)
 
 > O campo `diagnosis["confidence"]` **não sobrevive** a esta função. A revisão
@@ -307,7 +307,7 @@ dois caminhos: logo depois do rule engine e logo depois do LLM)
 do LLM se autoavaliar corretamente:
 
 1. **Clamp de range:** `model_confidence = max(0.0, min(1.0, raw_model_confidence))` — defesa em profundidade mesmo com `Field(ge=0.0, le=1.0)` já validando na origem via Pydantic
-2. **Teto de evidência (DA-25):** `evidence_ceiling = min(1.0, evidence_strength + EVIDENCE_CONFIDENCE_MARGIN)` e `model_confidence = min(model_confidence, evidence_ceiling)`, com a margem `app/agent/nodes.py::EVIDENCE_CONFIDENCE_MARGIN` = `0.25`. `evidence_strength` vem de `app/agent/nodes.py::_compute_evidence_strength` (`rerank_score_calibrated` do primeiro hit; piso 0.75 com conector real) e, quando o diagnóstico é do rule engine, é o maior entre esse valor e o `evidence_strength` da regra. Confiança não pode exceder o quanto a evidência sustenta — é o guardrail que mais aparece na prática
+2. **Teto de evidência (DA-25):** `evidence_ceiling = min(1.0, evidence_strength + EVIDENCE_CONFIDENCE_MARGIN)` e `model_confidence = min(model_confidence, evidence_ceiling)`, com a margem `packages/core/src/app/agent/nodes.py::EVIDENCE_CONFIDENCE_MARGIN` = `0.25`. `evidence_strength` vem de `packages/core/src/app/agent/nodes.py::_compute_evidence_strength` (`rerank_score_calibrated` do primeiro hit; piso 0.75 com conector real) e, quando o diagnóstico é do rule engine, é o maior entre esse valor e o `evidence_strength` da regra. Confiança não pode exceder o quanto a evidência sustenta — é o guardrail que mais aparece na prática
 3. **Fallback do conector:** identificador não reconhecido (`is_fallback`) → teto de 0.4 e prefixo `[confianca limitada - identificador nao reconhecido pelo sistema]`
 4. **Contexto vazio:** nenhum documento do retriever **e** nenhum dado de conector (e não é rule engine) → teto de 0.3, `matched_source` forçado pra `None`
 5. **Fonte inexistente:** `matched_source` citado que **não** está entre as fontes de `retrieved_context` (e não é rule engine) → `matched_source = None` e teto de 0.3. Vale também quando não há documento recuperado nenhum (correção M-04)
@@ -319,9 +319,9 @@ do LLM se autoavaliar corretamente:
 
 ### BP7 — Node de relatório
 
-**Símbolo:** `app/agent/nodes.py::report_node`, na linha `return {"report_markdown": report}`
+**Símbolo:** `packages/core/src/app/agent/nodes.py::report_node`, na linha `return {"report_markdown": report}`
 
-**O que observar:** a f-string `report` montada — compare com o `DiagnosisResponse.report_markdown` que sai na resposta HTTP final. Esse é o último ponto onde você vê tudo junto: causa raiz, as três métricas (`diagnosis_confidence`, `model_confidence`, `evidence_strength`), provider/agente/modelo/versão do prompt, documento usado como base, próximos passos e o Evidence Bundle em duas seções — **Primary Evidence** (`system_observed`: conector real ou rule engine) e **Supporting Facts** (RAG, web, conector simulado, relato do usuário), montadas por `app/agent/nodes.py::_assemble_evidence`.
+**O que observar:** a f-string `report` montada — compare com o `DiagnosisResponse.report_markdown` que sai na resposta HTTP final. Esse é o último ponto onde você vê tudo junto: causa raiz, as três métricas (`diagnosis_confidence`, `model_confidence`, `evidence_strength`), provider/agente/modelo/versão do prompt, documento usado como base, próximos passos e o Evidence Bundle em duas seções — **Primary Evidence** (`system_observed`: conector real ou rule engine) e **Supporting Facts** (RAG, web, conector simulado, relato do usuário), montadas por `packages/core/src/app/agent/nodes.py::_assemble_evidence`.
 
 **Pergunta:** "o relatório final reflete fielmente tudo que os nodes anteriores descobriram, ou perdeu informação no caminho?"
 
@@ -342,25 +342,25 @@ do LLM se autoavaliar corretamente:
 
 ### `.env` (na raiz de `~/MyProjects/GitHub/integration-incident-copilot`)
 
-Cada variável mapeia 1:1 pra um campo de `app/config.py::Settings`:
+Cada variável mapeia 1:1 pra um campo de `packages/core/src/app/config.py::Settings`:
 
 | Variável no `.env` | Campo em `Settings` | O que muda no comportamento |
 |---|---|---|
-| (não setado, usa default) | `llm_model` | Qual modelo os nodes de diagnóstico (`sap_`/`saas_`/`generic_diagnosis_node`) chamam quando o rule engine não resolve — foi editando isso indiretamente (via `sed` no código, antes do `app/config.py` existir) que trocamos de `qwen3:30b-a3b` pra `qwen3-coder-next:latest` |
+| (não setado, usa default) | `llm_model` | Qual modelo os nodes de diagnóstico (`sap_`/`saas_`/`generic_diagnosis_node`) chamam quando o rule engine não resolve — foi editando isso indiretamente (via `sed` no código, antes do `packages/core/src/app/config.py` existir) que trocamos de `qwen3:30b-a3b` pra `qwen3-coder-next:latest` |
 | `RULE_ENGINE_ENABLED` (default `true`) | `rule_engine_enabled` | Com `false`, `_run_diagnosis_agent` pula o rule engine e todo diagnóstico vai ao LLM — use só para depurar o caminho LLM (Seção 5) |
-| `NEO4J_PASSWORD` | `neo4j_password` | Usado pelo GraphRAG (`app/rag/graph_store.py`) quando `GRAPH_RAG_ENABLED=true` — desligado por default, mas implementado e testado (nao mais so provisionado) |
+| `NEO4J_PASSWORD` | `neo4j_password` | Usado pelo GraphRAG (`packages/core/src/app/rag/graph_store.py`) quando `GRAPH_RAG_ENABLED=true` — desligado por default, mas implementado e testado (nao mais so provisionado) |
 | `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_HOST` | `langfuse_*` | Sem essas três, o `CallbackHandler()` do Langfuse falha silenciosamente em autenticar — os traces simplesmente não aparecem em `localhost:3000` |
 
 **Para ver a configuração efetiva sem ler código:** `uv run python -m app.config`
 
 ### Qdrant
 
-Duas collections, criadas dinamicamente por `app/rag/ingest.py::ensure_collection()`:
+Duas collections, criadas dinamicamente por `packages/core/src/app/rag/ingest.py::ensure_collection()`:
 
 - `sap_incident_docs` — a que o pipeline de fato consulta (via `retrieve_node`, antes dos nodes de diagnóstico)
 - `sap_reference_library` — PDFs técnicos SAP (2.000+ documentos), **consultada pelo grafo desde a v2.0** via retrieval unificado (`_retrieve_unified`) com reranker semântico
 
-O tamanho do vetor (`vector_size`) não é hardcoded — é medido do próprio modelo de embedding por `app/rag/ingest.py::probe_vector_size` (embeda a string `"probe"` e conta as dimensões), então se você trocar `EMBEDDING_MODEL` no `.env`, a próxima ingestão cria a collection com a dimensão certa automaticamente (mas atenção: **misturar embeddings de dimensões diferentes na mesma collection quebra a busca** — trocar de modelo de embedding exige reindexar do zero).
+O tamanho do vetor (`vector_size`) não é hardcoded — é medido do próprio modelo de embedding por `packages/core/src/app/rag/ingest.py::probe_vector_size` (embeda a string `"probe"` e conta as dimensões), então se você trocar `EMBEDDING_MODEL` no `.env`, a próxima ingestão cria a collection com a dimensão certa automaticamente (mas atenção: **misturar embeddings de dimensões diferentes na mesma collection quebra a busca** — trocar de modelo de embedding exige reindexar do zero).
 
 ### Ollama
 
@@ -411,7 +411,7 @@ Isso é o "payload simulando o que Ariba/S4 reportariam" — em produção, seri
 
 **No BP4 (retrieval):** a query efetiva combina a descrição (`"IDoc travado"`) com `data.message` — o retriever busca por *"IDoc travado\nIDoc com status 51 - Application Document Not Posted"*. Em 4b, o esperado é `idoc_status_51.md` no topo de `candidates`; olhe o `rerank_score_calibrated` dele e a folga para o segundo colocado. (Versões antigas deste tutorial citavam "score 0.904": era o cosseno da busca densa pura, antes do híbrido e do reranker, e não é mais o número que decide.)
 
-**No BP5r (`if _rule_match:`):** `_rule_text` é `"IDoc travado IDoc com status 51 - Application Document Not Posted"`. O padrão `IDoc.*status.*51` da regra `sap_idoc_status_51` (`app/agent/rules.py::KNOWN_ERROR_RULES`) casa — repare que quem fez casar foi a **mensagem do conector**, não a descrição vaga. `_has_connector` é `False` (o conector é mock), então a regra devolve `evidence_strength = 0.70`. Aperte F10: o node retorna aqui. **BP5a e BP5b não disparam** — nenhum prompt é montado, nenhum token é gasto.
+**No BP5r (`if _rule_match:`):** `_rule_text` é `"IDoc travado IDoc com status 51 - Application Document Not Posted"`. O padrão `IDoc.*status.*51` da regra `sap_idoc_status_51` (`packages/core/src/app/agent/rules.py::KNOWN_ERROR_RULES`) casa — repare que quem fez casar foi a **mensagem do conector**, não a descrição vaga. `_has_connector` é `False` (o conector é mock), então a regra devolve `evidence_strength = 0.70`. Aperte F10: o node retorna aqui. **BP5a e BP5b não disparam** — nenhum prompt é montado, nenhum token é gasto.
 
 **No BP6 (guardrail, chamado de dentro do rule engine):** `diagnosis.pop("confidence")` tira o `0.90` da regra, que vira `model_confidence`. `is_rule_engine` é `True` (o `matched_source` é `rule_engine:sap_idoc_status_51` e bate com `rule_engine_category`). `evidence_strength = max(pipeline, 0.70)`, onde "pipeline" é o `rerank_score_calibrated` do primeiro hit (o conector mock não dá piso). O teto `evidence_strength + 0.25` é ≥ 0.95, então `model_confidence` **permanece 0.90**; `is_fallback` é `False` (guardrail 3 não dispara) e os guardrails 4 e 5 não se aplicam ao rule engine. `diagnosis_confidence = evidence_strength * 0.90`.
 

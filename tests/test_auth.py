@@ -240,3 +240,16 @@ def test_login_rate_limit_com_x_api_key_nao_e_contornado() -> None:
             )
         else:
             assert response.status_code == 429, f"Tentativa {i} deve ser 429 (rate limit ativo)"
+
+
+def test_cookie_configuravel_preserva_sessao_do_outro_produto(user_env, monkeypatch):
+    monkeypatch.setattr(settings, "session_cookie_name", "product_session")
+    client.cookies.set("iic_session", "legacy-other-product")
+    response = client.post("/auth/login", json={"username": "marcos", "password": "senha-correta"})
+    assert response.status_code == 200
+    assert "product_session=" in response.headers["set-cookie"]
+    assert client.cookies.get("iic_session") == "legacy-other-product"
+    assert client.get("/auth/session").json()["authenticated"] is True
+    client.post("/auth/logout")
+    assert client.cookies.get("iic_session") == "legacy-other-product"
+    assert client.get("/auth/session").json()["authenticated"] is False

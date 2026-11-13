@@ -13,7 +13,7 @@ flowchart LR
     COR[correlation]
     XSD[(PL 010g<br/>+ hashes)]
   end
-  subgraph CORE[Core · app/]
+  subgraph CORE[Core · packages/core/src/app/]
     API[/diagnose]
     DP[domain_plugins]
     GR[grafo LangGraph]

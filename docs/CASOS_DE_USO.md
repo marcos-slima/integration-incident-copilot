@@ -94,7 +94,7 @@ UC-01, UC-02 e UC-03 abaixo.
 ### Loop ReAct e chamada de ferramenta
 
 Dentro do no de diagnostico, sem regra casada
-(`app/agent/nodes.py::_run_diagnosis_agent`):
+(`packages/core/src/app/agent/nodes.py::_run_diagnosis_agent`):
 
 ```mermaid
 sequenceDiagram
@@ -135,14 +135,14 @@ e o loop termina na primeira resposta do LLM.
 
 | Etapa | Onde | O que faz |
 |---|---|---|
-| Domínio | `app/agent/supervisor.py::classify_domain` | `sap`, `saas` ou `generic`, sem LLM (invariante 6) |
-| Conector | `app/agent/nodes.py::connector_node` | dado do sistema de origem; em modo demo, cenário simulado (`is_mock=True`) |
-| RAG | `app/agent/nodes.py::retrieve_node` → `app/rag/retriever.py::retrieve` | busca híbrida + reranker; admissão pelo score calibrado (DA-25/42) |
-| Diagnóstico | `app/agent/nodes.py::_run_diagnosis_agent` | **rule engine primeiro** (`app/agent/rules.py::match_known_error`); só sem regra chama o LLM, pelo AI Gateway (`app/llm/gateway.py::invoke_via_gateway`) |
-| Guardrails | `app/agent/nodes.py::_apply_confidence_guardrails` | teto de confiança pela evidência, fonte citada tem de ter sido recuperada |
-| Evidência | `app/agent/nodes.py::_assemble_evidence` | lista de fontes com `trust_level` (nunca autoavaliação do LLM) |
-| Escalonamento | `app/agent/escalation.py::compute_escalation_signal` | sinal determinístico devolvido em `escalation` (informativo) |
-| Persistência | `app/services/incident_recorder.py::record_incident` | linha em `incidents` (best-effort, só com `DATABASE_URL`) |
+| Domínio | `packages/core/src/app/agent/supervisor.py::classify_domain` | `sap`, `saas` ou `generic`, sem LLM (invariante 6) |
+| Conector | `packages/core/src/app/agent/nodes.py::connector_node` | dado do sistema de origem; em modo demo, cenário simulado (`is_mock=True`) |
+| RAG | `packages/core/src/app/agent/nodes.py::retrieve_node` → `packages/core/src/app/rag/retriever.py::retrieve` | busca híbrida + reranker; admissão pelo score calibrado (DA-25/42) |
+| Diagnóstico | `packages/core/src/app/agent/nodes.py::_run_diagnosis_agent` | **rule engine primeiro** (`packages/core/src/app/agent/rules.py::match_known_error`); só sem regra chama o LLM, pelo AI Gateway (`packages/core/src/app/llm/gateway.py::invoke_via_gateway`) |
+| Guardrails | `packages/core/src/app/agent/nodes.py::_apply_confidence_guardrails` | teto de confiança pela evidência, fonte citada tem de ter sido recuperada |
+| Evidência | `packages/core/src/app/agent/nodes.py::_assemble_evidence` | lista de fontes com `trust_level` (nunca autoavaliação do LLM) |
+| Escalonamento | `packages/core/src/app/agent/escalation.py::compute_escalation_signal` | sinal determinístico devolvido em `escalation` (informativo) |
+| Persistência | `packages/core/src/app/services/incident_recorder.py::record_incident` | linha em `incidents` (best-effort, só com `DATABASE_URL`) |
 
 **Duas confianças na resposta:**
 
@@ -166,7 +166,7 @@ demonstração do conector RFC).
 **Caminho.**
 
 1. `classify_domain` responde `sap`.
-2. `app/connectors/rfc_connector.py::RFCConnector` devolve o cenário
+2. `packages/core/src/app/connectors/rfc_connector.py::RFCConnector` devolve o cenário
    simulado. Sem `SAP_ASHOST`, o modo é demo.
 3. `match_known_error` casa a regra `sap_idoc_status_51` (confiança 0,9). O
    texto avaliado é a descrição **mais** a mensagem do conector.
@@ -186,7 +186,7 @@ demonstração do conector RFC).
 
 - Em modo demo o dado do conector é **simulado**.
 - Em modo real, a função chamada (`BAPI_IDOC_STATUS`) nunca foi executada
-  contra um sistema SAP. Ver o docstring de `app/connectors/rfc_connector.py`.
+  contra um sistema SAP. Ver o docstring de `packages/core/src/app/connectors/rfc_connector.py`.
 
 **Teste:** `tests/test_casos_de_uso.py::test_uc01_idoc_51_resolvido_pelo_rule_engine`.
 
@@ -203,7 +203,7 @@ SAP. O Copilot cruza o chamado com a base de conhecimento.
 **Caminho.**
 
 1. `classify_domain` responde `saas`.
-2. `app/connectors/servicenow_connector.py::ServiceNowConnector` devolve o
+2. `packages/core/src/app/connectors/servicenow_connector.py::ServiceNowConnector` devolve o
    cenário.
 3. Nenhuma regra casa, então `saas_diagnosis_node` chama o LLM pelo gateway.
 4. `_apply_confidence_guardrails`:
@@ -218,7 +218,7 @@ documento recuperado):
 - `model_confidence = 0,8`: o cenário demo é reconhecido e a evidência
   (0,88) sustenta esse valor;
 - `diagnosis_confidence = 0,88 × 0,8 ≈ 0,70`;
-- `prompt_version` = o de `app/agent/prompts.py`;
+- `prompt_version` = o de `packages/core/src/app/agent/prompts.py`;
 - `escalation.escalation = "grounded"`.
 
 **Variante: identificador que o conector não reconhece** (`INC9999999`). O
@@ -258,7 +258,7 @@ precisa **dizer que não sabe**, em vez de inventar.
 - `escalation.escalation = "no_context"`.
 
 **Busca web.** Ela é *fail-closed*. Com `WEB_SEARCH_POLICY=approved` (o
-default), `app/agent/nodes.py::_web_search_allowed` só libera se houver uma
+default), `packages/core/src/app/agent/nodes.py::_web_search_allowed` só libera se houver uma
 fonte aprovada para o `interface_type` em `web_search_sources` (DA-57). Sem
 banco, não há busca.
 
@@ -274,7 +274,7 @@ banco, não há busca.
 **Objetivo.** Padrões recorrentes de integração são resolvidos de forma
 determinística, auditável e sem custo.
 
-**Catálogo.** São **22 regras** em `app/agent/rules.py::KNOWN_ERROR_RULES`.
+**Catálogo.** São **22 regras** em `packages/core/src/app/agent/rules.py::KNOWN_ERROR_RULES`.
 A fonte é o código; não há tabela mantida à mão:
 
 ```bash
@@ -300,7 +300,7 @@ uv run python -c "from app.agent.rules import KNOWN_ERROR_RULES as R; print([r.c
 **Objetivo.** Quando a base curada não tem nada forte, o sistema consulta o
 acervo de referência (DA-17).
 
-**Caminho.** Em `app/rag/retriever.py::_retrieve_unified`:
+**Caminho.** Em `packages/core/src/app/rag/retriever.py::_retrieve_unified`:
 
 1. Se nenhum candidato de `sap_incident_docs` passa do limiar, a busca vai a
    `sap_reference_library` com o limiar próprio do fallback (0,665).
@@ -325,11 +325,11 @@ registrado. O gate `index_manifest` avisa até existir
 **Objetivo.** O diagnóstico continua quando o LLM local cai, **sem** que um
 dado confidencial saia para a nuvem.
 
-**Caminho** (`app/llm/gateway.py::invoke_via_gateway`):
+**Caminho** (`packages/core/src/app/llm/gateway.py::invoke_via_gateway`):
 
-1. **Sensibilidade** (`app/llm/gateway.py::classify_sensitivity`): dado real de
+1. **Sensibilidade** (`packages/core/src/app/llm/gateway.py::classify_sensitivity`): dado real de
    conector é `confidential`. O que o cliente declara só **eleva** (GOV-01).
-2. **Providers elegíveis** (`app/llm/gateway.py::_select_allowed_providers`):
+2. **Providers elegíveis** (`packages/core/src/app/llm/gateway.py::_select_allowed_providers`):
    - avaliados pela **origem real** (DA-43), não pelo rótulo;
    - `confidential` só vai para uma origem na allowlist
      (`CONFIDENTIAL_ALLOWED_ORIGINS`) ou local.
@@ -337,7 +337,7 @@ dado confidencial saia para a nuvem.
    - abre o circuito do provider;
    - aplica backoff;
    - tenta o próximo provider elegível (R01).
-4. **Política efetiva:** `GET /llm/policy` (`app/llm/gateway.py::describe_effective_policy`).
+4. **Política efetiva:** `GET /llm/policy` (`packages/core/src/app/llm/gateway.py::describe_effective_policy`).
 
 **Testes** (em `tests/test_llm_gateway.py`):
 
@@ -354,7 +354,7 @@ dado confidencial saia para a nuvem.
 o diagnóstico sem ninguém abrir chamado.
 
 **Entrada.** `POST /events/incident` com `X-Event-Mesh-Api-Key`, ou uma
-mensagem AMQP 1.0 (`app/events/amqp_consumer.py::AmqpConsumerTask`). O
+mensagem AMQP 1.0 (`packages/core/src/app/events/amqp_consumer.py::AmqpConsumerTask`). O
 envelope é **CloudEvents 1.0 estrito** (M-16):
 
 ```json
@@ -369,10 +369,10 @@ envelope é **CloudEvents 1.0 estrito** (M-16):
 
 **Caminho.**
 
-1. `app/events/consumer.py::handle_incident_event_async` decide a execução:
+1. `packages/core/src/app/events/consumer.py::handle_incident_event_async` decide a execução:
    - com `REDIS_URL`, enfileira no RQ (durável);
    - sem `REDIS_URL`, roda em background no processo.
-2. A deduplicação usa o par `(source, id)`: `app/events/idempotency.py::event_key`.
+2. A deduplicação usa o par `(source, id)`: `packages/core/src/app/events/idempotency.py::event_key`.
 
 **Resultado observado.**
 
@@ -396,7 +396,7 @@ envelope é **CloudEvents 1.0 estrito** (M-16):
 principalmente, dos **verificados por humano**.
 
 **Forma do grafo.** Ela é decidida na construção
-(`app/agent/graph.py::build_graph`):
+(`packages/core/src/app/agent/graph.py::build_graph`):
 
 - com `GRAPH_RAG_ENABLED=true` entram `graph_enrich` (antes do diagnóstico) e
   `graph_write` (depois);
@@ -405,11 +405,11 @@ principalmente, dos **verificados por humano**.
 **Regras (AI-01):**
 
 - **Fato:** só um incidente verificado por humano
-  (`POST /incidents/{id}/verify` → `app/rag/graph_store.py::verify_incident`)
+  (`POST /incidents/{id}/verify` → `packages/core/src/app/rag/graph_store.py::verify_incident`)
   volta ao prompt como fato.
 - **Hipótese:** a hipótese não verificada aparece rotulada como **NÃO
-  verificada** (`app/rag/graph_store.py::format_graph_context_for_prompt`).
-- **Prune:** `app/rag/graph_store.py::prune_ungrounded_hypotheses` nunca apaga
+  verificada** (`packages/core/src/app/rag/graph_store.py::format_graph_context_for_prompt`).
+- **Prune:** `packages/core/src/app/rag/graph_store.py::prune_ungrounded_hypotheses` nunca apaga
   um incidente verificado.
 - **Redação:** a descrição é redigida antes de ir ao Neo4j.
 
@@ -428,18 +428,18 @@ real roda só no job `neo4j-smoke` do CI.
 **Objetivo.** Detectar que o SAP republicou um serviço OData com uma
 propriedade a menos **antes** de o consumidor quebrar em produção.
 
-**Caminho** (`scripts/check_contract_drift.py` → `app/contracts/observe.py::check_connector`):
+**Caminho** (`scripts/check_contract_drift.py` → `packages/core/src/app/contracts/observe.py::check_connector`):
 
-1. `app/connectors/odata_connector.py::ODataConnector` lê `$metadata`
+1. `packages/core/src/app/connectors/odata_connector.py::ODataConnector` lê `$metadata`
    (`fetch_contract`).
-2. `app/contracts/odata.py::parse_odata_metadata` normaliza o contrato. O
+2. `packages/core/src/app/contracts/odata.py::parse_odata_metadata` normaliza o contrato. O
    fingerprint ignora namespace e versão (invariante 18).
-3. `app/contracts/diff.py::diff_contracts` classifica a mudança:
+3. `packages/core/src/app/contracts/diff.py::diff_contracts` classifica a mudança:
    - **breaking:** propriedade removida ou renomeada, tipo alterado,
      `MaxLength` novo ou menor;
    - **additive:** o resto.
 4. Só `breaking` vira incidente, com um único ponto de emissão
-   (`app/contracts/observe.py::emit_incident`). Se a entrega falhar, o
+   (`packages/core/src/app/contracts/observe.py::emit_incident`). Se a entrega falhar, o
    baseline antigo fica e a próxima rodada detecta de novo.
 5. `system_contracts` é append-only, garantido por trigger (migration 011).
 
@@ -462,4 +462,4 @@ incidente nem mexe no baseline.
 - **Referências a código:** sempre no formato `arquivo.py::símbolo`. O gate
   `docs_code_references` reprova símbolo inexistente.
 - **Variáveis de ambiente:** o gate `docs_env_vars` confere as que aparecem
-  aqui contra `app/config.py`, o compose e os manifests.
+  aqui contra `packages/core/src/app/config.py`, o compose e os manifests.

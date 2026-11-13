@@ -45,7 +45,7 @@ cost comparison is in [`docs/TCO_SAP_AI_CORE_VS_SELF_HOSTED.md`](docs/TCO_SAP_AI
 
 ## Architecture
 
-The orchestration graph below is **generated from `app/agent/graph.py`** and a
+The orchestration graph below is **generated from `packages/core/src/app/agent/graph.py`** and a
 test fails if it drifts. The C4 views, the state contract, trust boundaries,
 the AI Gateway decision tree, the state machines and the deployment view are
 in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#mapa-dos-diagramas).
@@ -210,35 +210,35 @@ The table below maps each capability to its implementation status and evidence.
 
 | Capability | Class | Evidence | Notes |
 |---|---|---|---|
-| Supervisor → connector → retrieve → specialist → report flow | VER | `app/agent/graph.py:84-131`; diagram generated and tested against code | Not retrieve → diagnose → report |
-| Deterministic supervisor (sap/saas/generic) | VER | `app/agent/supervisor.py:107-133` | No LLM |
+| Supervisor → connector → retrieve → specialist → report flow | VER | `packages/core/src/app/agent/graph.py:84-131`; diagram generated and tested against code | Not retrieve → diagnose → report |
+| Deterministic supervisor (sap/saas/generic) | VER | `packages/core/src/app/agent/supervisor.py:107-133` | No LLM |
 | Three specialists, one per incident | VER | `graph.py:87-89` | |
 | Rule engine before LLM | VER | `nodes.py` (_run_diagnosis_agent); `rules.py:28-37, 97`; measured: ttl=28, hardcoded=22, combined=28 | README previously said 22 |
 | ReAct agent with optional web search | VER | `nodes.py:1085-1128` | One agent per incident, no autonomous action |
-| Hybrid RAG (dense + BM25) + reranker | VER | `app/rag/retriever.py:41`; CI job `rag-quality` | Production reranker: mmarco-mMiniLMv2-L12-H384-v1 |
+| Hybrid RAG (dense + BM25) + reranker | VER | `packages/core/src/app/rag/retriever.py:41`; CI job `rag-quality` | Production reranker: mmarco-mMiniLMv2-L12-H384-v1 |
 | Retrieval metrics (Hit@1 95.6%, MRR 0.967) | VER | `scripts/eval_rag.py` on 110 cases (2026-10-18) | Cite with n=90 in-scope and the 95% CI; corpus is the 15 bundled docs |
 | Reranker advantage | VER | `docs/RERANKER_BENCHMARK.md`; 17/18 vs 16/18, McNemar p=1.0; gate `reranker_invariant` = WARN | Not statistically significant |
 | GraphRAG / Neo4j | OPC | `config.py:378`; `graph.py:96`; CI `neo4j-smoke` | Disabled by default |
-| SKOS error taxonomy feeding rules | VER | `app/ontology/error_codes.ttl` (39 skos:Concept); `ontology_loader.py:211` | Error code taxonomy, not formal domain ontology |
+| SKOS error taxonomy feeding rules | VER | `packages/core/src/app/ontology/error_codes.ttl` (39 skos:Concept); `ontology_loader.py:211` | Error code taxonomy, not formal domain ontology |
 | Semantic enrichment in retrieval | OPC | `config.py:385`; `nodes.py:159` | Disabled by default |
 | Evidence with trust_level | VER | `nodes.py:756, 834`; `_assemble_evidence` | |
 | Confidence capped by evidence (+0.25) | VER | `nodes.py:715, 893` | |
 | 0.4 cap with fallback data | VER | `nodes.py:897` | |
 | Only most relevant document in prompt | VER | `nodes.py:615-630` | DA-1 |
-| seed=42 | VER | `app/llm/factory.py:152` | Sent only when destination accepts |
-| AI Gateway: sensitivity, breaker, budget, audit | VER | `app/llm/gateway.py:9-26, 126-158`; `GET /llm/policy` | Default confidential (`config.py:159`) |
-| PII redaction by patterns | VER | `app/redaction.py` (email, CPF, CNPJ, IDoc 16 digits, bearer, passwords) | No NER/classifier |
+| seed=42 | VER | `packages/core/src/app/llm/factory.py:152` | Sent only when destination accepts |
+| AI Gateway: sensitivity, breaker, budget, audit | VER | `packages/core/src/app/llm/gateway.py:9-26, 126-158`; `GET /llm/policy` | Default confidential (`config.py:159`) |
+| PII redaction by patterns | VER | `packages/core/src/app/redaction.py` (email, CPF, CNPJ, IDoc 16 digits, bearer, passwords) | No NER/classifier |
 | Sanitization against prompt injection | VER | `nodes.py::sanitize_untrusted_input`, `format_untrusted_web_hits` | Includes web-search results returned to the ReAct agent (DA-71); pattern-based, reduces risk without eliminating it |
 | Web search only with approved source (fail-closed) | VER | `nodes.py:1000-1030`, DA-57 | |
-| 10 connectors under one contract | VER | `app/connectors/` | |
+| 10 connectors under one contract | VER | `packages/core/src/app/connectors/` | |
 | Validation in real system | PARC | ServiceNow, Salesforce, CAP: yes; RFC: logon; 6 without validation | `docs/ARCHITECTURE.md:644-652`; gate `connector_validation_matrix` |
-| REST `/diagnose` and `/diagnose/async` (RQ + Redis) | VER | `app/main.py`, `app/queue.py`, tests | Async requires worker |
-| MCP server (2 read-only tools only) | VER | `app/mcp/policy.py:95-125` | Policy denies unregistered tool by default |
-| A2A 0.3 | VER | `app/a2a/` | Note: GA inbound from Joule expected Q4/2026 (`docs/ARCHITECTURE.md:888`) |
-| CloudEvents ingestion (webhook) | VER | `app/events/consumer.py`, `tests/test_events.py` | |
-| AMQP 1.0 consumer | NVAL | `app/events/amqp_consumer.py`; 14 tests in `tests/test_amqp_consumer.py` | No real broker evidence |
-| OData contract drift detection | VER | `app/contracts/`; test diff/observe/e2e | OData connector never validated in real tenant |
-| Escalation (`should_escalate`) | PARC | `app/agent/escalation.py`; `graph.py:271, 311` | Only signals and logs; tier 3 (paid model) "not part of DA" |
+| REST `/diagnose` and `/diagnose/async` (RQ + Redis) | VER | `packages/core/src/app/main.py`, `packages/core/src/app/queue.py`, tests | Async requires worker |
+| MCP server (2 read-only tools only) | VER | `packages/core/src/app/mcp/policy.py:95-125` | Policy denies unregistered tool by default |
+| A2A 0.3 | VER | `packages/core/src/app/a2a/` | Note: GA inbound from Joule expected Q4/2026 (`docs/ARCHITECTURE.md:888`) |
+| CloudEvents ingestion (webhook) | VER | `packages/core/src/app/events/consumer.py`, `tests/test_events.py` | |
+| AMQP 1.0 consumer | NVAL | `packages/core/src/app/events/amqp_consumer.py`; 14 tests in `tests/test_amqp_consumer.py` | No real broker evidence |
+| OData contract drift detection | VER | `packages/core/src/app/contracts/`; test diff/observe/e2e | OData connector never validated in real tenant |
+| Escalation (`should_escalate`) | PARC | `packages/core/src/app/agent/escalation.py`; `graph.py:271, 311` | Only signals and logs; tier 3 (paid model) "not part of DA" |
 | HITL a posteriori | VER | `POST /incidents/{id}/verify`, `main.py:777-884` | SQL, `VERIFIED_AS` (if GraphRAG on), Langfuse score |
 | HITL before action | AUS | `policy.py: approval_required` exists; `approved` depends on "not implemented in v1" mechanism | No action to approve today |
 | Langfuse | VER | `observe_span` in retrieve, graph_enrich, graph_write, web_search, 3 specialists, report and root; CallbackHandler on LLM | supervisor and connector not instrumented |
@@ -247,7 +247,7 @@ The table below maps each capability to its implementation status and evidence.
 | Quality gates | VER | 23 defined (`gates.py`); 21 PASS, 2 WARN, 0 FAIL | WARN: reranker, deployed model |
 | CI | VER | `tests.yml` (lint, tests, security, compose smoke, rag-quality, neo4j-smoke) and `quality.yml` | |
 | Kyma | PARC | `deploy/kyma/` + `deploy/local/` | Applied to real Kubernetes (k3d, 2026-10-18); APIRule/Istio/BTP OIDC not validated |
-| Graceful degradation (Qdrant down) | VER | `app/rag/retriever.py`, DA-65, `tests/test_da65_rag_degradation.py` | `_retrieve_hybrid` e `_retrieve_dense_only` capturam exceção de Qdrant e retornam `[]` (DA-65); erros conhecidos ainda respondidos pelo rule engine. Testado em nível de retriever; fluxo completo `/diagnose → run_diagnosis` pendente de teste de integração |
+| Graceful degradation (Qdrant down) | VER | `packages/core/src/app/rag/retriever.py`, DA-65, `tests/test_da65_rag_degradation.py` | `_retrieve_hybrid` e `_retrieve_dense_only` capturam exceção de Qdrant e retornam `[]` (DA-65); erros conhecidos ainda respondidos pelo rule engine. Testado em nível de retriever; fluxo completo `/diagnose → run_diagnosis` pendente de teste de integração |
 | Architecture decisions | VER | 55 sections in `docs/DECISOES_DE_ARQUITETURA.md`; 44 with DA | |
 
 ## Project status

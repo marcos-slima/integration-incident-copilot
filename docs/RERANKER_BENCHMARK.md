@@ -67,7 +67,7 @@ resultante. O script que produziu os números está em
 - **Corpus**: os mesmos `data/sample_docs/*.md` usados em produção
   (fallback da collection `incidents`), **chunked com os mesmos
   parâmetros de produção** (`MarkdownTextSplitter`, `chunk_size=500`,
-  `chunk_overlap=50` — ver `app/rag/ingest.py::TARGETS["incidents"]`)
+  `chunk_overlap=50` — ver `packages/core/src/app/rag/ingest.py::TARGETS["incidents"]`)
   — na execução original, 10 documentos → 40 chunks (na re-execução de
   2026-10-07, 15 documentos).
 - **Queries + relevância**: os casos *in-scope* de
@@ -83,7 +83,7 @@ resultante. O script que produziu os números está em
   que é o nível em que a relevância do dataset de avaliação está
   anotada.
 - **Métricas**: Hit@1, Recall@5, MRR@5, nDCG@5 (relevância binária —
-  lógica pura e testada em `app/rag/eval_metrics.py` /
+  lógica pura e testada em `packages/core/src/app/rag/eval_metrics.py` /
   `tests/test_eval_metrics.py`, sem depender de nenhum modelo
   carregado) + latência média/p95 por query (ms) + delta de RSS do
   processo após carregar o modelo (proxy de RAM, via `psutil`) +
@@ -140,7 +140,7 @@ aparece (Hit@1, MRR@5, nDCG@5).
 
 ## Recomendação
 
-**Trocar `RERANKER_MODEL` em `app/rag/retriever.py` de
+**Trocar `RERANKER_MODEL` em `packages/core/src/app/rag/retriever.py` de
 `cross-encoder/ms-marco-MiniLM-L-6-v2` para
 `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1`.**
 
@@ -165,7 +165,7 @@ Motivos:
 
 Esta troca **foi aplicada** (DA-29): hoje
 `RERANKER_MODEL = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"` em
-`app/rag/retriever.py`. Foi uma mudança de uma linha, sem nenhuma outra
+`packages/core/src/app/rag/retriever.py`. Foi uma mudança de uma linha, sem nenhuma outra
 mudança de código, já que `rerank()` só depende do nome do modelo ser
 compatível com a interface `CrossEncoder.predict()`, que todos os 4
 candidatos satisfazem. A re-execução de 2026-10-07 (18 casos) mostrou
@@ -189,5 +189,5 @@ ganho de acerto comprovado.
 - Latência medida é do reranker reranqueando o corpus inteiro (40
   chunks na execução original), não do pool reduzido que o pipeline de produção
   normalmente passa após a fusão RRF (`_retrieve_unified`,
-  `app/rag/retriever.py`) — um limite superior, não uma medida de
+  `packages/core/src/app/rag/retriever.py`) — um limite superior, não uma medida de
   latência end-to-end de produção.

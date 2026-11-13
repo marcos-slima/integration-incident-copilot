@@ -27,7 +27,7 @@ This document describes the **threat model** and **security test suite** for the
 | **User authentication** | **Spoofing**: fake API key | Medium | High | `X-API-Key` header required, validated against `web_users` table. |
 | **LLM calls** | **Tampering**: modify prompt | Low | Critical | Hash digest of prompt stored in `incidents.prompt_digest`; changes → reject. |
 | **Evidence storage** | **Repudiation**: deny evidence | Low | Medium | `evidence_json` encrypted with Fernet (`LLM_CREDENTIALS_MASTER_KEY`). |
-| **Policy engine** | **Elevation of privilege**: bypass routing | Low | Critical | Fail-closed: unknown origin → no LLM access (`app/mcp/policy.py`). |
+| **Policy engine** | **Elevation of privilege**: bypass routing | Low | Critical | Fail-closed: unknown origin → no LLM access (`packages/core/src/app/mcp/policy.py`). |
 | **Web search** | **Information disclosure**: PII leak | Low | High | PII redaction before LLM call (DA-30); URLs truncated. |
 | **Incident report** | **Repudiation**: alter diagnosis | Medium | High | `incidents.diagnosis_correct` flag (cannot coerce `true` from `false`; DA-13). |
 | **Metering** | **Repudiation**: fake usage | Low | Medium | Real usage from `usage_metadata` (DA-48). |
@@ -74,12 +74,12 @@ uv run pytest tests/ -m "not integration" -v --cov=app --cov-fail-under=80
 
 ### 4.1. Checklist
 
-- [ ] All secrets encrypted at rest (`app/admin/crypto.py`).
+- [ ] All secrets encrypted at rest (`packages/core/src/app/admin/crypto.py`).
 - [ ] PII redaction before any LLM call (`nodes.py::_redact_pii`).
 - [ ] API key validation on `/diagnose`, `/mcp`, `/a2a` (`main.py:Depends(APIKeyHeader)`).
 - [ ] Rate limiting on `/incidents/{id}/review` (`main.py:rate_limiter(10, 60)`).
-- [ ] Circuit breaker enabled (`app/llm/gateway.py:GatewayConfig`).
-- [ ] Audit log enabled (`app/metrics.py`).
+- [ ] Circuit breaker enabled (`packages/core/src/app/llm/gateway.py:GatewayConfig`).
+- [ ] Audit log enabled (`packages/core/src/app/metrics.py`).
 - [ ] HTTPS enforced in production (via ingress / load balancer).
 
 ### 4.2. Automated scans
@@ -87,9 +87,9 @@ uv run pytest tests/ -m "not integration" -v --cov=app --cov-fail-under=80
 | Tool | Command | Frequency |
 |---|---|---|
 | **gitleaks** | `gitleaks detect --source . --verbose` | Pre-commit |
-| **bandit** | `uv run bandit -r app/ -c pyproject.toml` | CI |
-| **pylint** | `uv run pylint app/` | CI |
-| **mypy** | `uv run mypy app/` | CI |
+| **bandit** | `uv run bandit -r packages/core/src/app/ -c pyproject.toml` | CI |
+| **pylint** | `uv run pylint packages/core/src/app/` | CI |
+| **mypy** | `uv run mypy packages/core/src/app/` | CI |
 
 ---
 
@@ -262,21 +262,21 @@ A SPA usa `POST /auth/login`, `POST /auth/logout` e `GET /auth/session`.
 A sessão usa assinatura HMAC, validade e cookie HttpOnly. O atributo
 Secure depende da configuração. Logout revoga a sessão e remove o cookie.
 A rota de diagnóstico aceita sessão ou chave conforme
-`app/main.py::verify_session_or_api_key`. O middleware MCP reutiliza `X-API-Key` de REST. A2A, eventos e
+`packages/core/src/app/main.py::verify_session_or_api_key`. O middleware MCP reutiliza `X-API-Key` de REST. A2A, eventos e
 administração verificam, respectivamente, `X-A2A-Api-Key`,
 `X-Event-Mesh-Api-Key` e `X-API-Admin-Key`. A autorização de capabilities no MCP é adicional à
 autenticação de transporte. Nas operações administrativas, o controle
 observado é a chave administrativa compartilhada. O login da SPA não
 concede acesso a essas operações por papel.
 
-Em `app/admin/ui.py`, as páginas Jinja são shells. O JavaScript envia
+Em `packages/core/src/app/admin/ui.py`, as páginas Jinja são shells. O JavaScript envia
 `X-API-Admin-Key` nas chamadas protegidas e mantém a chave no
-`sessionStorage`. A CSP de `app/main.py` se aplica às respostas HTML
+`sessionStorage`. A CSP de `packages/core/src/app/main.py` se aplica às respostas HTML
 com exceções explícitas para a documentação interativa. Limites de
 tentativas de autenticação e de requisições de aplicação são controles
 distintos. Confira o backend de rate limiting ao distribuir réplicas.
 
-`app/admin/crypto.py` usa Fernet para credenciais e evidência estruturada.
+`packages/core/src/app/admin/crypto.py` usa Fernet para credenciais e evidência estruturada.
 As rotas admin de credenciais exibem metadados, e os consumidores
 autorizados recuperam a credencial para uso. O caminho de evidência
 também admite leitura de JSON legado. A disponibilidade e retenção do
@@ -284,7 +284,7 @@ histórico dependem dos dados, da chave e da política operacional do
 ambiente. Logs, traces e caches têm fronteiras próprias. A presença de
 redação em um destino não comprova ausência de PII nos demais.
 
-`app/redaction.py` implementa padrões e detecção contextual de CPF.
+`packages/core/src/app/redaction.py` implementa padrões e detecção contextual de CPF.
 `tests/test_dlp_ner.py` checa a presença de funções e campos, com alcance
 insuficiente para demonstrar NER ou cobertura de dados sensíveis. A DA-79
 tem campos e filtros em repositórios para incidentes e credenciais, com
@@ -293,7 +293,7 @@ cadeia de identidade autenticada, autorização por locatário e filtro
 obrigatório em todos os protocolos, filas e armazenamentos.
 
 A ativação usa `POST /auth/verify/email` e `POST /auth/verify/phone`.
-`app/notifications/providers.py` seleciona Mailpit ou Resend para e-mail.
+`packages/core/src/app/notifications/providers.py` seleciona Mailpit ou Resend para e-mail.
 Para telefone a factory atual não devolve um provedor. O código é
 gerenciado pela administração e entregue fora da aplicação. A geração
 do código e a validação de sua expiração são capacidades distintas
@@ -303,7 +303,7 @@ Relatórios em `/admin/reports/compliance/export`, painel de compliance e
 materiais de ISO 27001/SOC 2 são insumos de governança. Certificação e
 eficácia dos controles exigem evidência organizacional independente.
 
-A busca web passa por `app/agent/nodes.py::_web_search_allowed`.
+A busca web passa por `packages/core/src/app/agent/nodes.py::_web_search_allowed`.
 A execução exige habilitação, política compatível e fonte aprovada por
 tipo em `web_search_sources`. O modo `public_only` consulta a
 classificação de sensibilidade. A consulta omite a descrição original e

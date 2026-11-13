@@ -1,0 +1,704 @@
+"""Ingestao de documentos no Qdrant, com duas fontes/collections
+separadas (incidents / reference).
+
+A collection 'incidents' agora indexa vetores DENSOS (embeddings
+semanticos, via Ollama) e ESPARSOS (BM25, via fastembed) lado a lado,
+na mesma collection, como campos nomeados - habilita hybrid search
+(A.py faz a fusao). A collection 'reference' continua so
+densa (nao participa do fluxo de diagnostico, nao precisa da mesma
+sofisticacao).
+
+Uso:
+    uv run python -m app.rag.ingest --target incidents
+    uv run python -m app.rag.ingest --target reference
+    uv run python -m app.rag.ingest --target incidents --reset-state
+    uv run python -m app.rag.ingest --target incidents --reset-collection
+"""
+
+import argparse
+import hashlib
+import json
+import re
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import UTC, datetime
+from pathlib import Path
+from uuid import NAMESPACE_URL, uuid5
+
+import pymupdf4llm
+from fastembed import SparseTextEmbedding
+from langchain_ollama import OllamaEmbeddings
+from langchain_text_splitters import MarkdownTextSplitter
+from qdrant_client import QdrantClient
+from qdrant_client.models import (
+    Distance,
+    PointStruct,
+    SparseVector,
+    SparseVectorParams,
+    VectorParams,
+)
+
+from app.config import settings
+from app.rag.embedding_guard import (
+    stamp_collection,
+    verify_collection_embedding,
+)
+from app.rag.retriever import _FastEmbedWrapper, embedding_identity, new_sparse_model
+from app.rag.retriever import _get_embeddings as get_query_embeddings
+
+# §4.5 (avaliacao externa §3.5): pymupdf4llm.use_layout(False) desativa
+# o motor de layout ONNX (BoxRFDGNN) que detecta colunas/tabelas em PDFs.
+#
+# POR QUE ESTA DESATIVADO:
+#   Determinados PDFs/EPUBs causam SIGSEGV dentro de page.get_layout()
+#   (crash nativo sem traceback Python, reproduzido com PYTHONFAULTHANDLER=1
+#   em single-thread isolado - nao e race condition). O documento culpado
+#   nao foi isolado no corpus de 2.000+ PDFs tecnicos SAP deste projeto.
+#
+# CONSEQUENCIA:
+#   Perda de fidelidade estrutural em tabelas/colunas — justamente os
+#   manuais SAP com mais tabelas de configuracao e matrizes de conector
+#   sao os mais afetados. O parser heuristico legado (sem ML) e estavel
+#   mas produz texto linearizado, sem distincao entre celulas de tabela.
+#
+# GARGALO DE THROUGHPUT:
+#   _pdf_extract_lock serializa toda extracao de PDF (ver abaixo). Com
+#   layout ativado (quando o crash for resolvido), o lock continuara
+#   necessario porque pymupdf usa estado global nativo (MuPDF) que
+#   segfaulta com threads concorrentes. Consequencia: MAX_WORKERS=4
+#   threads so paralelizam embedding/upsert, nao a extracao em si.
+#
+# PROXIMOS PASSOS (quando pymupdf4llm estabilizar):
+#   1. Montar corpus de regressao com PDFs variados (incluindo o culpado).
+#   2. Reabilitar com use_layout(True) e rodar pytest -m pdf_regression.
+#   3. Avaliar subprocess-isolation para PDF culpado (forkserver) em vez
+#      de desativar o layout para todos.
+#
+# REFERENCIA: avaliacao externa §3.5 e DA pending "PDF layout regression".
+pymupdf4llm.use_layout(False)
+
+from app.paths import project_root
+
+BASE_DIR = project_root()
+EMBEDDING_MODEL = settings.embedding_model
+SPARSE_MODEL_NAME = "Qdrant/bm25"  # BM25 classico, sem rede neural - roda so em CPU, sem GPU
+QDRANT_URL = settings.qdrant_url
+EMBED_BATCH_SIZE = 16
+MAX_WORKERS = 4  # alinhado com OLLAMA_NUM_PARALLEL=4
+SUPPORTED_SUFFIXES = {".md", ".pdf", ".epub"}
+
+TARGETS = {
+    "incidents": {
+        "collection": "sap_incident_docs",
+        "primary_dir": BASE_DIR / "data" / "knowledge_base",
+        "fallback_dir": BASE_DIR / "data" / "sample_docs",
+        "chunk_size": 500,
+        "chunk_overlap": 50,
+        "state_file": BASE_DIR / "data" / ".ingest_state_incidents.json",
+        "hybrid": True,
+    },
+    "reference": {
+        "collection": "sap_reference_library",
+        "primary_dir": BASE_DIR / "data" / "reference_library",
+        "fallback_dir": None,
+        "chunk_size": 1000,
+        "chunk_overlap": 150,
+        "state_file": BASE_DIR / "data" / ".ingest_state_reference.json",
+        "hybrid": False,
+    },
+}
+
+_sparse_model: SparseTextEmbedding | None = None
+_sparse_model_lock = threading.Lock()
+
+# pymupdf4llm/PyMuPDF usa estado global nativo (MuPDF) para inferencia de
+# layout (modelo ONNX de deteccao de estrutura de pagina) - chamar
+# to_markdown() de threads diferentes ao mesmo tempo segfaulta o processo
+# (visto com PYTHONFAULTHANDLER=1: crash dentro de page.get_layout(), com
+# varias threads simultaneas na mesma pilha nativa). Serializa so a
+# extracao (CPU-bound, nativa); embedding/upsert (I/O) continuam paralelos.
+_pdf_extract_lock = threading.Lock()
+
+
+def _get_sparse_model() -> SparseTextEmbedding:
+    global _sparse_model
+    # A inicializacao pode disparar download/carregamento do modelo. Protege
+    # contra duas threads fazendo isso simultaneamente.
+    with _sparse_model_lock:
+        if _sparse_model is None:
+            _sparse_model = new_sparse_model()
+    return _sparse_model
+
+
+def resolve_source_dir(cfg: dict) -> Path:
+    primary = cfg["primary_dir"]
+    if primary.exists() and any(
+        path.is_file() and path.suffix.lower() in SUPPORTED_SUFFIXES for path in primary.rglob("*")
+    ):
+        return primary
+    if cfg["fallback_dir"] is not None:
+        print(f"[aviso] {primary} vazia, usando fallback {cfg['fallback_dir']}")
+        return cfg["fallback_dir"]
+    return primary
+
+
+def find_files(source_dir: Path, excludes: list[str]) -> list[Path]:
+    if not source_dir.exists():
+        return []
+    files = [
+        path
+        for path in source_dir.rglob("*")
+        if path.is_file() and path.suffix.lower() in SUPPORTED_SUFFIXES
+    ]
+    if excludes:
+        files = [f for f in files if not any(ex.lower() in str(f).lower() for ex in excludes)]
+    return sorted(files)
+
+
+def load_state(state_file: Path) -> dict[str, str]:
+    """Carrega estado de ingestao.
+    Formato novo: {hash_key: filepath} — detecta mudancas por conteudo.
+    Formato legado: lista de paths — convertida automaticamente.
+    """
+    if not state_file.exists():
+        return {}
+    data = json.loads(state_file.read_text(encoding="utf-8"))
+    if isinstance(data, list):
+        # Converte formato legado (lista de paths) para dict
+        return {p: p for p in data}
+    return data
+
+
+def _state_key(path: Path) -> str:
+    """Chave de estado: hash:filename — detecta mudancas mesmo com renomeacao."""
+    return f"{file_hash(path)}:{path.name}"
+
+
+def save_state(state_file: Path, processed: dict[str, str]) -> None:
+    state_file.parent.mkdir(parents=True, exist_ok=True)
+    state_file.write_text(json.dumps(processed, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def extract_text(path: Path) -> str:
+    return path.read_text(encoding="utf-8", errors="ignore")
+
+
+def extract_pages_with_metadata(path: Path) -> list[dict]:
+    md_pages = pymupdf4llm.to_markdown(str(path), page_chunks=True)
+    result = []
+    for page in md_pages:
+        t = page.get("text", "").strip()
+        if t:
+            result.append(
+                {
+                    "text": t,
+                    "page_number": page.get("metadata", {}).get("page", 0) + 1,
+                }
+            )
+    return result
+
+
+def file_hash(path: Path) -> str:
+    """Retorna o SHA-256 de todo o arquivo sem carrega-lo integralmente em memoria."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+#: Ordem importa: o primeiro bucket casado vence. As chaves sao CASADAS POR
+#: TOKEN, nunca por substring -- casar por substring classifica
+#: "po_pi_message_ordering.md" como "sales" ("order" dentro de "ordering") e
+#: "apim_..._throttle.md" como "hcm" ("hr" dentro de "throttle").
+CATEGORY_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("security", ("security", "authorization", "auth", "xsuaa")),
+    ("abap", ("abap", "rap", "bapi", "rfc")),
+    ("integration", ("integration", "cpi", "iflow", "idoc", "odata", "api")),
+    ("cap_btp", ("cap", "btp", "cloud")),
+    ("ui", ("fiori", "ui5", "frontend")),
+    ("database", ("hana", "sql", "database", "db")),
+    ("hcm", ("successfactor", "hcm", "hr", "payroll")),
+    ("finance", ("finance", "fi", "co", "accounting")),
+    ("procurement", ("mm", "material", "procurement", "ariba", "vendor")),
+    # "salesforce" e explicito: antes ele so casava porque "sales" e
+    # substring de "salesforce"; com casamento por token cairia em "general".
+    ("sales", ("sd", "sales", "salesforce", "order", "crm")),
+)
+
+_TOKEN_RE = re.compile(r"[A-Z]+(?![a-z])|[A-Z][a-z0-9]*|[a-z0-9]+")
+
+
+def _filename_tokens(filename: str) -> set[str]:
+    """Tokens do nome do arquivo, quebrando snake_case, hifen e camelCase."""
+    stem = Path(filename).stem
+    tokens: set[str] = set()
+    for chunk in re.split(r"[^A-Za-z0-9]+", stem):
+        tokens.update(tok.lower() for tok in _TOKEN_RE.findall(chunk))
+    return tokens
+
+
+def _token_matches(token: str, keyword: str) -> bool:
+    """Token casa com a keyword: exato ou plural simples (orders -> order)."""
+    return token == keyword or token == f"{keyword}s" or token == f"{keyword}es"
+
+
+def infer_category(filename: str) -> str:
+    tokens = _filename_tokens(filename)
+    if not tokens:
+        return "general"
+    for category, keywords in CATEGORY_KEYWORDS:
+        if any(_token_matches(token, kw) for token in tokens for kw in keywords):
+            return category
+    return "general"
+
+
+def probe_vector_size(embeddings: OllamaEmbeddings | _FastEmbedWrapper) -> int:
+    return len(embeddings.embed_query("probe"))
+
+
+def ensure_collection(
+    client: QdrantClient,
+    collection_name: str,
+    vector_size: int,
+    hybrid: bool,
+    embedding_model: str,
+    allow_recreate: bool = False,
+) -> None:
+    """Cria a collection se nao existir. Se existir com schema
+    incompativel (ex: vetor unico antigo, sem suporte a hybrid),
+    recria do zero - aceitavel para o volume de dados deste projeto."""
+    existing = [c.name for c in client.get_collections().collections]
+
+    needs_recreate = False
+    if collection_name in existing:
+        info = client.get_collection(collection_name)
+        # DA-45: a checagem de dimensao ABAXO nao basta. Dois modelos
+        # de embedding diferentes podem ter a mesma dimensao (768 e' a
+        # mais comum do ecossistema) e produzem espacos vetoriais
+        # incomparaveis - a busca passaria a devolver respostas
+        # plausiveis e erradas em vez de erro. Aqui a identidade do
+        # modelo e' conferida contra a collection lateral de identidade.
+        _prov, _modelo = embedding_identity()
+        aviso_embedding = verify_collection_embedding(
+            client,
+            collection_name,
+            expected_model=_modelo,
+            expected_size=vector_size,
+            provider=_prov,
+        )
+        if aviso_embedding:
+            print(f"AVISO: {aviso_embedding}")
+
+        vectors = info.config.params.vectors
+        sparse_vectors = getattr(info.config.params, "sparse_vectors", None)
+        has_named_dense = isinstance(vectors, dict) and "dense" in vectors
+        has_named_sparse = isinstance(sparse_vectors, dict) and "sparse" in sparse_vectors
+        has_unnamed_dense = vectors is not None and not isinstance(vectors, dict)
+        dense_config = vectors.get("dense") if has_named_dense else vectors
+        has_expected_size = getattr(dense_config, "size", None) == vector_size
+
+        if (
+            hybrid
+            and not (has_named_dense and has_named_sparse and has_expected_size)
+            or not hybrid
+            and not (has_unnamed_dense and not sparse_vectors and has_expected_size)
+        ):
+            needs_recreate = True
+        if needs_recreate:
+            expected_schema = "hybrid (dense + sparse)" if hybrid else "dense-only"
+            if not allow_recreate:
+                raise RuntimeError(
+                    f"Collection '{collection_name}' tem schema incompativel com {expected_schema}. "
+                    f"Execute novamente com --reset-collection para recriar do zero "
+                    f"(atenção: todos os dados indexados serão perdidos)."
+                )
+            print(
+                f"Collection '{collection_name}' tem schema incompativel com {expected_schema} - recriando (--reset-collection ativo)."
+            )
+            client.delete_collection(collection_name)
+            existing.remove(collection_name)
+
+    if collection_name not in existing:
+        if hybrid:
+            client.create_collection(
+                collection_name=collection_name,
+                vectors_config={"dense": VectorParams(size=vector_size, distance=Distance.COSINE)},
+                sparse_vectors_config={"sparse": SparseVectorParams()},
+            )
+        else:
+            client.create_collection(
+                collection_name=collection_name,
+                vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
+            )
+        print(f"Collection '{collection_name}' criada ({'hybrid' if hybrid else 'dense-only'}).")
+        # DA-45: grava AGORA a identidade do embedding, nao no fim do run.
+        # Um ingest interrompido no meio deixa a collection com metadado,
+        # e o proximo run sabe o que espera; gravar so no fim deixaria
+        # uma collection meio-ingestada indistinguivel de uma vergine.
+        stamp_collection(client, collection_name, *_identidade_para_carimbo())
+        # Payload indexes para campos usados em filtros — melhora performance
+        # à medida que a collection cresce (Qdrant docs: payload indexes).
+        for field_name, field_schema in [
+            ("source", "keyword"),
+            ("document_id", "keyword"),
+            ("category", "keyword"),
+            ("file_hash", "keyword"),
+        ]:
+            try:
+                client.create_payload_index(
+                    collection_name=collection_name,
+                    field_name=field_name,
+                    field_schema=field_schema,
+                )
+            except Exception:  # noqa: BLE001 S110
+                pass  # índice já existe ou versão do Qdrant não suporta — não crítico
+
+
+def stamp_existing_collection(client: QdrantClient, collection_name: str, embeddings) -> None:
+    """DA-45: carimba a identidade de uma collection EXISTENTE, guard antes.
+
+    O aviso do guard promete "um reindex sem --reset gravara a identidade"
+    — o caminho de 'nada a fazer' do run_ingest devolvia ANTES do stamp e
+    quebrava a promessa: numa collection 100% indexada pre-DA-45 (tudo no
+    state), nenhum reincremental carimbava nada e o aviso aparecia para
+    sempre. Este e' exatamente o caminho de migracao que o aviso descreve.
+
+    Ordem deliberada: guard -> stamp (nunca o contrario). Divergencia
+    comprovada (fingerprint diferente ou dimensao incompativel) levanta
+    ANTES de gravar — carimbar por cima de divergencia comprovada seria
+    inventar identidade. O stamp acontece so em identidade ausente
+    (migracao pre-DA-45) ou identidade igual (reescreve o mesmo valor).
+    A collection e' criada em lugar nenhum aqui: no-op run nao cria
+    collection vazia.
+
+    Args:
+        client: QdrantClient pronto para uso.
+        collection_name: nome da collection a ser carimbada.
+        embeddings: embedder instanciado (para probe de tamanho).
+    """
+    existing = {c.name for c in client.get_collections().collections}
+    if collection_name not in existing:
+        return
+    vector_size = probe_vector_size(embeddings)
+    _prov, _modelo = embedding_identity()
+    aviso = verify_collection_embedding(
+        client, collection_name, expected_model=_modelo, expected_size=vector_size, provider=_prov
+    )
+    if aviso:
+        print(f"AVISO: {aviso}")
+        print(
+            f"[DA-45] {collection_name}: gravando identidade do embedding corrente "
+            f"('{EMBEDDING_MODEL}') — migracao de collection pre-DA-45."
+        )
+    stamp_collection(client, collection_name, *_identidade_para_carimbo())
+
+
+def _identidade_para_carimbo() -> tuple[str, str]:
+    """(modelo, provider) na ordem de stamp_collection(client, nome, model, provider)."""
+    prov, modelo = embedding_identity()
+    return modelo, prov
+
+
+def deterministic_point_id(document_id: str, chunk_index: int) -> str:
+    """UUID estavel e aceito pelo Qdrant para um chunk do documento -
+    ver docstring de `deterministic_document_id` para por que isso
+    basta para upsert idempotente sem delete previo."""
+    return str(uuid5(NAMESPACE_URL, f"{document_id}::chunk::{chunk_index}"))
+
+
+def deterministic_document_id(source: str) -> str:
+    """UUID estavel para o caminho relativo do arquivo (`source`) -
+    DELIBERADAMENTE nao depende do conteudo/hash do arquivo, ao
+    contrario de uma versao anterior. Isso e o que torna o upsert
+    idempotente sem delete-before-upsert (ver docs/ARCHITECTURE.md,
+    secao "Ingestao"): reprocessar o MESMO arquivo (path) sempre gera
+    os mesmos `document_id`/point ids por indice de chunk, entao um
+    `client.upsert()` novo sobrescreve os chunks existentes no lugar -
+    sem janela de indisponibilidade (delete + upsert deixaria a
+    collection momentaneamente sem esses pontos) e sem duplicar dados
+    quando so o CONTEUDO do arquivo muda (mesmo indice de chunk == mesmo
+    point id == overwrite, nao um ponto novo orfao).
+
+    Trade-off aceito: se um arquivo encolhe (produz MENOS chunks que a
+    versao anterior), os indices de chunk que deixaram de existir nao
+    sao removidos automaticamente (nao ha "delete dos que sobraram"
+    sem reintroduzir a janela de indisponibilidade que este esquema
+    evita). Para uma limpeza completa apos edicoes que reduzem
+    bastante o numero de chunks de varios arquivos, use
+    `--reset-collection` (reindexa tudo do zero)."""
+    return str(uuid5(NAMESPACE_URL, f"ingest-document::{source}"))
+
+
+def _sparse_vector_for(text: str) -> SparseVector:
+    embedding = next(_get_sparse_model().embed([text]))
+    return SparseVector(indices=embedding.indices.tolist(), values=embedding.values.tolist())
+
+
+def embed_and_upsert(
+    client,
+    collection,
+    embeddings,
+    chunks: list[dict],
+    source: str,
+    hybrid: bool,
+    doc_meta: dict | None = None,
+) -> None:
+    doc_meta = doc_meta or {}
+    ingested_at = datetime.now(UTC).isoformat()
+
+    for i in range(0, len(chunks), EMBED_BATCH_SIZE):
+        batch = chunks[i : i + EMBED_BATCH_SIZE]
+        texts = [c["text"] for c in batch]
+        dense_vectors = embeddings.embed_documents(texts)
+
+        points = []
+        for j, (chunk_data, dense_vec) in enumerate(zip(batch, dense_vectors)):
+            chunk_text = chunk_data["text"]
+            if hybrid:
+                vector = {"dense": dense_vec, "sparse": _sparse_vector_for(chunk_text)}
+            else:
+                vector = dense_vec
+            payload = {
+                "source": source,
+                "text": chunk_text,
+                "filename": doc_meta.get("filename", source),
+                "page_number": chunk_data.get("page_number"),
+                "document_id": doc_meta["document_id"],
+                "chunk_index": i + j,
+                "file_hash": doc_meta.get("file_hash", ""),
+                "title": doc_meta.get("title", Path(source).stem),
+                "category": doc_meta.get("category", "general"),
+                "ingested_at": ingested_at,
+            }
+            point_id = deterministic_point_id(doc_meta["document_id"], i + j)
+            points.append(PointStruct(id=point_id, vector=vector, payload=payload))
+
+        client.upsert(collection_name=collection, points=points)
+
+
+def run_ingest(
+    target: str,
+    limit: int | None,
+    excludes: list[str],
+    reset_state: bool,
+    reset_collection: bool,
+) -> int:
+    """Retorna o numero de arquivos que falharam (0 = sucesso total)."""
+    cfg = TARGETS[target]
+    source_dir = resolve_source_dir(cfg)
+    print(f"[{target}] Fonte: {source_dir}")
+
+    all_files = find_files(source_dir, excludes)
+    print(f"[{target}] {len(all_files)} arquivo(s) encontrados (.md + .pdf + .epub, recursivo)")
+
+    processed = {} if (reset_state or reset_collection) else load_state(cfg["state_file"])
+    if reset_state or reset_collection:
+        # Persiste imediatamente para que --reset-state tenha efeito mesmo
+        # quando nao ha arquivos elegiveis nesta execucao.
+        save_state(cfg["state_file"], processed)
+    pending = [f for f in all_files if _state_key(f) not in processed]
+    print(f"[{target}] {len(processed)} ja processados anteriormente, {len(pending)} pendentes")
+
+    if limit:
+        pending = pending[:limit]
+        print(f"[{target}] --limit aplicado: processando {len(pending)} arquivo(s) nesta execucao")
+
+    client = QdrantClient(url=QDRANT_URL)
+    if reset_collection:
+        existing = {collection.name for collection in client.get_collections().collections}
+        if cfg["collection"] in existing:
+            client.delete_collection(cfg["collection"])
+            print(f"Collection '{cfg['collection']}' removida por --reset-collection.")
+
+    if not pending:
+        # DA-45: o early-exit de 'nada a fazer' devolvia antes do stamp e
+        # quebrava a promessa do aviso do guard. Chama stamp_existing_collection
+        # para carimbar a identidade (se existir) e fechar o buraco.
+        embeddings = get_query_embeddings()
+        stamp_existing_collection(client, cfg["collection"], embeddings)
+        print(f"[{target}] Nada a fazer.")
+        return 0
+
+    # DA-38: a INGESTAO precisa respeitar EMBEDDING_BACKEND tanto quanto a
+    # consulta. Antes ela ignorava a variavel e usava Ollama fixo, enquanto
+    # `retriever._get_embeddings()` respeitava. O job `rag-quality` do CI
+    # ingeria com fastembed mas a ingestao montava a collection com o
+    # nomic-embed-text do Ollama: os pontos saiam 384 (bge-small) numa
+    # collection de 768, e a consulta falhava com
+    # "expected dim: 768, got 384". Nao era ambiente: o job do GitHub roda
+    # sem Ollama, entao la a ingestao nem completava. Agora a ingestao e a
+    # consulta usam o MESMO embedder, e a dimensao da collection e' sempre
+    # medida do embedder em maos (probe), nunca assumida.
+    embeddings = get_query_embeddings()
+    splitter = MarkdownTextSplitter(
+        chunk_size=cfg["chunk_size"], chunk_overlap=cfg["chunk_overlap"]
+    )
+    vector_size = probe_vector_size(embeddings)
+    ensure_collection(
+        client,
+        cfg["collection"],
+        vector_size,
+        cfg["hybrid"],
+        embedding_model=EMBEDDING_MODEL,
+        allow_recreate=reset_collection,
+    )
+    # DA-45: reaffirma a identidade a CADA run, nao so na criacao da
+    # collection. `ensure_collection` so grava quando cria; num reindex
+    # incremental (o caso normal deste corpus) a collection ja existia e
+    # o stamp nunca acontecia - a identidade ficava ausente para sempre,
+    # que e' o estado que o guard trata como "nao sei". Como o guard
+    # acima ja falha duro quando ha divergencia comprovada, chegar
+    # aqui significa que a identidade ausente NAO era divergencia: e
+    # collection pre-DA-45 no embedding corrente, ou nao gravada. Nos
+    # dois casos o gravar agora e' a acao que fecha o buraco.
+    stamp_collection(client, cfg["collection"], *_identidade_para_carimbo())
+
+    # Carrega o BM25 antes do paralelismo; o acesso posterior e somente para
+    # gerar vetores, nao para inicializar/downloadar o modelo em varias threads.
+    if cfg["hybrid"]:
+        _get_sparse_model()
+
+    state_lock = threading.Lock()
+    progress_lock = threading.Lock()
+    done_count = 0
+    error_count = 0
+
+    def process_one(path: Path) -> None:
+        nonlocal done_count, error_count
+        rel = path.relative_to(source_dir)
+        try:
+            filename = path.name
+            fhash = file_hash(path)
+            category = infer_category(filename)
+            source = str(rel)
+            document_id = deterministic_document_id(source)
+            doc_meta = {
+                "filename": filename,
+                "file_hash": fhash,
+                "category": category,
+                "document_id": document_id,
+                "title": path.stem,
+            }
+
+            if path.suffix.lower() in (".pdf", ".epub"):
+                with _pdf_extract_lock:
+                    pages = extract_pages_with_metadata(path)
+                if not pages:
+                    with state_lock:
+                        processed[_state_key(path)] = str(path)
+                        save_state(cfg["state_file"], processed)
+                    with progress_lock:
+                        done_count += 1
+                        print(
+                            f"[{target}] ({done_count}/{len(pending)}) {rel} -- [aviso] sem texto no PDF, pulando"
+                        )
+                    return
+                chunks = []
+                for page in pages:
+                    for chunk_text in splitter.split_text(page["text"]):
+                        chunks.append({"text": chunk_text, "page_number": page["page_number"]})
+            else:
+                chunks = [
+                    {"text": c, "page_number": None}
+                    for c in splitter.split_text(extract_text(path))
+                ]
+
+            if not chunks:
+                with progress_lock:
+                    done_count += 1
+                    print(
+                        f"[{target}] ({done_count}/{len(pending)}) {rel} -- [aviso] nenhum chunk gerado, pulando"
+                    )
+            else:
+                # Sem delete previo - deterministic_document_id(source) faz o
+                # upsert sobrescrever os pontos existentes no lugar (ver
+                # docstring de deterministic_document_id).
+                embed_and_upsert(
+                    client,
+                    cfg["collection"],
+                    embeddings,
+                    chunks,
+                    source,
+                    cfg["hybrid"],
+                    doc_meta,
+                )
+                with progress_lock:
+                    done_count += 1
+                    print(
+                        f"[{target}] ({done_count}/{len(pending)}) {rel} -- {len(chunks)} chunk(s) indexados (categoria: {category})"
+                    )
+        except Exception as exc:  # noqa: BLE001
+            with progress_lock:
+                done_count += 1
+                error_count += 1
+                print(
+                    f"[{target}] ({done_count}/{len(pending)}) {rel} -- [ERRO] {exc} -- pulando este arquivo"
+                )
+            return
+
+        with state_lock:
+            processed[_state_key(path)] = str(path)
+            save_state(cfg["state_file"], processed)
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = [executor.submit(process_one, path) for path in pending]
+        for fut in as_completed(futures):
+            fut.result()  # relanca excecao inesperada (nao deveria ocorrer, ja tratada acima)
+
+    if error_count:
+        print(
+            f"[{target}] Concluido com {error_count} erro(s). "
+            f"Sucesso: {len(processed)} arquivo(s). Falha: {error_count} arquivo(s)."
+        )
+    else:
+        print(f"[{target}] Concluido. Total processado ate agora: {len(processed)} arquivo(s).")
+    # M-23: registra o indice que ficou no ar (contagem, identidade, data) em
+    # data/index_manifest.json - e ele que um limiar calibrado deve citar.
+    try:
+        from app.rag.index_manifest import update_manifest
+
+        entry = update_manifest(
+            client,
+            cfg["collection"],
+            target=target,
+            source_dir=str(source_dir) if source_dir else None,
+            files_processed=len(processed),
+        )
+        print(f"[{target}] Manifesto do indice: {entry['points']} ponto(s) em {cfg['collection']}")
+    except Exception as exc:  # noqa: BLE001 - manifesto e registro, nao pode falhar o ingest
+        print(f"[{target}] [aviso] manifesto do indice nao atualizado: {exc}")
+    return error_count
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--target", choices=["incidents", "reference", "all"], default="incidents")
+    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--exclude", action="append", default=[])
+    parser.add_argument(
+        "--reset",
+        "--reset-state",
+        dest="reset_state",
+        action="store_true",
+        help="limpa apenas o estado local e reindexa os arquivos; nao apaga a collection",
+    )
+    parser.add_argument(
+        "--reset-collection",
+        action="store_true",
+        help="apaga e recria a collection do target; tambem limpa o estado local",
+    )
+    args = parser.parse_args()
+
+    targets = ["incidents", "reference"] if args.target == "all" else [args.target]
+    total_errors = 0
+    for t in targets:
+        total_errors += run_ingest(
+            t, args.limit, args.exclude, args.reset_state, args.reset_collection
+        )
+    if total_errors:
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()

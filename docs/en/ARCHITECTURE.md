@@ -32,7 +32,7 @@ which drew a non-existent graph.
 
 ## C4 level 1 - Context
 
-Source: `app/main.py`, `app/events/consumer.py`, `app/admin/routes.py`, `app/mcp/server.py`.
+Source: `packages/core/src/app/main.py`, `packages/core/src/app/events/consumer.py`, `packages/core/src/app/admin/routes.py`, `packages/core/src/app/mcp/server.py`.
 
 ```mermaid
 flowchart TD
@@ -62,7 +62,7 @@ flowchart TD
 
 ## C4 level 2 - Containers
 
-Source: `docker-compose.yml`, `app/config.py`, `app/llm/factory.py`, `app/rag/retriever.py`.
+Source: `docker-compose.yml`, `packages/core/src/app/config.py`, `packages/core/src/app/llm/factory.py`, `packages/core/src/app/rag/retriever.py`.
 
 | Container | Technology | Protocol | Credentials |
 |---|---|---|---|
@@ -88,7 +88,7 @@ writing. The optional ontology branch starts after report.
 
 ## Evidence confidence calculation
 
-Source: `app/agent/nodes.py::_compute_evidence_strength`.
+Source: `packages/core/src/app/agent/nodes.py::_compute_evidence_strength`.
 
 ```mermaid
 flowchart LR
@@ -118,7 +118,7 @@ the quality gate (`tests/test_evidence.py`).
 
 ## Incident lifecycle
 
-Source: `app/admin/routes.py::registry_status`, `app/events/consumer.py`.
+Source: `packages/core/src/app/admin/routes.py::registry_status`, `packages/core/src/app/events/consumer.py`.
 
 ```mermaid
 stateDiagram-v2
@@ -138,7 +138,7 @@ client polls with `tasks/get`.
 
 ## UI user (DA-55)
 
-Source: constants `STATUS_*` of `app/webusers.py` and `PATCH /admin/api/users/{id}`.
+Source: constants `STATUS_*` of `packages/core/src/app/webusers.py` and `PATCH /admin/api/users/{id}`.
 
 ```mermaid
 stateDiagram-v2
@@ -155,7 +155,7 @@ stateDiagram-v2
 
 ## Circuit breaker (connectors and LLM providers)
 
-Source: `app/circuit_breaker.py` (naming: `CircuitState` enum).
+Source: `packages/core/src/app/circuit_breaker.py` (naming: `CircuitState` enum).
 
 ```mermaid
 stateDiagram-v2
@@ -170,7 +170,7 @@ stateDiagram-v2
 
 ## AI Gateway routing decision
 
-Source: `app/llm/gateway.py::invoke_via_gateway`.
+Source: `packages/core/src/app/llm/gateway.py::invoke_via_gateway`.
 
 ```mermaid
 flowchart TD
@@ -199,11 +199,11 @@ case complexity before calling the LLM—cost a second LLM call in part of
 the cases and require calibrating a threshold; resilience only kicks in
 when the primary provider is genuinely unavailable).
 
-`app/llm/factory.py::invoke_with_hybrid_fallback()` runs the call with
+`packages/core/src/app/llm/factory.py::invoke_with_hybrid_fallback()` runs the call with
 `settings.llm_provider` (Ollama, typically) and, IF
 `settings.llm_fallback_provider` is configured (`.env`, empty by
 default = same behavior as before this phase) AND the failure is of
-TRANSPORT (`app/llm/factory.py::TRANSPORT_FAILURE_EXCEPTIONS`:
+TRANSPORT (`packages/core/src/app/llm/factory.py::TRANSPORT_FAILURE_EXCEPTIONS`:
 `ConnectionError`, `httpx.TransportError`—base of `ConnectError`,
 `TimeoutException`, `ReadError`, etc.—and, with the SDK `openai`,
 `APIStatusError` with `status_code` 503/504/429).
@@ -212,7 +212,7 @@ TRANSPORT (`app/llm/factory.py::TRANSPORT_FAILURE_EXCEPTIONS`:
 
 ## RAG pipeline (dense + sparse + rerank)
 
-Source: `app/rag/retriever.py::_retrieve_hybrid`.
+Source: `packages/core/src/app/rag/retriever.py::_retrieve_hybrid`.
 
 1. query `incidents` index (sparse, BM25) and `sap_reference_library`
    (dense, Ollama embedding) in parallel;
@@ -221,12 +221,12 @@ Source: `app/rag/retriever.py::_retrieve_hybrid`.
    (`cross-encoder/mmarco-mMiniLMv2-L12-H384-v1`, DA-29, via
    `sentence-transformers`), which reorders by real relevance to the pair
    `(query, chunk)`;
-3. final admission uses `app/rag/retriever.py::_evidence_admission_score`
+3. final admission uses `packages/core/src/app/rag/retriever.py::_evidence_admission_score`
    (see DA-25 below).
 
 **Ingestion:** idempotent by deterministic IDs
 (`uuid5(NAMESPACE_URL, f"{document_id}::chunk::{chunk_index}")`, see
-`app/rag/ingest.py`)—no delete-before-upsert. State
+`packages/core/src/app/rag/ingest.py`)—no delete-before-upsert. State
 saved by content hash (`hash:filename`) instead of path, detecting
 changes even with file renaming.
 
@@ -235,7 +235,7 @@ changes even with file renaming.
 ## GraphRAG (Neo4j) - opt-in, not in the path of
 resilience
 
-Source: `app/rag/graph_store.py`.
+Source: `packages/core/src/app/rag/graph_store.py`.
 
 When `GRAPH_RAG_ENABLED=true`, the `graph_enrich` node queries Neo4j for
 historical incidents with the same `interface_type` and `identifier`. The
@@ -258,7 +258,7 @@ equals, not the architectural axis (see Decision of Architecture #8/#13 in
 `DECISOES_DE_ARQUITETURA.md`). An incident from a Salesforce webhook
 received the same "OData/IDoc/RFC/CPI" expertise as an RFC incident.
 
-**Decision:** a `supervisor_node` (`app/agent/supervisor.py`) runs
+**Decision:** a `supervisor_node` (`packages/core/src/app/agent/supervisor.py`) runs
 FIRST in the graph (even before `connector`) and classifies
 deterministically the incident domain:
 
@@ -273,7 +273,7 @@ The `agent_domain` routes the graph to `sap_diagnose`, `saas_diagnose` or
 
 ## Rule engine (DA-33)
 
-Source: `app/agent/rules.py::KNOWN_ERROR_RULES` (22 rules).
+Source: `packages/core/src/app/agent/rules.py::KNOWN_ERROR_RULES` (22 rules).
 
 When `rule_engine_enabled=true` (default), the `sap_diagnose` node runs
 the rule engine **before** calling the LLM. If a rule matches, the
@@ -297,7 +297,7 @@ Rule(
 
 ## Evidence strength (DA-25)
 
-Source: `app/agent/nodes.py::_compute_evidence_strength`.
+Source: `packages/core/src/app/agent/nodes.py::_compute_evidence_strength`.
 
 | trust_level | Source |
 |---|---|
@@ -313,7 +313,7 @@ Source: `app/agent/nodes.py::_compute_evidence_strength`.
 
 ## LLM gateway policy (DA-27)
 
-Source: `app/mcp/policy.py`.
+Source: `packages/core/src/app/mcp/policy.py`.
 
 - `capability_registry` is fail-closed (no match = no access)
 - `interface_type` and `origin` are the only keys
@@ -323,7 +323,7 @@ Source: `app/mcp/policy.py`.
 
 ## Contract drift detection (DA-52)
 
-Source: `app/contracts/`.
+Source: `packages/core/src/app/contracts/`.
 
 When a connector returns a response that doesn't match the contract
 (unknown field, missing field, wrong type), the system records the drift
@@ -343,19 +343,19 @@ are logged but don't open an incident.
 
 ## Quality gates (DA-51)
 
-Source: `app/evaluation/gates.py`.
+Source: `packages/core/src/app/evaluation/gates.py`.
 
 - `implemented_das_documented` — every DA row in `CLAUDE.md` has a prose section
 - `das_index_current` — index table in `DECISOES_DE_ARQUITETURA.md` matches the registered DAs
-- `da_registered` — every DA referenced in `app/`, `scripts/`, `alembic/` has a `CLAUDE.md` row
-- `prompt_digest_measured` — prompt in `app/agent/prompts.py` matches `data/eval/prompt_baseline.json`
-- `connector_reachable` — every registered connector reaches each surface (registry, 2 Literals, routing domain in `data/skills/diagnose_incident.yaml` (DA-63; `apim` is generic by design), CLI, `CONNECTOR_TYPES`, UI dropdown, web-search seed, systems form) and the `Dockerfile` copies `data/skills/`
+- `da_registered` — every DA referenced in `packages/core/src/app/`, `scripts/`, `alembic/` has a `CLAUDE.md` row
+- `prompt_digest_measured` — prompt in `packages/core/src/app/agent/prompts.py` matches `data/eval/prompt_baseline.json`
+- `connector_reachable` — every registered connector reaches each surface (registry, 2 Literals, routing domain in `packages/core/data/skills/diagnose_incident.yaml` (DA-63; `apim` is generic by design), CLI, `CONNECTOR_TYPES`, UI dropdown, web-search seed, systems form) and the `Dockerfile` copies `packages/core/data/skills/`
 - `connector_coverage` — the 9th surface, `data/connector_coverage.yaml`, has its own gate (DA-58 coverage map consistency)
 - `connector_validation_matrix` — `docs/ARCHITECTURE.md` covers every registered connector
 - `candidate_das_fresh` — DAs marked "candidate" have no prose section yet
 
 **Gate regex note:** the index-table header `| DA | Section | What it is |` is what
-`app/evaluation/gates.py::check_index_current` matches. It does not match the
+`packages/core/src/app/evaluation/gates.py::check_index_current` matches. It does not match the
 old `| Number | Title | Section |` header that was removed in this session.
 
 ---
@@ -386,7 +386,7 @@ Total: 27 products × 9 mechanisms = 243 possible combinations; 167 covered
 
 ## Prompt engineering (DA-53)
 
-Source: `app/agent/prompts.py`.
+Source: `packages/core/src/app/agent/prompts.py`.
 
 - `prompt_digest`/`prompt_version` NULL when rule engine terminates (invariant 21)
 - Prompt text changes require promptfoo re-baseline (invariant 20)
@@ -446,7 +446,7 @@ When answering questions about this project, **always**:
    source code or documentation first. If you are unsure, say so explicitly and
    verify before proceeding.
 2. **Use local artifacts as your primary evidence.** The authoritative sources are:
-   - `app/` — current source of truth (not memory or prior knowledge)
+   - `packages/core/src/app/` — current source of truth (not memory or prior knowledge)
    - `docs/DECISOES_DE_ARQUITETURA.md` — architecture decisions prose
    - `CLAUDE.md` — DA index + invariantes
    - `AGENTS.md` — this file
@@ -472,7 +472,7 @@ When answering questions about this project, **always**:
 
 ## Evidence confidence calculation (continued from line 112)
 
-Source: `app/agent/nodes.py::_compute_evidence_strength`.
+Source: `packages/core/src/app/agent/nodes.py::_compute_evidence_strength`.
 
 ```mermaid
 flowchart LR
@@ -570,10 +570,10 @@ flowchart TB
 
 ## LLM Gateway - why and how
 
-See `app/llm/factory.py` and Architecture Decision #10 in `DECISOES_DE_ARQUITETURA.md`. In
+See `packages/core/src/app/llm/factory.py` and Architecture Decision #10 in `DECISOES_DE_ARQUITETURA.md`. In
 one sentence: `Settings.llm_provider` decides between Ollama (default,
 local-first, no API cost), OpenAI or Azure OpenAI, without the rest of
-the code (`app/agent/nodes.py`, prompt, guardrails) needing to know which was
+the code (`packages/core/src/app/agent/nodes.py`, prompt, guardrails) needing to know which was
 chosen - all implement the same `BaseChatModel` interface from
 LangChain.
 
@@ -589,11 +589,11 @@ case complexity before calling the LLM—cost a second LLM call in part of
 the cases and require calibrating a threshold; resilience only kicks in
 when the primary provider is genuinely unavailable).
 
-`app/llm/factory.py::invoke_with_hybrid_fallback()` runs the call with
+`packages/core/src/app/llm/factory.py::invoke_with_hybrid_fallback()` runs the call with
 `settings.llm_provider` (Ollama, typically) and, IF
 `settings.llm_fallback_provider` is configured (`.env`, empty by
 default = same behavior as before this phase) AND the failure is of
-TRANSPORT (`app/llm/factory.py::TRANSPORT_FAILURE_EXCEPTIONS`:
+TRANSPORT (`packages/core/src/app/llm/factory.py::TRANSPORT_FAILURE_EXCEPTIONS`:
 `ConnectionError`, `httpx.TransportError`—base of `ConnectError`,
 `TimeoutException`, `ReadError`, etc.—and, with the SDK `openai`,
 `APIStatusError` with `status_code` 503/504/429), it retries the
@@ -603,8 +603,8 @@ running normally avoids masking a real bug behind a second
 LLM call (unnecessary cost/latency). The diagnosis sub-agents (`sap_diagnosis_node`/`saas_diagnosis_node`/
 `generic_diagnosis_node`, see DA-22 below) called this
 directly in the DA-20 delivery (historical; today, since DA-26,
-`app/agent/nodes.py::_run_diagnosis_agent` calls
-`app/llm/gateway.py::invoke_via_gateway`, which applies policy/circuit
+`packages/core/src/app/agent/nodes.py::_run_diagnosis_agent` calls
+`packages/core/src/app/llm/gateway.py::invoke_via_gateway`, which applies policy/circuit
 breaker/budget and is the ONLY entry point for LLM in the graph); which
 provider actually responded is exposed in
 `DiagnosisResponse.llm_provider_used` - transparency, not just a
@@ -658,7 +658,7 @@ customers who cannot adopt SAP AI Core (which requires HANA Cloud). See
 
 ## RAG
 
-Two Qdrant collections (`app/rag/ingest.py`) — `sap_incident_docs` and
+Two Qdrant collections (`packages/core/src/app/rag/ingest.py`) — `sap_incident_docs` and
 the primary source of diagnosis; `sap_reference_library` only as
 fallback (DA-17, see below):
 
@@ -669,12 +669,12 @@ fallback (DA-17, see below):
   `document_id`, `chunk_index`, `file_hash`, `title`, `category`,
   `ingested_at` (parser: `pymupdf4llm`, preserves Markdown structure)
 
-**Unified retrieval (`app/rag/retriever.py::_retrieve_unified`):**
+**Unified retrieval (`packages/core/src/app/rag/retriever.py::_retrieve_unified`):**
 (historical; v2.0 described parallel queries to both collections—
 today it's sequential with fallback):
 
 1. query `sap_incident_docs` by hybrid search
-   (`app/rag/retriever.py::_retrieve_hybrid`, which ranks candidates
+   (`packages/core/src/app/rag/retriever.py::_retrieve_hybrid`, which ranks candidates
    by composite score `0.7 × cosine + 0.3 × normalized_rrf`);
 2. only if no incident hit has cosine `>= score_threshold`
    query `sap_reference_library` (dense search) as fallback—this
@@ -684,12 +684,12 @@ today it's sequential with fallback):
    (`cross-encoder/mmarco-mMiniLMv2-L12-H384-v1`, DA-29, via
    `sentence-transformers`), which reorders by real relevance to the pair
    `(query, chunk)`;
-4. final admission uses `app/rag/retriever.py::_evidence_admission_score`
+4. final admission uses `packages/core/src/app/rag/retriever.py::_evidence_admission_score`
    (see DA-25 below).
 
 **Ingestion:** idempotent by deterministic IDs
 (`uuid5(NAMESPACE_URL, f"{document_id}::chunk::{chunk_index}")`, see
-`app/rag/ingest.py`)—no delete-before-upsert. State
+`packages/core/src/app/rag/ingest.py`)—no delete-before-upsert. State
 saved by content hash (`hash:filename`) instead of path, detecting
 changes even with file renaming.
 
@@ -697,7 +697,7 @@ changes even with file renaming.
 
 ## GraphRAG (Neo4j) - opt-in, not in the default path
 
-`app/rag/graph_store.py` implements what was previously just "reserved for
+`packages/core/src/app/rag/graph_store.py` implements what was previously just "reserved for
 future use": records each completed diagnosis in Neo4j as a graph
 (`Incident -AFFECTS-> Interface -RUNS_ON-> System`, `Incident
 -HAS_ROOT_CAUSE_IN-> Document`) and queries this graph for previous
@@ -722,13 +722,13 @@ phase is that now **real, tested code exists** (with fake driver, see
 
 There is no manual step 3: since Architecture Decision #19 (DA-21),
 `ensure_constraints()` runs automatically in the FastAPI `lifespan` when the
-flag is on (see `app/main.py`)—the old
+flag is on (see `packages/core/src/app/main.py`)—the old
 `uv run python -m app.rag.graph_store --init` is still available for
 manual/explicit use, but is no longer mandatory.
 
 There's nothing to uncomment in Python—just this flag + the actual infrastructure
 to exist. With the flag off, `build_graph()` builds exactly the same
-sequence of nodes as before this phase (see `app/agent/graph.py`),
+sequence of nodes as before this phase (see `packages/core/src/app/agent/graph.py`),
 zero cost. **Not validated against a real Neo4j** (no Docker daemon
 available in the environment where this was built)—same honest caveat
 as `RFCConnector._fetch_real`.
@@ -737,7 +737,7 @@ as `RFCConnector._fetch_real`.
 
 Turning on GraphRAG means Neo4j is now in the critical path of
 EACH diagnosis (`graph_enrich_node` before, `graph_write_node`
-after—see `app/agent/graph.py`). Without care, a momentary
+after—see `packages/core/src/app/agent/graph.py`). Without care, a momentary
 Neo4j instability (restart, network, pool exhausted) would bring down
 the entire diagnosis due to a layer that should be just an
 enrichment, not a hard dependency. Three reinforcements, all
@@ -792,7 +792,7 @@ equals, not the architectural axis (see Architecture Decision #8/#13 in
 `DECISOES_DE_ARQUITETURA.md`). An incident from a Salesforce webhook
 received the same "OData/IDoc/RFC/CPI" expertise as an RFC incident.
 
-**Decision:** a `supervisor_node` (`app/agent/supervisor.py`) runs
+**Decision:** a `supervisor_node` (`packages/core/src/app/agent/supervisor.py`) runs
 FIRST in the graph (even before `connector`) and classifies
 deterministically the incident domain:
 
@@ -805,7 +805,7 @@ deterministically the incident domain:
 
 The classification is CODE, not an LLM call—the same principle already
 applied to confidence guardrails (DA-15): cheap, deterministic structural
-decision, 100% testable without AI infrastructure. `app/agent/graph.py::_route_to_specialist` reads `agent_domain` from
+decision, 100% testable without AI infrastructure. `packages/core/src/app/agent/graph.py::_route_to_specialist` reads `agent_domain` from
 the state and routes the graph (via `add_conditional_edges`) to ONE of
 the three specialist sub-agents—never more than one in the same incident,
 without duplicating LLM call cost:
@@ -815,14 +815,14 @@ without duplicating LLM call cost:
 - `saas_diagnosis_node` - multi-vendor persona (ServiceNow,
   Salesforce, Workday, Ariba, SuccessFactors, REST/OAuth2 APIs in general)
 - `generic_diagnosis_node` - generic integration persona
-  (`app/agent/prompts.py::GENERIC_INTEGRATION_PERSONA`) for
+  (`packages/core/src/app/agent/prompts.py::GENERIC_INTEGRATION_PERSONA`) for
   `"generic"` (no domain identified). (historical; in the DA-22 delivery
   there were two sub-agents and `"generic"` fell to
   `saas_diagnosis_node`.) Missing `agent_domain` still falls to
-  `saas_diagnose` (`app/agent/graph.py::_route_to_specialist`).
+  `saas_diagnose` (`packages/core/src/app/agent/graph.py::_route_to_specialist`).
 
 The sub-agents share the same core (`_run_diagnosis_agent`
-in `app/agent/nodes.py`)—ReAct agent, Hybrid Inference (DA-20),
+in `packages/core/src/app/agent/nodes.py`)—ReAct agent, Hybrid Inference (DA-20),
 JSON parsing and confidence guardrails (DA-15) remain
 IDENTICAL; the only difference between them is the persona/expertise injected
 into the prompt. Which domain was used is exposed in
@@ -866,18 +866,18 @@ GraphRAG.
 
 ## A2A (Agent2Agent) - external interoperability
 
-`app/a2a/` implements the proposal archived in
+`packages/core/src/app/a2a/` implements the proposal archived in
 the original A2A layer proposal (internal document, outside the repository)
 (read that document for the complete business context and the caveat
 about the inbound Joule GA, planned for Q4/2026 and not yet
 available). In technical summary:
 
-- **Agent Card** (`app/a2a/agent_card.py`), published at
+- **Agent Card** (`packages/core/src/app/a2a/agent_card.py`), published at
   `GET /.well-known/agent-card.json` (standard A2A protocol path)
-- **Task manager** (`app/a2a/task_manager.py`) - translates an A2A
+- **Task manager** (`packages/core/src/app/a2a/task_manager.py`) - translates an A2A
   message into `IncidentRequest` and calls `run_diagnosis()`, the SAME
   function used by `/diagnose` REST; no duplicate diagnosis logic
-- **JSON-RPC 2.0 server** (`app/a2a/server.py`), mounted at
+- **JSON-RPC 2.0 server** (`packages/core/src/app/a2a/server.py`), mounted at
   `POST /a2a`, with methods `message/send` and `tasks/get`
 
 Deliberate simplification: of the 8 task states that the A2A protocol
@@ -887,7 +887,7 @@ reaches are implemented (`submitted -> working -> completed|failed`)
 to an agent that doesn't request additional data mid-process nor has
 interactive authorization flow. Authentication is a static key via
 header (`A2A_API_KEY`). Since DA-18, this key NEVER stays empty in
-memory: if it doesn't come from `.env`, `app/main.py::_ensure_api_keys_configured`
+memory: if it doesn't come from `.env`, `packages/core/src/app/main.py::_ensure_api_keys_configured`
 generates a random one at startup and logs a warning—the endpoint never
 silently opens. An OAuth2/JWT key between agents remains
 the real production gap (would require an interoperable authorization
@@ -903,7 +903,7 @@ correct behavior of an A2A agent (business error, not transport).
 
 ## MCP (Model Context Protocol) - capability catalog, not just "connect an LLM to a tool"
 
-`app/mcp/server.py` exposes the Copilot as MCP SERVER (not client—
+`packages/core/src/app/mcp/server.py` exposes the Copilot as MCP SERVER (not client—
 explicit decision, see module docstring for the discarded alternative
 reading), mounted at `POST /mcp/` (with trailing slash—`app.mount()`
 redirects 307 from `/mcp` without slash, standard Starlette behavior,
@@ -944,7 +944,7 @@ therefore the tests in `tests/test_mcp.py` use a SINGLE
 Until this phase, the Copilot only reacted to EXPLICIT calls: `POST
 /diagnose` human, A2A message, or MCP tool call. Closing the sixth
 item of the consolidated architectural roadmap, `POST /events/incident`
-(`app/main.py` + `app/events/`) allows an external monitoring
+(`packages/core/src/app/main.py` + `packages/core/src/app/events/`) allows an external monitoring
 system (CPI, Solution Manager, a queue/IDoc listener) to trigger the
 diagnosis automatically, publishing an event instead of waiting
 for someone to call the API.
@@ -959,7 +959,7 @@ AMQP 1.0). `data` carries exactly the same fields as
 `IncidentRequest` (the information is the SAME a human would type in
 `/diagnose`, just generated automatically). Today only one `type` is
 recognized—`com.sap.integration.incident.detected.v1`—modeled
-as `Literal` in `IncidentEventEnvelope` (`app/models/models.py`): any
+as `Literal` in `IncidentEventEnvelope` (`packages/core/src/app/models/models.py`): any
 other value is rejected with `422` automatically by Pydantic, instead
 of trying to silently interpret a payload of unknown format.
 
@@ -978,13 +978,13 @@ in an external monitoring system (outside the direct control
 of this project), so a leak there shouldn't compromise the
 other two access channels.
 
-`app/events/consumer.py::handle_incident_event()` converts the event to
+`packages/core/src/app/events/consumer.py::handle_incident_event()` converts the event to
 `IncidentRequest` and calls the SAME `run_diagnosis()` used by
 `/diagnose` and the A2A layer—no duplicate diagnosis
 logic, just another entry point.
 
 **Update (2026-10-07):** the webhook today calls
-`app/events/consumer.py::handle_incident_event_async` and responds `202`
+`packages/core/src/app/events/consumer.py::handle_incident_event_async` and responds `202`
 without waiting for the LLM: with `REDIS_URL`, the 202 only comes after the event
 is recorded in the RQ queue (durable); without `REDIS_URL` (dev), the diagnosis runs
 in `BackgroundTasks` in the web process (not durable). Enqueue failure
@@ -1097,7 +1097,7 @@ in this environment, same limitation already recorded above).
 
 Along with this fix, a second problem found in the same review was
 corrected: the default LLM model was inconsistent between
-`app/config.py` (`qwen3-coder-next:latest`, canonical source) and
+`packages/core/src/app/config.py` (`qwen3-coder-next:latest`, canonical source) and
 `.env.example`/`docker-compose.yml` (both `qwen2.5-coder:32b`)—the
 two files aligned to the canonical value of `config.py`.
 
@@ -1113,7 +1113,7 @@ Docker multi-stage and `uv.lock`, were already corrected—see section
 "Post-roadmap follow-up" above).
 
 **1. RAG threshold applied too early (before reranker).**
-`app/rag/retriever.py::_retrieve_hybrid` discarded candidates with
+`packages/core/src/app/rag/retriever.py::_retrieve_hybrid` discarded candidates with
 dense cosine below `score_threshold` (0.5) BEFORE the cross-encoder
 (reranker) had any chance to evaluate true semantic relevance—
 a document with excellent BM25/RRF (exact term match,
@@ -1146,7 +1146,7 @@ dense + sparse -> RRF -> candidate pool -> cross encoder -> evidence threshold -
   rejeitado) e os dois ramos do fallback de `reference_library`.
 
 **2. Evidence/Trust Layer.** A resposta do diagnostico (`DiagnosisResponse`)
-ganhou um campo `evidence: list[Evidence]` (`app/models/models.py`) - uma
+ganhou um campo `evidence: list[Evidence]` (`packages/core/src/app/models/models.py`) - uma
 entrada por fonte REAL consultada nesta execucao (conector, RAG,
 GraphRAG, busca web, descricao do usuario), cada uma com um
 `trust_level` decidido pelo TIPO da fonte:
@@ -1160,7 +1160,7 @@ system_observed (conector real)
 
 (`simulated` substitui `system_observed` quando o conector retornou
 dado mock/fallback.) A lista e montada de forma inteiramente
-DETERMINISTICA em `app/agent/nodes.py::_assemble_evidence(state)` - o
+DETERMINISTICA em `packages/core/src/app/agent/nodes.py::_assemble_evidence(state)` - o
 LLM nunca declara/cita suas proprias fontes, mesmo principio ja usado
 em `evidence_strength` (DA-15) e nos demais guardrails deste projeto
 ("guardrails em codigo, nao em prompt", DA-3 em `DECISOES_DE_ARQUITETURA.md`).
@@ -1192,15 +1192,15 @@ contra os dicts montados por `_assemble_evidence`, e a secao nova do
 ## AI Gateway v1 - policy, circuit breaker e budget (DA-26)
 
 Terceiro item da segunda revisao arquitetural externa (P1): o "LLM
-Gateway" existente (`app/llm/factory.py`) era, tecnicamente, so um LLM
+Gateway" existente (`packages/core/src/app/llm/factory.py`) era, tecnicamente, so um LLM
 Provider Factory / Abstraction Layer - decidia QUAL `BaseChatModel`
 instanciar, mas nao tinha, de forma centralizada, policy, budget nem
-circuit breaker de verdade. `app/llm/gateway.py` (novo) adiciona essas
+circuit breaker de verdade. `packages/core/src/app/llm/gateway.py` (novo) adiciona essas
 tres coisas SOBRE a Hybrid Inference ja existente (DA-20) - auth
 continua na borda HTTP (X-API-Key por endpoint, DA-18/DA-23), nao
 duplicada aqui.
 
-`app/agent/nodes.py::_run_diagnosis_agent` (usado pelos dois
+`packages/core/src/app/agent/nodes.py::_run_diagnosis_agent` (usado pelos dois
 sub-agentes especialistas, DA-22) agora chama
 `gateway.invoke_via_gateway()` em vez de
 `factory.invoke_with_hybrid_fallback()` diretamente - e o UNICO ponto
@@ -1222,7 +1222,7 @@ e confidencial), a chamada falha explicitamente com
 assim. (historico: texto da v1.)
 
 **Atualizacao (2026-10-07):** hoje
-(`app/llm/gateway.py::classify_sensitivity`, DA-39/DA-43) o default e
+(`packages/core/src/app/llm/gateway.py::classify_sensitivity`, DA-39/DA-43) o default e
 `confidential` (`settings.sensitivity_default`) - texto livre pode
 conter dado que a redacao por regex nao reconhece; dado real de
 conector ou `pii_detected` tambem dao `confidential`. A classificacao
@@ -1241,7 +1241,7 @@ chamadas seguintes pulam esse provider sem tentar, em vez de esperar o
 mesmo timeout de rede de novo contra algo que ja sabemos que esta
 fora. Reseta para fechado no primeiro sucesso. (historico; desde a
 DA-41 o estado e compartilhado entre replicas via Redis -
-`app/circuit_breaker.py` - com fallback automatico para memoria quando
+`packages/core/src/app/circuit_breaker.py` - com fallback automatico para memoria quando
 `REDIS_URL` esta vazia ou o Redis esta fora.)
 
 **3. Budget.** `_estimate_cost_usd` estima o custo (heuristica de
@@ -1274,7 +1274,7 @@ ja usado em `test_llm_factory.py` para `invoke_with_hybrid_fallback`).
 ## Capability Registry + Agent Execution Policy (DA-27)
 
 Ultimo item P1 da segunda revisao arquitetural externa. O servidor
-MCP (`app/mcp/server.py`, DA-19) so tinha autenticacao de TRANSPORTE
+MCP (`packages/core/src/app/mcp/server.py`, DA-19) so tinha autenticacao de TRANSPORTE
 (X-API-Key compartilhada) - nenhuma distincao entre tools por risco.
 Hoje isso nao e um problema pratico (as duas tools expostas,
 `diagnose_incident` e `list_connectors`, sao 100% read-only), mas a
@@ -1286,7 +1286,7 @@ SAP, reiniciar um iFlow ou executar uma operacao real - prompt
 injection deixa de ser um problema de qualidade de resposta e vira um
 problema de AUTORIZACAO OPERACIONAL.
 
-`app/mcp/policy.py` (novo) cria a base para isso:
+`packages/core/src/app/mcp/policy.py` (novo) cria a base para isso:
 
 - **Capability Registry** (`CAPABILITY_REGISTRY`): uma entrada
   `ToolPolicy` por tool exposta - `risk_level`, `destructive`,
@@ -1298,7 +1298,7 @@ problema de AUTORIZACAO OPERACIONAL.
   permitida por omissao. Verifica scopes concedidos no
   `ExecutionContext` e, quando a tool exige `approval_required=True`,
   se ja foi explicitamente aprovada.
-- `diagnose_incident` e `list_connectors` (`app/mcp/server.py`) agora
+- `diagnose_incident` e `list_connectors` (`packages/core/src/app/mcp/server.py`) agora
   chamam `enforce()` como primeira linha - nenhuma tool roda sem
   passar pelo registry primeiro, inclusive qualquer tool futura.
 
@@ -1315,7 +1315,7 @@ liberada.
 **Nao-objetivos explicitos desta v1** (backlog em aberto): granularidade de scope POR CHAVE de API
 (hoje ha uma unica `X-API-Key` compartilhada por todo o servidor MCP -
 multiplas chaves com scopes diferentes exigiria um esquema de
-credenciais mais rico, ex: OAuth2/TokenVerifier, que `app/mcp/server.py`
+credenciais mais rico, ex: OAuth2/TokenVerifier, que `packages/core/src/app/mcp/server.py`
 ja documenta como sobre-engenharia para o estagio atual); fluxo de
 aprovacao humana de verdade (o campo `approved` de `ExecutionContext`
 existe para `enforce()` ja saber verificar isso, mas nenhum mecanismo
@@ -1362,13 +1362,13 @@ compartilham a mesma causa raiz confirmada, sem reprocessar texto
 livre.
 
 - **`verify_incident(incident_id, verified_root_cause, verified_by,
-  session=None)`** (`app/rag/graph_store.py`) - o UNICO caminho que
+  session=None)`** (`packages/core/src/app/rag/graph_store.py`) - o UNICO caminho que
   marca `Incident.verified = true`. Chamada explicita apenas -
   `verified` nunca e inferido por score/threshold, ao contrario de
   `is_grounded`. `verified_root_cause` pode DIVERGIR de `root_cause` (a
   hipotese original do LLM) - e justamente o caso mais importante de
   capturar (o LLM errou, um humano corrigiu).
-- **`POST /incidents/{incident_id}/verify`** (`app/main.py`, novo
+- **`POST /incidents/{incident_id}/verify`** (`packages/core/src/app/main.py`, novo
   endpoint, mesma autenticacao `X-API-Key` de `/diagnose`) - superficie
   HTTP para um operador (ou outro sistema, ex: ticket fechado com causa
   raiz confirmada) registrar a verificacao. 404 explicito (nao
@@ -1432,8 +1432,8 @@ correct informados E (desde a DA-50) nao houver linha gravavel na tabela
 `incidents` (sem `DATABASE_URL` ou incidente inexistente) - nada para
 registrar em lugar nenhum; GraphRAG
 ligado com incident_id inexistente continua 404. Ver
-`app/models/models.py::VerifyIncidentRequest` (campos `correct`/`trace_id`
-novos) e `app/main.py::verify_incident_endpoint`.
+`packages/core/src/app/models/models.py::VerifyIncidentRequest` (campos `correct`/`trace_id`
+novos) e `packages/core/src/app/main.py::verify_incident_endpoint`.
 
 ## Benchmark cientifico de rerankers (DA-29)
 
@@ -1452,7 +1452,7 @@ modelos candidatos - `ms-marco-L6` (baseline), `ms-marco-L12` (mesma
 familia, mais profundo), `mmarco-mMiniLMv2` (multilingue, treinado no
 mMARCO) e `bge-reranker-base` (multilingue, maior). Metricas puras
 (Hit@1, Recall@5, MRR@5, nDCG@5 com relevancia binaria) isoladas em
-`app/rag/eval_metrics.py` - testadas sem depender de nenhum modelo
+`packages/core/src/app/rag/eval_metrics.py` - testadas sem depender de nenhum modelo
 carregado (`tests/test_eval_metrics.py`, 15 testes) - mais latencia
 media/p95, delta de RSS do processo (proxy de RAM via `psutil`) e
 contagem de parametros (proxy de custo computacional).
@@ -1497,7 +1497,7 @@ nao mais um arquivo especifico (gap corrigido nesta fase).
 **Atualizacao (avaliacao externa, medio prazo item 6 - "Fila
 assincrona"):** novo `POST /diagnose/async` enfileira o diagnostico
 via RQ (mesmo Redis usado pela persistencia de tasks A2A, item 2
-acima - ver `app/queue.py`) e devolve `{"job_id", "status": "queued"}`
+acima - ver `packages/core/src/app/queue.py`) e devolve `{"job_id", "status": "queued"}`
 (202), em vez de bloquear a requisicao ate o LLM terminar. `GET
 /diagnose/async/{job_id}` faz o polling do resultado
 (`{"job_id", "status", "result", "error"}`). `POST /diagnose` sincrono
@@ -1508,9 +1508,9 @@ rodando (`docker compose --profile async up -d redis worker`, novo
 servico "worker" em docker-compose.yml, mesma imagem da API) - sem
 ele, jobs enfileirados ficam presos em "queued" indefinidamente.
 
-Design: `DiagnosisQueue` (app/queue.py) e uma camada fina, testavel
+Design: `DiagnosisQueue` (packages/core/src/app/queue.py) e uma camada fina, testavel
 via injecao de fakes (mesmo espirito de `RedisTaskStore`,
-app/a2a/task_store.py) - a funcao efetivamente executada pelo worker
+packages/core/src/app/a2a/task_store.py) - a funcao efetivamente executada pelo worker
 (`run_diagnosis_job`) precisa ser importavel por dotted-path
 ("app.queue.run_diagnosis_job"), requisito do RQ para desserializar o
 job no processo do worker.
@@ -1536,7 +1536,7 @@ duas mudancas independentes:
 2. Novo job "neo4j-smoke" no CI (.github/workflows/tests.yml) - sobe
    um Neo4j real como service container e roda
    tests/test_graph_store_neo4j_smoke.py (marker "neo4j_smoke"). Os
-   testes existentes de app/rag/graph_store.py usam um FakeSession em
+   testes existentes de packages/core/src/app/rag/graph_store.py usam um FakeSession em
    memoria; este smoke test exercita ensure_constraints/
    upsert_incident_graph/graph_context/verify_incident contra Cypher
    de verdade pela primeira vez. Marcado so com "neo4j_smoke" (nao
@@ -1560,7 +1560,7 @@ puro sem ganho de qualidade. A regra deterministica tem confianca 0.90
 (ajustavel por regra) e latencia de microsegundos, contra segundos de
 inferencia local ou custo de API.
 
-**Implementacao:** `app/agent/rules.py` — `ErrorRule` dataclass
+**Implementacao:** `packages/core/src/app/agent/rules.py` — `ErrorRule` dataclass
 (`patterns` regex, `probable_root_cause`, `next_steps`, `category`,
 `confidence`) + catalogo `KNOWN_ERROR_RULES` com 22 regras hoje: 15 de
 base e 7 da expansao DA-35 (tabela da secao "Rule Engine: 14 → 21
@@ -1578,7 +1578,7 @@ daquele titulo sao historicos). A lista canônica é o próprio código:
 - Rate limit 429
 - Documento duplicado (numero de documento ja existente)
 
-**Integracao no agente:** `app/agent/nodes.py::_run_diagnosis_agent()` —
+**Integracao no agente:** `packages/core/src/app/agent/nodes.py::_run_diagnosis_agent()` —
 o rule engine e avaliado como PRIMEIRO passo, antes do prompt building,
 combinando `description` + `connector.message` no texto de busca. Se
 alguma regra bater, o resultado e retornado diretamente no grafo
@@ -1606,7 +1606,7 @@ Commit `0e387d7`.
 como contexto narrativo no payload mock do `WorkdayConnector`. Isso
 estava registrado como proximo item de backlog. DA-34 fecha esse gap.
 
-**Implementacao:** `app/connectors/successfactors_connector.py` (253
+**Implementacao:** `packages/core/src/app/connectors/successfactors_connector.py` (253
 linhas):
 - Auth: **OAuth2 Client Credentials** — mesmo padrao dos demais conectores,
   via `POST /oauth/token` com `grant_type=client_credentials`
@@ -1619,7 +1619,7 @@ linhas):
   - `AUTH-FAIL` — simula falha de autenticacao OAuth2 (401)
 - Modo **real**: circuit breaker, validacao de charset do IDENTIFICADOR
   antes de montar a URL OData
-  (`app/connectors/base.py::validate_identifier_charset`; historico:
+  (`packages/core/src/app/connectors/base.py::validate_identifier_charset`; historico:
   esta secao dizia "charset da resposta"), fallbacks
   explícitos para 401/404/CONNECTION_ERROR
 - Settings: `SFSF_BASE_URL`, `SFSF_OAUTH_TOKEN_URL`, `SFSF_CLIENT_ID`,
@@ -1653,7 +1653,7 @@ pela dependencia de outros commits (2f8532f / 0dfebe1 / 0e387d7).
 baseada em `aiormq` abaixo e HISTORICA. `aiormq` fala AMQP 0-9-1, nao
 AMQP 1.0; a DA-40 trocou a biblioteca por `python-qpid-proton` (AMQP
 1.0 nativo, com wrapper asyncio). Hoje, em
-`app/events/amqp_consumer.py`:
+`packages/core/src/app/events/amqp_consumer.py`:
 
 - o reactor do proton e single-thread e nunca bloqueia: o diagnostico
   roda fora dele - com `REDIS_URL`, a mensagem vira job RQ (mesmo
@@ -1674,7 +1674,7 @@ em vez de `python-proton` (requer `librproton` C) ou `azure-servicebus`
 — AMQP 0-9-1 e 1.0 via plugin — e instala sem compilar nada, mantendo o
 Dockerfile simples.
 
-**Implementacao (historico, versao aiormq):** `app/events/amqp_consumer.py`:
+**Implementacao (historico, versao aiormq):** `packages/core/src/app/events/amqp_consumer.py`:
 - `AmqpConsumerTask` — classe que gerencia o ciclo de vida como
   **asyncio background task**: `start()` cria a task, `stop()` sinaliza
   parada e aguarda (timeout 10s, cancel forcado apos isso)
@@ -1699,14 +1699,14 @@ Dockerfile simples.
   funcao usada pelo webhook DA-23); chamado via `to_thread` para nao
   bloquear o event loop
 
-**Integracao no lifespan:** `app/main.py` — dentro de
+**Integracao no lifespan:** `packages/core/src/app/main.py` — dentro de
 `mcp_server.session_manager.run()`, `amqp_consumer.start()` e chamado
 no startup e `amqp_consumer.stop()` no shutdown (bloco `try/finally`).
 Quando `AMQP_ENABLED=false` (default), o `start()` retorna imediatamente
 sem criar nenhuma task — zero custo quando desabilitado.
 
 **Rota de processamento unica:** `handle_incident_event()` de
-`app/events/consumer.py` — a MESMA funcao usada pelo webhook HTTP
+`packages/core/src/app/events/consumer.py` — a MESMA funcao usada pelo webhook HTTP
 (DA-23). Nenhuma logica de diagnostico foi duplicada para o caminho AMQP.
 
 **Configuracao:**
@@ -1740,7 +1740,7 @@ contem o bloco AMQP todo comentado como referencia de configuracao.
 
 ### Rule Engine: 14 → 21 regras (historico; hoje 22)
 
-O catálogo de `app/agent/rules.py` foi expandido de 14 para **21 regras**
+O catálogo de `packages/core/src/app/agent/rules.py` foi expandido de 14 para **21 regras**
 com 7 novas entradas cobrindo classes de erro SAP/integração frequentes:
 
 | Categoria | Padrões cobertos | Transação/ferramenta de resolução |
@@ -1766,7 +1766,7 @@ Cada nova regra segue o padrão `ErrorRule`:
 
 ### Fix: docstring stale em `_get_reranker()` (retriever.py)
 
-O docstring de `_get_reranker()` em `app/rag/retriever.py` ainda
+O docstring de `_get_reranker()` em `packages/core/src/app/rag/retriever.py` ainda
 mencionava o modelo antigo `ms-marco-MiniLM-L-6-v2`. Corrigido para
 refletir o modelo atual `mmarco-mMiniLMv2-L12-H384-v1` com as métricas
 reais da DA-29. **Correção (validação 2026-10-07, M-20):** "3.5x mais rápido" é em relação ao `bge-reranker-base`; o mmarco é ~1,3–1,5x mais LENTO que o baseline L-6, e a vantagem de Hit@1 é de uma consulta, sem significância (ver `docs/RERANKER_BENCHMARK.md`).
@@ -1798,16 +1798,16 @@ incidentes. A solução tem que ser:
 
 ### A Solução (Fase 1)
 
-- `app/ontology/error_codes.ttl`: arquivo Turtle RDF com **28 erros** mapeados
+- `packages/core/src/app/ontology/error_codes.ttl`: arquivo Turtle RDF com **28 erros** mapeados
   (OAuth, RFC, HTTP, JSON/XML, IDoc, OData, S/4HANA, CPI, etc.). Cada erro tem
   URI canônico (`<urn:error:>`) e labels em PT/EN.
-- `app/agent/ontology_loader.py`: carregador que lê o TTL, transforma em
+- `packages/core/src/app/agent/ontology_loader.py`: carregador que lê o TTL, transforma em
   instâncias `ErrorRule` e carrega em memória via `rdflib.Graph.parse()`.
   Fallback para `KNOWN_ERROR_RULES` se o TTL não for encontrado ou falhar na
   parse.
-- Implementação **aditiva**: `app/agent/rules.py` mantém `KNOWN_ERROR_RULES`
+- Implementação **aditiva**: `packages/core/src/app/agent/rules.py` mantém `KNOWN_ERROR_RULES`
   intacto; `ontology_loader.py` só é chamado se `error_codes.ttl` existir.
-  Nenhuma change em `app/agent/graph.py`, `app/agent/nodes.py`, etc.
+  Nenhuma change em `packages/core/src/app/agent/graph.py`, `packages/core/src/app/agent/nodes.py`, etc.
 - API compatível: `ErrorRule` (pattern `str`, error_type `Literal["OAuth2", "RFC", ...]`)
   é a mesma da versão hardcoded.
 
@@ -1823,7 +1823,7 @@ incidentes. A solução tem que ser:
 ### Arquitetura
 
 **Carregamento ontology-aware:** `retrieve_hybrid_ontology_aware()` em
-`app/rag/ontology_aware_retriever.py`:
+`packages/core/src/app/rag/ontology_aware_retriever.py`:
 - `ONTOLOGY_ENRICHMENT_ENABLED=false` → executa `retrieve` clássico (sem penalidade)
 - `ONTOLOGY_ENRICHMENT_ENABLED=true` → executa ontologia-aware quando
   `ontology_category` inferida; fallback para `retrieve` clássico caso contrário

@@ -1,4 +1,8 @@
-# DF-e Copilot
+# FISC — Fiscal Incident Support Copilot
+
+Nome técnico compatível: DF-e Copilot (`dfe-copilot`, pacote `dfe_copilot`,
+plugin `dfe`). A marca FISC é a identidade do produto; os identificadores
+técnicos permanecem estáveis para não quebrar contratos, imagens e integrações.
 
 Diagnóstico assistido de incidentes de **documentos fiscais eletrônicos**
 (NF-e modelo 55) para operações SAP AMS N2/N3. Produto independente que
@@ -19,14 +23,13 @@ automática.
 ## Como rodar
 
 ```bash
-# sempre com o ambiente da RAIZ do monorepo (o pyproject de packages/dfe so
-# declara o pacote; `uv run` dentro de packages/dfe sem --project criaria um
-# ambiente separado, sem o core)
-uv run uvicorn dfe_copilot.main:app --reload       # API do core com o plugin DF-e
+# na raiz do monorepo
+uv sync --locked --all-packages
+uv run --package dfe-copilot python -m uvicorn dfe_copilot.main:app --reload --port 8001
 cd packages/dfe
-uv run --project ../.. python -m pytest -q          # testes do produto (config própria)
-PYTHONPATH=src:../.. uv run --project ../.. python -m dfe_copilot.kb ingest --reset
-PYTHONPATH=src:../.. uv run --project ../.. python -m dfe_copilot.kb search "duplicidade de NF-e" --cstat 204
+uv run python -m pytest -q
+uv run python -m dfe_copilot.kb ingest --reset
+uv run python -m dfe_copilot.kb search "duplicidade de NF-e" --cstat 204
 ```
 
 Requisição mínima (`POST /diagnose`):
@@ -99,3 +102,14 @@ Detalhes em [`frontend/README.md`](frontend/README.md).
 - `docs/DECISOES.md` — decisões do domínio fiscal
 - `docs/PENDENCIAS.md` — o que depende de ação humana ou infraestrutura
 - `docs/ESTUDO_ORIGEM.md` — estudo IIC → SAP AMS/DF-e (v3)
+
+## Imagem e execução próprias
+
+A P2 entrega o alvo Docker `dfe`, Compose isolado na porta 8002 e workflow
+próprio. Veja [execução e CI](docs/DEPLOY.md) para configurar o primeiro usuário,
+iniciar o produto e reproduzir os testes da imagem. O build não publica nem
+substitui serviços automaticamente.
+
+Quando já existir uma base fiscal em Qdrant, `docs/DEPLOY.md` também descreve o
+`compose.existing.yaml`: rede externa, caches somente leitura e validação de
+preservação da coleção, sem ingestão ou reset.

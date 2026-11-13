@@ -72,7 +72,7 @@ se ela pode receber dado `public` e `confidential`.
   `deployed_model_evaluated` avisa quando o modelo implantado não tem baseline.
   Meça com o promptfoo (seção 7) antes de comparar resultados.
 - Modelos diferentes aceitam parâmetros diferentes (seed, `response_format`,
-  tools); a tabela fica em `app/llm/capabilities.py`, por origem. No registro,
+  tools); a tabela fica em `packages/core/src/app/llm/capabilities.py`, por origem. No registro,
   marque "não suporta" no modelo que tiver menos que a origem (a origem é o
   teto; o modelo só restringe).
 
@@ -98,7 +98,7 @@ classificação (`sensitivity_level`), nunca rebaixar (DA-43). Entradas
 inválidas na allowlist nunca ampliam a permissão.
 
 **Cuidado:** `SENSITIVITY_DEFAULT=public` faz texto livre ir para a nuvem. A
-redação de PII (`app/redaction.py`) cobre e-mail, CPF, CNPJ, número de IDoc,
+redação de PII (`packages/core/src/app/redaction.py`) cobre e-mail, CPF, CNPJ, número de IDoc,
 tokens e senhas — não nomes próprios nem endereços.
 
 ---
@@ -162,8 +162,8 @@ Erros conhecidos são respondidos **sem LLM**, antes de qualquer chamada
 
 | Fonte | Arquivo | Quando usar |
 |---|---|---|
-| Regras em código | `app/agent/rules.py::KNOWN_ERROR_RULES` | Padrão regex + causa + próximos passos |
-| Taxonomia SKOS | `app/ontology/error_codes.ttl` (`ONTOLOGY_TTL_PATH`) | Conceitos com `skos:altLabel`, `ex:confidence` e notas de padrões e passos |
+| Regras em código | `packages/core/src/app/agent/rules.py::KNOWN_ERROR_RULES` | Padrão regex + causa + próximos passos |
+| Taxonomia SKOS | `packages/core/src/app/ontology/error_codes.ttl` (`ONTOLOGY_TTL_PATH`) | Conceitos com `skos:altLabel`, `ex:confidence` e notas de padrões e passos |
 
 Uma regra em código:
 
@@ -195,7 +195,7 @@ uv run python -c "from app.agent.rules import match_known_error; print(match_kno
 
 ## 6. Roteamento (skills declarativas)
 
-**Onde:** `data/skills/diagnose_incident.yaml` (DA-63). O bloco `domains` decide
+**Onde:** `packages/core/data/skills/diagnose_incident.yaml` (DA-63). O bloco `domains` decide
 qual especialista atende cada `interface_type`:
 
 ```yaml
@@ -208,14 +208,14 @@ Fora das duas listas, o domínio sai da descrição (especialista genérico). O
 mesmo arquivo declara risco, escopos e timeout da tool no Capability Registry
 (DA-27), que é fail-closed: tool sem entrada é negada.
 
-**Cuidado:** o `Dockerfile` copia `data/skills/`; sem ele o supervisor não
+**Cuidado:** o `Dockerfile` copia `packages/core/data/skills/`; sem ele o supervisor não
 sobe. O gate `connector_reachable` confere que todo conector tem domínio.
 
 ---
 
 ## 7. Prompt de diagnóstico
 
-**Onde:** `app/agent/prompts.py` (personas, template e instrução de saída, com
+**Onde:** `packages/core/src/app/agent/prompts.py` (personas, template e instrução de saída, com
 versão e digest — DA-53). Inclui os `Field(description=)` do `DiagnosisModel`,
 que o LangChain injeta no schema.
 
@@ -293,18 +293,18 @@ do LLM) segue o `locale` do pedido, que a UI preenche com o idioma da tela
 Para **adicionar um idioma** (ex.: `es`):
 
 1. Copie `frontend/src/i18n/locales/en.json` para `es.json` e
-   `app/i18n/locales/admin.en.json` para `admin.es.json`, e traduza os valores
+   `packages/core/src/app/i18n/locales/admin.en.json` para `admin.es.json`, e traduza os valores
    (as chaves e as variáveis `{{x}}` ficam iguais).
 2. Inclua `es` em `SUPPORTED_LOCALES` e `LOCALE_LABELS` de
-   `frontend/src/i18n/index.ts` e de `app/i18n/__init__.py`, e em
+   `frontend/src/i18n/index.ts` e de `packages/core/src/app/i18n/__init__.py`, e em
    `normalizeLocale`/`normalize_locale` (idioma base `es` → `es`).
-3. Inclua `es` em `LOCALES` de `app/i18n/checks.py`, para o gate `ui_i18n`
+3. Inclua `es` em `LOCALES` de `packages/core/src/app/i18n/checks.py`, para o gate `ui_i18n`
    conferir a paridade do catálogo novo.
-4. Conteúdo do diagnóstico: copie `app/i18n/locales/content.en.json` para
+4. Conteúdo do diagnóstico: copie `packages/core/src/app/i18n/locales/content.en.json` para
    `content.es.json` e traduza — inclusive `rules.<categoria>`, uma entrada por
    regra do rule engine —, inclua `es` em `CONTENT_LOCALES`
-   (`app/i18n/content.py`) e escreva a instrução de idioma em
-   `OUTPUT_LANGUAGE_INSTRUCTIONS` (`app/agent/prompts.py`). O gate
+   (`packages/core/src/app/i18n/content.py`) e escreva a instrução de idioma em
+   `OUTPUT_LANGUAGE_INSTRUCTIONS` (`packages/core/src/app/agent/prompts.py`). O gate
    `content_i18n` aponta o que faltar.
 5. Meça o prompt novo antes de citar qualidade: use o idioma como 4ª parte
    do prompt (`descrição|||interface|||identificador|||es`). Para `en`, o
@@ -332,7 +332,7 @@ Para revisar texto que tenha escapado do catálogo, abra qualquer tela com
 
 ## 11. Limiares de confiança e escalonamento
 
-O sinal de escalonamento (DA-44) é determinístico, em `app/agent/escalation.py`:
+O sinal de escalonamento (DA-44) é determinístico, em `packages/core/src/app/agent/escalation.py`:
 `FLOOR_TIER_MIN_EVIDENCE` (0,62) e `CURATED_TIER_MIN_EVIDENCE` (0,45) decidem
 quando a evidência é fraca demais para confiar no diagnóstico.
 
@@ -362,5 +362,5 @@ gate `reranker_invariant` só aceita outro se ele for medido em
 Os invariantes de `AGENTS.md` §4 só mudam com uma DA nova (processo em
 `CLAUDE.md`, "Como registrar uma nova DA"). Os mais prováveis de aparecer numa
 customização: o reranker em produção, o rule engine ligado por default, toda
-chamada de LLM pelo `app/llm/gateway.py` e a política fail-closed do Capability
+chamada de LLM pelo `packages/core/src/app/llm/gateway.py` e a política fail-closed do Capability
 Registry.

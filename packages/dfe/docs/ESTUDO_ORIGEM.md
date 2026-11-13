@@ -104,25 +104,25 @@ Versões dos servidores Qdrant, Neo4j, PostgreSQL e Ollama em execução não fo
 
 | ID | Local | Conclusão permitida | Limite |
 |---|---|---|---|
-| E01 | `app/agent/graph.py::build_graph` | `supervisor → connector → retrieve → [graph_enrich] → {sap,saas,generic}_diagnose → [graph_write] → report → [ontology_debug]` | Não prova execução conectada |
-| E02 | `graph.py::get_graph`, `app/agent/checkpointing.py` | Checkpointer Postgres opcional com redação de PII | `CHECKPOINTING_ENABLED` OFF por padrão; retomada usa estado redigido |
-| E03 | `app/agent/nodes.py::retrieve_node` | Caminho ontology-aware condicional | Acesso a `error_code` corrigido (DA-64); restante de A4 aberto |
+| E01 | `packages/core/src/app/agent/graph.py::build_graph` | `supervisor → connector → retrieve → [graph_enrich] → {sap,saas,generic}_diagnose → [graph_write] → report → [ontology_debug]` | Não prova execução conectada |
+| E02 | `graph.py::get_graph`, `packages/core/src/app/agent/checkpointing.py` | Checkpointer Postgres opcional com redação de PII | `CHECKPOINTING_ENABLED` OFF por padrão; retomada usa estado redigido |
+| E03 | `packages/core/src/app/agent/nodes.py::retrieve_node` | Caminho ontology-aware condicional | Acesso a `error_code` corrigido (DA-64); restante de A4 aberto |
 | E04 | `nodes.py::_build_diagnosis_prompt` | Prompt reúne RAG, conector, logs, payload, histórico | Usa o texto do primeiro hit (DA-1) |
 | E05 | `nodes.py::_assemble_evidence` | Evidência montada por código, com proveniência (DA-15) | Regra curada rotulada `system_observed` (A6) |
 | E06 | `nodes.py::_run_diagnosis_agent` | Regra antecede o ReAct; caminho HITL | Retrieval ocorre antes da regra (A7) |
-| E07 | `app/agent/state.py::DiagnosisModel` | `matched_source`, `probable_root_cause`, `confidence`, `next_steps` | Não separa hipótese, causa e resolução |
-| E08 | `app/llm/gateway.py`, `app/config.py` | Política, orçamento, breaker; soberania `strict` | — |
-| E09 | `app/rag/retriever.py` | Dense + BM25, RRF, reranker | `HYBRID_TARGETS = {"incidents"}` (A10) |
-| E10 | `app/connectors/odata_connector.py` | HTTP/OAuth2, parsing OData v2; filtro por `MessageGuid` | Só `MockTransport`; parsing e cassette ainda no formato antigo (A1) |
-| E11 | `app/connectors/rfc_connector.py` | pyrfc com logon e `RFC_SYSTEM_INFO` no ABAP Trial | `BAPI_IDOC_STATUS` nunca executada (A2) |
-| E12 | `app/connectors/po_connector.py` | Consulta `/mdt/api/1.0/facade` | Endpoint não público (A3, DA-56) |
-| E13 | `app/models/models.py` | `IncidentRequest` com limites e Literals de `interface_type` | Não é contrato fiscal |
+| E07 | `packages/core/src/app/agent/state.py::DiagnosisModel` | `matched_source`, `probable_root_cause`, `confidence`, `next_steps` | Não separa hipótese, causa e resolução |
+| E08 | `packages/core/src/app/llm/gateway.py`, `packages/core/src/app/config.py` | Política, orçamento, breaker; soberania `strict` | — |
+| E09 | `packages/core/src/app/rag/retriever.py` | Dense + BM25, RRF, reranker | `HYBRID_TARGETS = {"incidents"}` (A10) |
+| E10 | `packages/core/src/app/connectors/odata_connector.py` | HTTP/OAuth2, parsing OData v2; filtro por `MessageGuid` | Só `MockTransport`; parsing e cassette ainda no formato antigo (A1) |
+| E11 | `packages/core/src/app/connectors/rfc_connector.py` | pyrfc com logon e `RFC_SYSTEM_INFO` no ABAP Trial | `BAPI_IDOC_STATUS` nunca executada (A2) |
+| E12 | `packages/core/src/app/connectors/po_connector.py` | Consulta `/mdt/api/1.0/facade` | Endpoint não público (A3, DA-56) |
+| E13 | `packages/core/src/app/models/models.py` | `IncidentRequest` com limites e Literals de `interface_type` | Não é contrato fiscal |
 | E14 | `graph.py::run_diagnosis`, `state.py`, `services/incident_recorder.py::build_incident_row`, repositórios | `tenant_id` propagado ao estado e persistido; filtros por tenant no SQL dos repositórios | Tenant ainda vem do corpo da requisição (A5) |
-| E15 | `app/main.py`, revisão com `Command(resume=...)` | Retomada HITL em código (DA-75) | Teste HTTP não concluiu (A9) |
-| E16 | `app/redaction.py`, `app/auth.py`, `app/mcp/policy.py` | Redação, sessão, policy fail-closed | Não é DLP completo nem ABAC |
-| E17 | `app/rag/graph_store.py::verify_incident` | `POST /incidents/{id}/verify` (DA-28/50) | `diagnosis_correct` pode ser NULL (invariante 13) |
-| E18 | `app/agent/rules.py`, `app/ontology/error_codes.ttl` | 22 regras, fallback em ontologia (DA-33/61) | Nenhuma regra fiscal |
-| E19 | `app/` inteiro | Nenhuma ocorrência de NF-e, SEFAZ, GRC ou DRC em código | Menções só em PDFs da `reference_library` |
+| E15 | `packages/core/src/app/main.py`, revisão com `Command(resume=...)` | Retomada HITL em código (DA-75) | Teste HTTP não concluiu (A9) |
+| E16 | `packages/core/src/app/redaction.py`, `packages/core/src/app/auth.py`, `packages/core/src/app/mcp/policy.py` | Redação, sessão, policy fail-closed | Não é DLP completo nem ABAC |
+| E17 | `packages/core/src/app/rag/graph_store.py::verify_incident` | `POST /incidents/{id}/verify` (DA-28/50) | `diagnosis_correct` pode ser NULL (invariante 13) |
+| E18 | `packages/core/src/app/agent/rules.py`, `packages/core/src/app/ontology/error_codes.ttl` | 22 regras, fallback em ontologia (DA-33/61) | Nenhuma regra fiscal |
+| E19 | `packages/core/src/app/` inteiro | Nenhuma ocorrência de NF-e, SEFAZ, GRC ou DRC em código | Menções só em PDFs da `reference_library` |
 | E20 | `docs/ARCHITECTURE.md` | Matriz histórica de validação dos conectores | Registro documental, não teste repetido |
 
 ---
@@ -172,7 +172,7 @@ Prioridade: **P0** bloqueia dado real ou alegação empresarial; **P1** bloqueia
 
 **A7 — Resiliência antes do LLM.** A regra é avaliada depois do retrieval; com Qdrant fora, `_retrieve_*` retornam vazio (DA-65), mas o fluxo `/diagnose` completo não tem teste de integração. O watchdog limita a espera de quem chama sem encerrar a thread. *Tratamento:* ferramentas determinísticas antes do retrieval (§5.2), modo degradado explícito com motivo auditável, teste de indisponibilidade.
 
-**A9 — Retomada HITL via HTTP não concluiu.** Em `tests/test_hitl.py`, a execução com endpoints foi interrompida no limite de 55 s em `test_review_endpoint_resumes_interrupt`; cinco casos haviam passado antes. Não está demonstrado defeito: a causa não foi isolada. *Aceite:* reproduzir com timeout e stack trace controlados, isolar app/ambiente/`TestClient` e aprovar o caso HTTP antes do piloto.
+**A9 — Retomada HITL via HTTP não concluiu.** Em `tests/test_hitl.py`, a execução com endpoints foi interrompida no limite de 55 s em `test_review_endpoint_resumes_interrupt`; cinco casos haviam passado antes. Não está demonstrado defeito: a causa não foi isolada. *Aceite:* reproduzir com timeout e stack trace controlados, isolar packages/core/src/app/ambiente/`TestClient` e aprovar o caso HTTP antes do piloto.
 
 **A10 — Base de referência sem BM25.** `HYBRID_TARGETS = {"incidents"}`: a `reference_library` usa só busca densa. Códigos de rejeição, números de NT e nomes de campo exigem correspondência lexical. *Tratamento:* coleção fiscal própria e híbrida; incluir uma coleção existente em `HYBRID_TARGETS` muda o retrieval e exige rebaseline do promptfoo (invariante 20).
 
@@ -194,7 +194,7 @@ Esforço em dias-pessoa adicionais, apenas indicativo; módulos se sobrepõem. O
 | Componente | Estado | Reuso | Adaptação | Esforço | Risco |
 |---|---|---|---|---|---|
 | LangGraph | I | Extensão | Nós de domínio, estados, retomada | 3–6 | Médio |
-| Supervisor / skills | I | Extensão | Domínio fiscal em `data/skills/diagnose_incident.yaml` | 0,5–1 | Baixo |
+| Supervisor / skills | I | Extensão | Domínio fiscal em `packages/core/data/skills/diagnose_incident.yaml` | 0,5–1 | Baixo |
 | Rule engine | I | Extensão | Regras de família de retorno, TLS, certificado, timeout | 2–4 | Baixo |
 | LLM Gateway | I | Direta | Política "dado fiscal ⇒ só local", métricas por domínio | 1–3 | Baixo |
 | RAG / Qdrant | I | Extensão | Coleção híbrida, metadados, filtro antes da busca, múltiplos trechos (A10) | 5–9 | Alto |
@@ -796,7 +796,7 @@ NFS-e, CT-e e MDF-e entram depois do MVP, com corpus, schemas, retornos e ambien
 
 ### 12.2 Mecânica
 
-- Flag de domínio fiscal em `app/config.py`, desligada por padrão.
+- Flag de domínio fiscal em `packages/core/src/app/config.py`, desligada por padrão.
 - Prompt do especialista fiscal com `PromptSpec` próprio (version + digest) e baseline própria, sem alterar o digest atual.
 - Fixtures e gabaritos versionados em `data/eval/`, em subpasta do domínio.
 - DAs registradas pelo processo do `CLAUDE.md` (tabela, seção `### N. Título (DA-N)`, índice); **número atribuído só no registro**.
@@ -1006,8 +1006,8 @@ Mostrar a evidência antes da explicação gerada, o estado da hipótese e a dec
 | Testes selecionados sem endpoints | 44 aprovados, 2 desmarcados, 1 warning, 7,00 s, exit 0 | Cobertura dos contratos exercitados | v2.0 |
 | `test_hitl.py` com endpoints | Interrompido em 55 s (exit 124) em `test_review_endpoint_resumes_interrupt`; 5 casos antes passaram | Causa não isolada (A9) | v2.0 |
 | A4 | `AttributeError` com `ConnectorResult` e `None`; flag desligada funciona | Defeito local comprovado | v2.0 + leitura v3 |
-| A5 (HEAD) | Zero ocorrências de `tenant` em `app/agent/graph.py` | Tenant não chegava ao grafo | v3 |
-| Working tree (21:47) | 7 arquivos de `app/` alterados, 2 testes novos (`test_gap_a4_ontology_broken.py`, 9 testes; `test_gap_a5_multitenancy.py`, 10 testes), DA-64 registrada, nenhum commit | Correções parciais de A1, A4, A5 (§3) | v3.1 |
+| A5 (HEAD) | Zero ocorrências de `tenant` em `packages/core/src/app/agent/graph.py` | Tenant não chegava ao grafo | v3 |
+| Working tree (21:47) | 7 arquivos de `packages/core/src/app/` alterados, 2 testes novos (`test_gap_a4_ontology_broken.py`, 9 testes; `test_gap_a5_multitenancy.py`, 10 testes), DA-64 registrada, nenhum commit | Correções parciais de A1, A4, A5 (§3) | v3.1 |
 | Execução dos testes novos | **Não executada**: a `.venv` não é utilizável no ambiente de análise | Aprovação não atribuída por este estudo | v3.1 |
 | A10 | `HYBRID_TARGETS = {"incidents"}` | Referência sem BM25 | v3 |
 | Microensaio UC01 corrigido | Todos os checks aprovados com lxml 6.1.3 (Apêndice A) | Contrato de diagnóstico sintético, fora do IIC | v3 |

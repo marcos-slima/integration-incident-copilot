@@ -6,10 +6,11 @@ from __future__ import annotations
 
 import json
 from functools import lru_cache
-from pathlib import Path
 from typing import Any
 
-CATALOG = Path(__file__).resolve().parents[3] / "data" / "corpus" / "cstat_moc7_anexo_i.json"
+from dfe_copilot.resources import DATA_DIR
+
+CATALOG = DATA_DIR / "corpus" / "cstat_moc7_anexo_i.json"
 TP_AMB = {"1": "producao", "2": "homologacao"}
 # cStat cujo protocolo traz nProt e prova o resultado (autorizacao ou denegacao).
 COM_PROTOCOLO = {"100", "150", "110", "301", "302", "303"}

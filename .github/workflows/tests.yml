@@ -63,6 +63,9 @@ jobs:
         timeout-minutes: 3
         run: ../../.venv/bin/python -m pytest -v --tb=short -p no:cacheprovider
 
+      - name: DF-e contra wheel do core fora do checkout
+        run: uv run python scripts/test_product_isolation.py
+
 
   security:
     name: security — pip-audit + bandit
@@ -116,7 +119,11 @@ jobs:
       - name: pip-audit — CVEs nas dependências
         run: |
           req="$(mktemp -t requirements-ci-XXXXXX.txt)"
-          uv export --no-dev --all-extras --no-emit-project --format requirements-txt > "$req"
+          # O workspace tem wheels locais (core/produtos); eles não são
+          # dependências auditáveis do requirements exportado. Sem esta opção,
+          # versões recentes do uv emitem -e ./packages/core e pip-audit falha
+          # antes de analisar qualquer CVE.
+          uv export --no-dev --all-extras --no-emit-project --no-emit-workspace --format requirements-txt > "$req"
           # Validacao 2026-10-07 (DEP-01): torch vem do index pytorch-cpu
           # como 2.14.1+cpu, versao que nao existe no PyPI - o pip-audit
           # tentava instalar e falhava. --disable-pip audita as versoes
@@ -138,7 +145,7 @@ jobs:
           /tmp/gitleaks detect --no-git --source . --config .gitleaks.toml --redact --exit-code 1
 
       - name: bandit — SAST Python
-        run: uv run bandit -r app/ -ll -f json -o bandit-report.json || uv run bandit -r app/ -ll
+        run: uv run bandit -r packages/core/src/app/ -ll -f json -o bandit-report.json || uv run bandit -r packages/core/src/app/ -ll
 
       - name: Upload relatórios de segurança
         if: always()
@@ -359,11 +366,20 @@ jobs:
       - name: Lint (oxlint, todos os workspaces)
         run: npm run lint
 
+      - name: Build do pacote neutro de UI
+        run: npm run build -w @copilot/core-ui
+
+      - name: Testes dos componentes públicos
+        run: npm test -w @copilot/core-ui
+
       - name: Typecheck (core-ui e shells)
         run: npm run typecheck
 
       - name: Build dos shells (IIC e DF-e)
         run: npm run build -w @copilot/iic-ui -w @copilot/dfe-ui
+
+      - name: Shells contra pacote distribuído de UI
+        run: node scripts/test_ui_distribution.mjs
 
   docker-build:
     name: valida build da imagem Docker

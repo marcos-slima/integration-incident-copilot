@@ -27,3 +27,15 @@ data/reference_library/
 # Idem: artefatos locais de execução, grandes e irrelevantes para a imagem.
 reports/
 *.log
+
+# Pacotes do workspace: ambientes e caches locais não entram na imagem.
+**/.venv/
+**/__pycache__/
+packages/core-ui/dist/
+
+# Corpus opcional de download local não faz parte da distribuição DF-e.
+packages/dfe/data/corpus/MOC_7.0_Anexo_I.pdf
+
+# Configuração e snapshots de modelos locais não entram no contexto de build.
+packages/dfe/.env
+packages/dfe/.runtime/

@@ -96,7 +96,7 @@ final.
 | 83 | [74](#74-explicabilidade-xai-da-83) | Explicabilidade XAI — campo `explanation` em `DiagnosisResponse`, função `_build_xai_explanation` |
 | 86 | [77](#77-ui-versionamento-rag-da-86) | UI versionamento RAG: tabela `knowledge_document_versions`, endpoints `/admin/knowledge/documents/{id}/versions`, `/rollback/{version}`, `/history/{id}` |
 | 87 | [79](#79-dashboard-por-domínio-da-87) | Dashboard de Performance por Domínio: endpoint `/admin/metrics/domains` com janela `days` (default 30), métricas count/hit@1/latência/custo por domain (sap/saas/generic) |
-| 88 | [78](#78-testes-de-escalonamento-da-88) | Testes de escalonamento: script `app/scripts/load_test.py` com métricas p50/p95/p99 e TPS, config `tests/load_test_config.py`, 3 testes em `tests/test_load_testing.py` |
+| 88 | [78](#78-testes-de-escalonamento-da-88) | Testes de escalonamento: script `packages/core/src/app/scripts/load_test.py` com métricas p50/p95/p99 e TPS, config `tests/load_test_config.py`, 3 testes em `tests/test_load_testing.py` |
 | 89 | [80](#80-relatórios-compliance-da-89) | Relatórios automatizados de compliance export: endpoint `/admin/reports/compliance/export?format=pdf|xlsx`, relatório com resumo/quality/auditoria |
 | 90 | [81](#81-documentação-grc-da-90) | Documentação GRC (ISO 27001, SOC2): mapeamento, guia de auditoria, checklist |
 | 91 | [82](#82-testes-rbac-completos-da-91) | Testes RBAC completos para todos os endpoints |
@@ -196,8 +196,8 @@ configuração presente, tracing ausente.
 `connector_node` não tem decorator, não existe node `diagnose` e os spans
 são `retrieve`, `graph_enrich`, `graph_write`, `web_search`,
 `sap_specialist`, `saas_specialist`, `generic_specialist` e `report`, via
-`@observe_span` em `app/agent/nodes.py`, sob o span raiz
-`sap_copilot_diagnosis` de `app/agent/graph.py`), e a chamada ao
+`@observe_span` em `packages/core/src/app/agent/nodes.py`, sob o span raiz
+`sap_copilot_diagnosis` de `packages/core/src/app/agent/graph.py`), e a chamada ao
 LLM usa o `CallbackHandler` do LangChain — capturando tempo de
 execução, tokens e o payload completo de entrada/saída de cada etapa,
 visível em `http://localhost:3000`.
@@ -206,8 +206,8 @@ visível em `http://localhost:3000`.
 automático antes do processo terminar, então traces ficavam no buffer
 e nunca chegavam ao Langfuse. Corrigido chamando `get_client().flush()`
 nos dois pontos onde o processo pode terminar: no lifespan de
-shutdown do FastAPI (`app/main.py`) e ao final da execução via CLI
-(`app/agent/graph.py`, bloco `if __name__ == "__main__"`) - não uma
+shutdown do FastAPI (`packages/core/src/app/main.py`) e ao final da execução via CLI
+(`packages/core/src/app/agent/graph.py`, bloco `if __name__ == "__main__"`) - não uma
 fixture de teste (`pytest` sobe/derruba o app via `TestClient`, que
 já passa pelo mesmo lifespan).
 
@@ -219,7 +219,7 @@ outras configurações estavam fixas como constantes Python, espalhadas
 em múltiplos arquivos. Trocar de modelo exigia editar código-fonte
 (`sed` direto no arquivo), não mudar uma variável de ambiente.
 
-**Solução:** `app/config.py`, uma classe `Settings` (via
+**Solução:** `packages/core/src/app/config.py`, uma classe `Settings` (via
 `pydantic-settings`) como única fonte de verdade, lida do `.env`. Um
 comando (`uv run python -m app.config`) imprime a configuração
 efetiva a qualquer momento, com segredos mascarados — permite
@@ -329,7 +329,7 @@ o que era real do que era falso alarme ou já havia sido corrigido:
   `create_react_agent(response_format=DiagnosisModel)` via tool-calling,
   em que as `Field(description=...)` fazem parte do schema que o LLM lê —
   e por isso entram no digest do prompt da DA-53
-  (`app/agent/prompts.py`).
+  (`packages/core/src/app/agent/prompts.py`).
 
 ### 10. LLM Gateway plugável (não hardcoded em Ollama) (nota informal — sem DA)
 
@@ -342,7 +342,7 @@ mais capacidade do que o hardware local aguenta para um caso
 específico. `diagnose_node` instanciava `ChatOllama` diretamente,
 então trocar de provedor exigiria editar o grafo.
 
-**Decisão:** extrair a escolha do provedor para `app/llm/factory.py`
+**Decisão:** extrair a escolha do provedor para `packages/core/src/app/llm/factory.py`
 (`get_chat_model()`), selecionado via `Settings.llm_provider`
 (ollama/openai/azure_openai). Deliberadamente **não** foi criada uma
 interface própria (tipo um `LLMProvider.generate()` do zero) — o
@@ -437,7 +437,7 @@ implementação por trás, o tipo exato de coisa que este projeto
 criticou no `genai-engineering-template` (documentação descrevendo
 funcionalidade que o código não entrega).
 
-**Decisão:** implementar o código real (`app/rag/graph_store.py`) —
+**Decisão:** implementar o código real (`packages/core/src/app/rag/graph_store.py`) —
 grava cada diagnóstico no Neo4j como grafo relacional
 (Incident/Interface/System/Document) e consulta esse grafo por
 histórico de incidentes na mesma interface antes de gerar um novo
@@ -473,7 +473,7 @@ satisfazem os dois.
 **Decisão:** implementar o subconjunto do protocolo A2A necessário
 para o critério de aceite original — Agent Card (`GET
 /.well-known/agent-card.json`), task manager e servidor JSON-RPC 2.0
-(`POST /a2a`, métodos `message/send` e `tasks/get`) — em `app/a2a/`,
+(`POST /a2a`, métodos `message/send` e `tasks/get`) — em `packages/core/src/app/a2a/`,
 sem depender de nenhum SDK externo de A2A (a proposta original já
 citava a imaturidade dessas SDKs como risco a validar antes de
 começar). O task manager chama a MESMA função (`run_diagnosis`) que o
@@ -486,8 +486,8 @@ foram implementados (`submitted -> working -> completed|failed`).
 Autenticação é uma chave estática opcional via header, não OAuth2/JWT
 — documentado como gap de produção, não escondido. **Atualização
 (2026-10-07):** a chave deixou de ser opcional desde a DA-18 (gerada no
-startup se ausente, `app/main.py::_ensure_api_keys_configured`), e
-`message/send` aceita `blocking=false` (`app/a2a/task_manager.py`),
+startup se ausente, `packages/core/src/app/main.py::_ensure_api_keys_configured`), e
+`message/send` aceita `blocking=false` (`packages/core/src/app/a2a/task_manager.py`),
 devolvendo a task antes de concluir.
 
 **Validação:** `tests/test_a2a.py` prova o critério de aceite original
@@ -533,13 +533,13 @@ silenciosamente virar "causa raiz confirmada anteriormente" (texto da
 (baixa evidencia - nao trate como fato)"` e, desde o AI-01 (2026-10-07),
 até incidentes `is_grounded` são rotulados como não verificados — só
 `verified` (DA-28) entra como fato; ver
-`app/rag/graph_store.py::format_graph_context_for_prompt`).
+`packages/core/src/app/rag/graph_store.py::format_graph_context_for_prompt`).
 
 **Bugs reais encontrados no caminho (não deixados como débito):** um
 regex de detecção de prompt injection quebrado (`re.error: global flags
 not at the start of the expression` — flags inline `(?i)` por padrão,
 inválido quando concatenados via `"|".join()`) e dois bugs de
-ranking em `app/rag/retriever.py` (score composto RRF+cosine vazando
+ranking em `packages/core/src/app/rag/retriever.py` (score composto RRF+cosine vazando
 para o campo que devia ser cosine puro; fallback para a biblioteca de
 referência sendo aplicado sempre, não só na ausência de match) que
 inflavam a confiança de diagnósticos com pouca ou nenhuma evidência
@@ -556,7 +556,7 @@ incluída.
 autenticação completamente desabilitada — um gap silencioso, só visível
 lendo o código-fonte, não um comportamento documentado como tal.
 
-**Decisão:** `app/main.py::_ensure_api_keys_configured()` roda no
+**Decisão:** `packages/core/src/app/main.py::_ensure_api_keys_configured()` roda no
 `lifespan` do FastAPI e garante que nenhuma das duas chaves fica vazia
 em memória — se o operador não configurou uma no `.env`, uma é gerada
 (`secrets.token_urlsafe(32)`) e avisada em `WARNING` no log de startup.
@@ -583,7 +583,7 @@ de produção.
 **Decisão:** expor o Copilot como SERVIDOR MCP (não cliente — a leitura
 alternativa, migrar os conectores para consumir MCP externo, fica para
 uma fase seguinte e deliberadamente fora deste escopo) em `POST /mcp/`,
-via `app/mcp/server.py` (SDK oficial `mcp`, classe `MCPServer`). Duas
+via `packages/core/src/app/mcp/server.py` (SDK oficial `mcp`, classe `MCPServer`). Duas
 ferramentas, ambas READ-ONLY por design ("leitura primeiro" no
 roadmap): `diagnose_incident` (chama a MESMA `run_diagnosis()` de
 `/diagnose`/`/a2a` — zero lógica duplicada pela terceira vez) e
@@ -621,20 +621,20 @@ complexidade do caso antes de chamar o LLM. Escolhido: **resiliência**
 exigem calibrar um limiar subjetivo; resiliência só age quando o
 provider primário está genuinamente indisponível.
 
-**Decisão:** `app/llm/factory.py::invoke_with_hybrid_fallback()` roda a
+**Decisão:** `packages/core/src/app/llm/factory.py::invoke_with_hybrid_fallback()` roda a
 chamada com `settings.llm_provider` e, se `settings.llm_fallback_provider`
 estiver configurado (vazio por default — comportamento idêntico a antes
 desta fase) **e** a falha for de transporte (`ConnectionError`/
 `httpx.ConnectError`/`httpx.TimeoutException` na época — Ollama fora do ar,
 timeout de rede; hoje `ConnectionError`, `httpx.TransportError`,
 `openai.APIConnectionError` e `openai.InternalServerError`, ver
-`app/llm/factory.py::TRANSPORT_FAILURE_EXCEPTIONS`), refaz a MESMA chamada com o provider de fallback
+`packages/core/src/app/llm/factory.py::TRANSPORT_FAILURE_EXCEPTIONS`), refaz a MESMA chamada com o provider de fallback
 antes de desistir. Erro de aplicação (JSON malformado, prompt inválido)
 nunca aciona o fallback — mascarar um bug real atrás de uma segunda
 chamada de LLM seria pior do que deixá-lo estourar. Os sub-agentes de diagnóstico
 (`sap_diagnosis_node`/`saas_diagnosis_node`, ver DA-22) eram os consumidores
 na época (hoje os três sub-agentes chamam o AI Gateway
-`app/llm/gateway.py::invoke_via_gateway`, que usa esta função por baixo —
+`packages/core/src/app/llm/gateway.py::invoke_via_gateway`, que usa esta função por baixo —
 nenhum node a chama diretamente); qual provider respondeu de fato fica exposto em
 `DiagnosisResponse.llm_provider_used` — transparência, não um fallback
 silencioso.
@@ -650,7 +650,7 @@ de lidar com indisponibilidade real.
 ### 19. GraphRAG como camada de conhecimento operacional - hardening (DA-21)
 
 **Contexto:** quinto item do roadmap arquitetural planejado. GraphRAG
-(`app/rag/graph_store.py`) já existia como código real desde uma fase
+(`packages/core/src/app/rag/graph_store.py`) já existia como código real desde uma fase
 anterior, mas desligado por default (`GRAPH_RAG_ENABLED=false`, ver
 Decisão #9) e sem Neo4j real acessível neste ambiente de
 desenvolvimento (sem Docker daemon). A opção considerada aqui não foi
@@ -666,7 +666,7 @@ desligada:**
 1. **Degradação graciosa por tipo de exceção** — `GRAPH_UNAVAILABLE_EXCEPTIONS`
    (`neo4j.exceptions.DriverError` + `TransientError`) é o catch-tuple
    usado agora em `graph_enrich_node`/`graph_write_node`
-   (`app/agent/nodes.py`): uma falha de infraestrutura do Neo4j
+   (`packages/core/src/app/agent/nodes.py`): uma falha de infraestrutura do Neo4j
    (conexão recusada, timeout, restart do servidor) não derruba mais o
    diagnóstico inteiro — cai para "sem histórico"/"escrita pulada" com
    um log de warning. Deliberadamente exclui `Neo4jError` em geral: um
@@ -675,7 +675,7 @@ desligada:**
    propagando — mesmo princípio de separar falha de transporte de erro
    de aplicação usado no Hybrid Inference (DA-20). `ensure_constraints()`
    também passou a rodar sozinho no `lifespan` do FastAPI quando a flag
-   está ligada (`app/main.py`), eliminando o passo manual `--init`
+   está ligada (`packages/core/src/app/main.py`), eliminando o passo manual `--init`
    sem bloquear o startup se o Neo4j estiver temporariamente fora do ar.
 2. **Formatação com deduplicação por recorrência** —
    `format_graph_context_for_prompt()` agrupa ocorrências CONSECUTIVAS
@@ -708,11 +708,11 @@ de um incidente de RFC. Isso contradizia o princípio de design já
 registrado neste log (#8/#13): SAP é um conector entre iguais, não o
 eixo arquitetural do produto.
 
-**Decisão:** um `supervisor_node` (`app/agent/supervisor.py`) roda
+**Decisão:** um `supervisor_node` (`packages/core/src/app/agent/supervisor.py`) roda
 PRIMEIRO no grafo — antes até do `connector` — e classifica
 deterministicamente (sem LLM) o domínio do incidente a partir de
 `interface_type` (ou, na ausência dele, palavras-chave SAP na
-descrição). O grafo (`app/agent/graph.py::_route_to_specialist`, via
+descrição). O grafo (`packages/core/src/app/agent/graph.py::_route_to_specialist`, via
 `add_conditional_edges`) direciona para UM dos dois sub-agentes
 especialistas — nunca os dois no mesmo incidente (na época; hoje são três:
 `generic` ganhou node próprio, `generic_diagnosis_node`):
@@ -748,7 +748,7 @@ A2A, MCP) — para virar um copiloto de verdade em produção, precisa
 reagir a eventos publicados por sistemas de monitoração (CPI, Solution
 Manager, um listener de fila/IDoc), não só esperar alguém chamar a API.
 
-**Decisão:** `POST /events/incident` (`app/main.py` + `app/events/`)
+**Decisão:** `POST /events/incident` (`packages/core/src/app/main.py` + `packages/core/src/app/events/`)
 recebe um envelope [CloudEvents](https://cloudevents.io/) — o formato
 que o SAP Event Mesh usa em modo **REST/Webhook push subscription**
 (além do AMQP 1.0 nativo) — e dispara `run_diagnosis()` automaticamente.
@@ -771,7 +771,7 @@ rate limit de `/diagnose`) e não há consumo AMQP direto — fila
 real/backpressure seria evolução natural se o volume justificar, não
 um gap escondido. **Atualização:** hoje o webhook responde `202` e
 processa em background (job RQ com `REDIS_URL`, `BackgroundTasks` sem
-ele), e existe o consumidor AMQP 1.0 (`app/events/amqp_consumer.py`,
+ele), e existe o consumidor AMQP 1.0 (`packages/core/src/app/events/amqp_consumer.py`,
 DA-32/DA-40).
 
 **Validação:** `tests/test_events.py` cobre mapeamento evento→
@@ -841,7 +841,7 @@ pronto, que está no `.gitignore` e não existe num clone limpo,
 quebrando exatamente o fluxo de build descrito no
 `deploy/kyma/README.md` (isso já estava autodenunciado como pendência
 em `docs/DEPLOY.md`, mas não foi corrigido durante a DA-24); (2) o
-modelo LLM default divergia entre `app/config.py`
+modelo LLM default divergia entre `packages/core/src/app/config.py`
 (`qwen3-coder-next:latest`, fonte canônica) e `.env.example`/
 `docker-compose.yml` (ambos `qwen2.5-coder:32b`).
 
@@ -873,7 +873,7 @@ reranqueados, e só depois um hit é admitido se o cosseno *ou* o
 um caminho próprio para "salvar" um documento que o cosseno sozinho
 descartaria. **Atualização (2026-10-07, RAG-01):** com reranker
 disponível, só `rerank_score_calibrated` decide a admissão; o cosseno
-vale apenas sem reranker (`app/rag/retriever.py::_evidence_admission_score`).
+vale apenas sem reranker (`packages/core/src/app/rag/retriever.py::_evidence_admission_score`).
 
 **Evidence/Trust Layer:** `DiagnosisResponse` ganhou `evidence:
 list[Evidence]` — uma entrada por fonte real consultada (conector,
@@ -901,9 +901,9 @@ SAP/PT-BR/EN técnico.
 
 ### 25. AI Gateway v1 - policy de roteamento, circuit breaker e budget (DA-26)
 
-O "LLM Gateway" existente (`app/llm/factory.py`) era, na prática, um
+O "LLM Gateway" existente (`packages/core/src/app/llm/factory.py`) era, na prática, um
 LLM Provider Factory — a revisão externa apontou corretamente a
-diferença. `app/llm/gateway.py` (novo) centraliza toda chamada LLM
+diferença. `packages/core/src/app/llm/gateway.py` (novo) centraliza toda chamada LLM
 (`_run_diagnosis_agent` não chama mais `invoke_with_hybrid_fallback`
 diretamente) e adiciona:
 
@@ -933,7 +933,7 @@ passando no total (`-m "not integration"`).
 
 Último item P1 da revisão externa. O servidor MCP (DA-19) só tinha
 autenticação de transporte (X-API-Key compartilhada) — sem
-diferenciação de risco por tool. `app/mcp/policy.py` (novo) cria um
+diferenciação de risco por tool. `packages/core/src/app/mcp/policy.py` (novo) cria um
 `CAPABILITY_REGISTRY` (uma entrada `ToolPolicy` por tool — risco,
 destrutividade, scopes exigidos, se precisa de aprovação, sensibilidade
 do dado) e `enforce()`, **fail-closed**: uma tool sem entrada no
@@ -975,7 +975,7 @@ real para topologia hoje, e inventar uma seria pior que não ter a
 funcionalidade.
 
 - **`verify_incident(incident_id, verified_root_cause, verified_by)`**
-  (`app/rag/graph_store.py`) — grava
+  (`packages/core/src/app/rag/graph_store.py`) — grava
   `(Incident)-[:VERIFIED_AS {verified_by, verified_at}]->(RootCause
   {text})` e marca `Incident.verified = true`. Chamada EXPLÍCITA
   apenas — nunca inferida por score.
@@ -1042,7 +1042,7 @@ inglês (MS MARCO).
 `data/sample_docs/` (chunked com os mesmos parâmetros de produção)
 contra os 13 casos *in-scope* de `data/eval/rag_eval_dataset.json`,
 para 4 modelos candidatos, medindo Hit@1/Recall@5/MRR@5/nDCG@5
-(lógica pura em `app/rag/eval_metrics.py`, testada sem depender de
+(lógica pura em `packages/core/src/app/rag/eval_metrics.py`, testada sem depender de
 nenhum modelo carregado) + latência + RAM + contagem de parâmetros.
 
 **Resultado:** o candidato multilíngue leve
@@ -1068,7 +1068,7 @@ externa estão fechados** (P0/P1/P2).
 **Atualização (avaliação externa, médio prazo item 6 — "Fila
 assíncrona"):** novo `POST /diagnose/async` enfileira o diagnóstico via
 RQ (mesmo Redis usado pela persistência de tasks A2A, item 2 acima —
-ver `app/queue.py`) e devolve `{"job_id", "status": "queued"}` (202),
+ver `packages/core/src/app/queue.py`) e devolve `{"job_id", "status": "queued"}` (202),
 em vez de bloquear a requisição até o LLM terminar. `GET
 /diagnose/async/{job_id}` faz o polling do resultado
 (`{"job_id", "status", "result", "error"}`). `POST /diagnose` síncrono
@@ -1103,7 +1103,7 @@ independentes fecham este item, o último dos sete do médio prazo:
    `neo4j-smoke` no CI (`.github/workflows/tests.yml`), que sobe um
    Neo4j real como *service container* e roda
    `tests/test_graph_store_neo4j_smoke.py` (marker `neo4j_smoke`,
-   `pyproject.toml`). Os testes existentes de `app/rag/graph_store.py`
+   `pyproject.toml`). Os testes existentes de `packages/core/src/app/rag/graph_store.py`
    usavam só um `FakeSession` em memória — nunca tinham sido
    executados contra um Neo4j de verdade, risco apontado
    explicitamente pela revisão ("schema/constraints em runtime").
@@ -1123,7 +1123,7 @@ mais, McNemar p = 1,0). A regra "produção = maior Hit@1 medido, com margem
 ≥ 0,05" exigiria trocar de modelo por ruído. Passou a ser: produção precisa
 ter sido medida, passar do piso de Hit@1 e nenhum candidato pode ser
 significativamente melhor (McNemar exato pareado, p < 0,05, via
-`app/rag/eval_metrics.py::paired_hit_comparison`); vantagem pontual não
+`packages/core/src/app/rag/eval_metrics.py::paired_hit_comparison`); vantagem pontual não
 significativa vira aviso. Sem acertos por consulta no benchmark, vale a
 margem mínima antiga. O invariante 1 (mmarco em produção) não muda. Ver
 `docs/RERANKER_BENCHMARK.md`.
@@ -1141,7 +1141,7 @@ por volta dele.
 
 **A solução: três peças independentes, porque são três lugares diferentes.**
 
-1. **Redaction (`app/redaction.py`), regex-based.** `redact_pii_text()`
+1. **Redaction (`packages/core/src/app/redaction.py`), regex-based.** `redact_pii_text()`
    entra dentro de `sanitize_untrusted_input` e cobre o caminho *antes do
    prompt*. `redact_pii_deep()` é passada como `mask=` na construção do
    client Langfuse e cobre o caminho *antes do Langfuse* — esse é o ponto:
@@ -1164,7 +1164,7 @@ por volta dele.
 **Limitações (deliberadamente registradas):**
 - **Não é DLP.** É regex sobre os padrões nomeados na avaliação, sem NER nem
   classificador: CPF em formato exótico, telefone, endereço e nome próprio
-  passam. O próprio `app/llm/gateway.py` mantém o não-objetivo anotado
+  passam. O próprio `packages/core/src/app/llm/gateway.py` mantém o não-objetivo anotado
   ("PII/DLP de verdade... permanece pendente") — isto reduz o gap, não o
   fecha.
 - O backoff é do **gateway**, não do `factory`: chamadas diretas ao factory
@@ -1202,7 +1202,7 @@ permitido e o endpoint HTTP. Suíte completa: 620 testes
 (`-m "not integration"`).
 
 **Limitações:** `llm_fallback_provider` não aceitava `ollama` (na
-época; resolvido na DA-45 — hoje aceita, ver `app/config.py`), então
+época; resolvido na DA-45 — hoje aceita, ver `packages/core/src/app/config.py`), então
 "cloud primário + fallback local" era inexpressável na
 configuração. E `verify_api_key` compara string vazia com string
 vazia: com `settings.api_key == ""` a comparação passa, e a proteção
@@ -1228,7 +1228,7 @@ precisa decidir *quando* escalar, e o sinal disponível — `evidence_strength`
    modelo acertou": um modelo que alucina confiante recebe o mesmo
    número que um que acerta.
 
-**Solução:** `app/agent/escalation.py` entrega um sinal **novo e
+**Solução:** `packages/core/src/app/agent/escalation.py` entrega um sinal **novo e
 aditivo** — `compute_escalation_signal()` devolve um
 `EscalationDecision` imutável, derivado apenas de fatos já decididos em
 código: `is_mock`/`is_fallback`, `hit["collection"]`,
@@ -1350,7 +1350,7 @@ O guard grava a identidade no **metadata da collection** (`update_collection`,
 não `set_payload` — payload é de ponto, identidade é da collection inteira;
 na época — hoje grava numa collection lateral `iic_collection_identity` via
 `upsert`, porque `update_collection(metadata=...)` não persiste no Qdrant
-1.19, ver `app/rag/embedding_guard.py`) e
+1.19, ver `packages/core/src/app/rag/embedding_guard.py`) e
 verifica em escrita e leitura, uma vez por processo (`verify_once`, para não
 virar latência por query). Três estados, e o terceiro é o honesto: bate →
 segue; diverge → **falha**; ausente (collection anterior à DA-45) → **avisa**,
@@ -1394,9 +1394,9 @@ origen com rotacao controlada.
 
 | DA | O que muda | Onde vive |
 |---|---|---|
-| DA-46 | `LLM_REGISTRY_DB=true` faz `get_chat_model` ler o **registro** (`llm_models`/`llm_credentials` por ORIGIN) em vez do `.env`; registry vazio/indisponível = `ConfigurationError`, nunca fallback silencioso | `app/admin/` (models, repository, runtime) + `llm/factory.py` |
-| DA-47 | Credencial por origin cifrada em repouso com **Fernet**; master key (`LLM_CREDENTIALS_MASTER_KEY`) vive no `.env`, nunca em runtime; rotação incrementa `key_version` e grava novo ciphertext | `app/admin/crypto.py` |
-| DA-48 | Metering de **tokens reais** (`usage_metadata`) via callback `on_llm_end` no AI Gateway; persistencia **síncrona best-effort** (psycopg2) no periodo aberto de `(origin, model)`; percentual consumido vs `monthly_limit_tokens` | `llm/gateway.py` + `app/admin/metering.py` |
+| DA-46 | `LLM_REGISTRY_DB=true` faz `get_chat_model` ler o **registro** (`llm_models`/`llm_credentials` por ORIGIN) em vez do `.env`; registry vazio/indisponível = `ConfigurationError`, nunca fallback silencioso | `packages/core/src/app/admin/` (models, repository, runtime) + `llm/factory.py` |
+| DA-47 | Credencial por origin cifrada em repouso com **Fernet**; master key (`LLM_CREDENTIALS_MASTER_KEY`) vive no `.env`, nunca em runtime; rotação incrementa `key_version` e grava novo ciphertext | `packages/core/src/app/admin/crypto.py` |
+| DA-48 | Metering de **tokens reais** (`usage_metadata`) via callback `on_llm_end` no AI Gateway; persistencia **síncrona best-effort** (psycopg2) no periodo aberto de `(origin, model)`; percentual consumido vs `monthly_limit_tokens` | `llm/gateway.py` + `packages/core/src/app/admin/metering.py` |
 
 Detalhes de desenho relevantes:
 
@@ -1451,9 +1451,9 @@ fechado e auditável, no mesmo regime da Fase A (DA-46/47/48):
 
 - `system_key` (slug único, ex. `sap_odata_prod`) é o identificador estável do
   sistema; `connector_type` usa **o mesmo Literal fechado do pipeline**
-  (`odata/rfc/servicenow/salesforce/workday/ariba/cap/apim` — `app/models/models.py`;
+  (`odata/rfc/servicenow/salesforce/workday/ariba/cap/apim` — `packages/core/src/app/models/models.py`;
   8 tipos na entrega da DA-49, hoje 10 com `successfactors` e `po`, ver
-  `app/admin/models.py::CONNECTOR_TYPES`),
+  `packages/core/src/app/admin/models.py::CONNECTOR_TYPES`),
   a ponte natural para correlacionar o registro ao `interface_type` de um
   incidente.
 - `environment` (`prod/stage/dev/test`) e `status` (`active/degraded/offline/
@@ -1506,10 +1506,10 @@ incidente* nem *de qual sistema veio este incidente*. Três falhas concretas:
 **A solução.** Fase C, em três partes:
 
 - **Propagação.** `CopilotState.connector_source_system` +
-  `initial_state` em `app/agent/graph.py`; `build_incident_row()` prefere o
+  `initial_state` em `packages/core/src/app/agent/graph.py`; `build_incident_row()` prefere o
   valor informado pelo cliente e só cai para o rótulo do conector quando ele
   não veio.
-- **Correlação determinística** (`app/admin/correlation.py`, funções puras sem
+- **Correlação determinística** (`packages/core/src/app/admin/correlation.py`, funções puras sem
   I/O, para testar e auditar sem banco):
   1. `connector_source_system` casa exatamente com um `system_key` → match
      exato (o cliente disse qual sistema é);
@@ -1591,7 +1591,7 @@ deixar rastro em log ou teste.
 **A solução.** Camada de gates com duas categorias, porque "testar tudo no CI"
 sem LLM e sem infra é uma fantasia:
 
-- **Determinístico** (`app/evaluation/gates.py` + `scripts/quality_gate.py`) —
+- **Determinístico** (`packages/core/src/app/evaluation/gates.py` + `scripts/quality_gate.py`) —
   segundos, sem LLM, sem Qdrant, roda em todo push: schema e piso do dataset de
   avaliação; todo `expected_sources` presente no corpus; presença de casos
   `hard`/`out_of_scope`; **invariante DA-29 automatizada** (o
@@ -1618,7 +1618,7 @@ visível para a suite:
 
 1. `candidate_das_fresh` acusou a **DA-32** listada como candidata "aguardam
    Kyma" no `CLAUDE.md`, embora entregue em `67b78e8`
-   (`app/events/amqp_consumer.py`) e documentada em `docs/ARCHITECTURE.md`.
+   (`packages/core/src/app/events/amqp_consumer.py`) e documentada em `docs/ARCHITECTURE.md`.
 2. A primeira versão do check de schema rejeitava `expected_sources: []` — mas
    os dois casos `out_of_scope` do dataset têm essa lista vazia **de propósito**
    ("fora do escopo: deve retornar baixa confiança"). O gate estava certo sobre
@@ -1630,17 +1630,17 @@ visível para a suite:
 documentação afirmar coisas que o código contradiz. O caso mais caro era um
 tutorial de debug que mandava o leitor colocar breakpoint em
 `structured_llm`, `result["raw"]` e `diagnosis["confidence"]` — **nenhum dos
-três existe em qualquer lugar do código** —, e em `app/agent/graph.py` para
+três existe em qualquer lugar do código** —, e em `packages/core/src/app/agent/graph.py` para
 funções que moram em `nodes.py`. Seguir o tutorial ao pé da letra não levava a
 nenhum breakpoint. Um `.md` truncado no meio de um heredoc (fence ímpar) era o
 único sintoma, e ele engole o resto da renderização sem erro visível.
 
 Os três gates são `docs_markup_integrity` (fences e links), `docs_code_references`
-(`app/x.py::símbolo` e `app/x.py:N` precisam resolver) e `connector_reachable`
+(`packages/core/src/app/x.py::símbolo` e `packages/core/src/app/x.py:N` precisam resolver) e `connector_reachable`
 (todo conector registrado é aceito pelo Literal de `interface_type`).
 
 O terceiro encontrou um **conector morto**: `SuccessFactors` estava registrado
-em `app/connectors/__init__.py`, tinha os quatro settings em `app/config.py`, e
+em `packages/core/src/app/connectors/__init__.py`, tinha os quatro settings em `packages/core/src/app/config.py`, e
 `/diagnose` respondia **422** para ele — o `Literal` fechado de `interface_type`
 aceitava 8 valores e o conector era o nono. O gate `rag_dataset_schema` espelhava
 o mesmo `Literal`, então os dois concordavam e o bug passava. Pior: mesmo se a
@@ -1719,11 +1719,11 @@ O fluxo é `probe → normalizar → hashear → diff → baseline → sinal`:
   existente**. Falha de transporte no conector vira `None` e o resultado é
   `unverified` com motivo genérico ("contrato indisponivel"); só uma exceção
   que escapa do conector leva o motivo detalhado em `unverified.reason`.
-- **Normalizar antes de hashear** (`app/contracts/model.py`): entidades e
+- **Normalizar antes de hashear** (`packages/core/src/app/contracts/model.py`): entidades e
   propriedades são serializadas em ordem canônica; namespace, versão e
   anotações ficam fora do modelo, e `max_length` faz parte do fingerprint. Como o
   XML volta a ser canônico, o fingerprint é comparável entre dias.
-- **Severidade** (`app/contracts/diff.py`), fechada e testada: campo ou
+- **Severidade** (`packages/core/src/app/contracts/diff.py`), fechada e testada: campo ou
   entidade removida, tipo trocado, `nullability` estreitada, `MaxLength`
   reduzido, chave alterada, `abstract` → breaking. Campo novo, tipo
   alargado, `MaxLength` maior → additive. Reordenação, namespace e versão
@@ -1731,14 +1731,14 @@ O fluxo é `probe → normalizar → hashear → diff → baseline → sinal`:
   vocabulário, mas não é emitido hoje. Rename provável (assinatura idêntica)
   é **breaking com `hint`** (invariante 17): para o consumidor, o efeito é o
   de um campo removido, e o hint evita dois alarmes.
-- **Baseline** (`app/contracts/baseline.py`, migration `005`): append-only
+- **Baseline** (`packages/core/src/app/contracts/baseline.py`, migration `005`): append-only
   em `system_contracts`, sem FK para `integration_systems` — é histórico
   de observação, não registro de cadastro, e a FK só criaria ordem de
   escrita e orphan na migração. Baseline é a observação mais recente por
   `system_key`. A garantia append-only é reforçada em banco pela migration
   `011_system_contracts_append_only.py` (trigger que nega UPDATE/DELETE;
   TRUNCATE segue permitido).
-- **Sinal** (`app/contracts/observe.py`): só `breaking` vira
+- **Sinal** (`packages/core/src/app/contracts/observe.py`): só `breaking` vira
   `IncidentEventEnvelope` → `handle_incident_event` → `run_diagnosis`
   (DA-23), com `source="schema-drift-detector"`. O `connector_source_system`
   recebe o **`system_key` exato** do catálogo (DA-50), não um rótulo
@@ -1748,7 +1748,7 @@ O fluxo é `probe → normalizar → hashear → diff → baseline → sinal`:
 **O que apareceu na implementação.** Três coisas que só aparecem quando o
 caminho inteiro roda, não nas unidades:
 
-1. `app/db.py::get_sync_session_factory` usava `@lru_cache` de **zero
+1. `packages/core/src/app/db.py::get_sync_session_factory` usava `@lru_cache` de **zero
    argumentos** sobre `settings.database_url`, que é mutável. A primeira
    chamada sem `DATABASE_URL` cacheava `None` para sempre — sem exceção,
    sem log. O próprio docstring admitia que o cache "precisa ser
@@ -1797,7 +1797,7 @@ e o CLI devolvendo exit ≠ 0 para breaking. Suíte: **903 testes**.
 ### 38. Prompt de diagnóstico como artefato versionado, com gate contra o prompt medido (DA-53)
 
 **O problema.** O prompt de diagnóstico — o texto mais caro e mais
-influente do sistema — era três f-strings dentro de `app/agent/nodes.py`
+influente do sistema — era três f-strings dentro de `packages/core/src/app/agent/nodes.py`
 (a persona, o template, a instrução de saída), e a tabela `incidents` não
 guardava nem o modelo nem o prompt. Duas consequências, nenhuma visível:
 
@@ -1816,11 +1816,11 @@ guardava nem o modelo nem o prompt. Duas consequências, nenhuma visível:
 
 O caso mais traiçoeiro: editar um `Field(description=...)` do
 `DiagnosisModel`. O LangChain injeta essas descrições no schema de
-tool-calling (`app/agent/state.py:18-24`), então elas **são** prompt — em
+tool-calling (`packages/core/src/app/agent/state.py:18-24`), então elas **são** prompt — em
 outro arquivo, sem nenhuma menção a prompt. Já quebrou uma vez
 (`matched_source` parou de ser preenchido) e nada automatizado pegaria.
 
-**A solução.** `app/agent/prompts.py` é a fonte única do artefato, e o
+**A solução.** `packages/core/src/app/agent/prompts.py` é a fonte única do artefato, e o
 digest é o que amarra produção à medição.
 
 - **`PromptSpec`**: `version` (`1.0.0`) + `digest` (sha256 de um tuplo
@@ -1848,8 +1848,8 @@ digest é o que amarra produção à medição.
 
 **A decisão que custou menos e protegeu mais: não tocar no texto.** Era
 tentador gerar a instrução de saída a partir do `DiagnosisModel` e matar
-a duplicação entre `app/agent/prompts.py::JSON_INSTRUCTION` e as
-`Field(description=...)` de `app/agent/state.py::DiagnosisModel`. Isso
+a duplicação entre `packages/core/src/app/agent/prompts.py::JSON_INSTRUCTION` e as
+`Field(description=...)` de `packages/core/src/app/agent/state.py::DiagnosisModel`. Isso
 mudaria o prompt — e o texto medido. Eu trocaria um bug latente por um
 benchmark invalidado e um gate vermelho. O texto ficou como está, e o digest
 passa a **incluir os dois**, de modo que mexer em qualquer um dos dois
@@ -1920,8 +1920,8 @@ a sua camada:
   `iic_session`, **HttpOnly** (JS não lê), **SameSite=Strict** (CSRF),
   assinado com HMAC-SHA256 (stateless: `usuario:expiry:assinatura` na
   época; hoje `usuario:emitido:expira:sid:assinatura`, com revogação por
-  `sid` e por usuário — `app/auth.py::sign_session`,
-  `app/auth.py::verify_session`, `app/auth_guard.py`; mexer em
+  `sid` e por usuário — `packages/core/src/app/auth.py::sign_session`,
+  `packages/core/src/app/auth.py::verify_session`, `packages/core/src/app/auth_guard.py`; mexer em
   qualquer campo invalida), com prazo (`SESSION_TTL_HOURS`, default 8h).
 
 Superfícies só-de-máquina (**MCP** `/mcp`, **A2A** `/a2a`, **Event Mesh**,
@@ -2000,13 +2000,13 @@ M-12): o e-mail de ativação é **enviado de fato** pelo provedor de
 com envio confirmado o token deixa de voltar na resposta admin. **SMS ainda
 não tem provedor**: o código de telefone segue out-of-band, na resposta da
 API admin. O contrato de entrega é `deliver_email(to, body)` e
-`deliver_sms(to, body)` (`app/webusers.py`); provedores específicos ficam em
-`app/notifications/providers.py` (Factory Method + Strategy).
+`deliver_sms(to, body)` (`packages/core/src/app/webusers.py`); provedores específicos ficam em
+`packages/core/src/app/notifications/providers.py` (Factory Method + Strategy).
 
 **Entrega out-of-band, com adaptador real depois** (decisão do dono): sem
 SMTP/provider configurados, o token/código **não** é publicado em
 rota nenhuma pública — volta **só** na resposta da API de admin, com
-WARNING no log. `deliver_email`/`deliver_sms` (`app/webusers.py`) são o
+WARNING no log. `deliver_email`/`deliver_sms` (`packages/core/src/app/webusers.py`) são o
 ponto de extensão: quando houver credencial, o envio real desliga o modo
 out-of-band sozinho, porque o retorno é o único contrato.
 
@@ -2157,7 +2157,7 @@ máquina).
 produção) e `fastembed`, um adaptador mínimo sobre `fastembed.TextEmbedding`
 que implementa a interface `.embed_query()`/`.embed_documents()` que o
 Qdrant consome. O CI exporta `EMBEDDING_BACKEND=fastembed`; em produção vale
-o default `ollama` do campo `embedding_backend` de `app/config.py` (lido do
+o default `ollama` do campo `embedding_backend` de `packages/core/src/app/config.py` (lido do
 `.env`) e o comportamento é o anterior.
 
 A decisão de política é a mesma dos conectores: o CI não é um ambiente
@@ -2256,7 +2256,7 @@ perde o estado compartilhado e ganha o de antes, que é o comportamento de
 - O fallback silencioso é uma armadilha clássica: sem Redis, o breaker volta a
   ser por processo. Com `REDIS_URL` vazio isso é silencioso; com Redis
   configurado mas fora do ar há um WARNING no log
-  (`app/circuit_breaker.py::_get_redis_client`), e o fallback em memória dura
+  (`packages/core/src/app/circuit_breaker.py::_get_redis_client`), e o fallback em memória dura
   até o restart do processo. O comportamento degradado não pode ser
   invisível.
 - O estado compartilhado usa o relógio de cada pod para `opened_at`; skew de
@@ -2271,7 +2271,7 @@ registradas — [DA-4](#decisões-de-arquitetura) e [DA-8](#decisões-de-arquite
 mesmo assim a troca de produção não tinha registro próprio. O commit `0222b79`
 (que trocou `qwen2.5-coder:32b` por `qwen3-coder-next:latest`) foi commitado
 como `feat:` sem prefixo de DA, e por isso ficou anos sem linha na tabela. DAs
-seguintes passaram a citá-lo pelo número — `app/models/models.py`, `alembic/006` — como
+seguintes passaram a citá-lo pelo número — `packages/core/src/app/models/models.py`, `alembic/006` — como
 se já estivesse registrado. É a diferença entre uma DA que existe na prosa e uma
 DA que existe: o número aparecia no código, mas não na fonte de verdade.
 
@@ -2294,7 +2294,7 @@ apresentá-la como vitória do benchmark, e aqui ela foi empate técnico.
 ### 48. Fontes de busca web como configuração, e `approved` que não era no-op (DA-57)
 
 **O problema.** A busca web do grafo (`web_search_node` + tool ReAct) era
-alimentada por **dois mapas literais** em `app/agent/nodes.py`:
+alimentada por **dois mapas literais** em `packages/core/src/app/agent/nodes.py`:
 `_WEB_SEARCH_SITE_MAP` e o `tech_term` por conector. Três defeitos, todos
 silenciosos:
 
@@ -2339,7 +2339,7 @@ inexistente.
 
 **Bug de preexistente encontrado no caminho (corrigido aqui) — a oitava
 superfície.** `<select name="connector_type">` do formulário de sistemas do
-admin (`app/admin/templates/systems.html`) tinha **8 das 10 opções**:
+admin (`packages/core/src/app/admin/templates/systems.html`) tinha **8 das 10 opções**:
 faltavam `successfactors` (DA-34) e `po` (DA-56). Aqui a falha é de outro
 tipo, e é por isso que ela precisava da própria verificação: nas outras
 sete, a ausência de um conector é morte — ele não existe para o produto. No
@@ -2352,7 +2352,7 @@ incidente que ele consegue desambiguar olhando a tela.
 
 O detalhe que fecha o caso: a prosa do gate já afirmava cobrir "o catálogo
 admin" e parava em `CONNECTOR_TYPES`. `CONNECTOR_TYPES` é a tupla do
-catálogo (`app/admin/models.py`), não o formulário — e era a segunda leitura
+catálogo (`packages/core/src/app/admin/models.py`), não o formulário — e era a segunda leitura
 de um arquivo que existe justamente para ser a versão que o operador
 enxerga. Um conector pode estar na tupla e faltar no `<select>`, e nenhuma
 das sete checagens via isso, porque nenhuma lia o formulário. O gate agora
@@ -2399,7 +2399,7 @@ diferentes com uma palavra. A pergunta que o mapa responde é por
 
 **A solução.** Dado versionado (`data/sap_products.yaml` com 27 linhas × 9
 mecanismos, `data/connector_coverage.yaml` com o destino e os mecanismos de
-cada conector), cálculo em `app/evaluation/coverage.py`, geração por
+cada conector), cálculo em `packages/core/src/app/evaluation/coverage.py`, geração por
 `scripts/coverage_map.py` e doc gerado `docs/COVERAGE_MAP.md`. O gate
 `connector_coverage` (DA-51) reprova por **incoerência**, nunca por lacuna.
 
@@ -2420,10 +2420,10 @@ mapa afirmar suporte que ninguém testou, que é exatamente o que a matriz de
 **Quatro decisões que o mapa precisou tomar, e o porquê de cada uma.**
 
 1. **`unknown` ≠ `none`.** A fonte distingue "não expõe" de "não sei", e o
-   enum mantêm os dois (`app/evaluation/coverage.py::LEVELS`). Mecanismo
+   enum mantêm os dois (`packages/core/src/app/evaluation/coverage.py::LEVELS`). Mecanismo
    desconhecido **não** vira lacuna: a lacuna vira trabalho de código, e
    isso seria trabalho de fonte — o mapa apontaria o dedo para o time
-   errado. `unknown` já existe em `app/llm/capabilities.py` (DA-45) pelo
+   errado. `unknown` já existe em `packages/core/src/app/llm/capabilities.py` (DA-45) pelo
    mesmo motivo.
 2. **Os dois eixos são independentes.** "Capacidade" é afirmação sobre o
    produto (vem da fonte); "cobertura" é fato sobre o repositório
@@ -2443,7 +2443,7 @@ mapa afirmar suporte que ninguém testou, que é exatamente o que a matriz de
 **O que o mapa encontrou.** `Integration Suite` é a maior lacuna do
 conjunto: a fonte diz que os 22 produtos são integráveis por ele, e o
 repositório não tem cliente de Cloud Integration nenhum. O ponto é delicate,
-porque o docstring de `app/connectors/apimanagement_connector.py` diz *"Conector SAP API
+porque o docstring de `packages/core/src/app/connectors/apimanagement_connector.py` diz *"Conector SAP API
 Management / Integration Suite"* — mas o código lê
 `APIM_ANALYTICS_URL/events`, ou seja, eventos de **analytics**, com endpoint
 especulativo. É fonte de sinal de observabilidade, não orquestrador. Deixar
@@ -2533,14 +2533,14 @@ Ela não é repetida aqui para não envelhecer em dois lugares.
 
 **Superfícies atualizadas ao adicionar um conector (DA-58/DA-59):**
 
-1. `app/connectors/__init__.py` — `_REGISTRY` e `_REAL_MODE_SETTING`
-2. `app/models/models.py` — `Literal` em `IncidentRequest.interface_type`
-3. `app/models/models.py` — `Literal` em `IncidentEventData.interface_type`
-4. `app/agent/supervisor.py` — classificação por domínio (`sap/saas/generic`)
-5. `app/agent/graph.py` — `choices` de `--interface` no CLI
-6. `app/admin/models.py` — `CONNECTOR_TYPES` do catálogo admin
+1. `packages/core/src/app/connectors/__init__.py` — `_REGISTRY` e `_REAL_MODE_SETTING`
+2. `packages/core/src/app/models/models.py` — `Literal` em `IncidentRequest.interface_type`
+3. `packages/core/src/app/models/models.py` — `Literal` em `IncidentEventData.interface_type`
+4. `packages/core/src/app/agent/supervisor.py` — classificação por domínio (`sap/saas/generic`)
+5. `packages/core/src/app/agent/graph.py` — `choices` de `--interface` no CLI
+6. `packages/core/src/app/admin/models.py` — `CONNECTOR_TYPES` do catálogo admin
 7. `alembic/versions/008_*.py` — seed de `web_search_sources` (DA-57)
-8. `app/admin/templates/systems.html` — `<select name="connector_type">`
+8. `packages/core/src/app/admin/templates/systems.html` — `<select name="connector_type">`
 9. `data/connector_coverage.yaml` — `dedicated/generic/absent` + mecanismos (DA-58)
 
 O gate `connector_reachable` (DA-51) confere as superfícies 1 a 8, e o
@@ -2555,7 +2555,7 @@ O gate `connector_reachable` (DA-51) confere as superfícies 1 a 8, e o
 
 **Bugs encontrados no caminho:**
 
-- **DA-57**: os mapas de busca web em `app/agent/nodes.py` não tinham `po`
+- **DA-57**: os mapas de busca web em `packages/core/src/app/agent/nodes.py` não tinham `po`
   nem `successfactors` (perdiam site e `tech_term`); o seed de
   `web_search_sources` substituiu os mapas.
 - **DA-58**: `connector_coverage.yaml` não tinha `po` nem `successfactors`. O
@@ -2590,10 +2590,10 @@ disco comprometido sem criptografia exporia esse contexto.
 
 **A solução.**
 
-- `app/admin/crypto.py::encrypt_evidence` **redige a PII reconhecível** (e-mail, CPF, número de IDoc; `app/redaction.py::redact_pii_deep`) e cifra com Fernet (`LLM_CREDENTIALS_MASTER_KEY`). Quem decifra (a API admin, para a tela de incidentes) não recebe o dado pessoal.
-- Sem master key, `encrypt_evidence` levanta `ConfigurationError` em vez de devolver `None`. A versão anterior perdia a evidência em silêncio e logava "deixando em claro". O boot falha quando `DATABASE_URL` está configurada sem a chave (`app/main.py::_ensure_evidence_key_configured`).
+- `packages/core/src/app/admin/crypto.py::encrypt_evidence` **redige a PII reconhecível** (e-mail, CPF, número de IDoc; `packages/core/src/app/redaction.py::redact_pii_deep`) e cifra com Fernet (`LLM_CREDENTIALS_MASTER_KEY`). Quem decifra (a API admin, para a tela de incidentes) não recebe o dado pessoal.
+- Sem master key, `encrypt_evidence` levanta `ConfigurationError` em vez de devolver `None`. A versão anterior perdia a evidência em silêncio e logava "deixando em claro". O boot falha quando `DATABASE_URL` está configurada sem a chave (`packages/core/src/app/main.py::_ensure_evidence_key_configured`).
 - `decrypt_evidence` aceita linhas legadas (lista/dict do JSONB, ou texto JSON) e levanta `ConfigurationError` quando o token não decifra com a chave atual.
-- `app/services/incident_recorder.py::build_incident_row` e `app/services/incident_repository.py` usam a mesma função (havia três cópias).
+- `packages/core/src/app/services/incident_recorder.py::build_incident_row` e `packages/core/src/app/services/incident_repository.py` usam a mesma função (havia três cópias).
 - Migration `009_encrypt_evidence_json.py`:
   - **upgrade** cifra só as linhas em claro, com a mesma redação do runtime;
   - banco novo, ou já migrado, sobe **sem exigir a chave** (o job de migrações do CI não tem chave);
@@ -2623,7 +2623,7 @@ downgrade (emergency rollback).
 
 ### 52. Taxonomia de erros SAP com TTL/RDFLib (SKOS para Rule Engine) (DA-61)
 
-**O problema.** O Rule Engine determinístico (DA-33) armazena regras de erro conhecidas em `KNOWN_ERROR_RULES` no arquivo `app/agent/rules.py` como um `dict` hardcoded: 22 pares `(pattern, error_type)`. Isso gera dois problemas:
+**O problema.** O Rule Engine determinístico (DA-33) armazena regras de erro conhecidas em `KNOWN_ERROR_RULES` no arquivo `packages/core/src/app/agent/rules.py` como um `dict` hardcoded: 22 pares `(pattern, error_type)`. Isso gera dois problemas:
 
 1. **Dificuldade de manutenção**: adicionar/remover regras exige editar código Python, fazer commit e deploy.
 2. **Ausência de estrutura semântica**: o `dict` não expressa relação entre erros (hierarquia, siblings, causas comuns), o que dificulta extensão e correlação.
@@ -2638,9 +2638,9 @@ A auditoria Q2 2026 (DATA-01) recomendou substituir hardcoded por taxonomia form
 
 **A solução.**
 
-- `app/ontology/error_codes.ttl`: arquivo Turtle RDF com 28 erros mapeados (OAuth, RFC, HTTP, JSON/XML, IDoc, OData, S/4HANA, CPI, etc.). Cada erro tem URI canônico (`<urn:error:>`) e labels em PT/EN.
-- `app/agent/ontology_loader.py`: carregador que lê o TTL, transforma em instâncias `ErrorRule` e carrega em memória via `rdflib.Graph.parse()`. Fallback para `KNOWN_ERROR_RULES` se o TTL não for encontrado ou falhar na parse.
-- Implementação **aditiva**: `app/agent/rules.py` mantém `KNOWN_ERROR_RULES` intacto; `ontology_loader.py` só é chamado se `error_codes.ttl` existir. Nenhum change em `app/agent/graph.py`, `app/agent/nodes.py`, etc.
+- `packages/core/src/app/ontology/error_codes.ttl`: arquivo Turtle RDF com 28 erros mapeados (OAuth, RFC, HTTP, JSON/XML, IDoc, OData, S/4HANA, CPI, etc.). Cada erro tem URI canônico (`<urn:error:>`) e labels em PT/EN.
+- `packages/core/src/app/agent/ontology_loader.py`: carregador que lê o TTL, transforma em instâncias `ErrorRule` e carrega em memória via `rdflib.Graph.parse()`. Fallback para `KNOWN_ERROR_RULES` se o TTL não for encontrado ou falhar na parse.
+- Implementação **aditiva**: `packages/core/src/app/agent/rules.py` mantém `KNOWN_ERROR_RULES` intacto; `ontology_loader.py` só é chamado se `error_codes.ttl` existir. Nenhum change em `packages/core/src/app/agent/graph.py`, `packages/core/src/app/agent/nodes.py`, etc.
 - API compatível: `ErrorRule` (pattern `str`, error_type `Literal["OAuth2", "RFC", ...]`) é a mesma da versão hardcoded.
 
 **Expansão Fase 1 (2026-10-08):**
@@ -2685,7 +2685,7 @@ A auditoria Q2 2026 (DATA-01) recomendou substituir hardcoded por taxonomia form
 
 **A solução.**
 
-- `app/ontology/neo4j_loader.py`: módulo com:
+- `packages/core/src/app/ontology/neo4j_loader.py`: módulo com:
   - `load_error_rules_to_neo4j()`: importa TTL via `ontology_loader.py`, upsert idempotente via `MERGE`,
   - `get_incidents_by_error_uri()`: Cypher query para encontrars incidentes pendentes,
   - `get_error_hierarchy()`: recupera `skos:broader`/`skos:narrower` relations via Cypher,
@@ -2696,7 +2696,7 @@ A auditoria Q2 2026 (DATA-01) recomendou substituir hardcoded por taxonomia form
 - **Separation of concerns**: SKOS (TTL) vs. GraphRAG (Neo4j) com camada de adaptação (`neo4j_loader.py`).
 
 **Critérios de sucesso.**
-- `uv run ruff check app/ontology/neo4j_loader.py` → all passed,
+- `uv run ruff check packages/core/src/app/ontology/neo4j_loader.py` → all passed,
 - `uv run pytest tests/ -m "not integration"` → 1406 passed (1 gate fails por ausência de baseline externo),
 - Commit staging + gitleaks clean (não há hardcoded secrets:常数 para variáveis de ambiente).
 
@@ -2707,11 +2707,11 @@ A auditoria Q2 2026 (DATA-01) recomendou substituir hardcoded por taxonomia form
 
 **Próximos passos (DA-62 Fase 2b):**
 - Ativar `GRAPH_RAG_ENABLED=true` e validar carga real TTL → Neo4j,
-- Integrar `get_error_hierarchy()` em `app/agent/ontology_agent.py`,
+- Integrar `get_error_hierarchy()` em `packages/core/src/app/agent/ontology_agent.py`,
 - Criar endpoint `/admin/ontology/hierarchy` para visualizar SKOS no console.
 
 **Validação.**
-- `app/ontology/neo4j_loader.py` com commit `291239c` em `feature/DA-61-fase2`,
+- `packages/core/src/app/ontology/neo4j_loader.py` com commit `291239c` em `feature/DA-61-fase2`,
 - Ruff check passando, gitleaks clean,
 - 4 testes `test_nodes_ontology_degradation.py` passando.
 - Testes de integração: 1407/1407 passing (não há testes específicos de ontology_loader ainda)
@@ -2722,14 +2722,14 @@ A auditoria Q2 2026 (DATA-01) recomendou substituir hardcoded por taxonomia form
 ### 54. Skills declarativas — YAML como fonte de verdade para capability e roteamento (DA-63)
 
 **Contexto:** antes desta DA, as skills do Copilot viviam como código Python
-estático: `CAPABILITY_REGISTRY` em `app/mcp/policy.py` era um dict hardcoded
-e o supervisor (`app/agent/supervisor.py`) usava `_SAP_INTERFACE_TYPES` /
+estático: `CAPABILITY_REGISTRY` em `packages/core/src/app/mcp/policy.py` era um dict hardcoded
+e o supervisor (`packages/core/src/app/agent/supervisor.py`) usava `_SAP_INTERFACE_TYPES` /
 `_SAAS_INTERFACE_TYPES` fixos para roteamento. Isso tornava a adição de novas
 skills ou conectores uma mudança de código, não de dados.
 
-**Decisão:** cada skill passa a ser um artefato declarativo em `data/skills/*.yaml`
+**Decisão:** cada skill passa a ser um artefato declarativo em `packages/core/data/skills/*.yaml`
 com schema versionado (nome, versão, risk_level, scopes, approval_required,
-data_sensitivity, timeout, domains). O módulo `app/mcp/skill_registry.py`
+data_sensitivity, timeout, domains). O módulo `packages/core/src/app/mcp/skill_registry.py`
 carrega esses arquivos e expõe:
 
 - `load_skills()` — dicionário `{name: skill_dict}` carregado do disco.
@@ -2737,26 +2737,26 @@ carrega esses arquivos e expõe:
   das skills, substituindo os sets hardcoded.
 
 A conversão de skill em `ToolPolicy` para o enforcement (DA-27) fica em
-`app/mcp/policy.py::_build_capability_registry_from_skills`, não no registry
+`packages/core/src/app/mcp/policy.py::_build_capability_registry_from_skills`, não no registry
 (o texto original citava um `build_capability_registry()` que não existe).
 
 O `CAPABILITY_REGISTRY` em `policy.py` agora tenta carregar de YAML primeiro;
-fallback para dict estatico quando `data/skills/` não existe. O supervisor
+fallback para dict estatico quando `packages/core/data/skills/` não existe. O supervisor
 deriva `_DOMAIN_INDEX`, `_SAP_INTERFACE_TYPES` e `_SAAS_INTERFACE_TYPES` do
 registry, mantendo compatibilidade com o quality gate (DA-51).
 
 **Impacto nas superfícies do connector check (DA-59):**
-- A superficie de roteamento (supervisor) agora é derivada de `data/skills/*.yaml`.
-- O quality gate (`check_connector_reachable`) verifica YAMLs em `data/skills/`
+- A superficie de roteamento (supervisor) agora é derivada de `packages/core/data/skills/*.yaml`.
+- O quality gate (`check_connector_reachable`) verifica YAMLs em `packages/core/data/skills/`
   quando `_DOMAIN_INDEX` existe no supervisor.
-- Novos conectores continuam com as 9 superfícies da DA-59 (`docs/CONNECTORS.md` §4); muda só a 4ª: o supervisor dá lugar a `domains` em `data/skills/diagnose_incident.yaml`.
+- Novos conectores continuam com as 9 superfícies da DA-59 (`docs/CONNECTORS.md` §4); muda só a 4ª: o supervisor dá lugar a `domains` em `packages/core/data/skills/diagnose_incident.yaml`.
 
 **Validação.**
-- `app/mcp/skill_registry.py` — loader + builders.
-- `data/skills/diagnose_incident.yaml` e `list_connectors.yaml`.
-- `app/agent/supervisor.py` — `_DOMAIN_INDEX` derivado, sets compatíveis.
-- `app/mcp/policy.py` — CAPABILITY_REGISTRY com fallback YAML→static.
-- `app/evaluation/gates.py` — gate reconhece padrao declarativo + fallback.
+- `packages/core/src/app/mcp/skill_registry.py` — loader + builders.
+- `packages/core/data/skills/diagnose_incident.yaml` e `list_connectors.yaml`.
+- `packages/core/src/app/agent/supervisor.py` — `_DOMAIN_INDEX` derivado, sets compatíveis.
+- `packages/core/src/app/mcp/policy.py` — CAPABILITY_REGISTRY com fallback YAML→static.
+- `packages/core/src/app/evaluation/gates.py` — gate reconhece padrao declarativo + fallback.
 - `tests/test_quality_gate.py` — 3 novos testes para padrao DA-63.
 
 **Atualização (2026-10-14) — índice vazio fora da raiz do repo.** A primeira
@@ -2767,7 +2767,7 @@ da raiz, `_DOMAIN_INDEX` ficava `{}` e **todo** `interface_type` caía em
 `successfactors` e `po` → `generic`). Os testes não pegavam porque rodam com
 cwd na raiz. Correções:
 
-- `app/mcp/skill_registry.py::DEFAULT_SKILLS_DIR` ancorado no pacote;
+- `packages/core/src/app/mcp/skill_registry.py::DEFAULT_SKILLS_DIR` ancorado no pacote;
   `SKILLS_DIR` segue como override.
 - Um só parser: `policy.py` e o gate `connector_reachable` usam
   `load_skills`/`build_domain_index` (havia uma cópia do loader em
@@ -2777,8 +2777,8 @@ cwd na raiz. Correções:
   domínio fora de `sap`/`saas` fazem a skill ser pulada com warning, nunca
   recebem default permissivo; `interface_type` em dois domínios levanta
   `ValueError` (antes "o último vencia" por ordem de arquivo).
-- `app/agent/supervisor.py` falha no import com índice vazio.
-- `Dockerfile` copia `data/skills/`, e o gate reprova se o `COPY` sumir.
+- `packages/core/src/app/agent/supervisor.py` falha no import com índice vazio.
+- `Dockerfile` copia `packages/core/data/skills/`, e o gate reprova se o `COPY` sumir.
 - `pyyaml` declarado em `pyproject.toml` (chegava só como transitiva).
 - `tests/test_skill_registry.py`: roteamento com cwd fora do repo, import sem
   skills, schema inválido, ambiguidade, índice = conectores registrados menos
@@ -2790,7 +2790,7 @@ cwd na raiz. Correções:
 
 **O problema.** Sem a degradação, um outage do Qdrant faria `/diagnose` retornar 500 mesmo quando o rule engine poderia responder com uma regra conhecida — o usuário final vê erro de servidor para um incidente que tem diagnóstico determinístico.
 
-**A solução.** `_retrieve_hybrid` e `_retrieve_dense_only` (app/rag/retriever.py) capturam `ResponseHandlingException` e `UnexpectedResponse`, logam WARNING e retornam lista vazia. A lista vazia significa "sem contexto RAG", não "erro". O pipeline continua:
+**A solução.** `_retrieve_hybrid` e `_retrieve_dense_only` (packages/core/src/app/rag/retriever.py) capturam `ResponseHandlingException` e `UnexpectedResponse`, logam WARNING e retornam lista vazia. A lista vazia significa "sem contexto RAG", não "erro". O pipeline continua:
 
 1. **Rule engine** — se a descrição casa uma regra de `KNOWN_ERROR_RULES`, o diagnóstico é respondido imediatamente, sem LLM.
 2. **LLM fallback** — se nenhuma regra casa, o LLM recebe o prompt sem chunks RAG (contexto vazio). O modelo ainda produz diagnóstico, apenas com menos evidência contextual.
@@ -2812,7 +2812,7 @@ cwd na raiz. Correções:
 
 A resposta atual exigia ler código e inferir — não havia uma decisão explícita, auditável e testável.
 
-**A solução.** `app/llm/routing.py` extrai um **Policy Engine puro** com duas fases:
+**A solução.** `packages/core/src/app/llm/routing.py` extrai um **Policy Engine puro** com duas fases:
 
 1. **Elegibilidade rígida** (rejeita se faltar algo):
    - Soberania/origin: provider local ou origin em `CONFIDENTIAL_ALLOWED_ORIGINS` (DA-43)
@@ -2832,9 +2832,9 @@ A função `evaluate_routing()` aceita `RoutingRequest` e devolve `RoutingDecisi
 A decisão é logada em audit log estruturado e exposta via `GET /llm/policy` (DA-43).
 
 **Implementação.**
-- `app/llm/routing.py`: Policy Engine puro com `RoutingRequest`, `RoutingDecision`, `RejectionReason` (enum)
-- `app/llm/gateway.py`: `invoke_via_gateway()` usa o engine, mantém backward compatibility com `_select_allowed_providers()` e `_provider_allows_sensitivity()`
-- `app/llm/capabilities.py`: `ProviderCapabilities` dataclass (reutilizado)
+- `packages/core/src/app/llm/routing.py`: Policy Engine puro com `RoutingRequest`, `RoutingDecision`, `RejectionReason` (enum)
+- `packages/core/src/app/llm/gateway.py`: `invoke_via_gateway()` usa o engine, mantém backward compatibility com `_select_allowed_providers()` e `_provider_allows_sensitivity()`
+- `packages/core/src/app/llm/capabilities.py`: `ProviderCapabilities` dataclass (reutilizado)
 
 **Validação.**
 - `tests/test_llm_gateway.py`: 31 testes passando (incluindo 5 novos para o Policy Engine)
@@ -2860,16 +2860,16 @@ A decisão é logada em audit log estruturado e exposta via `GET /llm/policy` (D
 
 **A solução.**
 
-1. **Tokenizer aproximado** (`app/llm/gateway.py::_estimate_tokens`): `tiktoken` com `cl100k_base`, carregado de forma lazy e em cache. Qualquer falha de carga (tiktoken ausente, BPE sem rede em container/Kyma) cai na heurística `len//4`, é lembrada (`_encoding_failed`, sem nova tentativa a cada chamada) e logada uma vez. Nunca propaga exceção.
-2. **Preços do registry** (`app/llm/routing.py::_estimate_cost_usd`): `registry_prices()` quando há `DATABASE_URL`; senão, a tabela interna.
-3. **Orçamento por diagnóstico** (`app/llm/budget.py`): ledger em memória por `incident_id`, aberto em `run_diagnosis` com `DIAGNOSIS_BUDGET_USD` (default 1.00) e fechado no `finally`, mesmo em erro ou timeout.
+1. **Tokenizer aproximado** (`packages/core/src/app/llm/gateway.py::_estimate_tokens`): `tiktoken` com `cl100k_base`, carregado de forma lazy e em cache. Qualquer falha de carga (tiktoken ausente, BPE sem rede em container/Kyma) cai na heurística `len//4`, é lembrada (`_encoding_failed`, sem nova tentativa a cada chamada) e logada uma vez. Nunca propaga exceção.
+2. **Preços do registry** (`packages/core/src/app/llm/routing.py::_estimate_cost_usd`): `registry_prices()` quando há `DATABASE_URL`; senão, a tabela interna.
+3. **Orçamento por diagnóstico** (`packages/core/src/app/llm/budget.py`): ledger em memória por `incident_id`, aberto em `run_diagnosis` com `DIAGNOSIS_BUDGET_USD` (default 1.00) e fechado no `finally`, mesmo em erro ou timeout.
    - Teto efetivo de cada chamada = `min(llm_gateway_max_cost_usd, restante / (1 + LLM_BUDGET_RESERVE_RATIO))`. A reserva (default 0.25) cobre o erro do tokenizer aproximado e saída maior que a prevista.
    - Após sucesso, o gateway debita o custo **real** (metering DA-48) ou, sem ele, o estimado. Chamada que falhou não é debitada.
    - **Degradação:** o Policy Engine (DA-66) rejeita com `orcamento_excedido` os candidatos que não cabem; um candidato mais barato que ainda caiba (ex.: Ollama local) segue elegível.
    - **Esgotamento:** se o orçamento do diagnóstico barra todos os candidatos, o gateway levanta `BudgetExhaustedError`, classificada como `FailureClass.BUDGET_EXHAUSTED` (DA-68: sem retry, sem failover). Se quem barra é o teto por chamada, segue `PolicyViolationError` (comportamento DA-26).
 4. **Ledger persistente** (`record_budget_ledger`, migration `018_create_llm_budget_ledger.py`): estimado × real por chamada, best-effort.
-5. **Preço do modelo efetivo** (correção de 2026-10-18): a estimativa do roteamento consultava o registro com o **rótulo** do provider (`"openai"`) como `model_id`; nenhum registro casa com isso, e a estimativa caía sempre na tabela interna. Para `gpt-4o-mini` (US$ 0,15/0,60 por 1M) a tabela dava ~33× o preço real: 10 mil tokens estimados em US$ 0,15 contra US$ 0,0045, e um contexto acima de ~34 mil tokens era barrado pelo teto de US$ 0,50 custando ~US$ 0,015. Agora `app/llm/routing.py::_registry_prices_for` consulta pelo modelo que o provider vai chamar (`llm_model`, o `model_name` do caller ou o deployment do Azure) e, no modo gerenciado, cai no default habilitado da origem — a mesma regra de `app/admin/runtime.py::resolve_runtime_model`. Testes em `tests/test_llm_routing.py::TestCostEstimation` (o teste anterior mockava o preço pelo rótulo e escondia o bug).
-6. **Borda HTTP e registro do incidente** (2026-10-18): `BudgetExhaustedError` vira 503 com `code: budget_exhausted` e `error_id` (`app/main.py`), em vez do 500 genérico; `PolicyViolationError` vira 503 `policy_violation`. O motivo completo vai só para o log. O total debitado e o número de chamadas são gravados no incidente (`cost_usd`, `llm_calls`, migration `019_incidents_escalation_and_cost.py`) e aparecem na Admin UI. Testes: `tests/test_gateway_refusal_http.py`, `tests/test_incident_escalation_cost.py`.
+5. **Preço do modelo efetivo** (correção de 2026-10-18): a estimativa do roteamento consultava o registro com o **rótulo** do provider (`"openai"`) como `model_id`; nenhum registro casa com isso, e a estimativa caía sempre na tabela interna. Para `gpt-4o-mini` (US$ 0,15/0,60 por 1M) a tabela dava ~33× o preço real: 10 mil tokens estimados em US$ 0,15 contra US$ 0,0045, e um contexto acima de ~34 mil tokens era barrado pelo teto de US$ 0,50 custando ~US$ 0,015. Agora `packages/core/src/app/llm/routing.py::_registry_prices_for` consulta pelo modelo que o provider vai chamar (`llm_model`, o `model_name` do caller ou o deployment do Azure) e, no modo gerenciado, cai no default habilitado da origem — a mesma regra de `packages/core/src/app/admin/runtime.py::resolve_runtime_model`. Testes em `tests/test_llm_routing.py::TestCostEstimation` (o teste anterior mockava o preço pelo rótulo e escondia o bug).
+6. **Borda HTTP e registro do incidente** (2026-10-18): `BudgetExhaustedError` vira 503 com `code: budget_exhausted` e `error_id` (`packages/core/src/app/main.py`), em vez do 500 genérico; `PolicyViolationError` vira 503 `policy_violation`. O motivo completo vai só para o log. O total debitado e o número de chamadas são gravados no incidente (`cost_usd`, `llm_calls`, migration `019_incidents_escalation_and_cost.py`) e aparecem na Admin UI. Testes: `tests/test_gateway_refusal_http.py`, `tests/test_incident_escalation_cost.py`.
 
 **Validação.** `tests/test_budget_ledger.py` (aritmética e reserva, acúmulo e esgotamento, degradação para candidato mais barato, teto por chamada continua valendo, chamada com falha não é debitada, mapeamento para `BUDGET_EXHAUSTED`, abertura e fechamento em `run_diagnosis` mesmo com erro); `tests/test_tokenizer_offline.py` (fallback para `ConnectionError`/`OSError`/`ImportError`, sem retentativa, um único aviso).
 
@@ -2903,8 +2903,8 @@ A decisão é logada em audit log estruturado e exposta via `GET /llm/policy` (D
 Cada classe define: retry? backoff? abre circuito? failover? escala?
 
 **Implementação.**
-- `app/llm/factory.py`: mapear exceções reais → classe
-- `app/llm/gateway.py`: definir política por classe
+- `packages/core/src/app/llm/factory.py`: mapear exceções reais → classe
+- `packages/core/src/app/llm/gateway.py`: definir política por classe
 - `tests/test_llm_gateway.py`: testes parametrizados por classe
 
 **Validação.**
@@ -2923,7 +2923,7 @@ Cada classe define: retry? backoff? abre circuito? failover? escala?
 
 ### 59. Checkpointing e execução resumível (DA-69)
 
-**O problema.** O grafo LangGraph (`app/agent/graph.py`) não tinha checkpointing: uma falha no meio do pipeline perdia o trabalho já feito (conector, RAG).
+**O problema.** O grafo LangGraph (`packages/core/src/app/agent/graph.py`) não tinha checkpointing: uma falha no meio do pipeline perdia o trabalho já feito (conector, RAG).
 
 **A solução.** Checkpointing **opt-in** (`CHECKPOINTING_ENABLED=false` por default):
 
@@ -2936,7 +2936,7 @@ Cada classe define: retry? backoff? abre circuito? failover? escala?
 
 **Validação.** `tests/test_checkpointing.py`, com o grafo real e nós fake com contador (sem Qdrant/Ollama/Postgres): retomada após falha num nó intermediário sem reexecutar `supervisor`/`connector`/`retrieve`; controle sem checkpointer (tudo roda de novo); isolamento entre `thread_id`; `thread_id` só com a flag ligada e nunca em `timeout_seconds`; default sem import do Postgres; `get_graph` usa o builder com redação; normalização da URL; checkpoint sem e-mail/CPF (com controle provando o vazamento sem a redação); retomada lê estado redigido com os tipos originais. `tests/test_checkpointing_postgres.py` repete retomada + ausência de PII contra Postgres real.
 
-**PII no checkpoint (fechado).** O estado do grafo guarda `description`/`logs`/`payload`/`connector_data` crus, porque o conector e o RAG precisam do texto original e a redação (DA-30) só acontece ao montar o prompt. Em vez de redigir a entrada (o que mudaria o diagnóstico), `app/agent/checkpointing.py::RedactingCheckpointMixin` redige **só o que o checkpointer grava**: cada valor de canal passa por `redact_preserving_types` em `put`/`put_writes` (e variantes async).
+**PII no checkpoint (fechado).** O estado do grafo guarda `description`/`logs`/`payload`/`connector_data` crus, porque o conector e o RAG precisam do texto original e a redação (DA-30) só acontece ao montar o prompt. Em vez de redigir a entrada (o que mudaria o diagnóstico), `packages/core/src/app/agent/checkpointing.py::RedactingCheckpointMixin` redige **só o que o checkpointer grava**: cada valor de canal passa por `redact_preserving_types` em `put`/`put_writes` (e variantes async).
 
 - A redação é no saver, não no serializer: o `PostgresSaver` grava `str`/`int`/`bool`/`None` **inline** no jsonb do checkpoint, sem passar pelo serde. Um serializer com redação deixaria `description` em claro no banco.
 - A estrutura de controle (`channel_versions`, ids) nunca é tocada: as versões têm sequências longas de dígitos que a regra de número de IDoc reescreveria, corrompendo o checkpoint (o estado retomado vinha vazio).
@@ -2971,8 +2971,8 @@ Cada classe define: retry? backoff? abre circuito? failover? escala?
 Dashboards: estender os existentes e passar em `scripts/validate_dashboards.py`.
 
 **Implementação.**
-- `app/metrics.py`: métricas Prometheus
-- `app/admin/metering.py`: já tem `record_usage_observed()`
+- `packages/core/src/app/metrics.py`: métricas Prometheus
+- `packages/core/src/app/admin/metering.py`: já tem `record_usage_observed()`
 - `grafana/dashboards/`: dashboards FinOps
 
 **Validação.**
@@ -2989,7 +2989,7 @@ Dashboards: estender os existentes e passar em `scripts/validate_dashboards.py`.
 
 **O problema.** O resultado da busca web era a única entrada não confiável que voltava ao LLM sem `sanitize_untrusted_input`. O tool do agente ReAct (`_make_web_search_tool`) devolvia título, URL e resumo crus do DuckDuckGo como observação. Uma página indexada com "ignore as instruções anteriores…" entrava no raciocínio do agente. A consulta de saída já era sanitizada (egress); a volta não. O limite estava declarado no README.
 
-**A solução.** `app/agent/nodes.py::format_untrusted_web_hits`, usada pelo tool do ReAct **e** pelo `web_search_node` (que alimenta prompt, evidência `web_untrusted` e relatório):
+**A solução.** `packages/core/src/app/agent/nodes.py::format_untrusted_web_hits`, usada pelo tool do ReAct **e** pelo `web_search_node` (que alimenta prompt, evidência `web_untrusted` e relatório):
 
 - título e resumo passam por `sanitize_untrusted_input` (neutralização de injection em inglês, português e espanhol, normalização Unicode e caracteres invisíveis, redação de PII), com limite de tamanho por campo (200/800) e total (1800);
 - URL reduzida a esquema + host + caminho, só `http`/`https` (query e fragmento podem carregar texto do atacante; `javascript:`/`data:` somem);
@@ -3022,9 +3022,9 @@ Dashboards: estender os existentes e passar em `scripts/validate_dashboards.py`.
 | `priority` | Desempate depois do score (menor primeiro) |
 | `monthly_limit_tokens` (já existia) | Passa a **bloquear** ao atingir 100% do período aberto |
 
-**Regras do engine** (`app/llm/routing.py::evaluate_routing`, ramo de registro). Fase 1 rejeita com motivo enumerado: `destino_fora_da_origem` (o `base_url` aponta para outro host que não a origem cadastrada), `soberania_bloqueada` (DA-43, avaliada sobre o destino final), `credencial_ausente` (origem cloud sem credencial cifrada, DA-47), `capability_faltando` (capacidade efetiva = origem ∩ modelo), `janela_insuficiente`, `dominio_nao_atendido`, `nivel_nao_autorizado`, `limite_mensal_atingido`, `circuito_aberto` (por **origem**) e `orcamento_excedido` (preço registrado do modelo). Fase 2 ordena os elegíveis por `w_custo·custo_norm + w_lat·latência_norm` (normalizados entre os elegíveis; `LLM_ROUTING_COST_WEIGHT`=0,7 e `LLM_ROUTING_LATENCY_WEIGHT`=0,3), depois `priority`, depois o default da origem. Sem latência medida o termo é zero: modelo novo não é penalizado.
+**Regras do engine** (`packages/core/src/app/llm/routing.py::evaluate_routing`, ramo de registro). Fase 1 rejeita com motivo enumerado: `destino_fora_da_origem` (o `base_url` aponta para outro host que não a origem cadastrada), `soberania_bloqueada` (DA-43, avaliada sobre o destino final), `credencial_ausente` (origem cloud sem credencial cifrada, DA-47), `capability_faltando` (capacidade efetiva = origem ∩ modelo), `janela_insuficiente`, `dominio_nao_atendido`, `nivel_nao_autorizado`, `limite_mensal_atingido`, `circuito_aberto` (por **origem**) e `orcamento_excedido` (preço registrado do modelo). Fase 2 ordena os elegíveis por `w_custo·custo_norm + w_lat·latência_norm` (normalizados entre os elegíveis; `LLM_ROUTING_COST_WEIGHT`=0,7 e `LLM_ROUTING_LATENCY_WEIGHT`=0,3), depois `priority`, depois o default da origem. Sem latência medida o termo é zero: modelo novo não é penalizado.
 
-**Gateway.** `app/llm/gateway.py::invoke_via_gateway` aplica os overrides da Admin UI (`app/llm/registry_routing.py::effective_settings`, antes ignorados na decisão), lê o registro (`app/llm/registry_routing.py::load_registry_snapshot`; ilegível = nenhum candidato, fail-closed), decifra a credencial **só do modelo escolhido**, grava a latência de cada chamada bem-sucedida (`llm_call_latency`, mediana de 7 dias) e registra o modelo que respondeu (`app/llm/gateway.py::consume_last_selection`), que vai para `DiagnosisResponse.llm_model` e para `incidents` (DA-53).
+**Gateway.** `packages/core/src/app/llm/gateway.py::invoke_via_gateway` aplica os overrides da Admin UI (`packages/core/src/app/llm/registry_routing.py::effective_settings`, antes ignorados na decisão), lê o registro (`packages/core/src/app/llm/registry_routing.py::load_registry_snapshot`; ilegível = nenhum candidato, fail-closed), decifra a credencial **só do modelo escolhido**, grava a latência de cada chamada bem-sucedida (`llm_call_latency`, mediana de 7 dias) e registra o modelo que respondeu (`packages/core/src/app/llm/gateway.py::consume_last_selection`), que vai para `DiagnosisResponse.llm_model` e para `incidents` (DA-53).
 
 **Superfícies.** `/admin/models`: parâmetros por modelo no cadastro e na edição; orçamento e pesos (`DIAGNOSIS_BUDGET_USD`, `LLM_BUDGET_RESERVE_RATIO`, `LLM_GATEWAY_MAX_COST_USD`, pesos) como overrides de runtime; e o simulador `GET /admin/api/routing/preview`, que roda a mesma decisão sem chamar o LLM.
 
@@ -3048,13 +3048,13 @@ Dashboards: estender os existentes e passar em `scripts/validate_dashboards.py`.
 
 **UI web.** `react-i18next` com `i18next-browser-languagedetector` (`frontend/src/i18n/index.ts`), catálogos `frontend/src/i18n/locales/{pt-BR,en}.json`, seletor de idioma (`frontend/src/components/LanguageSelect.tsx`), `<html lang>` sincronizado, e formatação por `Intl` (`frontend/src/i18n/format.ts`). Códigos estáveis do backend (`trust_level`, motivo de escalonamento, `code` de erro) são traduzidos pelo código, nunca pelo texto.
 
-**Admin UI.** Negociação no servidor (`app/i18n/__init__.py::negotiate`, `Accept-Language` com pesos `q`), `t()`/`t_html()` nos templates Jinja e o catálogo do idioma embutido na página como `<script type="application/json">` — dado, não script, então a CSP `script-src 'self'` continua valendo; `<`, `>` e `&` vão escapados para o conteúdo não fechar a tag (`app/i18n/__init__.py::embed_json`). O JS do admin usa o mesmo catálogo e a mesma sintaxe do i18next (`{{x}}`, plural `_zero/_one/_other`). Respostas com `Vary: Accept-Language, Cookie` e `Content-Language`.
+**Admin UI.** Negociação no servidor (`packages/core/src/app/i18n/__init__.py::negotiate`, `Accept-Language` com pesos `q`), `t()`/`t_html()` nos templates Jinja e o catálogo do idioma embutido na página como `<script type="application/json">` — dado, não script, então a CSP `script-src 'self'` continua valendo; `<`, `>` e `&` vão escapados para o conteúdo não fechar a tag (`packages/core/src/app/i18n/__init__.py::embed_json`). O JS do admin usa o mesmo catálogo e a mesma sintaxe do i18next (`{{x}}`, plural `_zero/_one/_other`). Respostas com `Vary: Accept-Language, Cookie` e `Content-Language`.
 
-**Erros por código.** `app/api_errors.py::CodedHTTPException`: erros de auth e da API admin passam a trazer `code` e `params` além do `detail` (mantido para clientes existentes). As UIs mostram o texto do catálogo para o `code`; sem código conhecido, o `detail`.
+**Erros por código.** `packages/core/src/app/api_errors.py::CodedHTTPException`: erros de auth e da API admin passam a trazer `code` e `params` além do `detail` (mantido para clientes existentes). As UIs mostram o texto do catálogo para o `code`; sem código conhecido, o `detail`.
 
 **Pseudo-locale.** `?lng=xx` mostra todo texto do catálogo entre `⟦ ⟧`; o que aparece sem marca é texto fixo.
 
-**Garantia automática.** Gate `ui_i18n` (`app/i18n/checks.py`): paridade de chaves e de variáveis entre os locales; toda chave usada existe (estáticas e grupos dinâmicos); nenhum texto visível fora do catálogo (`app/i18n/inventory.py`, também em `scripts/i18n_inventory.py`).
+**Garantia automática.** Gate `ui_i18n` (`packages/core/src/app/i18n/checks.py`): paridade de chaves e de variáveis entre os locales; toda chave usada existe (estáticas e grupos dinâmicos); nenhum texto visível fora do catálogo (`packages/core/src/app/i18n/inventory.py`, também em `scripts/i18n_inventory.py`).
 
 **Validação.** `tests/test_i18n.py` (negociação, interpolação e fallback, escape do catálogo embutido, catálogos reais consistentes, detecção de chave faltando/variável divergente/texto fixo, Admin UI em en e pt-BR pelo `Accept-Language`, cookie vencendo o navegador, pseudo-locale, erros com `code`, todo `code` com texto nos dois idiomas). Os testes de tela que conferem texto em português passam a fixar `Accept-Language: pt-BR`. Capturas Playwright das duas UIs em en, pt-BR e `xx`.
 
@@ -3074,14 +3074,14 @@ Na mesma investigação apareceram dois defeitos do rule engine: (1) a regra do 
 
 **A decisão** (2026-10-18, pedido "efetivar o i18n"). O idioma do conteúdo é um campo do pedido, não do servidor:
 
-- `IncidentRequest.locale` (também em `IncidentEventData`, A2A e na tool MCP): `pt-BR` (default, ausente = comportamento anterior) ou `en`; a tag do navegador é normalizada (`en-US` → `en`, `pt-PT` → `pt-BR`); outro idioma = 422 (`app/models/models.py::_coerce_locale`). O idioma vai ao estado do grafo, à resposta (`DiagnosisResponse.locale`) e a `incidents.locale` (migration `021_locale.py`). A UI web envia o idioma da tela (`frontend/src/i18n/index.ts::diagnosisLocale`; o pseudo-locale pede `en`).
-- **Rule engine:** os padrões casam em qualquer idioma; só o texto devolvido muda. pt-BR é o texto da própria regra (TTL/`rules.py`); `en` vem de `rules.<categoria>` em `app/i18n/locales/content.en.json` (`app/i18n/content.py::localize_rule`). O loader preenche causa e passos ausentes no TTL com a regra em código de mesma categoria (`app/agent/ontology_loader.py::_fill_from_hardcoded`) e separa passos por `;`.
+- `IncidentRequest.locale` (também em `IncidentEventData`, A2A e na tool MCP): `pt-BR` (default, ausente = comportamento anterior) ou `en`; a tag do navegador é normalizada (`en-US` → `en`, `pt-PT` → `pt-BR`); outro idioma = 422 (`packages/core/src/app/models/models.py::_coerce_locale`). O idioma vai ao estado do grafo, à resposta (`DiagnosisResponse.locale`) e a `incidents.locale` (migration `021_locale.py`). A UI web envia o idioma da tela (`frontend/src/i18n/index.ts::diagnosisLocale`; o pseudo-locale pede `en`).
+- **Rule engine:** os padrões casam em qualquer idioma; só o texto devolvido muda. pt-BR é o texto da própria regra (TTL/`rules.py`); `en` vem de `rules.<categoria>` em `packages/core/src/app/i18n/locales/content.en.json` (`packages/core/src/app/i18n/content.py::localize_rule`). O loader preenche causa e passos ausentes no TTL com a regra em código de mesma categoria (`packages/core/src/app/agent/ontology_loader.py::_fill_from_hardcoded`) e separa passos por `;`.
 - **Avisos e relatório:** `content.<idioma>.json` (`diagnosis.*`, `report.*`); o `pt-BR` reproduz byte a byte os textos de antes (teste dourado do relatório). Valor interpolado não é reinterpretado.
-- **Prompt:** o pt-BR é o prompt medido e o digest dele não muda (o payload canônico do default não ganhou chave). Para `en`, o prompt medido recebe ao fim uma instrução de idioma (`app/agent/prompts.py::OUTPUT_LANGUAGE_INSTRUCTIONS`) e tem digest próprio, gravado na resposta. O gate `prompt_digest_measured` avisa (WARN) enquanto o digest `en` não estiver em `locales.en` do baseline e reprova se um digest medido divergir; `--write-prompt-baseline --prompt-locale en` grava depois de medir (o provider do promptfoo aceita o idioma como 4ª parte do prompt).
+- **Prompt:** o pt-BR é o prompt medido e o digest dele não muda (o payload canônico do default não ganhou chave). Para `en`, o prompt medido recebe ao fim uma instrução de idioma (`packages/core/src/app/agent/prompts.py::OUTPUT_LANGUAGE_INSTRUCTIONS`) e tem digest próprio, gravado na resposta. O gate `prompt_digest_measured` avisa (WARN) enquanto o digest `en` não estiver em `locales.en` do baseline e reprova se um digest medido divergir; `--write-prompt-baseline --prompt-locale en` grava depois de medir (o provider do promptfoo aceita o idioma como 4ª parte do prompt).
 - **Ativação:** `web_users.locale` guarda o idioma da Admin UI de quem cadastrou (ou o `locale` do payload); e-mail e SMS saem nesse idioma; linha antiga (nulo) = pt-BR.
-- **Textos que as telas exibem:** `app/llm/routing.py::sovereignty_decision` devolve código e parâmetros (o texto em pt continua no audit log e no `/llm/policy`), os candidatos do simulador trazem `detail_items` (motivo + parâmetros) e o `/health` traz a variável de cada conector (`setting`). As UIs montam o texto (`sovereigntyReason.*`, `reasonDetail.*`, `status.connectorNote.*`).
+- **Textos que as telas exibem:** `packages/core/src/app/llm/routing.py::sovereignty_decision` devolve código e parâmetros (o texto em pt continua no audit log e no `/llm/policy`), os candidatos do simulador trazem `detail_items` (motivo + parâmetros) e o `/health` traz a variável de cada conector (`setting`). As UIs montam o texto (`sovereigntyReason.*`, `reasonDetail.*`, `status.connectorNote.*`).
 
-**Garantia automática.** Gate `content_i18n` (`app/i18n/checks.py::content_i18n_problems`): paridade de chaves e variáveis entre os catálogos de conteúdo; toda categoria do rule engine (TTL + código) com causa e passos em cada idioma não-default, e nenhuma categoria órfã; todo idioma de conteúdo com instrução de idioma no prompt e presente nas interfaces.
+**Garantia automática.** Gate `content_i18n` (`packages/core/src/app/i18n/checks.py::content_i18n_problems`): paridade de chaves e variáveis entre os catálogos de conteúdo; toda categoria do rule engine (TTL + código) com causa e passos em cada idioma não-default, e nenhuma categoria órfã; todo idioma de conteúdo com instrução de idioma no prompt e presente nas interfaces.
 
 **Validação.** `tests/test_i18n_content.py` (34): normalização e 422 do `locale`; estado e resposta; digest pt-BR igual ao medido e `en` próprio; regra com causa curada (não mais genérica) e passo com vírgula inteiro; regra em pt-BR e en com a mesma decisão; aviso de guardrail e relatório em en; relatório pt-BR idêntico ao de antes; ativação pt-BR igual à de antes e en; motivos de soberania com código e o mesmo texto; gate reprovando regra sem tradução e variável divergente. Suítes existentes ajustadas onde o contrato mudou de propósito (dublês de `match_known_error`/`deliver_email`, gate do prompt com idiomas).
 
@@ -3106,11 +3106,11 @@ Na mesma investigação apareceram dois defeitos do rule engine: (1) a regra do 
 - **Modelo de requisição:** `ReviewIncidentRequest` com `action` (`approve`/`edit`/`reject`), `edit` (nova causa raiz quando `action='edit'`) e `reviewed_by` (`human`/`system`).
 
 **Implementação.**
-- `app/agent/nodes.py::_run_diagnosis_agent`: verifica `escalation.should_escalate` antes de chamar LLM; com `hitl_interrupt_enabled` chama `interrupt()` com `incident_id`, `escalation.as_log_fields()`, `prompt`, `locale`, `probable_root_cause`, `matched_source` e `evidence_strength`. A retomada reentra no node, consome o `Command(resume=...)` e aplica approve/edit/reject sem chamar o LLM.
-- `app/agent/nodes.py::_wrap_diagnosis_result`: promove `hitl_request`/`hitl_response` ao TOPO do `CopilotState` (antes ficavam aninhados em `diagnosis` e o `report_node` nunca os via).
-- `app/agent/nodes.py::report_node`: devolve o relatório pendente somente quando há `hitl_request` e ainda não há `hitl_response`.
-- `app/main.py::review_incident_endpoint`: valida `CHECKPOINTING_ENABLED`, usa `graph.get_state()`/`snapshot.interrupts` e retoma com `Command(resume=...)` — sem abrir uma conexão `psycopg` própria por requisição.
-- `app/models/models.py::ReviewIncidentRequest`: modelo Pydantic com `action`, `edit` e `reviewed_by`.
+- `packages/core/src/app/agent/nodes.py::_run_diagnosis_agent`: verifica `escalation.should_escalate` antes de chamar LLM; com `hitl_interrupt_enabled` chama `interrupt()` com `incident_id`, `escalation.as_log_fields()`, `prompt`, `locale`, `probable_root_cause`, `matched_source` e `evidence_strength`. A retomada reentra no node, consome o `Command(resume=...)` e aplica approve/edit/reject sem chamar o LLM.
+- `packages/core/src/app/agent/nodes.py::_wrap_diagnosis_result`: promove `hitl_request`/`hitl_response` ao TOPO do `CopilotState` (antes ficavam aninhados em `diagnosis` e o `report_node` nunca os via).
+- `packages/core/src/app/agent/nodes.py::report_node`: devolve o relatório pendente somente quando há `hitl_request` e ainda não há `hitl_response`.
+- `packages/core/src/app/main.py::review_incident_endpoint`: valida `CHECKPOINTING_ENABLED`, usa `graph.get_state()`/`snapshot.interrupts` e retoma com `Command(resume=...)` — sem abrir uma conexão `psycopg` própria por requisição.
+- `packages/core/src/app/models/models.py::ReviewIncidentRequest`: modelo Pydantic com `action`, `edit` e `reviewed_by`.
 
 **Validação.**
 - `tests/test_hitl.py` (novo): escalonamento antes do LLM, `hitl_request` no topo, `interrupt()`/`Command(resume=...)`, endpoint de revisão e ausência de chamada ao LLM.
@@ -3191,21 +3191,21 @@ vazar para outro.
 - Credenciais LLM devem ser isoladas por tenant (não compartilhadas).
 
 **Implementação.**
-- `app/services/incident_repository.py::filter_by_tenant_id()`: filtra incidentes por tenant_id com ordenação por tempo.
-- `app/services/incident_repository.py::get_by_id_and_tenant()`: busca incidente específico de um tenant específico (fail-closed).
-- `app/services/incident_repository.py::list_recent()` agora aceita filtro por tenant_id.
-- `app/services/incident_repository.py::create()` grava tenant_id.
-- `app/services/incident_recorder.py::build_incident_row()` inclui tenant_id.
-- `app/admin/repository.py::set_credential()`, `get_credential()`, `decrypt_credential()`: aceitam tenant_id para isolamento.
-- `app/admin/models.py::LlmCredential` tem coluna tenant_id com restrição única por (tenant_id, provider_origin) quando tenant_id não é NULL.
+- `packages/core/src/app/services/incident_repository.py::filter_by_tenant_id()`: filtra incidentes por tenant_id com ordenação por tempo.
+- `packages/core/src/app/services/incident_repository.py::get_by_id_and_tenant()`: busca incidente específico de um tenant específico (fail-closed).
+- `packages/core/src/app/services/incident_repository.py::list_recent()` agora aceita filtro por tenant_id.
+- `packages/core/src/app/services/incident_repository.py::create()` grava tenant_id.
+- `packages/core/src/app/services/incident_recorder.py::build_incident_row()` inclui tenant_id.
+- `packages/core/src/app/admin/repository.py::set_credential()`, `get_credential()`, `decrypt_credential()`: aceitam tenant_id para isolamento.
+- `packages/core/src/app/admin/models.py::LlmCredential` tem coluna tenant_id com restrição única por (tenant_id, provider_origin) quando tenant_id não é NULL.
 
 **Validação.** Testes unitários verificam:
 - `filter_by_tenant_id()` devolve só incidentes do tenant especificado.
 - `get_by_id_and_tenant()` falha silenciosamente se tenant_id não bater.
 - Tenant_id é gravado e recuperado com o incidente.
 - `tests/test_gap_a5_multitenancy.py` (gap A5): `tenant_id` da requisição chega
-  ao estado inicial do grafo (`app/agent/graph.py`), o `CopilotState` declara a
-  chave (`app/agent/state.py`) e `build_incident_row()` persiste o valor —
+  ao estado inicial do grafo (`packages/core/src/app/agent/graph.py`), o `CopilotState` declara a
+  chave (`packages/core/src/app/agent/state.py`) e `build_incident_row()` persiste o valor —
   com teste de fallback para a requisição e de `None` sem tenant. Os filtros de
   leitura por tenant são verificados no SQL gerado, não por filtragem em Python.
 
@@ -3239,8 +3239,8 @@ ter versionamento de artefatos e capacidade de fazer rollback.
 
 **Implementação.**
 - Migration `024_add_prompt_versions_table.py`
-- `app/models/prompt_versioning_orm.py`: modelo ORM
-- `app/services/prompt_version_repository.py`: CRUD operations
+- `packages/core/src/app/models/prompt_versioning_orm.py`: modelo ORM
+- `packages/core/src/app/services/prompt_version_repository.py`: CRUD operations
 - Endpoints `/admin/api/prompt/versions`, `/admin/api/prompt/{id}/versions/{version}` e `/admin/api/prompt/{id}/rollback/{version}`: **não implementados**.
 
 **Validação.**
@@ -3265,8 +3265,8 @@ variantes de forma sistemática com métricas quantitativas.
 
 **Implementação.**
 - Migration `025_add_ab_experiments_table.py`
-- `app/models/ab_testing_orm.py`: modelo ORM
-- `app/services/ab_test_repository.py`: CRUD operations
+- `packages/core/src/app/models/ab_testing_orm.py`: modelo ORM
+- `packages/core/src/app/services/ab_test_repository.py`: CRUD operations
 - Endpoints `/admin/api/ab/experiments`, `/admin/api/ab/experiments/{id}` e `/diagnose/ab/{id}`: **não implementados**.
 
 **Validação.**
@@ -3293,12 +3293,12 @@ reverter para versões anteriores em caso de degradação ou erro introduzido.
 testes de load e stress régulares.
 
 **Decisão.**
-- Script `app/scripts/load_test.py` que gera requisições simultâneas e mede latência (p50, p95, p99) e taxa de sucesso
+- Script `packages/core/src/app/scripts/load_test.py` que gera requisições simultâneas e mede latência (p50, p95, p99) e taxa de sucesso
 - Config `tests/load_test_config.py` com variáveis TPS_TARGET, TOTAL_REQUESTS
 - Testes em `tests/test_load_testing.py`
 
 **Implementação.**
-- `app/scripts/load_test.py`: script principal com métricas p50/p95/p99, TPS, success rate
+- `packages/core/src/app/scripts/load_test.py`: script principal com métricas p50/p95/p99, TPS, success rate
 - `tests/load_test_config.py`: configuração de TPS_TARGET, TOTAL_REQUESTS, CONCURRENT_REQUESTS
 - `tests/test_load_testing.py`: 3 testes (test_positive, test_timeout_handling, test_rate_limiting)
 
@@ -3322,7 +3322,7 @@ contém texto em markdown com:
 - **Força de evidência:** `{evidence_strength:.0%}`
 - **Localização do chunk principal:** `locator` doretrieve_context[0] se disponível
 
-A função `_build_xai_explanation()` constroída em `app/agent/nodes.py`
+A função `_build_xai_explanation()` constroída em `packages/core/src/app/agent/nodes.py`
 
 **O que NÃO foi feito.**
 - Não há extração automática de trechos específicos do documento (requer NER adicional)
@@ -3335,7 +3335,7 @@ necessário visualizar métricas por domínio (sap/saas/generic) de forma isolad
 
 **Decisão.** Implementação do endpoint `/admin/metrics/domains` (JSON com métricas count/hit@1/latência/custo por domínio, janela `days`, default 30). A rota duplicada `/admin/dashboard/domains` foi removida em 2026-10-20 (IIC-AUD-021).
 
-Implementada em `app/admin/metrics.py` com funções:
+Implementada em `packages/core/src/app/admin/metrics.py` com funções:
 - `count_incidents_by_domain()`: Contagem por domínio
 - `calculate_domain_hit1()`: Hit@1 (precisão de diagnósticos corretos)
 - `calculate_domain_latency()`: Tempo médio por domínio
@@ -3356,7 +3356,7 @@ incluindo resumo de incidentes, métricas de qualidade e eventos auditáveis.
 - Eventos auditáveis (diagnósticos e verificações)
 - Export para PDF e XLSX
 
-Implementada em `app/admin/reports.py` com funções:
+Implementada em `packages/core/src/app/admin/reports.py` com funções:
 - `build_compliance_summary()`: Resumo consolidado
 - `calculate_quality_metrics()`: Métricas de qualidade
 - `extract_auditable_events()`: Eventos para auditoria
@@ -3404,7 +3404,7 @@ descrevia `qwen3-coder-next:latest` como o modelo final. Sem uma DA própria, a
 mudança não tinha rastro no livro-razão.
 
 **Decisão.**
-- `qwen3.6:35b-a3b` (35B MoE, 128k ctx) é o default em `app/config.py`,
+- `qwen3.6:35b-a3b` (35B MoE, 128k ctx) é o default em `packages/core/src/app/config.py`,
   `.env.example`, `docker-compose.yml` e `promptfooconfig.yaml`.
 - `qwen3-coder-next:latest` permanece registrado como histórico em DA-4/8 e
   DA-12; não é mais o default.
@@ -3414,7 +3414,7 @@ mudança não tinha rastro no livro-razão.
   para implantação. O manifesto Kyma declara `gpt-4o-mini`.
 
 **Validação.** `tests/test_model_harness.py` cobre o harness de medição;
-`promptfooconfig.yaml` e `app/config.py` são a fonte do default. O gate
+`promptfooconfig.yaml` e `packages/core/src/app/config.py` são a fonte do default. O gate
 `deployed_model_evaluated` é o lembrete de que a qualidade só está medida
 para o modelo que o baseline registra.
 
@@ -3422,7 +3422,7 @@ para o modelo que o baseline registra.
 
 ### 84. Ontologia quebrada (correção de bug em `retrieve_node`) (DA-64)
 
-**O problema.** O nó `retrieve_node` (`app/agent/nodes.py:164`) tentava acessar
+**O problema.** O nó `retrieve_node` (`packages/core/src/app/agent/nodes.py:164`) tentava acessar
 `error_code` de `connector_data` usando `state.get("connector_data", {}).get("error_code")`,
 mas `connector_data` é um `ConnectorResult` (dataclass), não um dicionário. Dataclasses
 não têm o método `.get()`, então quando `ontology_enrichment_enabled=true` e
@@ -3462,9 +3462,9 @@ else:
 
 **Complemento (2026-11-11, restante do gap A4).**
 - `ontology_inference` e `ontology_next_steps` passaram a ser declarados no
-  `CopilotState` (`app/agent/state.py`): antes o `StateGraph` descartava o
+  `CopilotState` (`packages/core/src/app/agent/state.py`): antes o `StateGraph` descartava o
   retorno do `ontology_enrich_node`.
-- O nó (renomeado `ontology_debug` → `ontology_enrich` em `app/agent/graph.py`)
+- O nó (renomeado `ontology_debug` → `ontology_enrich` em `packages/core/src/app/agent/graph.py`)
   roda **entre** o diagnóstico (de onde lê `rule_engine_category`) e o
   `report`, nos dois caminhos (com e sem GraphRAG). Antes ele era ligado
   depois do `report`, em paralelo ao `END`, e nunca influenciava o resultado.
@@ -3489,7 +3489,7 @@ decisão completa e o histórico estão em `packages/dfe/docs/DECISOES.md`.
 - `DiagnosisResponse.findings` (`Finding`: `fact`/`hypothesis`, fonte,
   evidências, teste de confirmação, alternativas) e `cause_status`
   (`hypothesis`/`inconclusive`; `confirmed` só por revisão humana).
-- `app/agent/findings.py::build_findings`: fatos dos plugins de domínio
+- `packages/core/src/app/agent/findings.py::build_findings`: fatos dos plugins de domínio
   (`CopilotState.domain_findings`) e a causa proposta como `hypothesis`; um
   `fact` sem fonte determinística é rebaixado.
 - O `DiagnosisModel` (saída estruturada do LLM) não mudou: o LLM não declara
@@ -3512,8 +3512,8 @@ compartilham o mesmo core (gateway LLM, RAG, evidência, HITL, auth,
 observabilidade, gates).
 
 **A solução: monorepo com plugin de domínio.**
-- `app/` continua sendo o core **e** o produto IIC. O core não conhece
-  nenhum domínio: `app/agent/domain_plugins.py` define o protocolo
+- `packages/core/src/app/` continua sendo o core **e** o produto IIC. O core não conhece
+  nenhum domínio: `packages/core/src/app/agent/domain_plugins.py` define o protocolo
   `DomainPlugin` (`validate_context`, `run`) e carrega plugins por
   `DOMAIN_PLUGINS` (vazio por default; plugin que não carrega derruba o
   build do grafo, fail-closed).
@@ -3545,7 +3545,7 @@ inalterado sem plugin, nó antes do retrieve, propagação em `run_diagnosis`,
 core sem import do produto) e `packages/dfe/tests/` (plugin real).
 
 **Limitações (registradas de propósito).**
-- O core ainda não foi movido para `packages/core`: `app/` acumula core e
+- O core ainda não foi movido para `packages/core`: `packages/core/src/app/` acumula core e
   IIC. A separação física é etapa posterior (`packages/dfe/docs/PENDENCIAS.md`).
 - Os dois produtos compartilham o `uv.lock` da raiz e o mesmo workflow de CI,
   mas cada um roda a própria suíte com a própria config de pytest (o DF-e em
@@ -3566,9 +3566,9 @@ que não fazem sentido para o usuário fiscal. Pôr a tela fiscal ali faria os
 dois produtos parecerem um só e acoplaria o domínio fiscal à UI do IIC.
 
 **A solução: superfícies públicas e shells por produto.**
-- **Backend, `app/sdk`:** fachada pública do core para produtos (diagnóstico,
+- **Backend, `packages/core/src/app/sdk`:** fachada pública do core para produtos (diagnóstico,
   catálogo de plugins, proveniência de prompt, backends de busca) e
-  `app/sdk/testing.py` para testes de produto sem tocar internos. Os imports
+  `packages/core/src/app/sdk/testing.py` para testes de produto sem tocar internos. Os imports
   pesados são feitos sob demanda: importar `app.sdk` não carrega o grafo nem
   a API.
 - **Contrato de UI do plugin:** `DomainPlugin.context_schema()` passa a ser
@@ -3586,7 +3586,7 @@ dois produtos parecerem um só e acoplaria o domínio fiscal à UI do IIC.
   fiscal próprios.
 - **Fronteiras verificadas por máquina:** `architecture/boundaries.toml`
   declara as regras e o gate `import_boundaries`
-  (`app/evaluation/boundaries.py`) as aplica em Python (ast) e TypeScript:
+  (`packages/core/src/app/evaluation/boundaries.py`) as aplica em Python (ast) e TypeScript:
   - o core não importa produto;
   - o DF-e usa o core só por `app.sdk`;
   - o `core-ui` não importa shell;
@@ -3596,6 +3596,28 @@ dois produtos parecerem um só e acoplaria o domínio fiscal à UI do IIC.
   descobrem toda UI do monorepo (`frontend/src`, `packages/*/src`,
   `packages/*/frontend/src`). Chave `core.*` resolve no catálogo do core-ui, e
   catálogo de produto que define `core` reprova.
+
+**Complemento de distribuição (2026-11-13).** O core-ui agora gera ESM,
+declarações e CSS, consumidos pelo índice público. Os dois shells são
+compilados fora do workspace contra seu tarball. Fixtures compartilhadas
+residem em `app.sdk.pytest_plugin`; o produto não lê mais o conftest do core.
+O wheel inclui skills de runtime em `packages/core/src/app/_data/skills`, utilizadas quando não
+há diretório de fontes. A suíte DF-e também roda contra esse wheel instalado
+fora do checkout (`scripts/test_product_isolation.py`). O backend foi extraído para `packages/core` como `copilot-core`, preservando
+o namespace `app.*`. IIC e DF-e declaram a dependência por workspace; SDK,
+HTTP e plugin usam contrato 1.0, documentado em
+`packages/core/docs/CONTRACTS.md`, com rejeição de versões incompatíveis.
+Não houve publicação em registro; detalhes em `packages/dfe/docs/ACEITE_P6.md`.
+
+**Execução independente (P2).** O alvo Docker `dfe` instala os wheels de
+core/produto e incorpora o bundle fiscal. A base de runtime é compartilhada,
+sem shell ou exemplos do IIC; o alvo padrão `final` preserva o IIC. O Compose
+DF-e tem rede, volume Qdrant, credenciais e porta próprios. O nome do cookie
+pode ser configurado por instância, preservando o padrão IIC e isolando os
+produtos no mesmo navegador. O workflow específico verifica a distribuição,
+a imagem e o Compose com usuário efêmero e XML sintético. Procedimento e
+limites em `packages/dfe/docs/DEPLOY.md` e `packages/dfe/docs/ACEITE_P2.md`.
+Nenhuma publicação ou implantação remota é automática nesta entrega.
 
 **Validação.**
 - `tests/test_da95_sdk.py`: endpoint, plugin sem schema recusado, `app.sdk`
@@ -3607,7 +3629,7 @@ dois produtos parecerem um só e acoplaria o domínio fiscal à UI do IIC.
 - CI de frontend: typecheck, lint e build do core-ui e dos dois shells.
 
 **Limitações (registradas de propósito).**
-- O backend do core continua em `app/` junto com o IIC; mover para
+- O backend do core continua em `packages/core/src/app/` junto com o IIC; mover para
   `packages/core` é a P1, agora mecânica: os produtos só enxergam `app.sdk`.
 - O `@copilot/core-ui` é pacote de código-fonte (TypeScript compilado pelo
   shell). Publicar fora do monorepo exige um build de biblioteca, sem mudar

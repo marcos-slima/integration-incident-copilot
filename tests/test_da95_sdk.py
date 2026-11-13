@@ -102,7 +102,11 @@ def test_endpoint_domain_plugins(monkeypatch: pytest.MonkeyPatch, plugin_mod: st
     assert client.get("/domain-plugins").status_code == 401
     monkeypatch.setattr(main_module.settings, "domain_plugins", "")
     vazio = client.get("/domain-plugins", headers={"X-API-Key": _KEY})
-    assert vazio.status_code == 200 and vazio.json() == {"plugins": []}
+    assert vazio.status_code == 200 and vazio.json() == {
+        "contract_version": "1.0",
+        "plugin_contract_version": "1.1",
+        "plugins": [],
+    }
     monkeypatch.setattr(main_module.settings, "domain_plugins", plugin_mod)
     body = client.get("/domain-plugins", headers={"X-API-Key": _KEY}).json()
     assert [p["name"] for p in body["plugins"]] == ["fake"]

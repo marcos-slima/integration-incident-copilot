@@ -246,4 +246,35 @@ Dataset: 104 casos (4 novos de 539), todos `aprovado` em
 - Medição de `dfe-1.1.0` (2026-11-13): 23/23, e a leitura confirmou as três correções. Resta 1 ressalva: no UC03-VALIDO-01 o LLM ainda levanta, como hipótese, divergência de ambiente sem `F-amb`. Antes da rodada, o baseline estava como **NÃO MEDIDO** até rodar
   `promptfooconfig.validation.yaml` de novo.
 
+### D8. Medição cega (split blind) do `dfe-1.1.0` (2026-11-13)
+
+- **Execução:** 25 casos do split blind (`promptfooconfig.blind.yaml`, gerado por
+  `scripts/promptfoo_split.py blind`), qwen3.6:35b-a3b, base fiscal ligada
+  (`F-kb` nos casos 204, `G-kb` nos demais cStat). Asserts: **25/25**.
+- **Leitura das respostas: 6 de 25 com erro de conteúdo** que nenhum assert cobre:
+
+  | Caso | Erro |
+  |---|---|
+  | UC03-PRODOK-01 | troca o significado do `tpAmb` (diz que 1 é homologação) e sugere ajustar o conector para "produção (tpAmb=2)" |
+  | UC04-COMTO-02 | explica 110 (Uso Denegado) como chave já registrada; denegação é irregularidade fiscal do emitente/destinatário |
+  | UC05-PROC-02 | `nfeProc` com protocolo 100 da mesma chave, e a resposta diz "sem protocolo, desfecho desconhecido" |
+  | UC04-539H-02 | diz que a linha do tempo não sustenta a causa, contra a hipótese `H539` da ferramenta |
+  | UC06-SIG-02 | inverte a causalidade (XSD inválido "gerou" a assinatura fora do perfil) |
+  | UC06-SIG-06 | afirma falha de validação no autorizador sem evidência (a ferramenta só observou CNPJ divergente) |
+
+- **Leitura da causa (geral, não específica dos casos):**
+  1. quando a base não tem o cStat (`G-kb`), o LLM explica o código com
+     conhecimento próprio e erra; o corpus só cobre o 204;
+  2. o significado de campos de domínio (`tpAmb`, protocolo presente) fica a
+     cargo do LLM, e não vem escrito no fato da ferramenta;
+  3. a persona manda "não afirmar autorização sem protocolo", mas o LLM não
+     reconhece o protocolo quando ele vem dentro do `nfeProc`.
+- **O que isto NÃO autoriza:** ajustar prompt ou regra olhando estes 25 casos.
+  O blind foi consumido; a próxima medição cega exige casos novos (dataset v2).
+- **Correções gerais candidatas** (para validar no split validation, não no blind):
+  - ingerir o MOC 7.0 Anexo I (tabela de cStat), hoje fora do repositório;
+  - fatos de ferramenta com significado explícito ("tpAmb=1 (produção)",
+    "protocolo de autorização nProt … presente");
+  - asserts de domínio para esses campos.
+
 ---

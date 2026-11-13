@@ -61,6 +61,7 @@ Medição do prompt com o Ollama local:
 ```bash
 cd packages/dfe
 npx promptfoo eval -c promptfooconfig.yaml
+npx promptfoo eval -c promptfooconfig.validation.yaml --no-cache -o p8_validation.json  # split validation (gerado)
 PYTHONPATH=src:../.. uv run --project ../.. python scripts/prompt_baseline.py --write \
   --measurement "promptfoo AAAA-MM-DD: qwen3.6:35b-a3b, N/5"
 ```

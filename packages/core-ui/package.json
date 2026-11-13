@@ -5,15 +5,20 @@
   "description": "DA-95: biblioteca de UI do core - cliente da API, sessao, i18n e componentes neutros de diagnostico. Nao conhece nenhum produto.",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./styles.css": "./src/styles.css"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./styles.css": "./dist/styles.css"
   },
   "sideEffects": [
     "**/*.css"
   ],
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "lint": "oxlint src"
+    "lint": "oxlint src",
+    "build": "vite build && tsc -p tsconfig.build.json",
+    "test": "npm run build && node --test tests/*.test.mjs"
   },
   "peerDependencies": {
     "i18next": "26.5.2",
@@ -33,6 +38,10 @@
     "react-dom": "^19.2.8",
     "react-i18next": "17.1.0",
     "react-markdown": "^10.1.0",
-    "typescript": "~6.0.2"
-  }
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0"
+  },
+  "files": [
+    "dist"
+  ]
 }

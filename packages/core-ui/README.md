@@ -15,20 +15,27 @@ interface, sem conhecer produto nenhum:
 
 ## Contrato com os shells
 
-- **API pública:** só `src/index.ts` e `styles.css` (campo `exports` do
+- **API pública:** índice compilado `dist/index.js`, tipos e `styles.css` (campo `exports` do
   `package.json`). Import profundo reprova no gate `import_boundaries`.
 - **Sem produto:** nenhum texto, campo ou condição de produto aqui. Um
   plugin novo ganha formulário pelo JSON Schema que publica em
   `GET /domain-plugins` (`SchemaForm`); o shell só traduz os rótulos.
 - **Textos:** o produto passa o próprio catálogo a `initI18n`; as chaves do
   core ficam em `core.*` e o produto não pode definir `core`.
-- **Pacote de código-fonte:** o pacote exporta TypeScript, compilado pelo
-  Vite/tsc do shell. Para publicar fora do monorepo (P1/P2), basta um build
-  de biblioteca; os imports dos shells não mudam.
+- **Pacote compilado:** JavaScript ESM, declarações TypeScript e CSS em
+  `dist`. React e bibliotecas de idioma são peer dependencies. Os imports
+  dos shells permanecem os mesmos fora do monorepo.
 
 ## Comandos (na raiz)
 
 ```bash
+npm run build -w @copilot/core-ui
+npm test -w @copilot/core-ui
 npm run typecheck -w @copilot/core-ui
 npm run lint -w @copilot/core-ui
 ```
+
+`npm pack -w @copilot/core-ui` gera um pacote instalável com apenas `dist`,
+metadados e documentação. Os scripts prebuild/predev/pretypecheck dos shells
+preparam a biblioteca. A versão do contrato de componentes é a versão do pacote
+(0.1.0); ela não substitui o versionamento do protocolo de plugin e da API HTTP.

@@ -25,7 +25,8 @@ export function EscalationBanner({ signal }: { signal?: EscalationSignal }) {
   const reason = KNOWN_REASONS.includes(signal.escalation)
     ? t(`core.details.reasons.${signal.escalation}`)
     : signal.escalation;
-  if (!signal.should_escalate) {
+  // O roteamento para outro modelo não mede suficiência de evidência.
+  if (!signal.should_escalate && signal.escalation === 'grounded') {
     return (
       <div className="escalation escalation-ok" role="status">
         <span className="escalation-title">{t('core.details.okTitle')}</span>

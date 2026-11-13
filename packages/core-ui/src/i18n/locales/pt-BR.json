@@ -10,8 +10,8 @@
   "login": {
     "titleLogin": "Entrar",
     "titleActivate": "Ativar conta",
-    "subLogin": "Autenticação de usuário — a sessão é um cookie HttpOnly assinado, válida por horas, enviado sozinho pelo navegador.",
-    "subActivate": "Primeiro acesso (DA-55): confirme o token enviado ao seu e-mail e depois o código enviado ao seu telefone.",
+    "subLogin": "Entre com o usuário e a senha fornecidos pelo administrador.",
+    "subActivate": "Sua conta precisa ter sido cadastrada pelo administrador. Confirme o token recebido por e-mail e depois o código recebido por telefone.",
     "username": "Usuário",
     "usernamePlaceholder": "seu usuário",
     "password": "Senha",
@@ -30,7 +30,7 @@
     "confirmPhone": "Confirmar telefone",
     "toActivate": "Ativar conta (primeiro acesso)",
     "backToLogin": "Voltar ao login",
-    "foot": "Integrações não entram por aqui: usam o header X-API-Key (curl, MCP, A2A) — cada credencial na camada dela."
+    "foot": "Ainda não tem acesso? Solicite sua conta ao administrador."
   },
   "auth": {
     "sessionCheckFailed": "Falha ao consultar a sessão",
@@ -92,7 +92,8 @@
     "validation": "Dados inválidos: {{message}}",
     "rateLimited": "Limite de requisições atingido. Aguarde e tente de novo.",
     "generic": "Erro {{status}}: {{message}}",
-    "ref": " (ref. {{id}})"
+    "ref": " (ref. {{id}})",
+    "incompatible_contract": "A interface e o servidor usam versões incompatíveis. Atualize a aplicação."
   },
   "result": {
     "resultTitle": "Resultado do diagnóstico",

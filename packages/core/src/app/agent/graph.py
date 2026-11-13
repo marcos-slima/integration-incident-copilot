@@ -43,7 +43,12 @@ from app.agent.supervisor import supervisor_node
 from app.config import settings
 from app.exceptions import DiagnosisOverloadedError, DiagnosisTimeoutError
 from app.i18n.content import content_text
-from app.models import DEFAULT_DIAGNOSIS_LOCALE, DiagnosisResponse, IncidentRequest
+from app.models import (
+    DEFAULT_DIAGNOSIS_LOCALE,
+    DiagnosisResponse,
+    HumanReviewState,
+    IncidentRequest,
+)
 
 _logger = logging.getLogger(__name__)
 from app.llm.budget import close_task_budget, open_task_budget
@@ -357,6 +362,27 @@ def run_diagnosis(
             "report_markdown": content_text(locale, "report.hitlPending"),
         }
     diagnosis = final_state.get("diagnosis", {})
+    review_pending = bool(interrupts) or (
+        bool(final_state.get("hitl_request")) and not bool(final_state.get("hitl_response"))
+    )
+    review_state = None
+    if review_pending:
+        review_state = HumanReviewState(
+            status="pending",
+            incident_id=incident_id if settings.checkpointing_enabled else None,
+            can_resume=bool(settings.checkpointing_enabled and incident_id),
+            actions=["approve", "edit", "reject"]
+            if settings.checkpointing_enabled and incident_id
+            else [],
+        )
+    elif final_state.get("hitl_reviewed"):
+        review_state = HumanReviewState(
+            status="reviewed",
+            incident_id=incident_id if settings.checkpointing_enabled else None,
+            can_resume=False,
+            reviewed_by=(final_state.get("hitl_response") or {}).get("reviewed_by"),
+            reviewed_at=(final_state.get("hitl_response") or {}).get("reviewed_at"),
+        )
 
     # Avaliacao externa (medio prazo, item 5): captura o trace_id do
     # Langfuse ENQUANTO ainda estamos dentro do span de
@@ -415,15 +441,21 @@ def run_diagnosis(
         # ver upsert_incident_graph) - devolver o id de qualquer jeito
         # seria enganoso (sugeriria que da pra verificar algo que nunca
         # foi persistido).
-        incident_id=incident_id
-        if settings.graph_rag_enabled and request.interface_type and request.identifier
-        else None,
+        incident_id=(
+            incident_id
+            if (
+                settings.checkpointing_enabled
+                or (settings.graph_rag_enabled and request.interface_type and request.identifier)
+            )
+            else None
+        ),
         trace_id=trace_id,
         escalation=escalation,
         locale=final_state.get("locale") or DEFAULT_DIAGNOSIS_LOCALE,
         # DA-83: report_node grava a explicacao XAI no state; sem isso o
         # campo existia no modelo mas nunca era preenchido na resposta.
         explanation=final_state.get("explanation"),
+        human_review=review_state,
         # DA-76: aviso obrigatorio em todo diagnostico, no idioma do
         # conteudo (pt-BR/en). Antes vivia em VerifyIncidentRequest, onde
         # nunca era lido.

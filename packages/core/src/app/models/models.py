@@ -252,6 +252,17 @@ class Finding(BaseModel):
     rule_ref: str | None = None
 
 
+class HumanReviewState(BaseModel):
+    """Estado publico da revisao humana, sem campos de produto."""
+
+    status: Literal["pending", "reviewed"]
+    incident_id: str | None = None
+    can_resume: bool = False
+    actions: list[Literal["approve", "edit", "reject"]] = Field(default_factory=list)
+    reviewed_by: Literal["human", "system"] | None = None
+    reviewed_at: str | None = None
+
+
 class DiagnosisResponse(BaseModel):
     probable_root_cause: str
 
@@ -416,6 +427,14 @@ class DiagnosisResponse(BaseModel):
             "app/agent/escalation.py): should_escalate, reason, tier, "
             "abstained, top_evidence, connector_real. Informativo - o "
             "pipeline nao escala sozinho para um modelo pago."
+        ),
+    )
+    human_review: "HumanReviewState | None" = Field(
+        default=None,
+        description=(
+            "Estado neutro de revisao humana. `pending` nunca confirma a causa; "
+            "`can_resume` so e verdadeiro quando existe checkpoint persistente "
+            "e o endpoint /incidents/{id}/review pode retomar o grafo."
         ),
     )
     # DA-83 (2026-10-19): Explicabilidade XAI - campo explanation para highlight de chunks usados

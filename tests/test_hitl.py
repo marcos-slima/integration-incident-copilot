@@ -242,6 +242,10 @@ def test_run_diagnosis_maps_interrupt_to_pending_response(monkeypatch):
     assert "pendente de revisao humana" in response.report_markdown
     assert response.ai_warning
     assert response.prompt_digest is None
+    assert response.human_review is not None
+    assert response.human_review.status == "pending"
+    assert response.human_review.can_resume is False
+    assert response.human_review.actions == []
 
 
 def test_run_diagnosis_maps_explanation_and_ai_warning(monkeypatch):

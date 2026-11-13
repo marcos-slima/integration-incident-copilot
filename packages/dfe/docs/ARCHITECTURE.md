@@ -57,7 +57,7 @@ Com `DOMAIN_PLUGINS=dfe_copilot.plugin`, o core insere `domain_tools` entre
    (sempre `hypothesis`) em `DiagnosisResponse.findings`.
 
 Lacunas viram fatos explícitos: `G-noxml`, `G-xml`, `G-events`, `G-ref`,
-`G-amb`, `G-kb`.
+`G-amb`, `G-kb`, `G-sig`, `G-lote`. Fatos de XML: `F-cStat`, `F-dv`, `F-xsd`, `F-sig`, `F-sigcnpj`, `F-sigvalid`, `F-protkey`.
 
 ## Estado por componente
 
@@ -65,6 +65,7 @@ Lacunas viram fatos explícitos: `G-noxml`, `G-xml`, `G-events`, `G-ref`,
 |---|---|
 | Contrato `FiscalContext` | Implementado (NF-e 55, leiaute 4.00) |
 | XML seguro, chave, `cStat`, XSD PL 010g | Implementado; protocolo (`protNFe`, `nfeProc`, `retEnviNFe`, `retConsReciNFe`) validado por entrypoint local sobre o tipo oficial (D3) |
+| Assinatura XMLDSig | Implementado, perfil fechado NF-e; integridade sim, confiança do certificado não (D4) |
 | Regras 204 e timeout | Implementado |
 | Plugin no grafo do core | Implementado (`domain_tools`) |
 | Corpus e base de conhecimento | `data/corpus/` (NT 2018.005 + manifesto + regra 2B08-20) e `kb.py`: coleção híbrida `dfe_kb`, filtros de modelo/cStat/status antes da busca, abstenção sem fonte; ingestão real pendente de execução local (P3) |

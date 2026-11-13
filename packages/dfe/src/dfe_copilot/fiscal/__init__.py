@@ -11,6 +11,7 @@ from dfe_copilot.fiscal.correlation import (
     diagnose_timeout,
     normalize_events,
 )
+from dfe_copilot.fiscal.signature import verify_enveloped
 from dfe_copilot.fiscal.xml_tools import (
     AccessKey,
     FiscalXmlError,
@@ -34,4 +35,5 @@ __all__ = [
     "parse_access_key",
     "safe_parse",
     "validate_xsd",
+    "verify_enveloped",
 ]

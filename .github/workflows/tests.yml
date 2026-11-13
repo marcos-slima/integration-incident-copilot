@@ -119,7 +119,11 @@ jobs:
       - name: pip-audit — CVEs nas dependências
         run: |
           req="$(mktemp -t requirements-ci-XXXXXX.txt)"
-          uv export --no-dev --all-extras --no-emit-project --format requirements-txt > "$req"
+          # O workspace tem wheels locais (core/produtos); eles não são
+          # dependências auditáveis do requirements exportado. Sem esta opção,
+          # versões recentes do uv emitem -e ./packages/core e pip-audit falha
+          # antes de analisar qualquer CVE.
+          uv export --no-dev --all-extras --no-emit-project --no-emit-workspace --format requirements-txt > "$req"
           # Validacao 2026-10-07 (DEP-01): torch vem do index pytorch-cpu
           # como 2.14.1+cpu, versao que nao existe no PyPI - o pip-audit
           # tentava instalar e falhava. --disable-pip audita as versoes

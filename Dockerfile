@@ -56,6 +56,8 @@ ENV UV_LINK_MODE=copy \
 # fallback azure_openai; sem o extra, langchain-openai nao existia na
 # imagem e o primeiro diagnostico falhava com ImportError.
 COPY pyproject.toml uv.lock ./
+COPY packages/core/ packages/core/
+COPY packages/dfe/pyproject.toml packages/dfe/pyproject.toml
 RUN uv sync --frozen --no-dev --no-install-project --extra openai
 
 # DEP-01: modelos baixados no build, nao no primeiro request. Antes o
@@ -120,7 +122,8 @@ COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
 COPY --from=builder --chown=appuser:appuser /app/.cache /app/.cache
 
 COPY --chown=appuser:appuser pyproject.toml ./
-COPY --chown=appuser:appuser app/ app/
+COPY --chown=appuser:appuser packages/core/ packages/core/
+COPY --chown=appuser:appuser iic_copilot/ iic_copilot/
 COPY --chown=appuser:appuser scripts/ scripts/
 # DEP-01: migrations dentro da imagem - sem isso `alembic upgrade head`
 # so rodava de um checkout local, nunca como Job/initContainer no cluster.
@@ -136,7 +139,7 @@ RUN install -d -o appuser -g appuser /app/data
 COPY --chown=appuser:appuser data/sample_docs/ data/sample_docs/
 # DA-63: skills declarativas (roteamento do supervisor + Capability Registry).
 # Sem elas o supervisor nao sobe (indice de dominios vazio).
-COPY --chown=appuser:appuser data/skills/ data/skills/
+COPY --chown=appuser:appuser packages/core/data/skills/ data/skills/
 
 # DA-24: static/ nao e versionado; o stage "frontend-build" gera o dist/
 # e o stage "final" copia para static/dist.
@@ -179,4 +182,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
 # PRIMEIRO item do X-Forwarded-For, que o cliente controla - qualquer um
 # trocaria de "IP" a cada tentativa. Use as faixas internas do cluster
 # (ver deploy/kyma/configmap.yaml).
-CMD ["/app/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+CMD ["/app/.venv/bin/uvicorn", "iic_copilot.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]

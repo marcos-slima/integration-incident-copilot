@@ -97,7 +97,7 @@ class IncidentRequest(BaseModel):
     # dominio carregado (DOMAIN_PLUGINS). Sem plugin, e' aceito e descartado.
     domain_context: dict | None = Field(
         default=None,
-        description="Contexto do produto de dominio (ex.: DF-e); validado pelo plugin.",
+        description="Contexto do produto de dominio; validado pelo plugin.",
     )
 
     _normalize_locale = field_validator("locale", mode="before")(_coerce_locale)

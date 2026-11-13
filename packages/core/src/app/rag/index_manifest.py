@@ -25,7 +25,9 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-MANIFEST_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "index_manifest.json"
+from app.paths import project_root
+
+MANIFEST_PATH = project_root() / "data" / "index_manifest.json"
 
 
 def collection_entry(client: Any, collection: str) -> dict[str, Any]:

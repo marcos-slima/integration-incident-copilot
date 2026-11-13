@@ -151,7 +151,7 @@ class ODataConnector(SAPConnector):
         client = self._injected_client or httpx.Client(timeout=10.0)
         try:
             token = self._get_access_token(client)
-            # Gap A1 (estudo IIC->SAP AMS/DF-e): a API MPL documenta
+            # Gap A1 (estudo de cobertura de conectores): a API MPL documenta
             # MessageGuid, ApplicationMessageId e CorrelationId - nao
             # "MessageId". MessageGuid e' o identificador unico e imutavel.
             response = client.get(

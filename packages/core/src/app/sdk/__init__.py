@@ -1,6 +1,6 @@
 """DA-95: superficie publica do core para produtos de dominio.
 
-Um produto (ex.: DF-e Copilot, `packages/dfe`) importa do core SO por aqui.
+Um produto importa do core SO por aqui.
 O gate `import_boundaries` (architecture/boundaries.toml) reprova import de
 qualquer outro modulo `app.*` a partir do codigo de um produto. Assim, o que
 o produto usa do core e' explicito, versionavel e estavel; o resto do core

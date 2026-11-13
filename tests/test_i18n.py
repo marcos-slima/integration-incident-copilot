@@ -154,7 +154,9 @@ def test_admin_api_errors_carry_code(monkeypatch):
 
 
 def test_every_admin_error_code_has_text_in_both_locales():
-    src = (ROOT / "app/admin/routes.py").read_text() + (ROOT / "app/auth_guard.py").read_text()
+    src = (ROOT / "packages/core/src/app/admin/routes.py").read_text() + (
+        ROOT / "packages/core/src/app/auth_guard.py"
+    ).read_text()
     codes = set(re.findall(r'api_error\(\s*\d+,\s*"(\w+)"', src))
     assert codes, "nenhum api_error encontrado"
     for loc in ("pt-BR", "en"):

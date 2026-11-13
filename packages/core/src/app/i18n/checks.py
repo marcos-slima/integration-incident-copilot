@@ -19,7 +19,7 @@ from app.i18n.inventory import scan_repo
 
 SURFACES = {
     "web": (Path("frontend/src/i18n/locales"), "{locale}.json"),
-    "admin": (Path("app/i18n/locales"), "admin.{locale}.json"),
+    "admin": (Path("packages/core/src/app/i18n/locales"), "admin.{locale}.json"),
 }
 # DA-95: toda UI do monorepo e' uma superficie web: o core-ui e os shells de
 # produto. Descoberta por padrao de diretorio, sem lista de produtos aqui.
@@ -97,8 +97,8 @@ def used_key_problems(root: Path, catalogs: dict[str, dict[str, str]], surface: 
         files = [p for p in (root / "frontend/src").rglob("*.ts*") if "i18n" not in p.parts]
         static, dynamic = (_WEB_STATIC, _WEB_DATA_KEYS), (_WEB_DYNAMIC,)
     else:
-        files = sorted((root / "app/admin/templates").glob("*.html")) + sorted(
-            (root / "app/admin/static").glob("*.js")
+        files = sorted((root / "packages/core/src/app/admin/templates").glob("*.html")) + sorted(
+            (root / "packages/core/src/app/admin/static").glob("*.js")
         )
         static, dynamic = (_ADMIN_STATIC,), (_ADMIN_DYNAMIC,)
     for path in files:
@@ -179,7 +179,7 @@ def ui_i18n_problems(root: Path) -> list[str]:
 # DA-74: conteudo do diagnostico (gate `content_i18n`)
 # ---------------------------------------------------------------------------
 
-CONTENT_DIR = Path("app/i18n/locales")
+CONTENT_DIR = Path("packages/core/src/app/i18n/locales")
 
 
 def _content(root: Path, locale: str) -> dict:
@@ -191,7 +191,7 @@ def rule_categories(root: Path) -> set[str]:
     from app.agent.ontology_loader import load_error_rules
     from app.agent.rules import KNOWN_ERROR_RULES
 
-    ttl = root / "app/ontology/error_codes.ttl"
+    ttl = root / "packages/core/src/app/ontology/error_codes.ttl"
     return {r.category for r in load_error_rules(ttl)} | {r.category for r in KNOWN_ERROR_RULES}
 
 

@@ -1,7 +1,7 @@
 """DA-94: ponto de extensao de produto de dominio sobre o core do IIC.
 
-O core nao conhece nenhum dominio. Um produto (ex.: DF-e Copilot, em
-`packages/dfe`) entrega um modulo com um objeto `PLUGIN` que implementa
+O core nao conhece nenhum dominio. Um produto entrega um modulo
+com um objeto `PLUGIN` que implementa
 `DomainPlugin`; o core o carrega por `DOMAIN_PLUGINS`. Regras:
 
 - core nunca importa um produto; so o carrega pelo nome configurado;

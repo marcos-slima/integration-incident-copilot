@@ -4,9 +4,11 @@ version = "0.1.0"
 description = "DF-e Copilot: diagnostico de incidentes de documentos fiscais eletronicos (NF-e) sobre o core do IIC"
 requires-python = ">=3.12"
 license = {text = "MIT"}
-# O core (integration-incident-copilot) e' a dependencia; no monorepo ele e'
-# resolvido pelo ambiente da raiz (uv) e por `pythonpath` do pytest.
-dependencies = ["lxml>=6.1", "pydantic>=2.13"]
+# O core é dependência explícita; uv resolve seu pacote pelo workspace.
+dependencies = ["copilot-core==1.4.0", "lxml>=6.1", "pydantic>=2.13"]
+
+[tool.uv.sources]
+copilot-core = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -17,6 +19,6 @@ packages = ["src/dfe_copilot"]
 
 [tool.pytest.ini_options]
 # DA-94: o produto roda a propria suite, com a propria config, a partir de
-# packages/dfe (`cd packages/dfe && pytest`). "../.." expoe o core (`app`).
+# packages/dfe; o core é instalado, não inserido via pythonpath.
 testpaths = ["tests"]
-pythonpath = ["src", "../.."]
+pythonpath = ["src"]

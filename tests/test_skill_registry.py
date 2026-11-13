@@ -3,7 +3,7 @@
 Cobre o que os testes do gate nao cobrem: o comportamento em RUNTIME do
 supervisor e do Capability Registry, inclusive fora da raiz do repo —
 foi assim que o indice vazio passou despercebido (os testes rodam com
-cwd na raiz, a imagem Docker nao tinha data/skills).
+cwd na raiz, a imagem Docker nao tinha packages/core/data/skills).
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ def _write(tmp_path: Path, name: str, content: str) -> Path:
 
 
 def test_diretorio_default_ancorado_no_repo() -> None:
-    assert sr.DEFAULT_SKILLS_DIR == REPO / "data" / "skills"
+    assert sr.DEFAULT_SKILLS_DIR == REPO / "packages" / "core" / "data" / "skills"
     assert sr.DEFAULT_SKILLS_DIR.is_dir()
 
 
@@ -137,4 +137,4 @@ def test_capability_registry_vem_dos_yamls_com_os_valores_do_fallback() -> None:
 
 def test_dockerfile_copia_as_skills() -> None:
     dockerfile = (REPO / "Dockerfile").read_text(encoding="utf-8")
-    assert "COPY --chown=appuser:appuser data/skills/ data/skills/" in dockerfile
+    assert "COPY --chown=appuser:appuser packages/core/data/skills/ data/skills/" in dockerfile

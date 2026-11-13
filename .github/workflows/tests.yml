@@ -63,6 +63,9 @@ jobs:
         timeout-minutes: 3
         run: ../../.venv/bin/python -m pytest -v --tb=short -p no:cacheprovider
 
+      - name: DF-e contra wheel do core fora do checkout
+        run: uv run python scripts/test_product_isolation.py
+
 
   security:
     name: security — pip-audit + bandit
@@ -138,7 +141,7 @@ jobs:
           /tmp/gitleaks detect --no-git --source . --config .gitleaks.toml --redact --exit-code 1
 
       - name: bandit — SAST Python
-        run: uv run bandit -r app/ -ll -f json -o bandit-report.json || uv run bandit -r app/ -ll
+        run: uv run bandit -r packages/core/src/app/ -ll -f json -o bandit-report.json || uv run bandit -r packages/core/src/app/ -ll
 
       - name: Upload relatórios de segurança
         if: always()
@@ -359,11 +362,20 @@ jobs:
       - name: Lint (oxlint, todos os workspaces)
         run: npm run lint
 
+      - name: Build do pacote neutro de UI
+        run: npm run build -w @copilot/core-ui
+
+      - name: Testes dos componentes públicos
+        run: npm test -w @copilot/core-ui
+
       - name: Typecheck (core-ui e shells)
         run: npm run typecheck
 
       - name: Build dos shells (IIC e DF-e)
         run: npm run build -w @copilot/iic-ui -w @copilot/dfe-ui
+
+      - name: Shells contra pacote distribuído de UI
+        run: node scripts/test_ui_distribution.mjs
 
   docker-build:
     name: valida build da imagem Docker

@@ -408,14 +408,14 @@ class Settings(BaseSettings):
 
     # DOMAIN_PLUGINS (app/agent/domain_plugins.py) - DA-94
     # Lista de modulos de produto de dominio separados por virgula (ex.:
-    # "dfe_copilot.plugin"). Vazio (default) = core puro: domain_context e'
+    # "produto.plugin"). Vazio (default) = core puro: domain_context e'
     # descartado e o grafo e' identico ao do IIC. Plugin que nao carrega
     # falha no build do grafo (fail-closed).
     domain_plugins: str = ""
 
     # UI_DIST_DIR (app/main.py) - DA-95
     # Diretorio do bundle de UI servido em "/" e "/assets". Cada produto
-    # aponta para o proprio build (o DF-e Copilot usa packages/dfe/frontend/dist);
+    # aponta para o proprio build (cada produto fornece o caminho do seu shell);
     # o core nao sabe qual produto esta servindo.
     ui_dist_dir: str = "static/dist"
 

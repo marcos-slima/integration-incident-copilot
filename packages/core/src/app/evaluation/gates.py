@@ -7,7 +7,9 @@ from datetime import UTC
 from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from app.paths import project_root
+
+REPO_ROOT = project_root()
 
 PIPELINE_INTERFACE_TYPES = frozenset(
     {
@@ -31,7 +33,7 @@ RERANKER_BENCHMARK = Path("data/eval/reranker_benchmark_results.json")
 PROMPTFOO_BASELINE = Path("data/eval/promptfoo_baseline.json")
 PROMPT_BASELINE = Path("data/eval/prompt_baseline.json")
 CORPUS_DIR = Path("data/sample_docs")
-RERANKER_SOURCE = Path("app/rag/retriever.py")
+RERANKER_SOURCE = Path("packages/core/src/app/rag/retriever.py")
 ARCHITECTURE_DOC = Path("docs/ARCHITECTURE.md")
 # Prosa e indice das DAs. Ate 2026-10-07 moravam no README.md; o README
 # passou a ser a pagina de apresentacao do repositorio.
@@ -247,7 +249,7 @@ def check_reranker_invariant(
     if production is None:
         return _fail(
             check,
-            f"app/rag/retriever.py usa '{in_code}', que nao foi medido no benchmark "
+            f"packages/core/src/app/rag/retriever.py usa '{in_code}', que nao foi medido no benchmark "
             f"({', '.join(str(r.get('hf_id')) for r in scored)})",
         )
 
@@ -642,8 +644,8 @@ def check_preflight_delegates(root: Path = REPO_ROOT) -> list[Finding]:
         )
     if "app.evaluation.ram_preflight" not in source:
         return _fail(check, "o script nao invoca app/evaluation/ram_preflight")
-    if not (root / "app/evaluation/ram_preflight.py").is_file():
-        return _fail(check, "app/evaluation/ram_preflight.py nao encontrado")
+    if not (root / "packages/core/src/app/evaluation/ram_preflight.py").is_file():
+        return _fail(check, "packages/core/src/app/evaluation/ram_preflight.py nao encontrado")
     return _ok(check)
 
 
@@ -804,7 +806,12 @@ def check_da_registered(root: Path = REPO_ROOT) -> list[Finding]:
             continue
         # As tres arvores de codigo de produto. Alembic entra: uma migration
         # que implementa uma decisao (a 006 e' a DA-53) e' implementacao.
-        if partes[0] not in ("app", "scripts", "alembic"):
+        if partes[0] not in ("scripts", "alembic") and partes[:4] != (
+            "packages",
+            "core",
+            "src",
+            "app",
+        ):
             continue
         fonte = caminho.read_text(encoding="utf-8", errors="ignore")
         for grupo in re.findall(r"DA-(\d+(?:/\d+)*)", fonte):
@@ -947,15 +954,15 @@ def check_index_current(root: Path = REPO_ROOT) -> list[Finding]:
 # ---------------------------------------------------------------------------
 
 DOCS_DIR = Path("docs")
-PIPELINE_MODEL_SOURCE = Path("app/models/models.py")
-CONNECTORS_SOURCE = Path("app/connectors/__init__.py")
-SKILLS_DIR = Path("data/skills")
-SUPERVISOR_SOURCE = Path("app/agent/supervisor.py")
-ADMIN_SYSTEMS_SOURCE = Path("app/admin/models.py")
-CLI_SOURCE = Path("app/agent/graph.py")
+PIPELINE_MODEL_SOURCE = Path("packages/core/src/app/models/models.py")
+CONNECTORS_SOURCE = Path("packages/core/src/app/connectors/__init__.py")
+SKILLS_DIR = Path("packages/core/data/skills")
+SUPERVISOR_SOURCE = Path("packages/core/src/app/agent/supervisor.py")
+ADMIN_SYSTEMS_SOURCE = Path("packages/core/src/app/admin/models.py")
+CLI_SOURCE = Path("packages/core/src/app/agent/graph.py")
 UI_DROPDOWN_SOURCE = Path("frontend/src/components/DiagnoseView.tsx")
 WEB_SEARCH_SEED_SOURCE = Path("alembic/versions/008_create_web_search_sources.py")
-ADMIN_SYSTEMS_FORM = Path("app/admin/templates/systems.html")
+ADMIN_SYSTEMS_FORM = Path("packages/core/src/app/admin/templates/systems.html")
 COVERAGE_MAP_DOC = Path("docs/COVERAGE_MAP.md")
 
 
@@ -1048,7 +1055,7 @@ def check_docs_markup_integrity(root: Path = REPO_ROOT) -> list[Finding]:
 
 
 _CODE_REF = re.compile(
-    r"`((?:app|tests|scripts)/[A-Za-z0-9_/]+\.py)(?:::([A-Za-z_][A-Za-z0-9_]*)|:(\d+)(?:-(\d+))?)`"
+    r"`((?:packages/core/src/app|app|tests|scripts)/[A-Za-z0-9_/]+\.py)(?:::([A-Za-z_][A-Za-z0-9_]*)|:(\d+)(?:-(\d+))?)`"
 )
 
 # Caminho citado "cru" (sem `::simbolo` e sem `:linha`). O regex antigo so'
@@ -1057,15 +1064,25 @@ _CODE_REF = re.compile(
 # Restrito a arquivos de codigo/config com extensao conhecida: diretorios
 # (`app/admin/`) e globs (`content.*.json`) ficam de fora.
 # IIC-AUD-030: inclui data/, deploy/ e frontend/ (o gate so' olhava
-# app/tests/scripts/alembic e deixava passar `data/skills/escalation.yaml`).
+# app/tests/scripts/alembic e deixava passar `packages/core/data/skills/escalation.yaml`).
 # frontend/ so' com extensoes suportadas (py, json, ya?ml, toml, sh, sql)
 # porque o frontend tem muitos .ts/.js e .css que o gate nao deve cobrir.
 _BARE_CODE_PATH = re.compile(
-    r"`((?:app|tests|scripts|alembic|data|deploy)/"
+    r"`((?:packages/core/src/app|packages/core/data|app|tests|scripts|alembic|data|deploy)/"
     r"[A-Za-z0-9_./-]+\.(?:py|json|ya?ml|toml|sh|sql))`"
 )
 
 _MD_CITACAO = re.compile(r"`([\w./-]+\.md)`")
+
+
+def _source_reference(root: Path, path: str) -> Path:
+    """Resolve referências históricas app/ sem modificar documentos locais."""
+    target = root / path
+    if path.startswith("data/skills/") and not target.exists():
+        return root / "packages/core" / path
+    if path.startswith("app/") and not target.exists():
+        return root / "packages/core/src" / path
+    return target
 
 
 def check_docs_code_references(root: Path = REPO_ROOT) -> list[Finding]:
@@ -1099,7 +1116,7 @@ def check_docs_code_references(root: Path = REPO_ROOT) -> list[Finding]:
         # Validacao 2026-10-07: intervalo `arquivo.py:10-20` tambem confere
         # (antes o regex nao casava e o intervalo passava sem verificacao).
         for caminho, simbolo, linha, linha_fim in _CODE_REF.findall(texto):
-            alvo = root / caminho
+            alvo = _source_reference(root, caminho)
             if not alvo.is_file():
                 problemas.append(f"{doc.relative_to(root)}: {caminho} nao existe")
                 continue
@@ -1143,7 +1160,7 @@ def check_docs_code_references(root: Path = REPO_ROOT) -> list[Finding]:
         # auditado que podem nao existir mais; cobra-los seria ruido.
         if not doc.name.startswith(("AUDITORIA_", "EVIDENCIA_")):
             for caminho in sorted(set(_BARE_CODE_PATH.findall(texto))):
-                if not (root / caminho).is_file():
+                if not _source_reference(root, caminho).is_file():
                     problemas.append(f"{doc.relative_to(root)}: {caminho} nao existe")
 
     if problemas:
@@ -1211,7 +1228,7 @@ _ENV_ATRIBUICAO_BLOCO = re.compile(r"^\s*(?:export\s+)?([A-Z][A-Z0-9]*_[A-Z0-9_]
 _ENV_ATRIBUICAO_INLINE = re.compile(r"`(?:export\s+)?([A-Z][A-Z0-9]*_[A-Z0-9_]+)=")
 _ENV_BACKTICK = re.compile(r"`([A-Z][A-Z0-9]*_[A-Z0-9_]+)`")
 _ENV_FONTES = (
-    "app",
+    "packages/core/src/app",
     "scripts",
     "alembic",
     "deploy",
@@ -1231,7 +1248,7 @@ def known_env_vars(root: Path = REPO_ROOT) -> set[str]:
     vez de importar `app.config`, para o gate continuar leve.
     """
     nomes: set[str] = set()
-    config = (root / "app" / "config.py").read_text(encoding="utf-8")
+    config = (root / "packages" / "core" / "src" / "app" / "config.py").read_text(encoding="utf-8")
     nomes |= {m.upper() for m in re.findall(r"^    ([a-z][a-z0-9_]*)\s*:", config, re.MULTILINE)}
     padroes = (
         r"(?:environ(?:\.get)?\(?\[?|getenv\()\s*[\"']([A-Z][A-Z0-9_]+)",
@@ -1417,7 +1434,7 @@ def check_connector_reachable(root: Path = REPO_ROOT) -> list[Finding]:
     if domain_index is not None:
         # Mesmo parser do runtime (app/mcp/skill_registry.py, so yaml +
         # stdlib): o gate nao pode aceitar um YAML que o supervisor rejeita.
-        # So <root>/data/skills conta — nao ha diretorio "vizinho" valido.
+        # So <root>/packages/core/data/skills conta — nao ha diretorio "vizinho" valido.
         from app.mcp.skill_registry import build_domain_index, load_skills
 
         skills_dir = root / SKILLS_DIR
@@ -1433,7 +1450,9 @@ def check_connector_reachable(root: Path = REPO_ROOT) -> list[Finding]:
         # o Dockerfile so copiava data/sample_docs/).
         dockerfile = root / "Dockerfile"
         if dockerfile.is_file() and not re.search(
-            r"^COPY\b.*\bdata/skills/?\s", dockerfile.read_text(encoding="utf-8"), re.MULTILINE
+            r"^COPY\b.*\bpackages/core/data/skills/?\s",
+            dockerfile.read_text(encoding="utf-8"),
+            re.MULTILINE,
         ):
             problemas.append(f"Dockerfile nao copia {SKILLS_DIR}/ para a imagem")
     else:

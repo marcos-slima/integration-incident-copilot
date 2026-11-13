@@ -77,7 +77,9 @@ from app.rag.retriever import _get_embeddings as get_query_embeddings
 # REFERENCIA: avaliacao externa §3.5 e DA pending "PDF layout regression".
 pymupdf4llm.use_layout(False)
 
-BASE_DIR = Path(__file__).resolve().parents[2]
+from app.paths import project_root
+
+BASE_DIR = project_root()
 EMBEDDING_MODEL = settings.embedding_model
 SPARSE_MODEL_NAME = "Qdrant/bm25"  # BM25 classico, sem rede neural - roda so em CPU, sem GPU
 QDRANT_URL = settings.qdrant_url

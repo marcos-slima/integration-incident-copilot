@@ -54,7 +54,9 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_SKILLS_DIR = Path(__file__).resolve().parents[2] / "data" / "skills"
+_SOURCE_SKILLS_DIR = Path(__file__).resolve().parents[3] / "data" / "skills"
+_PACKAGED_SKILLS_DIR = Path(__file__).resolve().parents[1] / "_data" / "skills"
+DEFAULT_SKILLS_DIR = _SOURCE_SKILLS_DIR if _SOURCE_SKILLS_DIR.is_dir() else _PACKAGED_SKILLS_DIR
 
 # Valores aceitos — espelham os Literals de app/mcp/policy.py (RiskLevel,
 # DataSensitivity) e os dominios de sub-agente do supervisor. "generic"

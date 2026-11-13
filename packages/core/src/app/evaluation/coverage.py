@@ -36,7 +36,9 @@ from typing import Any
 
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from app.paths import project_root
+
+REPO_ROOT = project_root()
 PRODUCTS_FILE = Path("data/sap_products.yaml")
 COVERAGE_FILE = Path("data/connector_coverage.yaml")
 MAP_DOC = Path("docs/COVERAGE_MAP.md")

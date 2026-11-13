@@ -192,9 +192,9 @@ def scan_repo(root: Path) -> list[Finding]:
         if p.suffix == ".tsx":
             findings += scan_markup(rel, src, jinja=False)
         findings += scan_literals(rel, src)
-    for p in sorted((root / "app/admin/templates").glob("*.html")):
+    for p in sorted((root / "packages/core/src/app/admin/templates").glob("*.html")):
         findings += scan_markup(p.relative_to(root), p.read_text(encoding="utf-8"), jinja=True)
-    for p in sorted((root / "app/admin/static").glob("*.js")):
+    for p in sorted((root / "packages/core/src/app/admin/static").glob("*.js")):
         src = p.read_text(encoding="utf-8")
         findings += scan_markup(p.relative_to(root), src, jinja=False)
         findings += scan_literals(p.relative_to(root), src)

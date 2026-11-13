@@ -365,8 +365,8 @@ def test_catalogos_das_uis_traduzem_todos_os_codigos_de_soberania():
     for path in (
         ROOT / "frontend/src/i18n/locales/en.json",
         ROOT / "frontend/src/i18n/locales/pt-BR.json",
-        ROOT / "app/i18n/locales/admin.en.json",
-        ROOT / "app/i18n/locales/admin.pt-BR.json",
+        ROOT / "packages/core/src/app/i18n/locales/admin.en.json",
+        ROOT / "packages/core/src/app/i18n/locales/admin.pt-BR.json",
     ):
         cat = json.loads(path.read_text(encoding="utf-8"))
         assert set(cat["sovereigntyReason"]) == set(_SOVEREIGNTY_TEXT), path.name
@@ -382,19 +382,22 @@ def test_gate_passa_no_repositorio():
 
 
 def _tmp_root(tmp_path: Path) -> Path:
-    (tmp_path / "app/i18n/locales").mkdir(parents=True)
-    (tmp_path / "app/ontology").mkdir(parents=True)
+    (tmp_path / "packages/core/src/app/i18n/locales").mkdir(parents=True)
+    (tmp_path / "packages/core/src/app/ontology").mkdir(parents=True)
     for loc in ("pt-BR", "en"):
         shutil.copy(
-            ROOT / f"app/i18n/locales/content.{loc}.json",
-            tmp_path / f"app/i18n/locales/content.{loc}.json",
+            ROOT / f"packages/core/src/app/i18n/locales/content.{loc}.json",
+            tmp_path / f"packages/core/src/app/i18n/locales/content.{loc}.json",
         )
-    shutil.copy(ROOT / "app/ontology/error_codes.ttl", tmp_path / "app/ontology/error_codes.ttl")
+    shutil.copy(
+        ROOT / "packages/core/src/app/ontology/error_codes.ttl",
+        tmp_path / "packages/core/src/app/ontology/error_codes.ttl",
+    )
     return tmp_path
 
 
 def _edit_en(root: Path, fn) -> None:
-    path = root / "app/i18n/locales/content.en.json"
+    path = root / "packages/core/src/app/i18n/locales/content.en.json"
     data = json.loads(path.read_text(encoding="utf-8"))
     fn(data)
     path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")

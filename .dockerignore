@@ -32,3 +32,6 @@ reports/
 **/.venv/
 **/__pycache__/
 packages/core-ui/dist/
+
+# Corpus opcional de download local não faz parte da distribuição DF-e.
+packages/dfe/data/corpus/MOC_7.0_Anexo_I.pdf

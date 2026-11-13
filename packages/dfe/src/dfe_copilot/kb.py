@@ -29,7 +29,9 @@ from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
 COLLECTION = "dfe_kb"
-CORPUS_DIR = Path(__file__).resolve().parents[2] / "data" / "corpus"
+from dfe_copilot.resources import DATA_DIR
+
+CORPUS_DIR = DATA_DIR / "corpus"
 CHUNK_CHARS = 1200
 PREFETCH_LIMIT = 20
 _RULE_ID = re.compile(r"\b\d[A-Z]\d{2}-\d{2}\b")

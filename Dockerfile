@@ -1,4 +1,4 @@
-FROM node:22-slim AS frontend-build
+FROM node:22-slim AS frontend-deps
 
 WORKDIR /ui
 
@@ -18,9 +18,16 @@ COPY frontend/package.json frontend/
 COPY packages/dfe/frontend/package.json packages/dfe/frontend/
 RUN npm ci
 
+FROM frontend-deps AS frontend-build
 COPY packages/core-ui/ packages/core-ui/
 COPY frontend/ frontend/
 RUN npm run build -w @copilot/iic-ui
+
+FROM frontend-deps AS dfe-frontend-build
+COPY packages/core-ui/ packages/core-ui/
+COPY packages/dfe/frontend/ packages/dfe/frontend/
+RUN npm run build -w @copilot/dfe-ui
+
 
 # Validacao 2026-10-07 (DEP-01): o stage Python foi dividido em
 # "builder" (compiladores, uv, download de modelos) e "app" (runtime).
@@ -56,9 +63,9 @@ ENV UV_LINK_MODE=copy \
 # fallback azure_openai; sem o extra, langchain-openai nao existia na
 # imagem e o primeiro diagnostico falhava com ImportError.
 COPY pyproject.toml uv.lock ./
-COPY packages/core/ packages/core/
+COPY packages/core/pyproject.toml packages/core/pyproject.toml
 COPY packages/dfe/pyproject.toml packages/dfe/pyproject.toml
-RUN uv sync --frozen --no-dev --no-install-project --extra openai
+RUN uv sync --frozen --no-dev --no-install-workspace --extra openai
 
 # DEP-01: modelos baixados no build, nao no primeiro request. Antes o
 # primeiro /diagnose de cada pod baixava ~120 MB do reranker e os modelos
@@ -94,6 +101,23 @@ RUN .venv/bin/python -c "from proton import SSL; assert SSL.present(), 'python-q
 # Stage Python de runtime — sem frontend e sem compiladores. Base do
 # stage "final" (API e worker) e target do servico "reporter" no
 # docker-compose, que nao precisa do frontend compilado.
+# O runtime usa o wheel do core, sem vínculo editável com fontes do monorepo.
+FROM builder AS runtime-deps
+COPY packages/core/ packages/core/
+RUN uv build --package copilot-core --wheel --out-dir /wheels \
+    && uv pip install --python .venv/bin/python --no-deps --reinstall /wheels/copilot_core-*.whl
+
+FROM runtime-deps AS dfe-package
+COPY packages/dfe/hatch_build.py packages/dfe/hatch_build.py
+COPY packages/dfe/src/ packages/dfe/src/
+COPY packages/dfe/data/schemas/ packages/dfe/data/schemas/
+COPY packages/dfe/data/corpus/manifest.json packages/dfe/data/corpus/cstat_moc7_anexo_i.json \
+    packages/dfe/data/corpus/regra_2B08-20.md packages/dfe/data/corpus/NT_2018.005_v1.51.pdf \
+    packages/dfe/data/corpus/
+COPY --from=dfe-frontend-build /ui/packages/dfe/frontend/dist packages/dfe/frontend/dist
+RUN DFE_BUILD_REQUIRE_UI=1 uv build --package dfe-copilot --wheel --out-dir /wheels \
+    && uv pip install --python .venv/bin/python --no-deps --target /install /wheels/dfe_copilot-*.whl
+
 FROM python:3.12-slim AS app
 
 WORKDIR /app
@@ -118,12 +142,9 @@ ENV PATH=/app/.venv/bin:$PATH \
 # DA-24: usuario nao-root (PodSecurityStandards; sidecar Istio no Kyma).
 RUN useradd --create-home --uid 1000 appuser
 
-COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
+COPY --from=runtime-deps --chown=appuser:appuser /app/.venv /app/.venv
 COPY --from=builder --chown=appuser:appuser /app/.cache /app/.cache
 
-COPY --chown=appuser:appuser pyproject.toml ./
-COPY --chown=appuser:appuser packages/core/ packages/core/
-COPY --chown=appuser:appuser iic_copilot/ iic_copilot/
 COPY --chown=appuser:appuser scripts/ scripts/
 # DEP-01: migrations dentro da imagem - sem isso `alembic upgrade head`
 # so rodava de um checkout local, nunca como Job/initContainer no cluster.
@@ -136,7 +157,6 @@ COPY --chown=appuser:appuser alembic.ini ./
 # app.rag.ingest` dentro do Pod falha com PermissionError (achado na
 # validacao em k3d, cenario G).
 RUN install -d -o appuser -g appuser /app/data
-COPY --chown=appuser:appuser data/sample_docs/ data/sample_docs/
 # DA-63: skills declarativas (roteamento do supervisor + Capability Registry).
 # Sem elas o supervisor nao sobe (indice de dominios vazio).
 COPY --chown=appuser:appuser packages/core/data/skills/ data/skills/
@@ -144,11 +164,21 @@ COPY --chown=appuser:appuser packages/core/data/skills/ data/skills/
 # DA-24: static/ nao e versionado; o stage "frontend-build" gera o dist/
 # e o stage "final" copia para static/dist.
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)" || exit 1
+
 USER appuser
 
-# Stage final — adiciona o frontend compilado ao stage "app".
-# Este e o stage padrao (sem "target") usado pela API e pelo worker.
+# Produto DF-e: instala somente seu wheel sobre o runtime compartilhado.
+FROM app AS dfe
+COPY --from=dfe-package --chown=appuser:appuser /install/ /app/.venv/lib/python3.12/site-packages/
+EXPOSE 8000
+CMD ["/app/.venv/bin/uvicorn", "dfe_copilot.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+
+# Produto IIC: target padrão mantido para API e worker existentes.
 FROM app AS final
+COPY --chown=appuser:appuser data/sample_docs/ data/sample_docs/
+COPY --chown=appuser:appuser iic_copilot/ iic_copilot/
 
 # DA-24-fix: copia o frontend buildado no estagio anterior em vez de
 # exigir que static/dist/ ja exista no contexto de build.
@@ -164,8 +194,7 @@ EXPOSE 8000
 # indefinidamente sem isso). Usa urllib da stdlib em vez de curl/wget
 # porque a imagem base python:3.12-slim nao inclui nenhum dos dois
 # (evita adicionar uma dependencia de SO so para o healthcheck).
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)" || exit 1
+# O HEALTHCHECK é herdado do runtime compartilhado.
 
 # DA-24: chama o uvicorn direto do venv (nao "uv run uvicorn ...") -
 # uv run tenta ressincronizar o ambiente a cada start (incluindo

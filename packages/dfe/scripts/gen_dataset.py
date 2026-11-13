@@ -46,6 +46,7 @@ VARIANTE_VENCIDO = _sem_comentario(
 )
 NS = "http://www.portalfiscal.inf.br/nfe"
 DS = "http://www.w3.org/2000/09/xmldsig#"
+COM_NPROT = ("100", "150", "110", "301", "302")  # protocolo com nProt (autorizacao/denegacao)
 CNPJ = "11222333000181"  # ficticio
 
 
@@ -70,11 +71,13 @@ def chave(n: int, cuf: str = "35") -> str:
 
 
 def prot(key: str, cstat: str, motivo: str, tp_amb: str = "2", ns: bool = True) -> str:
+    """Protocolo sintetico; autorizacao/denegacao trazem nProt, como no real."""
     xmlns = f' xmlns="{NS}"' if ns else ""
+    nprot = f"<nProt>1352600000{key[-5:]}</nProt>" if cstat in COM_NPROT else ""
     return (
         f'<protNFe{xmlns} versao="4.00"><infProt><tpAmb>{tp_amb}</tpAmb>'
         f"<verAplic>DEMO_IIC</verAplic><chNFe>{key}</chNFe>"
-        f"<dhRecbto>2026-11-11T09:52:00-03:00</dhRecbto>"
+        f"<dhRecbto>2026-11-11T09:52:00-03:00</dhRecbto>{nprot}"
         f"<cStat>{cstat}</cStat><xMotivo>{motivo}</xMotivo></infProt></protNFe>"
     )
 
@@ -256,12 +259,12 @@ def _casos_v1(add) -> None:
               ("999", "Rejeicao: Erro nao catalogado")]  # fmt: skip
     for i, (c, m) in enumerate(outros, start=1):
         add(f"UC04-CSTAT-{i:02d}", f"uc04_cstat_{c}", prot(chave(800 + i), c, m), [],
-            ["F-cStat"] + (["G-539"] if c == "539" else []))  # fmt: skip
+            ["F-cStat"] + (["F-prot"] if c in COM_NPROT else []) + (["G-539"] if c == "539" else []))  # fmt: skip
     for i, (c, m) in enumerate(outros[:5], start=1):  # retorno presente: timeout nao vira H-timeout
         k = chave(820 + i)
         add(f"UC04-COMTO-{i:02d}", f"uc04_cstat_{c}_com_timeout", prot(k, c, m),
             [ev("A", k, "2026-11-11T12:00:00Z", "sent"), ev("T", k, "2026-11-11T12:00:30Z", "timeout")],
-            ["F-cStat"])  # fmt: skip
+            ["F-cStat"] + (["F-prot"] if c in COM_NPROT else []))  # fmt: skip
     k = chave(830)
     add("UC04-RECI-01", "uc04_cstat_539_em_consulta_recibo",
         ret("retConsReciNFe", prot(k, "539", outros[8][1])), [], ["F-cStat", "G-539"])  # fmt: skip
@@ -289,7 +292,7 @@ def _casos_v1(add) -> None:
     kp = chave_do_positivo()
     for i in range(1, 3):
         add(f"UC05-PROC-{i:02d}", "uc05_nfeproc_autorizada",
-            nfe_proc(POSITIVO, prot(kp, "100", outros[0][1])), [], ["F-cStat"])  # fmt: skip
+            nfe_proc(POSITIVO, prot(kp, "100", outros[0][1])), [], ["F-cStat", "F-prot"])  # fmt: skip
         add(f"UC05-PROCKEY-{i:02d}", "uc05_nfeproc_protocolo_de_outra_nota",
             nfe_proc(POSITIVO, prot(chave(870 + i), "100", outros[0][1])), [], ["F-protkey", "F-cStat"])  # fmt: skip
 
@@ -310,7 +313,7 @@ def _casos_v1(add) -> None:
         ("UC06-SIG-07", "uc06_assinatura_certificado_vencido", VARIANTE_VENCIDO, ["F-sigvalid"]),
         ("UC06-SIG-08", "uc06_protocolo_com_assinatura_sem_id",
          prot(chave(880), "100", outros[0][1]).replace(
-             "</infProt>", f'</infProt><Signature xmlns="{DS}"/>'), ["F-cStat", "F-xsd", "G-sig"]),
+             "</infProt>", f'</infProt><Signature xmlns="{DS}"/>'), ["F-cStat", "F-prot", "F-xsd", "G-sig"]),
         ("UC06-SIG-09", "uc06_assinatura_removida",
          POSITIVO[: POSITIVO.index("<Signature")] + POSITIVO[POSITIVO.index("</Signature>") + 12 :],
          ["F-xsd"]),
@@ -339,9 +342,9 @@ def _casos_v1(add) -> None:
     # UC03: ambiente
     for i in range(1, 3):
         add(f"UC03-AMBPROT-{i:02d}", "uc03_protocolo_homologacao_em_producao",
-            prot(chave(930 + i), "100", outros[0][1]), [], ["F-cStat", "F-amb"], env="production")  # fmt: skip
+            prot(chave(930 + i), "100", outros[0][1]), [], ["F-cStat", "F-prot", "F-amb"], env="production")  # fmt: skip
         add(f"UC03-PRODOK-{i:02d}", "uc03_protocolo_producao_em_producao",
-            prot(chave(940 + i), "100", outros[0][1], tp_amb="1"), [], ["F-cStat"], env="production")  # fmt: skip
+            prot(chave(940 + i), "100", outros[0][1], tp_amb="1"), [], ["F-cStat", "F-prot"], env="production")  # fmt: skip
 
     # Seguranca
     add(
@@ -361,7 +364,7 @@ def _casos_v1(add) -> None:
     add("SEC-XSI-01", "sec_schema_location_remoto_ignorado",
         prot(chave(950), "100", outros[0][1]).replace(
             "<protNFe ", '<protNFe xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
-            'xsi:schemaLocation="http://www.portalfiscal.inf.br/nfe http://exemplo.invalid/x.xsd" '), [], ["F-cStat"])  # fmt: skip
+            'xsi:schemaLocation="http://www.portalfiscal.inf.br/nfe http://exemplo.invalid/x.xsd" '), [], ["F-cStat", "F-prot"])  # fmt: skip
     add(
         "SEC-NS-01",
         "sec_namespace_nao_fiscal",

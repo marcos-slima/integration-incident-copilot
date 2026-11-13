@@ -88,7 +88,10 @@ class DfePlugin:
                 findings.extend(facts["findings"])
                 if facts.get("tpAmb") == "2" and ctx.get("environment") == "production":
                     findings.append(
-                        _gap("F-amb", "XML de homologacao (tpAmb=2) num contexto de producao.")
+                        _gap(
+                            "F-amb",
+                            "XML de homologacao (tpAmb=2; 1 = producao) num contexto declarado de producao.",
+                        )
                     )
             except FiscalXmlError as exc:
                 findings.append(_gap("G-xml", f"XML recusado antes da analise ({exc.code})."))

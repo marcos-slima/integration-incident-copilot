@@ -25,6 +25,8 @@ tests:
   - type: javascript
     value: (() => { const o = JSON.parse(output); return /(sem evid|n[aã]o h[aá] evid|inconclusiv|n[aã]o sustent|n[aã]o comprov|G-204|G-539)/i.test(o.probable_root_cause + JSON.stringify(o.next_steps));
       })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
 - description: GAP-DV-01 (gap_dv_invalido)
   vars:
     case_id: GAP-DV-01
@@ -33,6 +35,8 @@ tests:
     value: (() => { const o = JSON.parse(output); return ["F-cStat", "F-dv"].every(i => o.finding_ids.includes(i)); })()
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
 - description: GAP-TZ-01 (gap_evento_sem_fuso)
   vars:
     case_id: GAP-TZ-01
@@ -52,6 +56,10 @@ tests:
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
   - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/n[aã]o (e |é )?sustent/i.test(o.probable_root_cause); })()
+  - type: javascript
     value: (() => { const o = JSON.parse(output); return /consult/i.test(JSON.stringify(o.next_steps)); })()
 - description: UC01-RET-02 (uc01_204_em_retorno_de_lote)
   vars:
@@ -62,6 +70,10 @@ tests:
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
   - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/n[aã]o (e |é )?sustent/i.test(o.probable_root_cause); })()
+  - type: javascript
     value: (() => { const o = JSON.parse(output); return /consult/i.test(JSON.stringify(o.next_steps)); })()
 - description: UC01-BORDA-01 (uc01_204_timeout_simultaneo)
   vars:
@@ -71,6 +83,10 @@ tests:
     value: (() => { const o = JSON.parse(output); return ["F-cStat", "F-204", "H1"].every(i => o.finding_ids.includes(i)); })()
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/n[aã]o (e |é )?sustent/i.test(o.probable_root_cause); })()
   - type: javascript
     value: (() => { const o = JSON.parse(output); return /consult/i.test(JSON.stringify(o.next_steps)); })()
 - description: UC01-BORDA-02 (uc01_204_envio_unico)
@@ -84,6 +100,8 @@ tests:
   - type: javascript
     value: (() => { const o = JSON.parse(output); return /(sem evid|n[aã]o h[aá] evid|inconclusiv|n[aã]o sustent|n[aã]o comprov|G-204|G-539)/i.test(o.probable_root_cause + JSON.stringify(o.next_steps));
       })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
 - description: UC04-CSTAT-04 (uc04_cstat_215)
   vars:
     case_id: UC04-CSTAT-04
@@ -92,6 +110,8 @@ tests:
     value: (() => { const o = JSON.parse(output); return ["F-cStat"].every(i => o.finding_ids.includes(i)); })()
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
 - description: UC04-CSTAT-05 (uc04_cstat_225)
   vars:
     case_id: UC04-CSTAT-05
@@ -100,14 +120,26 @@ tests:
     value: (() => { const o = JSON.parse(output); return ["F-cStat"].every(i => o.finding_ids.includes(i)); })()
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
 - description: UC04-CSTAT-08 (uc04_cstat_302)
   vars:
     case_id: UC04-CSTAT-08
   assert:
   - type: javascript
-    value: (() => { const o = JSON.parse(output); return ["F-cStat"].every(i => o.finding_ids.includes(i)); })()
+    value: (() => { const o = JSON.parse(output); return ["F-cStat", "F-prot"].every(i => o.finding_ids.includes(i)); })()
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return /(denega|irregularidade)/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/duplicidade/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/(sem|aus[eê]ncia d[eo]|falta d[eo]) protocolo/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/desfecho[^.]{0,40}desconhecid/i.test(o.probable_root_cause); })()
 - description: UC04-CSTAT-09 (uc04_cstat_539)
   vars:
     case_id: UC04-CSTAT-09
@@ -119,6 +151,8 @@ tests:
   - type: javascript
     value: (() => { const o = JSON.parse(output); return /(sem evid|n[aã]o h[aá] evid|inconclusiv|n[aã]o sustent|n[aã]o comprov|G-204|G-539)/i.test(o.probable_root_cause + JSON.stringify(o.next_steps));
       })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
 - description: UC04-CSTAT-10 (uc04_cstat_999)
   vars:
     case_id: UC04-CSTAT-10
@@ -127,14 +161,26 @@ tests:
     value: (() => { const o = JSON.parse(output); return ["F-cStat"].every(i => o.finding_ids.includes(i)); })()
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
 - description: UC04-COMTO-02 (uc04_cstat_110_com_timeout)
   vars:
     case_id: UC04-COMTO-02
   assert:
   - type: javascript
-    value: (() => { const o = JSON.parse(output); return ["F-cStat"].every(i => o.finding_ids.includes(i)); })()
+    value: (() => { const o = JSON.parse(output); return ["F-cStat", "F-prot"].every(i => o.finding_ids.includes(i)); })()
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return /(denega|irregularidade)/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/duplicidade/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/(sem|aus[eê]ncia d[eo]|falta d[eo]) protocolo/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/desfecho[^.]{0,40}desconhecid/i.test(o.probable_root_cause); })()
 - description: UC04-539H-01 (uc04_539_reenvio_chave_regerada)
   vars:
     case_id: UC04-539H-01
@@ -143,6 +189,10 @@ tests:
     value: (() => { const o = JSON.parse(output); return ["F-cStat", "H539"].every(i => o.finding_ids.includes(i)); })()
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/n[aã]o (e |é )?sustent/i.test(o.probable_root_cause); })()
   - type: javascript
     value: (() => { const o = JSON.parse(output); return /consult/i.test(JSON.stringify(o.next_steps)); })()
 - description: UC04-539H-02 (uc04_539_reenvio_chave_regerada)
@@ -154,6 +204,10 @@ tests:
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
   - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/n[aã]o (e |é )?sustent/i.test(o.probable_root_cause); })()
+  - type: javascript
     value: (() => { const o = JSON.parse(output); return /consult/i.test(JSON.stringify(o.next_steps)); })()
 - description: UC04-539H-03 (uc04_539_reenvio_chave_regerada)
   vars:
@@ -164,13 +218,23 @@ tests:
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
   - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/n[aã]o (e |é )?sustent/i.test(o.probable_root_cause); })()
+  - type: javascript
     value: (() => { const o = JSON.parse(output); return /consult/i.test(JSON.stringify(o.next_steps)); })()
 - description: UC05-PROC-02 (uc05_nfeproc_autorizada)
   vars:
     case_id: UC05-PROC-02
   assert:
   - type: javascript
-    value: (() => { const o = JSON.parse(output); return ["F-cStat"].every(i => o.finding_ids.includes(i)); })()
+    value: (() => { const o = JSON.parse(output); return ["F-cStat", "F-prot"].every(i => o.finding_ids.includes(i)); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/(sem|aus[eê]ncia d[eo]|falta d[eo]) protocolo/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/desfecho[^.]{0,40}desconhecid/i.test(o.probable_root_cause); })()
 - description: UC06-SIG-02 (uc06_assinatura_algoritmo_fora_do_perfil)
   vars:
     case_id: UC06-SIG-02
@@ -181,6 +245,8 @@ tests:
     value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/cStat\s*\d{3}/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
 - description: UC06-SIG-03 (uc06_assinatura_reference_trocada)
   vars:
     case_id: UC06-SIG-03
@@ -191,6 +257,8 @@ tests:
     value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/cStat\s*\d{3}/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
 - description: UC06-SIG-06 (uc06_assinatura_cnpj_divergente)
   vars:
     case_id: UC06-SIG-06
@@ -201,6 +269,8 @@ tests:
     value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/cStat\s*\d{3}/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
 - description: UC06-SIG-09 (uc06_assinatura_removida)
   vars:
     case_id: UC06-SIG-09
@@ -211,6 +281,8 @@ tests:
     value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/cStat\s*\d{3}/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
 - description: UC02-DUPLO-03 (uc02_dois_timeouts_sem_retorno)
   vars:
     case_id: UC02-DUPLO-03
@@ -240,7 +312,13 @@ tests:
     case_id: UC03-PRODOK-01
   assert:
   - type: javascript
-    value: (() => { const o = JSON.parse(output); return ["F-cStat"].every(i => o.finding_ids.includes(i)); })()
+    value: (() => { const o = JSON.parse(output); return ["F-cStat", "F-prot"].every(i => o.finding_ids.includes(i)); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}1\W{0,3}\(?\s*homolog/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/(sem|aus[eê]ncia d[eo]|falta d[eo]) protocolo/i.test(o.probable_root_cause); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/desfecho[^.]{0,40}desconhecid/i.test(o.probable_root_cause); })()
 - description: GAP-EVT-01 (gap_evento_desconhecido)
   vars:
     case_id: GAP-EVT-01

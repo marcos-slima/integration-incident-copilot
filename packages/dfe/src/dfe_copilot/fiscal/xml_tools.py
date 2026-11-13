@@ -21,6 +21,8 @@ from typing import Any, Literal
 
 from lxml import etree
 
+from dfe_copilot.fiscal.cstat import COM_PROTOCOLO, TP_AMB
+from dfe_copilot.fiscal.cstat import describe as describe_cstat
 from dfe_copilot.fiscal.signature import verify_enveloped, within_validity
 
 NS = "http://www.portalfiscal.inf.br/nfe"
@@ -348,11 +350,31 @@ def analyze_fiscal_xml(xml_bytes: bytes, package: SchemaPackage | None = None) -
     out["xsd"] = xsd
 
     if out.get("document_cStat"):
+        c = out["document_cStat"]
+        info = describe_cstat(c)
+        out["cstat_official"] = info
+        amb = TP_AMB.get(out.get("tpAmb") or "", "desconhecido")
+        oficial = (
+            f' - {info["source_id"]} ({info["table"]}, p. {info["page"]}): "{info["text"]}"'
+            if info
+            else " - codigo ausente da tabela oficial carregada"
+        )
         out["findings"].append({
             "id": "F-cStat", "kind": "fact", "source": "tool",
-            "statement": f"Retorno do documento com cStat {out['document_cStat']} (tpAmb={out.get('tpAmb')}).",
+            "statement": f"Retorno do documento com cStat {c}{oficial}; tpAmb={out.get('tpAmb')} ({amb}).",
             "evidence_refs": [f"sha256:{out['raw_sha256']}"],
         })  # fmt: skip
+        outra_nota = any(f["id"] == "F-protkey" for f in out["findings"])
+        if c in COM_PROTOCOLO and out.get("nProt") and not outra_nota:
+            resultado = "autorizacao de uso" if c in ("100", "150") else "denegacao de uso"
+            out["findings"].append({
+                "id": "F-prot", "kind": "fact", "source": "tool",
+                "statement": (
+                    f"Protocolo nProt {out['nProt']} presente no XML: o proprio retorno comprova a "
+                    f"{resultado} (cStat {c}); nao e' preciso consultar para saber o desfecho."
+                ),
+                "evidence_refs": [f"sha256:{out['raw_sha256']}"],
+            })  # fmt: skip
     if parsed is not None and not parsed.dv_valid:
         out["findings"].append({
             "id": "F-dv", "kind": "fact", "source": "tool",

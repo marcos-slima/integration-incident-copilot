@@ -33,7 +33,12 @@ CORPUS_DIR = Path(__file__).resolve().parents[2] / "data" / "corpus"
 CHUNK_CHARS = 1200
 PREFETCH_LIMIT = 20
 _RULE_ID = re.compile(r"\b\d[A-Z]\d{2}-\d{2}\b")
-_CSTAT_REJ = re.compile(r"\b(\d{3})\s+Rej\.?")
+_CSTAT_REJ = re.compile(r"\b(\d{3})\s+(?:Rej|Den)\.?")
+# Linha de tabela de cStat do MOC (secao 4.4): "110 Uso Denegado".
+_CSTAT_LINE = re.compile(r"(?m)^\s*(\d{3})\s+(?=[A-ZÀ-Ú])")
+_CSTAT_TABLE_START = re.compile(
+    r"4\.4\.1\. Tabela de Códigos de Resultado de Processamento \(cStat\)\s*\n"
+)
 
 DenseFn = Callable[[list[str]], list[list[float]]]
 SparseFn = Callable[[str], Any]  # devolve qdrant_client.models.SparseVector
@@ -137,14 +142,20 @@ def load_corpus(
     chunks: list[Chunk] = []
 
     for doc in manifest["documents"]:
-        if not doc.get("stored"):
+        # `stored=false`: fonte fora do repositorio (tamanho); entra se o
+        # arquivo estiver no corpus local e o hash conferir.
+        if not doc.get("file"):
             continue
         path = corpus_dir / doc["file"]
+        if not doc.get("stored") and not path.exists():
+            continue
         if hashlib.sha256(path.read_bytes()).hexdigest() != doc["content_sha256"]:
             raise ValueError(f"hash divergente no corpus: {doc['file']}")
         if pdf_pages is None:
             pdf_pages = _pypdf_pages
+        in_table = False
         for page in pdf_pages(path):
+            in_table = in_table or bool(_CSTAT_TABLE_START.search(page["text"]))
             for i, text in enumerate(_split(page["text"])):
                 # Marca regra e cStat citados NO trecho (tabela de regras da
                 # NT: "2B08-20 ... Obrig. 204 Rej."), para o filtro por cStat
@@ -154,7 +165,10 @@ def load_corpus(
                     "page_number": page.get("page_number"),
                     "chunk_index": i,
                     "rule_ids": sorted(set(_RULE_ID.findall(text))),
-                    "cstats": sorted(set(_CSTAT_REJ.findall(text))),
+                    "cstats": sorted(
+                        set(_CSTAT_REJ.findall(text))
+                        | (set(_CSTAT_LINE.findall(text)) if in_table else set())
+                    ),
                 }
                 chunks.append(Chunk(text=text, payload=payload))
 

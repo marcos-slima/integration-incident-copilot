@@ -358,3 +358,32 @@ class TestAssinatura:
     def test_protocolo_sem_assinatura_nao_executa(self, package: SchemaPackage) -> None:
         r = analyze_fiscal_xml(PROT_204, package)
         assert r["signature_validation"] == "not_executed"
+
+
+class TestSignificadoOficial:
+    """D8: o fato carrega o significado oficial (MOC 7.0 Anexo I) e o protocolo."""
+
+    def test_catalogo_do_moc(self) -> None:
+        from dfe_copilot.fiscal.cstat import describe
+
+        assert describe("110")["text"] == "Uso Denegado"
+        assert describe("302")["table"] == "denegacao"
+        assert describe("204")["text"].startswith("Rejeição: Duplicidade de NF-e")
+        assert describe("000") is None
+
+    def test_fcstat_traz_texto_oficial_e_ambiente(self, package: SchemaPackage) -> None:
+        r = analyze_fiscal_xml(PROT_204, package)
+        st = next(f for f in r["findings"] if f["id"] == "F-cStat")["statement"]
+        assert "MOC_7.0_Anexo_I" in st and "Duplicidade" in st and "(homologacao)" in st
+
+    def test_protocolo_com_nprot_comprova_desfecho(self, package: SchemaPackage) -> None:
+        aut = PROT_204.replace(
+            b"<cStat>204</cStat>", b"<nProt>135260000000001</nProt><cStat>100</cStat>"
+        ).replace(b"Rejeicao: Duplicidade de NF-e", b"Autorizado o uso da NF-e")
+        r = analyze_fiscal_xml(aut, package)
+        assert r["xsd_validation"] == "valid"
+        assert [f["id"] for f in r["findings"]] == ["F-cStat", "F-prot"]
+
+    def test_rejeicao_sem_nprot_nao_gera_fprot(self, package: SchemaPackage) -> None:
+        r = analyze_fiscal_xml(PROT_204, package)
+        assert "F-prot" not in {f["id"] for f in r["findings"]}

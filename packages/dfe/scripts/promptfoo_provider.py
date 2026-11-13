@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT.parents[1])]
 os.environ.setdefault("DOMAIN_PLUGINS", "dfe_copilot.plugin")
 os.environ.setdefault("RULE_ENGINE_ENABLED", "false")  # mede o LLM, nao a regra
+os.environ.setdefault("DFE_KB_ENABLED", "true")  # como o produto (dfe_copilot.main)
 
 from app.agent.graph import run_diagnosis
 from app.models import IncidentRequest

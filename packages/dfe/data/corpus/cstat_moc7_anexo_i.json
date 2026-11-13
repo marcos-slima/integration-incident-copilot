@@ -1,0 +1,4300 @@
+{
+ "source_id": "MOC_7.0_Anexo_I",
+ "document": "MOC 7.0 Anexo I - secao 4.4 (tabelas de cStat)",
+ "canonical_url": "https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=J+I+v4eN00E%3D",
+ "content_sha256": "5eb4cf2010b10b0b62f78197c4eb64025f24535d4c6e61158bc7806dd008f55d",
+ "extracted_by": "scripts/extract_cstat.py (pypdf, 1a linha de cada codigo)",
+ "notes": "Texto pode vir cortado na quebra de linha do PDF; codigos com mais de um texto listam todos.",
+ "codes": {
+  "100": {
+   "texts": [
+    "Autorizado o uso da NF-e"
+   ],
+   "page": 143,
+   "table": "resultado"
+  },
+  "101": {
+   "texts": [
+    "Cancelamento de NF-e homologado"
+   ],
+   "page": 143,
+   "table": "resultado"
+  },
+  "102": {
+   "texts": [
+    "Inutilização de número homologado"
+   ],
+   "page": 143,
+   "table": "resultado"
+  },
+  "103": {
+   "texts": [
+    "Lote recebido com sucesso"
+   ],
+   "page": 143,
+   "table": "resultado"
+  },
+  "104": {
+   "texts": [
+    "Lote processado"
+   ],
+   "page": 143,
+   "table": "resultado"
+  },
+  "105": {
+   "texts": [
+    "Lote em processamento"
+   ],
+   "page": 143,
+   "table": "resultado"
+  },
+  "106": {
+   "texts": [
+    "Lote não localizado"
+   ],
+   "page": 143,
+   "table": "resultado"
+  },
+  "107": {
+   "texts": [
+    "Serviço em Operação"
+   ],
+   "page": 143,
+   "table": "resultado"
+  },
+  "108": {
+   "texts": [
+    "Serviço Paralisado Momentaneamente (curto prazo)"
+   ],
+   "page": 143,
+   "table": "resultado"
+  },
+  "109": {
+   "texts": [
+    "Serviço Paralisado sem Previsão"
+   ],
+   "page": 143,
+   "table": "resultado"
+  },
+  "110": {
+   "texts": [
+    "Uso Denegado"
+   ],
+   "page": 143,
+   "table": "resultado"
+  },
+  "111": {
+   "texts": [
+    "Consulta cadastro com uma ocorrência"
+   ],
+   "page": 143,
+   "table": "resultado"
+  },
+  "112": {
+   "texts": [
+    "Consulta cadastro com mais de uma ocorrência"
+   ],
+   "page": 143,
+   "table": "resultado"
+  },
+  "124": {
+   "texts": [
+    "EPEC Autorizado"
+   ],
+   "page": 143,
+   "table": "resultado"
+  },
+  "128": {
+   "texts": [
+    "Lote de Evento Processado"
+   ],
+   "page": 143,
+   "table": "resultado"
+  },
+  "135": {
+   "texts": [
+    "Evento registrado e vinculado a NF-e"
+   ],
+   "page": 143,
+   "table": "resultado"
+  },
+  "136": {
+   "texts": [
+    "Evento registrado, mas não vinculado a NF-e"
+   ],
+   "page": 143,
+   "table": "resultado"
+  },
+  "137": {
+   "texts": [
+    "Nenhum documento localizado para o Destinatário"
+   ],
+   "page": 143,
+   "table": "resultado"
+  },
+  "138": {
+   "texts": [
+    "Documento localizado para o Destinatário"
+   ],
+   "page": 143,
+   "table": "resultado"
+  },
+  "139": {
+   "texts": [
+    "Pedido de Download processado"
+   ],
+   "page": 143,
+   "table": "resultado"
+  },
+  "140": {
+   "texts": [
+    "Download disponibilizado"
+   ],
+   "page": 143,
+   "table": "resultado"
+  },
+  "142": {
+   "texts": [
+    "Ambiente de Contingência EPEC bloqueado para o Emitente",
+    "Rejeição: Ambiente de Contingência EPEC bloqueado para o Emitente"
+   ],
+   "page": 143,
+   "table": "resultado"
+  },
+  "150": {
+   "texts": [
+    "Autorizado o uso da NF-e, autorização fora de prazo"
+   ],
+   "page": 143,
+   "table": "resultado"
+  },
+  "151": {
+   "texts": [
+    "Cancelamento de NF-e homologado fora de prazo"
+   ],
+   "page": 143,
+   "table": "resultado"
+  },
+  "201": {
+   "texts": [
+    "Rejeição: Número máximo de numeração a inutilizar ultrapassou o limite"
+   ],
+   "page": 143,
+   "table": "rejeicao"
+  },
+  "203": {
+   "texts": [
+    "Rejeição: Emissor não habilitado para emissão da NF-e"
+   ],
+   "page": 143,
+   "table": "rejeicao"
+  },
+  "204": {
+   "texts": [
+    "Rejeição: Duplicidade de NF-e [nRec:999999999999999]"
+   ],
+   "page": 143,
+   "table": "rejeicao"
+  },
+  "205": {
+   "texts": [
+    "Rejeição: NF-e está denegada na base de dados da SEFAZ [nRec:999999999999999]"
+   ],
+   "page": 143,
+   "table": "rejeicao"
+  },
+  "206": {
+   "texts": [
+    "Rejeição: NF-e já está inutilizada na Base de Dados da SEFAZ"
+   ],
+   "page": 143,
+   "table": "rejeicao"
+  },
+  "207": {
+   "texts": [
+    "Rejeição: CNPJ do emitente inválido"
+   ],
+   "page": 143,
+   "table": "rejeicao"
+  },
+  "208": {
+   "texts": [
+    "Rejeição: CNPJ do destinatário inválido"
+   ],
+   "page": 143,
+   "table": "rejeicao"
+  },
+  "209": {
+   "texts": [
+    "Rejeição: IE do emitente inválida"
+   ],
+   "page": 143,
+   "table": "rejeicao"
+  },
+  "210": {
+   "texts": [
+    "Rejeição: IE do destinatário inválida"
+   ],
+   "page": 143,
+   "table": "rejeicao"
+  },
+  "211": {
+   "texts": [
+    "Rejeição: IE do substituto inválida"
+   ],
+   "page": 143,
+   "table": "rejeicao"
+  },
+  "212": {
+   "texts": [
+    "Rejeição: Data de emissão NF-e posterior a data de recebimento"
+   ],
+   "page": 143,
+   "table": "rejeicao"
+  },
+  "213": {
+   "texts": [
+    "Rejeição: CNPJ-Base do Emitente difere do CNPJ-Base do Certificado Digital"
+   ],
+   "page": 143,
+   "table": "rejeicao"
+  },
+  "214": {
+   "texts": [
+    "Rejeição: Tamanho da mensagem excedeu o limite estabelecido"
+   ],
+   "page": 143,
+   "table": "rejeicao"
+  },
+  "215": {
+   "texts": [
+    "Rejeição: Falha no schema XML"
+   ],
+   "page": 143,
+   "table": "rejeicao"
+  },
+  "217": {
+   "texts": [
+    "Rejeição: NF-e não consta na base de dados da SEFAZ"
+   ],
+   "page": 143,
+   "table": "rejeicao"
+  },
+  "218": {
+   "texts": [
+    "Rejeição: NF-e já está cancelada na base de dados da SEFAZ [nRec:999999999999999]"
+   ],
+   "page": 143,
+   "table": "rejeicao"
+  },
+  "219": {
+   "texts": [
+    "Rejeição: Circulação da NF-e verificada"
+   ],
+   "page": 143,
+   "table": "rejeicao"
+  },
+  "220": {
+   "texts": [
+    "Rejeição: Destinatário com identificação igual à identificação do emitente"
+   ],
+   "page": 143,
+   "table": "rejeicao"
+  },
+  "221": {
+   "texts": [
+    "Rejeição: Confirmado o recebimento da NF-e pelo destinatário"
+   ],
+   "page": 143,
+   "table": "rejeicao"
+  },
+  "222": {
+   "texts": [
+    "Rejeição: Protocolo de Autorização de Uso difere do cadastrado"
+   ],
+   "page": 143,
+   "table": "rejeicao"
+  },
+  "223": {
+   "texts": [
+    "Rejeição: CNPJ/CPF do transmissor do lote difere do CNPJ/CPF do transmissor da consulta"
+   ],
+   "page": 143,
+   "table": "rejeicao"
+  },
+  "224": {
+   "texts": [
+    "Rejeição: A faixa inicial é maior que a faixa final"
+   ],
+   "page": 143,
+   "table": "rejeicao"
+  },
+  "225": {
+   "texts": [
+    "Rejeição: Falha no Schema XML do lote de NFe"
+   ],
+   "page": 143,
+   "table": "rejeicao"
+  },
+  "226": {
+   "texts": [
+    "Rejeição: Código da UF do Emitente diverge da UF autorizadora"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "227": {
+   "texts": [
+    "Rejeição: CPF do Emitente difere do CPF do Certificado Digital"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "228": {
+   "texts": [
+    "Rejeição: Data de Emissão muito atrasada"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "229": {
+   "texts": [
+    "Rejeição: IE do emitente não informada"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "230": {
+   "texts": [
+    "Rejeição: IE do emitente não cadastrada"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "231": {
+   "texts": [
+    "Rejeição: IE do emitente não vinculada ao CNPJ"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "232": {
+   "texts": [
+    "Rejeição: IE do destinatário não informada"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "233": {
+   "texts": [
+    "Rejeição: IE do destinatário não cadastrada"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "234": {
+   "texts": [
+    "Rejeição: IE do destinatário não vinculada ao CNPJ"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "235": {
+   "texts": [
+    "Rejeição: Inscrição SUFRAMA inválida"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "236": {
+   "texts": [
+    "Rejeição: Chave de Acesso com dígito verificador inválido"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "237": {
+   "texts": [
+    "Rejeição: CPF do destinatário inválido"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "239": {
+   "texts": [
+    "Rejeição: Versão do arquivo XML não suportada (NT 2108.004)"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "240": {
+   "texts": [
+    "Rejeição: Irregularidade Fiscal do Emitente"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "241": {
+   "texts": [
+    "Rejeição: Um número da faixa já foi utilizado"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "243": {
+   "texts": [
+    "Rejeição: XML Mal Formado"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "244": {
+   "texts": [
+    "Rejeição: Processo de Emissão pelo Contribuinte incompatível com a Série da NF"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "245": {
+   "texts": [
+    "Rejeição: CNPJ Emitente não cadastrado"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "246": {
+   "texts": [
+    "Rejeição: CNPJ Destinatário não cadastrado"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "247": {
+   "texts": [
+    "Rejeição: Sigla da UF do Emitente diverge da UF autorizadora"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "248": {
+   "texts": [
+    "Rejeição: UF do Recibo diverge da UF autorizadora"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "249": {
+   "texts": [
+    "Rejeição: UF da Chave de Acesso diverge da UF autorizadora"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "250": {
+   "texts": [
+    "Rejeição: UF diverge da UF autorizadora"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "251": {
+   "texts": [
+    "Rejeição: UF/Município destinatário não pertence a SUFRAMA"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "252": {
+   "texts": [
+    "Rejeição: Ambiente informado diverge do Ambiente de recebimento"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "253": {
+   "texts": [
+    "Rejeição: Digito Verificador da chave de acesso composta inválida"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "254": {
+   "texts": [
+    "Rejeição: NF-e complementar não possui NF referenciada"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "255": {
+   "texts": [
+    "Rejeição: NF-e complementar possui mais de uma NF referenciada"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "256": {
+   "texts": [
+    "Rejeição: Uma NF-e da faixa já está inutilizada na Base de dados da SEFAZ"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "257": {
+   "texts": [
+    "Rejeição: Solicitante não habilitado para emissão da NF-e"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "258": {
+   "texts": [
+    "Rejeição: CNPJ da consulta inválido"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "259": {
+   "texts": [
+    "Rejeição: CNPJ da consulta não cadastrado como contribuinte na UF"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "260": {
+   "texts": [
+    "Rejeição: IE da consulta inválida"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "261": {
+   "texts": [
+    "Rejeição: IE da consulta não cadastrada como contribuinte na UF"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "262": {
+   "texts": [
+    "Rejeição: UF não fornece consulta por CPF"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "263": {
+   "texts": [
+    "Rejeição: CPF da consulta inválido"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "264": {
+   "texts": [
+    "Rejeição: CPF da consulta não cadastrado como contribuinte na UF"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "265": {
+   "texts": [
+    "Rejeição: Sigla da UF da consulta difere da UF do Web Service"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "266": {
+   "texts": [
+    "Rejeição: Série utilizada não permitida no Web Service"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "267": {
+   "texts": [
+    "Rejeição: Chave de Acesso referenciada inexistente [nRef: xxx]"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "268": {
+   "texts": [
+    "Rejeição: NF Complementar referencia uma outra NF-e Complementar"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "269": {
+   "texts": [
+    "Rejeição: CNPJ/CPF Emitente da NF Complementar difere do CNPJ/CPF da NF Referenciada"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "270": {
+   "texts": [
+    "Rejeição: Código Município do Fato Gerador de ICMS inexistente"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "271": {
+   "texts": [
+    "Rejeição: Código Município do Fato Gerador: difere da UF do emitente"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "272": {
+   "texts": [
+    "Rejeição: Código Município do Emitente inexistente"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "273": {
+   "texts": [
+    "Rejeição: Código Município do Emitente: difere da UF do emitente"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "274": {
+   "texts": [
+    "Rejeição: Código Município do Destinatário inexistente"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "275": {
+   "texts": [
+    "Rejeição: Código Município do Destinatário: difere da UF do Destinatário"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "276": {
+   "texts": [
+    "Rejeição: Código Município do Local de Retirada inexistente"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "277": {
+   "texts": [
+    "Rejeição: Código Município do Local de Retirada: difere da UF do Local de Retirada"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "278": {
+   "texts": [
+    "Rejeição: Código Município do Local de Entrega inexistente"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "279": {
+   "texts": [
+    "Rejeição: Código Município do Local de Entrega: difere da UF do Local de Entrega"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "280": {
+   "texts": [
+    "Rejeição: Certificado Transmissor inválido"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "281": {
+   "texts": [
+    "Rejeição: Certificado Transmissor Data Validade"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "282": {
+   "texts": [
+    "Rejeição: Certificado Transmissor sem CNPJ/CPF"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "283": {
+   "texts": [
+    "Rejeição: Certificado Transmissor - erro Cadeia de Certificação"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "284": {
+   "texts": [
+    "Rejeição: Certificado Transmissor revogado"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "285": {
+   "texts": [
+    "Rejeição: Certificado Transmissor difere ICP-Brasil"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "286": {
+   "texts": [
+    "Rejeição: Certificado Transmissor erro no acesso a LCR"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "287": {
+   "texts": [
+    "Rejeição: Código Município do Fato Gerador de ISSQN inexistente [nItem:nnn]"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "288": {
+   "texts": [
+    "Rejeição: Código Município do Fato Gerador do Transporte inexistente"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "289": {
+   "texts": [
+    "Rejeição: Código da UF informada diverge da UF solicitada"
+   ],
+   "page": 144,
+   "table": "rejeicao"
+  },
+  "290": {
+   "texts": [
+    "Rejeição: Certificado Assinatura inválido"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "291": {
+   "texts": [
+    "Rejeição: Certificado Assinatura Data Validade"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "292": {
+   "texts": [
+    "Rejeição: Certificado de Assinatura sem CNPJ/CPF"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "293": {
+   "texts": [
+    "Rejeição: Certificado Assinatura - erro Cadeia de Certificação"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "294": {
+   "texts": [
+    "Rejeição: Certificado Assinatura revogado"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "295": {
+   "texts": [
+    "Rejeição: Certificado Assinatura difere ICP-Brasil"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "296": {
+   "texts": [
+    "Rejeição: Certificado Assinatura erro no acesso a LCR"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "297": {
+   "texts": [
+    "Rejeição: Assinatura difere do calculado"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "298": {
+   "texts": [
+    "Rejeição: Assinatura difere do padrão do Sistema"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "301": {
+   "texts": [
+    "Uso Denegado: Irregularidade fiscal do emitente"
+   ],
+   "page": 153,
+   "table": "denegacao"
+  },
+  "302": {
+   "texts": [
+    "Uso Denegado: Irregularidade fiscal do destinatário"
+   ],
+   "page": 153,
+   "table": "denegacao"
+  },
+  "303": {
+   "texts": [
+    "Uso Denegado: Destinatário não habilitado a operar na UF"
+   ],
+   "page": 153,
+   "table": "denegacao"
+  },
+  "304": {
+   "texts": [
+    "Rejeição: Pedido de Cancelamento para NF-e com evento da Suframa"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "305": {
+   "texts": [
+    "Rejeição: Destinatário bloqueado na UF [NT 2019.001]"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "306": {
+   "texts": [
+    "Rejeição: IE do destinatário não está ativa na UF [NT 2019.001]"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "315": {
+   "texts": [
+    "Rejeição: Data de Emissão anterior ao início da autorização de Nota Fiscal na UF"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "316": {
+   "texts": [
+    "Rejeição: Chave de Acesso referenciada com a mesma Chave de Acesso da Nota Fiscal atual [nOcor:nnn]"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "317": {
+   "texts": [
+    "Rejeição: NF modelo 1 referenciada com data de emissão inválida [nOcor:nnn]"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "318": {
+   "texts": [
+    "Rejeição: Contranota de Produtor sem Nota Fiscal referenciada"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "319": {
+   "texts": [
+    "Rejeição: Contranota de Produtor não pode referenciar somente Nota Fiscal de entrada"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "320": {
+   "texts": [
+    "Rejeição: Contranota de Produtor referencia somente NF de outro emitente"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "321": {
+   "texts": [
+    "Rejeição: NF-e de devolução de mercadoria não possui documento fiscal referenciado"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "322": {
+   "texts": [
+    "Rejeição: NF de produtor referenciada com data de emissão inválida [nOcor:nnn]"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "323": {
+   "texts": [
+    "Rejeição: CNPJ autorizado para download inválido"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "324": {
+   "texts": [
+    "Rejeição: CNPJ do destinatário já autorizado para download"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "325": {
+   "texts": [
+    "Rejeição: CPF autorizado para download inválido"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "326": {
+   "texts": [
+    "Rejeição: CPF do destinatário já autorizado para download"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "327": {
+   "texts": [
+    "Rejeição: CFOP inválido para Nota Fiscal com finalidade de devolução de mercadoria[nItem:nnn]"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "328": {
+   "texts": [
+    "Rejeição: CFOP de devolução de mercadoria para NF-e que não tem finalidade de devolução de mercadoria [nItem:nnn]"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "329": {
+   "texts": [
+    "Rejeição: Número da DI /DSI inválido"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "330": {
+   "texts": [
+    "Rejeição: Informar o Valor da AFRMM na importação por via marítima"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "331": {
+   "texts": [
+    "Rejeição: Informar o CNPJ do adquirente ou do encomendante nesta forma de importação"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "332": {
+   "texts": [
+    "Rejeição: CNPJ do adquirente ou do encomendante da importação inválido"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "333": {
+   "texts": [
+    "Rejeição: Informar a UF do adquirente ou do encomendante nesta forma de importação"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "334": {
+   "texts": [
+    "Rejeição: Número do processo de drawback não informado na importação"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "335": {
+   "texts": [
+    "Rejeição: Número do processo de drawback na importação inválido"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "336": {
+   "texts": [
+    "Rejeição: Informado o grupo de exportação no item em operação que não é com exterior [nItem: nnn]"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "337": {
+   "texts": [
+    "Rejeição: NFC-e para emitente pessoa física"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "338": {
+   "texts": [
+    "Rejeição: Número do processo de drawback não informado na exportação"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "339": {
+   "texts": [
+    "Rejeição: Número do processo de drawback na exportação inválido"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "340": {
+   "texts": [
+    "Rejeição: Não informado o grupo de exportação indireta no item"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "341": {
+   "texts": [
+    "Rejeição: Número do registro de exportação inválido"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "342": {
+   "texts": [
+    "Rejeição: Chave de Acesso informada na Exportação Indireta com DV inválido"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "343": {
+   "texts": [
+    "Rejeição: Modelo da NF-e informada na Exportação Indireta diferente de 55"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "344": {
+   "texts": [
+    "Rejeição: Duplicidade de NF-e informada na Exportação Indireta (Chave de Acesso informada mais de uma vez)"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "345": {
+   "texts": [
+    "Rejeição: Chave de Acesso informada na Exportação Indireta não consta como NF-e referenciada"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "346": {
+   "texts": [
+    "Rejeição: Somatório das quantidades informadas na Exportação Indireta não corresponde a quantidade total do item"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "347": {
+   "texts": [
+    "Rejeição: Informada IE do substituto tributário em operação que não é interestadual"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "348": {
+   "texts": [
+    "Rejeição: NFC-e com grupo RECOPI"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "349": {
+   "texts": [
+    "Rejeição: Número RECOPI não informado"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "350": {
+   "texts": [
+    "Rejeição: Número RECOPI inválido"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "351": {
+   "texts": [
+    "Rejeição: Valor do ICMS da Operação no CST=51 difere do produto BC e Alíquota [nItem: 999]"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "352": {
+   "texts": [
+    "Rejeição: Valor do ICMS Diferido no CST=51 difere do produto Valor ICMS Operação e percentual diferimento [nItem: 999]"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "353": {
+   "texts": [
+    "Rejeição: Valor do ICMS no CST=51 não corresponde a diferença do ICMS operação e ICMS diferido [nItem: 999]"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "354": {
+   "texts": [
+    "Rejeição: Informado grupo de devolução de tributos para NF-e que não tem finalidade de devolução de mercadoria"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "355": {
+   "texts": [
+    "Rejeição: Informar o local de saída do Pais no caso da exportação"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "356": {
+   "texts": [
+    "Rejeição: Informar o local de saída do Pais somente no caso da exportação"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "357": {
+   "texts": [
+    "Rejeição: Chave de Acesso do grupo de Exportação Indireta inexistente [nRef: xxx]"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "358": {
+   "texts": [
+    "Rejeição: Chave de Acesso do grupo de Exportação Indireta cancelada ou denegada [nRef: xxx ]"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "359": {
+   "texts": [
+    "Rejeição: NF-e de venda a Órgão Público sem informar a Nota de Empenho"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "360": {
+   "texts": [
+    "Rejeição: NF-e com Nota de Empenho inválida para a UF."
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "361": {
+   "texts": [
+    "Rejeição: NF-e com Nota de Empenho inexistente na UF."
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "362": {
+   "texts": [
+    "Rejeição: Venda de combustível sem informação do Transportador"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "363": {
+   "texts": [
+    "Rejeição: IE do substituto tributário idêntica à IE do emitente ou do destinatário"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "364": {
+   "texts": [
+    "Rejeição: Total do valor da dedução do ISS difere do somatório dos itens"
+   ],
+   "page": 145,
+   "table": "rejeicao"
+  },
+  "365": {
+   "texts": [
+    "Rejeição: Total de outras retenções difere do somatório dos itens"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "366": {
+   "texts": [
+    "Rejeição: Total do desconto incondicionado ISS difere do somatório dos itens"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "367": {
+   "texts": [
+    "Rejeição: Total do desconto condicionado ISS difere do somatório dos itens"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "368": {
+   "texts": [
+    "Rejeição: Total de ISS retido difere do somatório dos itens"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "369": {
+   "texts": [
+    "Rejeição: Não informado o grupo avulsa na emissão pelo Fisco"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "370": {
+   "texts": [
+    "Rejeição: Processo de emissão pelo Fisco com Tipo de Emissão inválido"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "372": {
+   "texts": [
+    "Rejeição: Destinatário com identificação de estrangeiro com caracteres inválidos"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "373": {
+   "texts": [
+    "Rejeição: Descrição do primeiro item diferente de NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "374": {
+   "texts": [
+    "Rejeição: CFOP incompatível com o grupo de tributação [nItem: nnn]"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "375": {
+   "texts": [
+    "Rejeição: NF-e com lançamento relativo a Cupom Fiscal referencia uma NFC-e [nItem: nnn]"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "376": {
+   "texts": [
+    "Rejeição: Data do Desembaraço Aduaneiro inválida [nItem: nnn]"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "377": {
+   "texts": [
+    "Rejeição: Código de País do destinatário inexistente"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "378": {
+   "texts": [
+    "Rejeição: Grupo de Combustível sem a informação de Encerrante [nItem: nnn]"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "379": {
+   "texts": [
+    "Rejeição: Grupo de Encerrante na NF-e (modelo 55) para CFOP diferente de venda de combustível para consumidor final"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "380": {
+   "texts": [
+    "Rejeição: Valor do Encerrante final não é superior ao Encerrante inicial [nItem: nnn]"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "381": {
+   "texts": [
+    "Rejeição: Grupo de tributação ICMS90, informando dados do ICMS-ST [nItem:nnn]"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "382": {
+   "texts": [
+    "Rejeição: CFOP não permitido para o CST informado [nItem:nnn]"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "383": {
+   "texts": [
+    "Rejeição: Item com CSOSN indevido [nItem: nnn]"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "384": {
+   "texts": [
+    "Rejeição: CSOSN não permitido para a UF [nItem: nnn]"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "385": {
+   "texts": [
+    "Rejeição: Grupo de tributação ICMSSN900, informando dados do ICMS-ST [nItem: nnn]"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "386": {
+   "texts": [
+    "Rejeição: CFOP não permitido para o CSOSN informado [nItem: nnn]"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "387": {
+   "texts": [
+    "Rejeição: Código de Enquadramento Legal do IPI inválido [nItem: nnn]"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "388": {
+   "texts": [
+    "Rejeição: Código de Situação Tributária do IPI incompatível com o Código de Enquadramento Legal do IPI [nItem: nnn]"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "389": {
+   "texts": [
+    "Rejeição: Código Município ISSQN inexistente [nItem:nnn]"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "390": {
+   "texts": [
+    "Rejeição: Nota Fiscal com grupo de devolução de Tributos [nItem: nnn]"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "391": {
+   "texts": [
+    "Rejeição: Não informados os dados do cartão de crédito / débito nas Formas de Pagamento da Nota Fiscal"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "392": {
+   "texts": [
+    "Rejeição: Não informados os dados da operação de pagamento por cartão de crédito / débito"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "393": {
+   "texts": [
+    "Rejeição: NF-e com o grupo de Informações Suplementares"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "394": {
+   "texts": [
+    "Rejeição: Nota Fiscal sem a informação do QR-Code"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "395": {
+   "texts": [
+    "Rejeição: Endereço do site da UF da Consulta via QR-Code diverge do previsto"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "396": {
+   "texts": [
+    "Rejeição: Parâmetro do QR-Code inexistente: [Nome do parâmetro do QR Code: xxx)]"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "397": {
+   "texts": [
+    "Rejeição: Parâmetro do QR-Code divergente da Nota Fiscal: [Nome do parâmetro do QR Code:: xxx)]"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "398": {
+   "texts": [
+    "Rejeição: Parâmetro Versão informada no QR-Code diverge do previsto (“2”)"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "399": {
+   "texts": [
+    "Rejeição: Parâmetro de Identificação do destinatário no QR-Code para Nota Fiscal sem identificação do destinatário"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "400": {
+   "texts": [
+    "Rejeição: Parâmetro do QR-Code não está no formato hexadecimal: [Nome do parâmetro do QR Code: xxx)]"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "401": {
+   "texts": [
+    "Rejeição: CPF do emitente inválido"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "402": {
+   "texts": [
+    "Rejeição: XML da área de dados com codificação diferente de UTF-8"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "403": {
+   "texts": [
+    "Rejeição: O grupo de informações da NF-e avulsa é de uso exclusivo do Fisco"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "404": {
+   "texts": [
+    "Rejeição: Uso de prefixo de namespace não permitido"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "407": {
+   "texts": [
+    "Rejeição: CPF do Emitente somente no serviço de Nota Fiscal Avulsa no site do Fisco"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "408": {
+   "texts": [
+    "Rejeição: Evento não disponível para Autor pessoa física"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "410": {
+   "texts": [
+    "Rejeição: UF informada no campo cUF não é atendida pelo WebService (NT 2018.004)"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "417": {
+   "texts": [
+    "Rejeição: Total do ICMS superior ao valor limite estabelecido"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "418": {
+   "texts": [
+    "Rejeição: Total do ICMS ST superior ao valor limite estabelecido"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "434": {
+   "texts": [
+    "Rejeição: NF-e sem indicativo do intermediador (NT 2020.006)"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "435": {
+   "texts": [
+    "Rejeição: NF-e não pode ter o indicativo do intermediador (NT 2020.006)"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "436": {
+   "texts": [
+    "Rejeição: Informado 99-Outros como meio de pagamento (NT 2020.006)"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "437": {
+   "texts": [
+    "Rejeição: CNPJ da instituição de pagamento inválido (NT 2020.006)"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "438": {
+   "texts": [
+    "Rejeição: Obrigatória as informações do intermediador da transação para operação por site de terceiros (NT 2020.006)"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "439": {
+   "texts": [
+    "Rejeição: Informações do intermediador da transação para operação por site de terceiros preenchido indevidamente (NT"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "440": {
+   "texts": [
+    "Rejeição: CNPJ do intermediador da transação inválido (NT 2020.006)"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "450": {
+   "texts": [
+    "Rejeição: Modelo da NF-e diferente de 55"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "451": {
+   "texts": [
+    "Rejeição: Processo de Emissão pelo Fisco incompatível com a Série da NF"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "453": {
+   "texts": [
+    "Rejeição: Ano de inutilização não pode ser superior ao Ano atual"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "454": {
+   "texts": [
+    "Rejeição: Ano de inutilização não pode ser inferior a 2006"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "455": {
+   "texts": [
+    "Rejeição: Órgão Autor do evento diferente da UF da Chave de Acesso"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "461": {
+   "texts": [
+    "Rejeição: Informado campos de percentual de GLP e/ou GLGNn e/ou GLGNi para produto diferente de GLP [nItem: 999]"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "462": {
+   "texts": [
+    "Rejeição: Código Identificador do CSC no QR-Code não cadastrado na SEFAZ"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "463": {
+   "texts": [
+    "Rejeição: Código Identificador do CSC no QR-Code foi revogado pela empresa"
+   ],
+   "page": 146,
+   "table": "rejeicao"
+  },
+  "464": {
+   "texts": [
+    "Rejeição: Código de Hash no QR-Code difere do calculado"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "465": {
+   "texts": [
+    "Rejeição: Número de Controle da FCI inexistente"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "466": {
+   "texts": [
+    "Rejeição: Evento com Tipo de Autor incompatível"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "467": {
+   "texts": [
+    "Rejeição: Dados da NF-e divergentes do EPEC [tag: xxxx]"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "468": {
+   "texts": [
+    "Rejeição: NF-e com Tipo Emissão = 4, sem EPEC correspondente"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "471": {
+   "texts": [
+    "Rejeição: Informado NCM=00 indevidamente"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "472": {
+   "texts": [
+    "Rejeição: CPF consultado difere do CPF do Certificado Digital"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "476": {
+   "texts": [
+    "Rejeição: Código da UF diverge da UF da primeira NF-e do Lote"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "477": {
+   "texts": [
+    "Rejeição: Código do órgão diverge do órgão do primeiro evento do Lote"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "478": {
+   "texts": [
+    "Rejeição: Local da entrega não informado para faturamento direto de veículos novos"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "479": {
+   "texts": [
+    "Rejeição: Data de Emissão anterior a data de credenciamento ou anterior a Data de Abertura do estabelecimento"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "480": {
+   "texts": [
+    "Rejeição: Código Município do Emitente diverge do cadastrado na UF"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "481": {
+   "texts": [
+    "Rejeição: Código Regime Tributário do emitente diverge do cadastro na SEFAZ"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "482": {
+   "texts": [
+    "Rejeição: Código do Município do Destinatário diverge do cadastrado na UF"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "483": {
+   "texts": [
+    "Rejeição: Valor do desconto maior que valor do produto [nItem: nnn]"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "484": {
+   "texts": [
+    "Rejeição: Chave de Acesso com tipo de emissão diferente de 4 (posição 35 da Chave de Acesso)"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "485": {
+   "texts": [
+    "Rejeição: Duplicidade de numeração do EPEC (Modelo, CNPJ ou CPF, Série e Número)"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "486": {
+   "texts": [
+    "Rejeição: Não informado o Grupo de Autorização para UF que exige a identificação do Escritório de Contabilidade na Nota"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "487": {
+   "texts": [
+    "Rejeição: Escritório de Contabilidade não cadastrado na SEFAZ"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "488": {
+   "texts": [
+    "Rejeição: Vendas do Emitente incompatíveis com o Porte da Empresa"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "489": {
+   "texts": [
+    "Rejeição: CNPJ informado inválido (DV ou zeros)",
+    "Rejeição: CNPJ informado inválido (DV ou zeros) [nItem: 999]"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "490": {
+   "texts": [
+    "Rejeição: CPF informado inválido (DV ou zeros)"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "494": {
+   "texts": [
+    "Rejeição: Chave de Acesso inexistente [chNFe:99999999999999999999999999999999999999999999]"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "495": {
+   "texts": [
+    "Rejeição: CPF do Emitente com Série incompatível"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "501": {
+   "texts": [
+    "Rejeição: Prazo de cancelamento superior ao previsto na Legislação"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "502": {
+   "texts": [
+    "Rejeição: Erro na Chave de Acesso - Campo Id não corresponde à concatenação dos campos correspondentes"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "503": {
+   "texts": [
+    "Rejeição: CNPJ do emitente com Série incompatível"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "504": {
+   "texts": [
+    "Rejeição: Data de Entrada/Saída posterior ao permitido"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "505": {
+   "texts": [
+    "Rejeição: Data de Entrada/Saída anterior ao permitido"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "506": {
+   "texts": [
+    "Rejeição: Data de Saída menor que a Data de Emissão"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "508": {
+   "texts": [
+    "Rejeição: CST incompatível na operação com Não Contribuinte [nItem: 999]"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "509": {
+   "texts": [
+    "Rejeição: Informado código de município diferente de “9999999” para operação com o exterior"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "510": {
+   "texts": [
+    "Rejeição: Operação com Exterior e Código País destinatário é 1058 (Brasil) ou não informado"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "511": {
+   "texts": [
+    "Rejeição: Não é de Operação com Exterior e Código País destinatário difere de 1058 (Brasil)"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "512": {
+   "texts": [
+    "Rejeição: CNPJ do Local de Retirada inválido"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "513": {
+   "texts": [
+    "Rejeição: Código Município do Local de Retirada deve ser 9999999 para UF retirada = “EX”."
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "514": {
+   "texts": [
+    "Rejeição: CNPJ do Local de Entrega inválido"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "515": {
+   "texts": [
+    "Rejeição: Código Município do Local de Entrega deve ser 9999999 para UF entrega = “EX”."
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "516": {
+   "texts": [
+    "Rejeição: Falha no schema XML – inexiste a tag raiz esperada para a mensagem"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "517": {
+   "texts": [
+    "Rejeição: Falha no schema XML – inexiste atributo versao na tag raiz da mensagem"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "518": {
+   "texts": [
+    "Rejeição: CFOP de entrada para NF-e de saída"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "519": {
+   "texts": [
+    "Rejeição: CFOP de saída para NF-e de entrada"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "520": {
+   "texts": [
+    "Rejeição: CFOP de Operação com Exterior e UF destinatário difere de “EX”"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "521": {
+   "texts": [
+    "Rejeição: Operação Interna e UF do emitente difere da UF do destinatário/remetente contribuinte do ICMS"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "522": {
+   "texts": [
+    "Rejeição: Chave de Acesso referenciada com UF inválida[nOcor:nnn]"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "523": {
+   "texts": [
+    "Rejeição: CFOP não é de Operação Estadual e UF emitente igual à UF destinatário [nItem: 999]"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "524": {
+   "texts": [
+    "Rejeição: Chave de Acesso referenciada com Ano-Mês inválido [nOcor: 999]"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "525": {
+   "texts": [
+    "Rejeição: CFOP de Importação e não informado dados da DI [nItem: 999]"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "526": {
+   "texts": [
+    "Rejeição: Consulta a uma Chave de Acesso muito antiga"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "527": {
+   "texts": [
+    "Rejeição: Operação de Exportação com informação de ICMS incompatível"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "528": {
+   "texts": [
+    "Rejeição: Valor do ICMS difere do produto BC e Alíquota [nItem: 999]"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "529": {
+   "texts": [
+    "Rejeição: CST incompatível na operação com Contribuinte Isento de Inscrição Estadual [nItem: 999]"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "530": {
+   "texts": [
+    "Rejeição: Operação com tributação de ISSQN sem informar a Inscrição Municipal"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "531": {
+   "texts": [
+    "Rejeição: Total da BC ICMS difere do somatório dos itens"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "532": {
+   "texts": [
+    "Rejeição: Total do ICMS difere do somatório dos itens"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "533": {
+   "texts": [
+    "Rejeição: Total da BC ICMS-ST difere do somatório dos itens"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "534": {
+   "texts": [
+    "Rejeição: Total do ICMS-ST difere do somatório dos itens"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "535": {
+   "texts": [
+    "Rejeição: Total do Frete difere do somatório dos itens"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "536": {
+   "texts": [
+    "Rejeição: Total do Seguro difere do somatório dos itens"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "537": {
+   "texts": [
+    "Rejeição: Total do Desconto difere do somatório dos itens"
+   ],
+   "page": 147,
+   "table": "rejeicao"
+  },
+  "538": {
+   "texts": [
+    "Rejeição: Total do IPI difere do somatório dos itens"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "539": {
+   "texts": [
+    "Rejeição: Duplicidade de NF-e com diferença na Chave de Acesso [chNFe:"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "540": {
+   "texts": [
+    "Rejeição: CPF do Local de Retirada inválido"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "541": {
+   "texts": [
+    "Rejeição: CPF do Local de Entrega inválido"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "542": {
+   "texts": [
+    "Rejeição: CNPJ do Transportador inválido"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "543": {
+   "texts": [
+    "Rejeição: CPF do Transportador inválido"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "544": {
+   "texts": [
+    "Rejeição: IE do Transportador inválida"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "547": {
+   "texts": [
+    "Rejeição: Chave de Acesso referenciada com Dígito Verificador inválido[nOcor:nnn]"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "548": {
+   "texts": [
+    "Rejeição: NF modelo 1 referenciada com data de emissão inválida [nOcor:nnn]"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "549": {
+   "texts": [
+    "Rejeição: CNPJ da NF referenciada de produtor inválido [nOcor: 999]"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "550": {
+   "texts": [
+    "Rejeição: CPF da NF referenciada de produtor inválido."
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "551": {
+   "texts": [
+    "Rejeição: IE da NF referenciada de produtor inválido."
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "552": {
+   "texts": [
+    "Rejeição: Chave de Acesso referenciada com CNPJ/CPF inválido[nOcor:nnn]"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "553": {
+   "texts": [
+    "Rejeição: Tipo autorizador do recibo diverge do Órgão Autorizador."
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "554": {
+   "texts": [
+    "Rejeição: IE do Emitente informada como ISENTO indevidamente"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "556": {
+   "texts": [
+    "Rejeição: Justificativa de entrada em contingência não deve ser informada para tipo de emissão normal"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "557": {
+   "texts": [
+    "Rejeição: A Justificativa de entrada em contingência deve ser informada"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "558": {
+   "texts": [
+    "Rejeição: Data de entrada em contingência posterior a data de recebimento"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "559": {
+   "texts": [
+    "Rejeição: UF do Transportador não informada"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "560": {
+   "texts": [
+    "Rejeição: CNPJ base/CPF do emitente difere do CNPJ base/CPF da primeira NF-e do lote recebido"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "561": {
+   "texts": [
+    "Rejeição: Mês de Emissão informado na Chave de Acesso difere do Mês de Emissão da NF-e"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "562": {
+   "texts": [
+    "Rejeição: Código Numérico informado na Chave de Acesso difere do Código Numérico da NF-e"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "563": {
+   "texts": [
+    "Rejeição: Já existe pedido de Inutilização com a mesma faixa de inutilização"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "564": {
+   "texts": [
+    "Rejeição: Total do Produto / Serviço difere do somatório dos itens"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "565": {
+   "texts": [
+    "Rejeição: Falha no schema XML – inexiste a tag raiz esperada para o lote de NF-e"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "568": {
+   "texts": [
+    "Rejeição: Falha no schema XML – inexiste atributo versao na tag raiz do lote de NF-e"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "569": {
+   "texts": [
+    "Rejeição: Data de entrada em contingência muito atrasada"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "570": {
+   "texts": [
+    "Rejeição: Tipo de Emissão 3, 6 ou 7 só é válido nas contingências SCAN/SVC"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "571": {
+   "texts": [
+    "Rejeição: Processo de emissão pelo Fisco com Certificado de Transmissão incompatível"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "572": {
+   "texts": [
+    "Rejeição: Erro Atributo ID do evento não corresponde a concatenação dos campos (“ID” + tpEvento + chNFe + nSeqEvento)"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "573": {
+   "texts": [
+    "Rejeição: Duplicidade de Evento"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "574": {
+   "texts": [
+    "Rejeição: O autor do evento diverge do emissor da NF-e"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "575": {
+   "texts": [
+    "Rejeição: O autor do evento diverge do destinatário da NF-e"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "576": {
+   "texts": [
+    "Rejeição: O autor do evento não é um órgão autorizado a gerar o evento"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "577": {
+   "texts": [
+    "Rejeição: A data do evento não pode ser menor que a data de emissão da NF-e"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "578": {
+   "texts": [
+    "Rejeição: A data do evento não pode ser maior que a data do processamento"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "579": {
+   "texts": [
+    "Rejeição: A data do evento não pode ser menor que a data de autorização para NF-e não emitida em contingência"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "580": {
+   "texts": [
+    "Rejeição: O evento exige uma NF-e autorizada"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "587": {
+   "texts": [
+    "Rejeição: Usar somente o namespace padrão da NF-e"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "588": {
+   "texts": [
+    "Rejeição: Não é permitida a presença de caracteres de edição no início/fim da mensagem ou entre as tags da mensagem"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "589": {
+   "texts": [
+    "Rejeição: Número do NSU informado superior ao maior NSU do Ambiente Nacional"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "590": {
+   "texts": [
+    "Rejeição: Informado CST para emissor do Simples Nacional (CRT=1)"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "591": {
+   "texts": [
+    "Rejeição: Informado CSOSN para emissor que não é do Simples Nacional (CRT diferente de 1)"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "592": {
+   "texts": [
+    "Rejeição: A NF-e deve ter pelo menos um item de produto sujeito ao ICMS."
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "593": {
+   "texts": [
+    "Rejeição: CNPJ-Base consultado difere do CNPJ-Base do Certificado Digital"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "594": {
+   "texts": [
+    "Rejeição: O número de sequencia do evento informado é maior que o permitido"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "595": {
+   "texts": [
+    "Rejeição: Obrigatória a informação da justificativa do evento."
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "596": {
+   "texts": [
+    "Rejeição: Evento apresentado fora do prazo: [prazo vigente]"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "597": {
+   "texts": [
+    "Rejeição: CFOP de Importação e não informado dados de IPI"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "598": {
+   "texts": [
+    "Rejeição: NF-e emitida em ambiente de homologação com Razão Social do destinatário diferente de NF-E EMITIDA EM"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "599": {
+   "texts": [
+    "Rejeição: CFOP de Importação e não informado dados de II [nItem: 999]"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "600": {
+   "texts": [
+    "Rejeição: CSOSN incompatível na operação com Não Contribuinte [nItem: 999]"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "601": {
+   "texts": [
+    "Rejeição: Total do II difere do somatório dos itens"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "602": {
+   "texts": [
+    "Rejeição: Total do PIS difere do somatório dos itens sujeitos ao ICMS"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "603": {
+   "texts": [
+    "Rejeição: Total da COFINS difere do somatório dos itens suje itos ao ICMS"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "604": {
+   "texts": [
+    "Rejeição: Total do vOutro difere do somatório dos itens"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "605": {
+   "texts": [
+    "Rejeição: Total do vServ difere do somatório do vProd dos itens sujeitos ao ISSQN"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "606": {
+   "texts": [
+    "Rejeição: Total do vBC do ISS difere do somatório dos itens"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "607": {
+   "texts": [
+    "Rejeição: Total do ISS difere do somatório dos itens"
+   ],
+   "page": 148,
+   "table": "rejeicao"
+  },
+  "608": {
+   "texts": [
+    "Rejeição: Total do PIS difere do somatório dos itens sujeitos ao ISSQN"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "609": {
+   "texts": [
+    "Rejeição: Total da COFINS difere do somatório dos itens sujeitos ao ISSQN"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "610": {
+   "texts": [
+    "Rejeição: Total da NF difere do somatório dos Valores compõe o valor Total da NF."
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "611": {
+   "texts": [
+    "Rejeição: GTIN (cEAN) inválido [nItem:999]"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "612": {
+   "texts": [
+    "Rejeição: GTIN da unidade tributável (cEANTrib) inválido [nItem:999]"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "613": {
+   "texts": [
+    "Rejeição: Chave de Acesso difere da existen te em BD"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "614": {
+   "texts": [
+    "Rejeição: Chave de Acesso inválida (Código UF inválido)"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "615": {
+   "texts": [
+    "Rejeição: Chave de Acesso inválida (Ano < 06 ou Ano maior que Ano Corrente)"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "616": {
+   "texts": [
+    "Rejeição: Chave de Acesso inválida (Mês < 1 ou Mês >  12)"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "617": {
+   "texts": [
+    "Rejeição: Chave de Acesso inválida (CNPJ/CPF zerado ou dígito inválido)"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "618": {
+   "texts": [
+    "Rejeição: Chave de Acesso inválida (modelo diferente de 55 e 65)"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "619": {
+   "texts": [
+    "Rejeição: Chave de Acesso inválida (número NF = 0)"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "621": {
+   "texts": [
+    "Rejeição: CPF Emitente não cadastrado"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "622": {
+   "texts": [
+    "Rejeição: IE emitente não vinculada ao CPF"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "623": {
+   "texts": [
+    "Rejeição: CPF Destinatário não cadastrado"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "624": {
+   "texts": [
+    "Rejeição: IE Destinatário não vinculada ao CPF"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "625": {
+   "texts": [
+    "Rejeição: Inscrição SUFRAMA deve ser informada na venda com isenção para ZFM [nItem: 999]"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "626": {
+   "texts": [
+    "Rejeição: CFOP de operação isenta para ZFM diferente do previsto [nItem: 999]"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "627": {
+   "texts": [
+    "Rejeição: O valor do ICMS desonerado deve ser informado [nItem: 999]"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "628": {
+   "texts": [
+    "Rejeição: Total da NF superior ao valor limite estabelecido pela SEFAZ [Limite]"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "629": {
+   "texts": [
+    "Rejeição: Valor do Produto difere do produto Valor Unitário de Comercialização e Quantidade Comercial [nItem: 999]"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "630": {
+   "texts": [
+    "Rejeição: Valor do Produto difere do produto Valor Unitário de Tributação e Quantidade Tributável [nItem: 999]"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "631": {
+   "texts": [
+    "Rejeição: CNPJ-Base do Destinatário difere do CNPJ-Base do Certificado Digital"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "632": {
+   "texts": [
+    "Rejeição: Solicitação fora de prazo, a NF-e não está mais disponível para download"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "633": {
+   "texts": [
+    "Rejeição: NF-e indisponível para download devido a ausência de Manifestação do Destinatário"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "634": {
+   "texts": [
+    "Rejeição: Destinatário da NF-e não tem o mesmo CNPJ raiz do solicitante do download"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "635": {
+   "texts": [
+    "Rejeição: NF-e com mesmo número e série já transmitida e aguardando processamento"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "636": {
+   "texts": [
+    "Rejeição: O tipo do evento de cancelamento não corresponde ao tipo do evento a ser cancelado"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "638": {
+   "texts": [
+    "Rejeição: A quantidade de Pedidos de Prorrogação 1º prazo excede o valor limite de 20 Pedidos de Prorrogação autorizados e"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "639": {
+   "texts": [
+    "Rejeição: A quantidade de Pedidos de Prorrogação 2° prazo excede o valor limite de 20 Pedidos de Prorrogação autorizados e"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "640": {
+   "texts": [
+    "Rejeição: CNPJ/CPF do interessado não possui permissão para consultar esta NF-e",
+    "Rejeição: ID do Pedido de Prorrogação inválido"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "641": {
+   "texts": [
+    "Rejeição: A data do evento não pode ser menor que a data de autorização para o evento",
+    "Rejeição: NF-e indisponível para o emitente"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "650": {
+   "texts": [
+    "Rejeição: Evento de \"Ciência da Emissão\" para NF-e Cancelada ou Denegada"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "651": {
+   "texts": [
+    "Rejeição: Evento de \"Desconhecimento da Operação\" para NF-e Cancelada ou Denegada"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "652": {
+   "texts": [
+    "Rejeição: NF-e para emitente pessoa física"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "653": {
+   "texts": [
+    "Rejeição: NF-e Cancelada, arquivo indisponível para download"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "654": {
+   "texts": [
+    "Rejeição: NF-e Denegada, arquivo indisponível para download"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "655": {
+   "texts": [
+    "Rejeição: Evento de Ciência da Emissão informado após a manifestação final do destinatário"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "656": {
+   "texts": [
+    "Rejeição: Consumo indevido pelo aplicativo da empresa [det: DESC_ERRO]"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "657": {
+   "texts": [
+    "Rejeição: Código do Órgão diverge do órgão autorizador"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "658": {
+   "texts": [
+    "Rejeição: UF do destinatário da Chave de Acesso diverge da UF autorizadora"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "659": {
+   "texts": [
+    "Rejeição: Ano-Mês da Data de Emissão diverge do Ano_Mês da Chave de Acesso"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "660": {
+   "texts": [
+    "Rejeição: CFOP de Combustível e não informado grupo de combustível da NF-e [nItem: nnn]"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "661": {
+   "texts": [
+    "Rejeição: NF-e já existente para o número do EPEC informado"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "662": {
+   "texts": [
+    "Rejeição: Numeração do EPEC está inutilizada na Base de Dados da SEFAZ"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "663": {
+   "texts": [
+    "Rejeição: Alíquota do ICMS com valor superior a 4 por cento na operação de saída interestadual com produtos importados"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "678": {
+   "texts": [
+    "Rejeição: NF referenciada com UF diferente da NF-e complementar"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "679": {
+   "texts": [
+    "Rejeição: Chave de Acesso referenciada com Modelo inválido[nOcor:nnn]"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "680": {
+   "texts": [
+    "Rejeição: Chave de Acesso referenciada em duplicidade na NF-e [nOcor:nnn]"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "681": {
+   "texts": [
+    "Rejeição: Duplicidade de NF Modelo 1 referenciada (CNPJ, Modelo, Série e Número) [nOcor: nnn]"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "682": {
+   "texts": [
+    "Rejeição: Duplicidade de NF de Produtor referenciada (IE, Modelo, Série e Número) [nOcor: 999]"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "683": {
+   "texts": [
+    "Rejeição: Chave de Acesso referenciada com Número inválido[nOcor:nnn]"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "684": {
+   "texts": [
+    "Rejeição: Duplicidade de Cupom Fiscal referenciado (Modelo, Número de Ordem e COO) [nOcor: 999]"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "685": {
+   "texts": [
+    "Rejeição: Total do Valor Aproximado dos Tributos difere do somatório dos itens"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "686": {
+   "texts": [
+    "Rejeição: NF Complementar referencia uma NF-e cancelada"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "687": {
+   "texts": [
+    "Rejeição: NF Complementar referencia uma NF-e denegada"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "688": {
+   "texts": [
+    "Rejeição: NF referenciada de Produtor com IE inexistente [nRef: xxx]"
+   ],
+   "page": 149,
+   "table": "rejeicao"
+  },
+  "689": {
+   "texts": [
+    "Rejeição: NF referenciada de Produtor com IE não vinculada ao CNPJ/CPF informado [nRef: xxx]"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "690": {
+   "texts": [
+    "Rejeição: Pedido de Cancelamento para NF-e com CT-e ou MDF-e"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "691": {
+   "texts": [
+    "Rejeição: Chave de Acesso da NF-e diverge da Chave de Acesso do EPEC [Chave EPEC: xxxxxxxxx]"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "692": {
+   "texts": [
+    "Rejeição: Existe EPEC registrado para esta Série e Número [Chave EPEC: xxxxxxxxxxx]"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "693": {
+   "texts": [
+    "Rejeição: Alíquota de ICMS superior à definida para a operação interestadual [nItem: 999]"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "694": {
+   "texts": [
+    "Rejeição: Não informado o grupo de ICMS para a UF de destino [nItem: 999]"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "695": {
+   "texts": [
+    "Rejeição: Informado indevidamente o grupo de ICMS para a UF de destino [nItem:999]"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "696": {
+   "texts": [
+    "Rejeição: Operação com não contribuinte deve indicar operação com consumidor final"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "697": {
+   "texts": [
+    "Rejeição: Alíquota interestadual do ICMS com origem diferente do previsto [nItem:999]"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "698": {
+   "texts": [
+    "Rejeição: Alíquota interestadual do ICMS incompatível com as UF envolvidas na operação [nItem:999]"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "699": {
+   "texts": [
+    "Rejeição: Percentual do ICMS Interestadual para a UF de destino difere do previsto para o ano da Data de Emissão [nItem:"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "701": {
+   "texts": [
+    "Rejeição: Não informado Nota Fiscal referenciada (CFOP de Exportação Indireta) [nItem: nnn]",
+    "Rejeição: Não informado Nota Fiscal referenciada (Lançamento relativo a Cupom Fiscal) [nItem: nnn]"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "702": {
+   "texts": [
+    "Rejeição: NFC-e não é aceita pela UF do Emitente"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "703": {
+   "texts": [
+    "Rejeição: Data-Hora de Emissão posterior ao horário de recebimento"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "704": {
+   "texts": [
+    "Rejeição: NFC-e com Data-Hora de emissão atrasada"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "705": {
+   "texts": [
+    "Rejeição: NFC-e com data de entrada/saída"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "706": {
+   "texts": [
+    "Rejeição: NFC-e para operação de entrada"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "707": {
+   "texts": [
+    "Rejeição: NFC-e para operação interestadual ou com o exterior"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "708": {
+   "texts": [
+    "Rejeição: NFC-e não pode referenciar documento fiscal"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "709": {
+   "texts": [
+    "Rejeição: NFC-e com formato de DANFE inválido"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "710": {
+   "texts": [
+    "Rejeição: NF-e com formato de DANFE inválido"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "711": {
+   "texts": [
+    "Rejeição: NF-e com contingência off-line"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "712": {
+   "texts": [
+    "Rejeição: NFC-e com contingência off-line para a UF"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "713": {
+   "texts": [
+    "Rejeição: Tipo de Emissão diferente de 6 ou 7 para contingência da SVC acessada"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "714": {
+   "texts": [
+    "Rejeição: NFC-e com contingência inválida (tpEmis=2, 4 (a critério da UF) ou 5)"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "715": {
+   "texts": [
+    "Rejeição: NFC-e com finalidade inválida"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "716": {
+   "texts": [
+    "Rejeição: NFC-e em operação não destinada a consumidor final"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "717": {
+   "texts": [
+    "Rejeição: NFC-e em operação não presencial"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "718": {
+   "texts": [
+    "Rejeição: NFC-e não deve informar IE de Substituto Tributário"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "719": {
+   "texts": [
+    "Rejeição: NF-e sem a identificação do destinatário"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "720": {
+   "texts": [
+    "Rejeição: Na operação com Exterior deve ser informada tag idEstrangeiro"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "721": {
+   "texts": [
+    "Rejeição: Informado idEstrangeiro e Operação não é com consumidor final.",
+    "Rejeição: Operação interestadual deve informar CNPJ ou CPF"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "722": {
+   "texts": [
+    "Rejeição: CFOP de Transporte Inexistente"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "724": {
+   "texts": [
+    "Rejeição: NF-e sem o nome do destinatário"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "725": {
+   "texts": [
+    "Rejeição: NFC-e com CFOP inválido[nItem:nnn]"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "726": {
+   "texts": [
+    "Rejeição: NF-e sem a informação de endereço do destinatário"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "727": {
+   "texts": [
+    "Rejeição: Operação com Exterior e UF diferente de EX"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "728": {
+   "texts": [
+    "Rejeição: NF-e sem informação da IE do destinatário"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "729": {
+   "texts": [
+    "Rejeição: NFC-e com informação da IE do destinatário"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "730": {
+   "texts": [
+    "Rejeição: NFC-e com Inscrição Suframa"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "731": {
+   "texts": [
+    "Rejeição: CFOP de operação com Exterior e idDest <> 3"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "732": {
+   "texts": [
+    "Rejeição: CFOP de operação interestadual e idDest <> 2"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "733": {
+   "texts": [
+    "Rejeição: CFOP de operação interna e idDest <> 1"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "734": {
+   "texts": [
+    "Rejeição: NFC-e com Unidade de Comercialização inválida [nItem: 999]"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "735": {
+   "texts": [
+    "Rejeição: NFC-e com Unidade de Tributação inválida [nItem: 999]"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "736": {
+   "texts": [
+    "Rejeição: NFC-e com grupo de Veículos novos"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "737": {
+   "texts": [
+    "Rejeição: Pagamento com cartão de crédito em sistema de automação não integrado"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "738": {
+   "texts": [
+    "Rejeição: NFC-e com grupo de Armamentos"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "739": {
+   "texts": [
+    "Rejeição: Código de País do ISSQN Inexistente"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "740": {
+   "texts": [
+    "Rejeição: Item com Repasse de ICMS retido por Substituto Tributário [nItem: nnn]"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "741": {
+   "texts": [
+    "Rejeição: NFC-e com Partilha de ICMS entre UF"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "742": {
+   "texts": [
+    "Rejeição: NFC-e com grupo do IPI"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "743": {
+   "texts": [
+    "Rejeição: NFC-e com grupo do II"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "745": {
+   "texts": [
+    "Rejeição: NF-e sem grupo do PIS"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "746": {
+   "texts": [
+    "Rejeição: NFC-e com grupo do PIS-ST"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "748": {
+   "texts": [
+    "Rejeição: NF-e sem grupo da COFINS"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "749": {
+   "texts": [
+    "Rejeição: NFC-e com grupo da COFINS-ST"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "750": {
+   "texts": [
+    "Rejeição: NFC-e com valor total superior ao permitido para destinatário não identificado (Código) [Limite]"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "751": {
+   "texts": [
+    "Rejeição: NFC-e com valor total superior ao permitido para destinatário não identificado (Nome) [Limite]"
+   ],
+   "page": 150,
+   "table": "rejeicao"
+  },
+  "752": {
+   "texts": [
+    "Rejeição: NFC-e com valor total superior ao permitido para destinatário não identificado (Endereço) [Limite]"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "753": {
+   "texts": [
+    "Rejeição: NFC-e com Frete"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "754": {
+   "texts": [
+    "Rejeição: NFC-e com dados do Transportador"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "755": {
+   "texts": [
+    "Rejeição: NFC-e com dados de Retenção do ICMS no Transporte"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "756": {
+   "texts": [
+    "Rejeição: NFC-e com dados do veículo de Transporte"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "757": {
+   "texts": [
+    "Rejeição: NFC-e com dados de Reboque do veículo de Transporte"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "758": {
+   "texts": [
+    "Rejeição: NFC-e com dados do Vagão de Transporte"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "759": {
+   "texts": [
+    "Rejeição: NFC-e com dados da Balsa de Transporte"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "760": {
+   "texts": [
+    "Rejeição: NFC-e com dados de cobrança (Fatura, Duplicata)"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "761": {
+   "texts": [
+    "Rejeição: Código de Produto ANP inexistente [nItem: 999]"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "762": {
+   "texts": [
+    "Rejeição: NFC-e com dados de compras (Empenho, Pedido, Contrato)"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "763": {
+   "texts": [
+    "Rejeição: NFC-e com dados de aquisição de Cana"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "765": {
+   "texts": [
+    "Rejeição: Lote só poderá conter NF-e ou NFC-e"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "766": {
+   "texts": [
+    "Rejeição: Item com CST indevido [nItem:nnn]"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "770": {
+   "texts": [
+    "Rejeição: CFOP Inexistente [nItem:nnn]"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "771": {
+   "texts": [
+    "Rejeição: Informado idEstrangeiro em operação interestadual"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "772": {
+   "texts": [
+    "Rejeição: Operação Interestadual e UF de destino igual à UF de origem"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "773": {
+   "texts": [
+    "Rejeição: Operação Interna e UF de destino difere da UF de origem"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "774": {
+   "texts": [
+    "Rejeição: NFC-e com indicador de item não participante do total [nItem: 999]"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "775": {
+   "texts": [
+    "Rejeição: Modelo da NFC-e diferente de 65"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "777": {
+   "texts": [
+    "Rejeição: Obrigatória a informação do NCM completo (redação dada pela NT 2013/005 v 1.20) [nItem: 999]"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "778": {
+   "texts": [
+    "Rejeição: Informado NCM inexistente[nItem:nnn]"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "779": {
+   "texts": [
+    "Rejeição: NFC-e com NCM incompatível [nItem: 999]"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "780": {
+   "texts": [
+    "Rejeição: Total da NFC-e superior ao valor limite estabelecido pela SEFAZ [Limite]"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "781": {
+   "texts": [
+    "Rejeição: Emissor não habilitado para emissão da NFC-e"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "783": {
+   "texts": [
+    "Rejeição: NFC-e não é autorizada pela SVC"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "784": {
+   "texts": [
+    "Rejeição: NFC-e não permite o evento de Carta de Correção"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "785": {
+   "texts": [
+    "Rejeição: NFC-e com entrega a domicílio não permitida pela UF"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "786": {
+   "texts": [
+    "Rejeição: NFC-e de entrega a domicílio sem dados do Transportador"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "787": {
+   "texts": [
+    "Rejeição: NFC-e de entrega a domicílio sem a identificação do destinatário"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "788": {
+   "texts": [
+    "Rejeição: NFC-e de entrega a domicílio sem o endereço do destinatário"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "789": {
+   "texts": [
+    "Rejeição: NFC-e para destinatário contribuinte de ICMS"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "790": {
+   "texts": [
+    "Rejeição: Operação com Exterior para destinatário Contribuinte de ICMS"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "791": {
+   "texts": [
+    "Rejeição: NF-e com indicação de destinatário isento de IE, com a informação da IE do destinatário"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "792": {
+   "texts": [
+    "Rejeição: Informada a IE do destinatário para operação com destinatário no Exterior"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "793": {
+   "texts": [
+    "Rejeição: Valor do ICMS relativo ao Fundo de Combate à Pobreza na UF de destino difere do calculado [nItem: 999]"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "794": {
+   "texts": [
+    "Rejeição: NF-e com indicativo de NFC-e com entrega a domicílio"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "795": {
+   "texts": [
+    "Rejeição: Total do ICMS desonerado difere do somatório dos itens"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "798": {
+   "texts": [
+    "Rejeição: Valor total do ICMS relativo Fundo de Combate à Pobreza (FCP) da UF de destino difere do somatório do valor dos"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "799": {
+   "texts": [
+    "Rejeição: Valor total do ICMS Interestadual da UF de destino difere do somatório dos itens"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "800": {
+   "texts": [
+    "Rejeição: Valor total do ICMS Interestadual da UF do remetente difere do somatório dos itens"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "805": {
+   "texts": [
+    "Rejeição: A SEFAZ do destinatário não permite Contribuinte Isento de Inscrição Estadual"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "806": {
+   "texts": [
+    "Rejeição: Operação com ICMS-ST sem informação do CEST [nItem: 999]"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "807": {
+   "texts": [
+    "Rejeição: NFC-e com grupo de ICMS para a UF do destinatário"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "811": {
+   "texts": [
+    "Rejeição: Pedido de Prorrogação deferido impede o cancelamento da NF-e"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "812": {
+   "texts": [
+    "Rejeição: Regime Tributário SN, com excesso de sublimite não é permitido para Emitentes desta UF"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "813": {
+   "texts": [
+    "Rejeição: QR-Code com sequência de escape para o e-comercial. Usar CDATA"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "814": {
+   "texts": [
+    "Rejeição: Nota Fiscal com grupo de comércio exterior"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "815": {
+   "texts": [
+    "Rejeição: Valor do ICMS Interestadual para UF de Destino difere do calculado [nItem : 999] (Valor Informado: XXX, Valor"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "816": {
+   "texts": [
+    "Rejeição: Valor do ICMS Interestadual para UF do Remetente difere do calculado [nItem: 999] (Valor Informado: XXX, Valor"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "817": {
+   "texts": [
+    "Rejeição: Unidade Tributável incompatível com o NCM informado na operação com Comércio Exterior [nItem: 999]"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "827": {
+   "texts": [
+    "Rejeição: Obrigatório informar o tipo de autorização"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "828": {
+   "texts": [
+    "Rejeição: Não permitido informar o campo tipo de autorização"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "829": {
+   "texts": [
+    "Rejeição: Condição de uso não informado para o tipo de autorização de uso"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "830": {
+   "texts": [
+    "Rejeição: Não permitido preencher o campo Condição de Uso"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "850": {
+   "texts": [
+    "Rejeição: Data de vencimento da parcela não informada ou menor que a Data de vencimento da parcela anterior [nOcor: 999]"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "851": {
+   "texts": [
+    "Rejeição: Soma do valor das parcelas difere do Valor Líquido da Fatura"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "852": {
+   "texts": [
+    "Rejeição: Número da parcela inválido ou não informado [nOcor: 999]"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "854": {
+   "texts": [
+    "Rejeição: Unidade Tributável (tag:uTrib) incompatível com produto informado [nItem: 999]"
+   ],
+   "page": 151,
+   "table": "rejeicao"
+  },
+  "855": {
+   "texts": [
+    "Rejeição: Somatório percentuais de GLP derivado do petróleo, GLGNn e GLGNi diferente de 100 [nItem: 999]."
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "856": {
+   "texts": [
+    "Rejeição: Campo valor de partida não preenchido para produto GLP [nItem: 999]."
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "857": {
+   "texts": [
+    "Rejeição: Informado Duplicata Mercantil como Forma de Pagamento"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "858": {
+   "texts": [
+    "Rejeição: Grupo de Tributação informado indevidamente [nItem: 999]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "859": {
+   "texts": [
+    "Rejeição: Total do FCP retido anteriormente por Substituição Tributária difere do somatório dos itens"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "860": {
+   "texts": [
+    "Rejeição: Valor do FCP informado difere de base de cálculo*alíquota [nItem: 999]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "861": {
+   "texts": [
+    "Rejeição: Total do FCP difere do somatório dos itens"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "862": {
+   "texts": [
+    "Rejeição: Total do FCP ST difere do somatório dos itens"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "863": {
+   "texts": [
+    "Rejeição: Total do IPI devolvido difere do somatório dos itens"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "864": {
+   "texts": [
+    "Rejeição: NF-e com indicativo de Operação presencial, fora do estabelecimento e não informada NF referenciada"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "865": {
+   "texts": [
+    "Rejeição: Total dos pagamentos menor que o total da nota"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "866": {
+   "texts": [
+    "Rejeição: Ausência de troco quando o valor dos pagamentos informados for maior que o total da nota"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "868": {
+   "texts": [
+    "Rejeição: Grupos Veiculo Transporte e Reboque não devem ser informados"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "869": {
+   "texts": [
+    "Rejeição: Valor do troco incorreto"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "870": {
+   "texts": [
+    "Rejeição: Data de validade incompatível com data de fabricação [nItem: 999]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "871": {
+   "texts": [
+    "Rejeição: O campo Meio de Pagamento deve ser preenchido com a opção Sem Pagamento"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "873": {
+   "texts": [
+    "Rejeição: Operação com medicamentos e não informado os campos de rastreabilidade [nItem: 999]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "874": {
+   "texts": [
+    "Rejeição: Percentual de FCP inválido [nItem: 999]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "875": {
+   "texts": [
+    "Rejeição: Percentual de FCPST inválido [nItem: 999]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "876": {
+   "texts": [
+    "Rejeição: Operação interestadual para Consumidor Final e valor do FCP informado em campo diferente de vFCPUFDest"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "877": {
+   "texts": [
+    "Rejeição: Data de fabricação maior que a data de processamento [nItem: 999]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "878": {
+   "texts": [
+    "Rejeição: Endereço do site da UF da Consulta por chave de acesso diverge do previsto"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "879": {
+   "texts": [
+    "Rejeição: Informado item “Produzido em Escala NÃO Relevante” e não informado CNPJ do Fabricante [nItem: 999]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "880": {
+   "texts": [
+    "Rejeição: Percentual de FCP igual a zero [nItem: 999]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "881": {
+   "texts": [
+    "Rejeição: Percentual de FCPST igual a zero [nItem: 999]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "882": {
+   "texts": [
+    "Rejeição: GTIN (cEAN) com prefixo inválido [nItem:999]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "883": {
+   "texts": [
+    "Rejeição: GTIN (cEAN) sem informação [nItem: 999]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "884": {
+   "texts": [
+    "Rejeição: GTIN da unidade tributável (cEANTrib) com prefixo inválido [nItem:999]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "885": {
+   "texts": [
+    "Rejeição: GTIN informado, mas não informado o GTIN da unidade tributável [nItem:999]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "886": {
+   "texts": [
+    "Rejeição: GTIN da unidade tributável informado, mas não informado o GTIN [nItem:999]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "888": {
+   "texts": [
+    "Rejeição: GTIN da unidade tributável (cEANTrib) sem informação [nItem:999]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "889": {
+   "texts": [
+    "Rejeição: Obrigatória a informação do GTIN para o produto [nItem: 999]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "890": {
+   "texts": [
+    "Rejeição: GTIN inexistente no Cadastro Centralizado de GTIN (CCG) [nItem:999]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "891": {
+   "texts": [
+    "Rejeição: GTIN incompatível com a NCM [nItem:999; NCM esperada: 99999999]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "892": {
+   "texts": [
+    "Rejeição: GTIN incompatível com CEST [nItem:999; CEST esperado: 9999999]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "893": {
+   "texts": [
+    "Rejeição: GTIN da unidade tributável diverge do GTIN Contido cadastrado no CCG [nItem:999; GTIN Contido esperado:"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "894": {
+   "texts": [
+    "Rejeição: GTIN da unidade tributável inexistente no Cadastro Centralizado de GTIN (CCG) [nItem:999]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "895": {
+   "texts": [
+    "Rejeição: GTIN da unidade tributável incompatível com a NCM [nItem:999; NCM esperada: 99999999]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "896": {
+   "texts": [
+    "Rejeição: GTIN da unidade tributável incompatível com CEST [nItem:999; CEST esperado: 9999999]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "899": {
+   "texts": [
+    "Rejeição: Informado incorretamente o campo meio de pagamento"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "900": {
+   "texts": [
+    "Rejeição: Data de vencimento da parcela não informada ou menor que Data de Emissão [nOcor: 999]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "901": {
+   "texts": [
+    "Rejeição: Valor do Desconto da Fatura maior que Valor Original da Fatura"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "902": {
+   "texts": [
+    "Rejeição: Valor Liquido da Fatura difere do Valor Original menos o Valor do Desconto"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "903": {
+   "texts": [
+    "Rejeição Versão informada no QR-Code (“100”) não é mais válida para a data de emissão"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "904": {
+   "texts": [
+    "Rejeição: Informado indevidamente campo valor de pagamento"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "905": {
+   "texts": [
+    "Rejeição: Campos do grupo Fatura não informados"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "906": {
+   "texts": [
+    "Rejeição: Não informados os campos para informações do ICMS Efetivo. [nItem: nnn] [NT 2018.005]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "910": {
+   "texts": [
+    "Rejeição: Chave de Acesso NF-e Substituta inválida (<nome do campo>) [NT 2018.004]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "911": {
+   "texts": [
+    "Rejeição: Chave de Acesso NF-e Substituta incorreta (<nome do campo>) [NT 2018.004]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "912": {
+   "texts": [
+    "Rejeição: NF-e Substituta inexistente [NT 2018.004]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "913": {
+   "texts": [
+    "Rejeição: NF-e Substituta Denegada ou Cancelada [NT 2018.004]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "914": {
+   "texts": [
+    "Rejeição: Data de emissão da NF-e Substituta maior que 2 horas da data de emissão da NF-e a ser cancelada [NT 2018.004]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "915": {
+   "texts": [
+    "Rejeição: Valor total da NF-e Substituta difere do valor da NF-e a ser cancelada [NT 2018.004]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "916": {
+   "texts": [
+    "Rejeição: Valor total do ICMS da NF-e Substituta difere do valor da NF-e a ser cancelada [NT 2018.004]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "917": {
+   "texts": [
+    "Rejeição: Identificação do destinatário da NF-e Substituta difere da identificação do destinatário da NF-e a ser cancelada. [NT"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "918": {
+   "texts": [
+    "Rejeição: Quantidade de itens da NF-e Substituta difere da quantidade de itens da NF-e a ser cancelada. [NT 2018.004]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "919": {
+   "texts": [
+    "Rejeição: Item da NF-e Substituta difere do mesmo item da NF-e a ser cancelada. [NT 2018.004]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "920": {
+   "texts": [
+    "Rejeição: Tipo de Emissão inválido no Cancelamento por Substituição [NT 2018.004]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "922": {
+   "texts": [
+    "Rejeição: Contranota de Produtor só pode referenciar NF-e ou NF de Produtor Modelo 4 [NT 2019.001]"
+   ],
+   "page": 152,
+   "table": "rejeicao"
+  },
+  "923": {
+   "texts": [
+    "Rejeição: Referenciado documento de operação interna em operação interestadual ou com o exterior [NT 2019.001]"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  },
+  "924": {
+   "texts": [
+    "Rejeição: Informado Cupom Fiscal referenciado. [NT 2019.001]"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  },
+  "925": {
+   "texts": [
+    "Rejeição: NF-e com identificação de estrangeiro e inscrição estadual informada para destinatário [NT 2019.001]"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  },
+  "926": {
+   "texts": [
+    "Rejeição: Operação com Exterior e país de destino igual a Brasil. [NT 2019.001]"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  },
+  "927": {
+   "texts": [
+    "Rejeição: Número do item fora da ordem sequencial. [NT 2019.001]"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  },
+  "928": {
+   "texts": [
+    "Rejeição: Informado código de benefício fiscal para CST sem benefício fiscal [nItem: nnn] [NT 2019.001]"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  },
+  "929": {
+   "texts": [
+    "Rejeição: Informado CST de diferimento sem as informações de diferimento [nItem: nnn] [NT 2019.001]"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  },
+  "930": {
+   "texts": [
+    "Rejeição: CST com benefício fiscal e não informado o código de benefício fiscal [nItem: nnn] [NT 2019.001]"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  },
+  "931": {
+   "texts": [
+    "Rejeição: CST não corresponde ao tipo de código de benefício fiscal [nItem: nnn] [NT 2019.001]"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  },
+  "932": {
+   "texts": [
+    "Rejeição: Informada modalidade de determinação da BC da ST como MVA e não informado o campo pMVAST [nItem: nnn]"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  },
+  "933": {
+   "texts": [
+    "Rejeição: Informada modalidade de determinação da BC da ST diferente de MVA e informado o campo pMVAST [nItem: nnn]"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  },
+  "934": {
+   "texts": [
+    "Rejeição: Não informado valor do ICMS desonerado ou o Motivo de desoneração [nItem: nnn] [NT 2019.001]"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  },
+  "935": {
+   "texts": [
+    "Rejeição: Valor total da Base de Cálculo superior ao valor limite estabelecido [Valor Limite: R$ XXX.XXX,XX] (valor definido pela"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  },
+  "936": {
+   "texts": [
+    "Rejeição: Razão Social do emitente diverge do informado no cadastro da SEFAZ"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  },
+  "938": {
+   "texts": [
+    "Rejeição: Não informada BCST, pST e ICMSST retido na operação anterior [nItem: 999] [NT 2018.005]"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  },
+  "946": {
+   "texts": [
+    "Rejeição: Informado código de benefício fiscal incorreto ou inexistente na UF [nItem: nnn]"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  },
+  "970": {
+   "texts": [
+    "Rejeição: Código de País inexistente [local de retirada/entrega] [NT 2018.005]"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  },
+  "971": {
+   "texts": [
+    "Rejeição: IE inválida [local de retirada/entrega] [NT 2018.005]"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  },
+  "972": {
+   "texts": [
+    "Rejeição: Obrigatória as informações do responsável técnico [NT 2018.005]"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  },
+  "973": {
+   "texts": [
+    "Rejeição: CNPJ do responsável técnico inválido [NT 2018.005]"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  },
+  "974": {
+   "texts": [
+    "Rejeição: CNPJ do responsável técnico diverge do cadastrado  [NT 2018.005]"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  },
+  "975": {
+   "texts": [
+    "Rejeição: Obrigatória a informação do identificador do CSRT e do Hash do CSRT [NT 2018.005]"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  },
+  "976": {
+   "texts": [
+    "Rejeição: Identificador do CSRT não cadastrado na SEFAZ [NT 2018.005]"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  },
+  "977": {
+   "texts": [
+    "Rejeição: Identificador do CSRT revogado [NT 2018.005]"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  },
+  "978": {
+   "texts": [
+    "Rejeição: Hash do CSRT diverge do calculado [NT 2018.005]"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  },
+  "999": {
+   "texts": [
+    "Rejeição: Erro não catalogado (informar a mensagem de erro capturado no tratamento da exceção)"
+   ],
+   "page": 153,
+   "table": "rejeicao"
+  }
+ }
+}

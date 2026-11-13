@@ -57,7 +57,7 @@ Com `DOMAIN_PLUGINS=dfe_copilot.plugin`, o core insere `domain_tools` entre
    (sempre `hypothesis`) em `DiagnosisResponse.findings`.
 
 Lacunas viram fatos explícitos: `G-noxml`, `G-xml`, `G-events`, `G-ref`,
-`G-kb`, `G-sig`, `G-lote`, `G-ns`, `G-539`. Fatos de XML: `F-amb`, `F-cStat`, `F-dv`, `F-xsd`, `F-sig`, `F-sigcnpj`, `F-sigvalid`, `F-protkey`.
+`G-kb`, `G-sig`, `G-lote`, `G-ns`, `G-539`. Fatos de XML: `F-amb`, `F-cStat` (com texto oficial do MOC 7.0 Anexo I), `F-prot`, `F-dv`, `F-xsd`, `F-sig`, `F-sigcnpj`, `F-sigvalid`, `F-protkey`.
 
 ## Estado por componente
 

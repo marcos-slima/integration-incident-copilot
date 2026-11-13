@@ -1,0 +1,35 @@
+# Reutiliza serviços existentes; não declara Qdrant nem volume de dados.
+name: dfe-copilot-existing
+
+services:
+  dfe:
+    extends:
+      file: compose.yaml
+      service: dfe
+    environment:
+      QDRANT_URL: ${DFE_EXISTING_QDRANT_URL:?Configure a URL do Qdrant existente}
+      EMBEDDING_BACKEND: ollama
+      EMBEDDING_MODEL: ${DFE_EXISTING_EMBEDDING_MODEL:?Informe o modelo usado na base existente}
+      HF_HOME: /opt/dfe-models
+      HF_HUB_OFFLINE: "1"
+      FASTEMBED_BM25_PATH: /opt/dfe-bm25
+    volumes:
+      - type: bind
+        source: ${DFE_BM25_CACHE_PATH:-./.runtime/bm25}
+        target: /opt/dfe-bm25
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DFE_HF_CACHE_PATH:-./.runtime/huggingface}
+        target: /opt/dfe-models
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - existing_kb
+
+networks:
+  existing_kb:
+    external: true
+    name: ${DFE_EXISTING_NETWORK:?Configure a rede Docker do Qdrant existente}

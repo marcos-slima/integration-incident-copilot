@@ -93,3 +93,6 @@ docs/secrets-local/
 packages/dfe/uv.lock
 packages/dfe/p8_*
 packages/dfe/data/corpus/MOC_7.0_Anexo_I.pdf
+
+# Recursos locais do runtime DF-e reutilizado (sem dados de coleção).
+packages/dfe/.runtime/

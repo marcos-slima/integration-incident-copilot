@@ -15,6 +15,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from dotenv import dotenv_values
+
 from app.auth import hash_password
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,7 +33,8 @@ def docker(*args: str, data: str | None = None) -> str:
     ).stdout.strip()
 
 
-def main(image: str, compose: bool = False) -> None:
+def main(image: str, compose: bool = False, existing_env: Path | None = None) -> None:
+    compose = compose or existing_env is not None
     password = secrets.token_urlsafe(24)
     env = {
         name: secrets.token_urlsafe(32)
@@ -68,10 +71,29 @@ def main(image: str, compose: bool = False) -> None:
         if compose:
             env = {"DFE_" + key: value for key, value in env.items()}
             env.update({"DFE_IMAGE": image, "DFE_PORT": "0"})
+            if existing_env:
+                connection = dotenv_values(existing_env)
+                for key in (
+                    "DFE_EXISTING_NETWORK",
+                    "DFE_EXISTING_QDRANT_URL",
+                    "DFE_EXISTING_EMBEDDING_MODEL",
+                    "DFE_BM25_CACHE_PATH",
+                    "DFE_HF_CACHE_PATH",
+                    "DFE_LLM_MODEL",
+                    "DFE_EMBEDDING_MODEL",
+                    "DFE_OLLAMA_HOST",
+                ):
+                    if connection.get(key):
+                        env[key] = connection[key]
+
             compose_args = [
                 "compose",
                 "-f",
-                str(ROOT / "packages/dfe/compose.yaml"),
+                str(
+                    ROOT
+                    / "packages/dfe"
+                    / ("compose.existing.yaml" if existing_env else "compose.yaml")
+                ),
                 "--project-name",
                 "dfe-smoke-" + secrets.token_hex(5),
                 "--env-file",
@@ -97,6 +119,19 @@ def main(image: str, compose: bool = False) -> None:
                     "127.0.0.1::8000",
                     image,
                 )
+
+            def collection_count():
+                return int(
+                    docker(
+                        "exec",
+                        container,
+                        "python",
+                        "-c",
+                        "from app.sdk import qdrant_client; print(qdrant_client().count('dfe_kb', exact=True).count)",
+                    )
+                )
+
+            before_points = collection_count() if existing_env else None
             port = docker("port", container, "8000/tcp").rsplit(":", 1)[1]
             base = f"http://127.0.0.1:{port}"
 
@@ -176,6 +211,9 @@ print('Wheel DF-e: UI, catálogo e XSD válidos; core não editável; sem shell 
                 assert json.load(response)["ok"]
             with request("/auth/session") as response:
                 assert json.load(response)["authenticated"] is False
+            if existing_env:
+                assert collection_count() == before_points
+                print(f"Base existente preservada no smoke: {before_points} pontos")
             print(
                 "Smoke HTTP: health, login, cookie, catálogo fiscal, UI/assets, validação e logout aprovados"
             )
@@ -192,5 +230,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("image")
     parser.add_argument("--compose", action="store_true")
+    parser.add_argument(
+        "--existing-env",
+        type=Path,
+        help="Configuração de conexão existente, sem reutilizar credenciais no smoke",
+    )
     args = parser.parse_args()
-    main(args.image, args.compose)
+    main(args.image, args.compose, args.existing_env)

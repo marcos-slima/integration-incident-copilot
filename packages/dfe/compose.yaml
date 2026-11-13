@@ -32,9 +32,6 @@ services:
       GRAPH_RAG_ENABLED: "false"
       CHECKPOINTING_ENABLED: "false"
       AMQP_ENABLED: "false"
-    depends_on:
-      qdrant:
-        condition: service_healthy
     restart: unless-stopped
 
   qdrant:

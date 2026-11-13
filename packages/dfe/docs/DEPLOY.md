@@ -78,6 +78,32 @@ docker compose --env-file packages/dfe/.env -f packages/dfe/compose.yaml exec df
 O corpus distribuído inclui apenas as fontes versionadas. O MOC opcional e a
 base já existente no ambiente nativo não são migrados automaticamente.
 
+### Usar uma base Qdrant fiscal já existente (somente leitura operacional)
+
+Quando a base fiscal já foi ingerida por outro serviço, use o Compose de
+coexistência, e não `compose.yaml`:
+
+```bash
+docker compose --env-file packages/dfe/.env \
+  -f packages/dfe/compose.existing.yaml up -d
+```
+
+Esse arquivo não declara serviço, volume ou porta de Qdrant. A aplicação entra
+somente na rede externa indicada por `DFE_EXISTING_NETWORK` e recebe
+`DFE_EXISTING_QDRANT_URL` apontando para o serviço existente. Declare também o
+mesmo `DFE_EXISTING_EMBEDDING_MODEL` usado pela coleção. Os caches locais de
+BM25 e do reranker são montados como volumes somente leitura; não copie o
+`.env` da origem nem credenciais para a imagem. O modo de validação calcula a
+contagem e o SHA-256 canônico da coleção antes/depois e falha se houver
+alteração. Ele não executa ingestão, reset ou migração.
+
+Em 2026-11-13, esse modo foi exercitado contra a coleção `dfe_kb` existente:
+310 pontos, SHA-256
+`842c82b9442cbf171bef529a43e67f0d0ad0f697bd049801feebc277514868a0` antes e
+depois; dois casos sintéticos revisados foram diagnosticados pelo Ollama real.
+O SHA identifica o estado observado nessa execução, não a origem histórica da
+ingestão nem a identidade dos embeddings anteriores.
+
 Para integrações máquina-a-máquina configure as chaves `DFE_API_KEY`,
 `DFE_A2A_API_KEY` e `DFE_EVENT_MESH_API_KEY`; a administração usa
 `DFE_ADMIN_API_KEY`. `DFE_REQUIRE_AUTH=true` exige as chaves de borda no startup.

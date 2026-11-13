@@ -105,3 +105,7 @@ A P2 entrega o alvo Docker `dfe`, Compose isolado na porta 8002 e workflow
 próprio. Veja [execução e CI](docs/DEPLOY.md) para configurar o primeiro usuário,
 iniciar o produto e reproduzir os testes da imagem. O build não publica nem
 substitui serviços automaticamente.
+
+Quando já existir uma base fiscal em Qdrant, `docs/DEPLOY.md` também descreve o
+`compose.existing.yaml`: rede externa, caches somente leitura e validação de
+preservação da coleção, sem ingestão ou reset.

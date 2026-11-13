@@ -12,7 +12,7 @@ preserva a imagem IIC; não foi criada uma cópia do runtime ou dos componentes.
 
 | Verificação | Resultado |
 |---|---|
-| Suíte completa do core | 1.969 aprovados, 21 pulados, 17 desmarcados por `not integration` |
+| Suíte completa do core | 1.977 aprovados, 21 pulados, 17 desmarcados por `not integration` |
 | Autenticação e coexistência de cookies | 20 aprovados; login/logout não alteram cookie do outro produto |
 | Suíte fiscal contra ambos os wheels fora do checkout | 214 aprovados |
 | Build somente de backend | Aprovado sem bundle de UI local |
@@ -23,6 +23,16 @@ preserva a imagem IIC; não foi criada uma cópia do runtime ou dos componentes.
 | Compose próprio | Aprovado em projeto temporário com Qdrant e volume próprios; mesmos testes HTTP/recursos e cookie distinto |
 | Regressão imagem IIC | Build aprovado; shell importado, cookie histórico e documentos de exemplo preservados |
 | Ruff, formatação e quality gate | Sem falhas; avisos informativos de benchmark/baseline permanecem |
+
+## Validação contra base fiscal já existente
+
+O modo `compose.existing.yaml` foi validado sem iniciar Qdrant próprio e sem
+executar ingestão/reset: dois casos sintéticos revisados passaram pelo Ollama
+real, com `F-kb`, referências de domínio e `cause_status=hypothesis`. A coleção
+`dfe_kb` permaneceu com 310 pontos e SHA-256
+`842c82b9442cbf171bef529a43e67f0d0ad0f697bd049801feebc277514868a0` antes e
+depois. O smoke HTTP da imagem também confirmou login, cookie, catálogo, UI,
+XSD e logout nesse modo.
 
 Os contêineres, rede e volume temporários usados pelo smoke foram removidos.
 Os serviços existentes do usuário não foram substituídos. Chaves, usuário,

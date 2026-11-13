@@ -1,7 +1,7 @@
 {
   "base_prompt_digest": "62b9b62050c1d9b8757be656e5c1d4b625e713d611749b93cd5347b93e6a0851",
   "measured_by": "promptfoo (packages/dfe/promptfooconfig.yaml) via scripts/promptfoo_provider.py",
-  "measurement": "NAO MEDIDO: dfe-1.2.0 (regra 6 distingue G-204/G-539 de H1/H539; D10)",
+  "measurement": "promptfoo 2026-11-13: qwen3.6:35b-a3b, dfe-1.2.0 + fatos D9, split validation 23/23 com base fiscal ligada (F-kb em 13 casos); leitura: H1 apresentada como sustentada, G-204 como inconclusiva, F-prot reconhecido; ressalvas leves em UC01-XSD-01 e UC06-SIG-01 (afirmam processamento/rejeicao no autorizador sem evidencia)",
   "measurement_blind": "promptfoo 2026-11-13: qwen3.6:35b-a3b, dfe-1.1.0, split blind 25/25 asserts, base fiscal ligada; leitura: 6 de 25 com erro de conteudo nao coberto por assert (docs/DECISOES.md D8). Blind consumido: proxima medicao cega exige casos novos.",
   "prompt_digest": "4f821100de9a836bc1d0ef375da546a00aa099b33b7ce46b4733629484cc35bd",
   "prompt_name": "dfe",

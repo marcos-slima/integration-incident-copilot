@@ -326,5 +326,13 @@ Correções gerais para as causas da D8, sem ajuste nos casos blind.
   provider não ligava a base. Agora ele liga por padrão (`DFE_KB_ENABLED=true`,
   como `dfe_copilot.main`); o Qdrant precisa estar no ar.
 - `scripts/prompt_baseline.py --write` preserva as medições cegas anteriores.
+- **Medição de `dfe-1.2.0`:** 23/23 com a base fiscal ligada (`F-kb` em 13
+  casos). Pela leitura:
+  - `H1` aparece como hipótese sustentada e ainda não confirmada;
+  - `G-204` aparece como causa inconclusiva;
+  - `F-prot` e `F-amb` são interpretados corretamente.
+
+  Ressalvas leves, sem nova versão do prompt: UC01-XSD-01 e UC06-SIG-01
+  afirmam processamento ou rejeição no autorizador sem evidência.
 
 ---

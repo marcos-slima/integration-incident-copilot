@@ -1,9 +1,9 @@
 {
   "base_prompt_digest": "62b9b62050c1d9b8757be656e5c1d4b625e713d611749b93cd5347b93e6a0851",
   "measured_by": "promptfoo (packages/dfe/promptfooconfig.yaml) via scripts/promptfoo_provider.py",
-  "measurement": "NAO MEDIDO apos D9 (fatos com significado oficial, F-prot, base com MOC 7.0 Anexo I). Anterior: promptfoo 2026-11-13 qwen3.6:35b-a3b validation 23/23 com dfe-1.1.0.",
-  "measurement_blind": "promptfoo 2026-11-13: qwen3.6:35b-a3b, split blind 25/25 asserts, base fiscal ligada; leitura: 6 de 25 com erro de conteudo nao coberto por assert (ver docs/DECISOES.md D8). Blind consumido: proxima medicao cega exige casos novos.",
-  "prompt_digest": "695c7d1bbc67cc2c612246dd36997815d31c96745549e43393d4c36bf7225600",
+  "measurement": "NAO MEDIDO: dfe-1.2.0 (regra 6 distingue G-204/G-539 de H1/H539; D10)",
+  "measurement_blind": "promptfoo 2026-11-13: qwen3.6:35b-a3b, dfe-1.1.0, split blind 25/25 asserts, base fiscal ligada; leitura: 6 de 25 com erro de conteudo nao coberto por assert (docs/DECISOES.md D8). Blind consumido: proxima medicao cega exige casos novos.",
+  "prompt_digest": "4f821100de9a836bc1d0ef375da546a00aa099b33b7ce46b4733629484cc35bd",
   "prompt_name": "dfe",
-  "prompt_version": "dfe-1.1.0"
+  "prompt_version": "dfe-1.2.0"
 }

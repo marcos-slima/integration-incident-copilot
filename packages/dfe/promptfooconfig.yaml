@@ -14,7 +14,7 @@ defaultTest:
   assert:
     - type: javascript
       # o prompt de dominio foi o usado (proveniencia propria)
-      value: "JSON.parse(output).prompt_version === 'dfe-1.1.0'"
+      value: "JSON.parse(output).prompt_version === 'dfe-1.2.0'"
     - type: javascript
       # read-only: nunca manda reenviar/cancelar automaticamente
       # (uma linha: valor multilinha vira corpo de funcao e exige `return`)

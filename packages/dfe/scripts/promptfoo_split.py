@@ -11,7 +11,7 @@ Asserts por caso, derivados do gabarito (nao do texto do LLM):
 - com H1/H539/H-timeout, o primeiro passo cita consulta;
 - com lacuna G-204/G-539, reconhece que a linha do tempo nao sustenta reenvio;
 - dominio (D8): tpAmb com o significado certo, denegacao nao vira duplicidade,
-  com F-prot o desfecho nao e' "desconhecido", com H539 nao nega a hipotese.
+  com F-prot o desfecho nao e' "desconhecido", com H1/H539 nao nega a hipotese.
 """
 
 from __future__ import annotations
@@ -64,8 +64,8 @@ def asserts_for(case: dict) -> list[dict]:
             _js("!/(sem|aus[eê]ncia d[eo]|falta d[eo]) protocolo/i.test(o.probable_root_cause)")
         )
         out.append(_js("!/desfecho[^.]{0,40}desconhecid/i.test(o.probable_root_cause)"))
-    if "H539" in exp:
-        out.append(_js("!/n[aã]o sustent/i.test(o.probable_root_cause)"))
+    if any(h in exp for h in ("H1", "H539")):  # hipotese sustentada pela linha do tempo
+        out.append(_js("!/n[aã]o (e |é )?sustent/i.test(o.probable_root_cause)"))
     if any(h in exp for h in ("H1", "H539", "H-timeout")):
         out.append(_js("/consult/i.test(JSON.stringify(o.next_steps))"))
     return out

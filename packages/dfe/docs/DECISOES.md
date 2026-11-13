@@ -308,4 +308,23 @@ Correções gerais para as causas da D8, sem ajuste nos casos blind.
 - O prompt (`dfe-1.1.0`) não mudou. As entradas mudaram, então a medição no
   split validation precisa ser refeita.
 
+### D10. Medição de D9 no split validation e prompt fiscal 1.2.0 (2026-11-13)
+
+- **Medição (`dfe-1.1.0` + fatos da D9):** 23/23 asserts. As correções da D9
+  funcionaram nos casos de validação:
+  - cStat 100 com `F-prot` reconhecido como autorizado;
+  - ambiente divergente explicado corretamente;
+  - 297 descrito com o texto oficial.
+- **Regressão encontrada na leitura:** em 2 casos com `H1` (UC01-H1-04,
+  UC01-H1TZ-03), o LLM disse que "a linha do tempo não sustenta" a hipótese,
+  o oposto do que a ferramenta concluiu. É o efeito colateral da regra 6
+  (`G-204` → inconclusivo) generalizada para `H1`. O assert só cobria `H539`.
+- **Correção:** a regra 6 da persona (`dfe-1.2.0`) distingue as lacunas
+  (`G-204`/`G-539`) das hipóteses sustentadas (`H1`/`H539`), e o assert
+  "não nega a hipótese" passa a valer para `H1` também.
+- **Base fiscal na medição:** a rodada não teve `F-kb`/`G-kb`, porque o
+  provider não ligava a base. Agora ele liga por padrão (`DFE_KB_ENABLED=true`,
+  como `dfe_copilot.main`); o Qdrant precisa estar no ar.
+- `scripts/prompt_baseline.py --write` preserva as medições cegas anteriores.
+
 ---

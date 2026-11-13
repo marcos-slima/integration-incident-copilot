@@ -36,7 +36,10 @@ def main() -> None:
     if not args.write:
         print(json.dumps(prov, indent=2))
         return
+    anterior = json.loads(BASELINE.read_text()) if BASELINE.exists() else {}
     data = {
+        # medicoes cegas sao historicas: nao se perdem ao regravar
+        **{k: v for k, v in anterior.items() if k.startswith("measurement_blind")},
         "prompt_name": "dfe",
         **prov,
         "base_prompt_digest": prompts.get_spec().digest,

@@ -58,6 +58,8 @@ tests:
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
   - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/n[aã]o (e |é )?sustent/i.test(o.probable_root_cause); })()
+  - type: javascript
     value: (() => { const o = JSON.parse(output); return /consult/i.test(JSON.stringify(o.next_steps)); })()
 - description: UC01-RET-02 (uc01_204_em_retorno_de_lote)
   vars:
@@ -70,6 +72,8 @@ tests:
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
   - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/n[aã]o (e |é )?sustent/i.test(o.probable_root_cause); })()
+  - type: javascript
     value: (() => { const o = JSON.parse(output); return /consult/i.test(JSON.stringify(o.next_steps)); })()
 - description: UC01-BORDA-01 (uc01_204_timeout_simultaneo)
   vars:
@@ -81,6 +85,8 @@ tests:
     value: (() => { const o = JSON.parse(output); return !/nf-?e\s+(foi|est[aá])\s+autorizada/i.test(o.probable_root_cause); })()
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
+  - type: javascript
+    value: (() => { const o = JSON.parse(output); return !/n[aã]o (e |é )?sustent/i.test(o.probable_root_cause); })()
   - type: javascript
     value: (() => { const o = JSON.parse(output); return /consult/i.test(JSON.stringify(o.next_steps)); })()
 - description: UC01-BORDA-02 (uc01_204_envio_unico)
@@ -186,7 +192,7 @@ tests:
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
   - type: javascript
-    value: (() => { const o = JSON.parse(output); return !/n[aã]o sustent/i.test(o.probable_root_cause); })()
+    value: (() => { const o = JSON.parse(output); return !/n[aã]o (e |é )?sustent/i.test(o.probable_root_cause); })()
   - type: javascript
     value: (() => { const o = JSON.parse(output); return /consult/i.test(JSON.stringify(o.next_steps)); })()
 - description: UC04-539H-02 (uc04_539_reenvio_chave_regerada)
@@ -200,7 +206,7 @@ tests:
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
   - type: javascript
-    value: (() => { const o = JSON.parse(output); return !/n[aã]o sustent/i.test(o.probable_root_cause); })()
+    value: (() => { const o = JSON.parse(output); return !/n[aã]o (e |é )?sustent/i.test(o.probable_root_cause); })()
   - type: javascript
     value: (() => { const o = JSON.parse(output); return /consult/i.test(JSON.stringify(o.next_steps)); })()
 - description: UC04-539H-03 (uc04_539_reenvio_chave_regerada)
@@ -214,7 +220,7 @@ tests:
   - type: javascript
     value: (() => { const o = JSON.parse(output); return !/tpAmb\W{0,3}2\W{0,3}\(?\s*produ/i.test((o.probable_root_cause + JSON.stringify(o.next_steps))); })()
   - type: javascript
-    value: (() => { const o = JSON.parse(output); return !/n[aã]o sustent/i.test(o.probable_root_cause); })()
+    value: (() => { const o = JSON.parse(output); return !/n[aã]o (e |é )?sustent/i.test(o.probable_root_cause); })()
   - type: javascript
     value: (() => { const o = JSON.parse(output); return /consult/i.test(JSON.stringify(o.next_steps)); })()
 - description: UC05-PROC-02 (uc05_nfeproc_autorizada)

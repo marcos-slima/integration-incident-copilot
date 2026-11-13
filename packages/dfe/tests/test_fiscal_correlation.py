@@ -146,3 +146,55 @@ def test_horario_ilegivel_vira_erro_de_correlacao(valor) -> None:
     with pytest.raises(FiscalCorrelationError) as exc:
         normalize_events([{"evidence_id": "A", "document_ref": "x", "at": valor, "event": "sent"}])
     assert exc.value.code == "invalid_timestamp"
+
+
+class TestRevisaoP7:
+    """Decisoes da revisao de 2026-11-12 (sujeitas a especialista fiscal)."""
+
+    @staticmethod
+    def _k(n: int, cnf: int) -> str:
+        from dfe_copilot.fiscal.xml_tools import _mod11_dv
+
+        body = f"352611{'11222333000181'}55001{n:09d}1{cnf:08d}"
+        return body + _mod11_dv(body)
+
+    def _ev(self, eid, key, at, kind):
+        return {"evidence_id": eid, "document_ref": key, "at": at, "event": kind}
+
+    def test_timeout_no_instante_do_reenvio_conta(self) -> None:
+        from dfe_copilot.fiscal import diagnose_duplicity, normalize_events
+
+        k = self._k(1, 1)
+        evs = normalize_events([
+            self._ev("A", k, "2026-11-11T12:00:00Z", "sent"),
+            self._ev("T", k, "2026-11-11T12:00:30Z", "timeout"),
+            self._ev("B", k, "2026-11-11T12:00:30Z", "sent"),
+        ])  # fmt: skip
+        facts = {"document_cStat": "204", "access_key": k, "access_key_dv_valid": True}
+        assert "H1" in [f["id"] for f in diagnose_duplicity(facts, evs)["findings"]]
+
+    def test_539_com_chave_regerada(self) -> None:
+        from dfe_copilot.fiscal import diagnose_key_divergence, normalize_events
+
+        k1, k2 = self._k(5, 11111111), self._k(5, 22222222)
+        evs = normalize_events([
+            self._ev("A", k1, "2026-11-11T12:00:00Z", "sent"),
+            self._ev("T", k1, "2026-11-11T12:00:30Z", "timeout"),
+            self._ev("B", k2, "2026-11-11T12:00:31Z", "sent"),
+        ])  # fmt: skip
+        facts = {"document_cStat": "539", "access_key": k2, "access_key_dv_valid": True}
+        out = diagnose_key_divergence(facts, evs)
+        assert [f["id"] for f in out["findings"]] == ["H539"]
+        assert out["cause_status"] == "hypothesis"
+
+    def test_539_timeout_depois_do_reenvio_nao_sustenta(self) -> None:
+        from dfe_copilot.fiscal import diagnose_key_divergence, normalize_events
+
+        k1, k2 = self._k(6, 11111111), self._k(6, 22222222)
+        evs = normalize_events([
+            self._ev("A", k1, "2026-11-11T12:00:00Z", "sent"),
+            self._ev("B", k2, "2026-11-11T12:00:31Z", "sent"),
+            self._ev("T", k1, "2026-11-11T12:01:00Z", "timeout"),
+        ])  # fmt: skip
+        facts = {"document_cStat": "539", "access_key": k2, "access_key_dv_valid": True}
+        assert [f["id"] for f in diagnose_key_divergence(facts, evs)["findings"]] == ["G-539"]

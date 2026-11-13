@@ -73,7 +73,9 @@ def diagnose_duplicity(xml_facts: dict[str, Any], events: list[TimelineEvent]) -
     """Caso cStat 204 (UC01): H1 = reenvio apos timeout.
 
     H1 exige, para o MESMO documento (chave do retorno == document_ref):
-    >= 2 envios e um timeout entre o primeiro e o ultimo envio.
+    >= 2 envios e um timeout depois do primeiro e ate o ultimo envio (inclusive:
+    log com precisao de segundo registra timeout e reenvio no mesmo instante;
+    decisao da revisao P7, 2026-11-12).
     """
     out = _base()
     key = xml_facts.get("access_key")
@@ -93,7 +95,7 @@ def diagnose_duplicity(xml_facts: dict[str, Any], events: list[TimelineEvent]) -
     doc = [e for e in events if e.document_ref == key]
     sent = [e for e in doc if e.event == "sent"]
     timeouts = [e for e in doc if e.event == "timeout"]
-    if len(sent) >= 2 and any(sent[0].at < t.at < sent[-1].at for t in timeouts):
+    if len(sent) >= 2 and any(sent[0].at < t.at <= sent[-1].at for t in timeouts):
         out["cause_status"] = "hypothesis"
         out["findings"].append({
             "id": "H1", "kind": "hypothesis", "source": "tool",
@@ -115,6 +117,62 @@ def diagnose_duplicity(xml_facts: dict[str, Any], events: list[TimelineEvent]) -
         })  # fmt: skip
     out["next_step"] = (
         "Conciliar situacao/protocolo por leitura autorizada; nao reenviar cegamente."
+    )
+    return out
+
+
+def _numero(key: str) -> str:
+    """CNPJ/CPF + modelo + serie + numero (posicoes 7-34 da chave): identifica a
+    nota independentemente de cNF/tpEmis, que um reenvio pode regerar."""
+    return key[6:34]
+
+
+def diagnose_key_divergence(
+    xml_facts: dict[str, Any], events: list[TimelineEvent]
+) -> dict[str, Any]:
+    """Caso cStat 539 (duplicidade com diferenca na chave): H539 = reenvio apos
+    timeout com chave regerada (cNF/tpEmis novos para a mesma serie/numero).
+
+    H539 exige: envio anterior de OUTRA chave com o mesmo emitente/modelo/serie/
+    numero, timeout dessa chave antes do envio da chave do retorno.
+    Decisao da revisao P7 (2026-11-12), sujeita a especialista fiscal.
+    """
+    out = _base()
+    key = xml_facts.get("access_key")
+    if (
+        xml_facts.get("document_cStat") != "539"
+        or not key
+        or not xml_facts.get("access_key_dv_valid")
+    ):
+        return out
+    sent_now = [e for e in events if e.document_ref == key and e.event == "sent"]
+    irmas = [e for e in events if e.document_ref != key and _numero(e.document_ref) == _numero(key)]
+    first_now = sent_now[0].at if sent_now else None
+    timeout_antes = [
+        e for e in irmas if e.event == "timeout" and (first_now is None or e.at <= first_now)
+    ]
+    envio_irmao = any(e.event == "sent" for e in irmas)
+    if envio_irmao and timeout_antes:
+        out["cause_status"] = "hypothesis"
+        out["findings"].append({
+            "id": "H539", "kind": "hypothesis", "source": "tool",
+            "statement": "Reenvio apos timeout com chave regerada (mesma serie/numero) pode explicar o 539.",
+            "evidence_refs": [e.evidence_id for e in irmas + sent_now],
+            "confirmation_test": [
+                "Consulta autorizada de situacao da chave ORIGINAL (a do primeiro envio)",
+                "Verificar se o reenvio regera cNF/tpEmis em vez de reaproveitar a chave",
+                "Confirmacao humana antes de cancelar/inutilizar qualquer numero",
+            ],
+            "alternatives": ["duas notas legitimas com o mesmo numero", "contingencia com nova chave"],
+        })  # fmt: skip
+    else:
+        out["findings"].append({
+            "id": "G-539", "kind": "fact", "source": "tool",
+            "statement": "Sem evidencia de envio anterior do mesmo numero com outra chave apos timeout.",
+            "evidence_refs": [e.evidence_id for e in irmas + sent_now],
+        })  # fmt: skip
+    out["next_step"] = (
+        "Consultar a chave original por leitura autorizada; nao reenviar nem cancelar cegamente."
     )
     return out
 

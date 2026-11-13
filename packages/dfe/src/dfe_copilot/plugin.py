@@ -21,6 +21,7 @@ from dfe_copilot.fiscal import (
     SchemaPackage,
     analyze_fiscal_xml,
     diagnose_duplicity,
+    diagnose_key_divergence,
     diagnose_timeout,
     normalize_events,
 )
@@ -87,7 +88,7 @@ class DfePlugin:
                 findings.extend(facts["findings"])
                 if facts.get("tpAmb") == "2" and ctx.get("environment") == "production":
                     findings.append(
-                        _gap("G-amb", "XML de homologacao (tpAmb=2) num contexto de producao.")
+                        _gap("F-amb", "XML de homologacao (tpAmb=2) num contexto de producao.")
                     )
             except FiscalXmlError as exc:
                 findings.append(_gap("G-xml", f"XML recusado antes da analise ({exc.code})."))
@@ -105,6 +106,8 @@ class DfePlugin:
             # nao de "timeout sem resposta" (o proprio XML e' a resposta).
             if facts["document_cStat"] == "204":
                 findings.extend(diagnose_duplicity(facts, events)["findings"])
+            elif facts["document_cStat"] == "539":
+                findings.extend(diagnose_key_divergence(facts, events)["findings"])
             findings.extend(self._rule_evidence(facts["document_cStat"]))
         elif events:
             refs = {e.document_ref for e in events}

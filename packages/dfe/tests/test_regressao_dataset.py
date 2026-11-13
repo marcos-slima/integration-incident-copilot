@@ -36,9 +36,9 @@ def test_dataset_cobre_os_cenarios() -> None:
     assert all(c["synthetic"] for c in CASES)
 
 
-def test_dataset_v1_tem_100_casos_unicos_e_splits() -> None:
+def test_dataset_v1_tem_100_casos_ou_mais_unicos_e_splits() -> None:
     ids = [c["case_id"] for c in CASES]
-    assert len(ids) == 100 and len(set(ids)) == 100
+    assert len(ids) >= 100 and len(set(ids)) == len(ids)
     assert {c["split"] for c in CASES} == {"dev", "validation", "blind"}
     assert all(c["description"] and c["rationale"] for c in CASES)
 

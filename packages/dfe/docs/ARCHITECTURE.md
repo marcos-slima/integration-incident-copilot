@@ -57,7 +57,7 @@ Com `DOMAIN_PLUGINS=dfe_copilot.plugin`, o core insere `domain_tools` entre
    (sempre `hypothesis`) em `DiagnosisResponse.findings`.
 
 Lacunas viram fatos explícitos: `G-noxml`, `G-xml`, `G-events`, `G-ref`,
-`G-amb`, `G-kb`, `G-sig`, `G-lote`. Fatos de XML: `F-cStat`, `F-dv`, `F-xsd`, `F-sig`, `F-sigcnpj`, `F-sigvalid`, `F-protkey`.
+`G-kb`, `G-sig`, `G-lote`, `G-ns`, `G-539`. Fatos de XML: `F-amb`, `F-cStat`, `F-dv`, `F-xsd`, `F-sig`, `F-sigcnpj`, `F-sigvalid`, `F-protkey`.
 
 ## Estado por componente
 
@@ -66,9 +66,9 @@ Lacunas viram fatos explícitos: `G-noxml`, `G-xml`, `G-events`, `G-ref`,
 | Contrato `FiscalContext` | Implementado (NF-e 55, leiaute 4.00) |
 | XML seguro, chave, `cStat`, XSD PL 010g | Implementado; protocolo (`protNFe`, `nfeProc`, `retEnviNFe`, `retConsReciNFe`) validado por entrypoint local sobre o tipo oficial (D3) |
 | Assinatura XMLDSig | Implementado, perfil fechado NF-e; integridade sim, confiança do certificado não (D4) |
-| Regras 204 e timeout | Implementado |
+| Regras 204 (H1), 539 (H539) e timeout | Implementado; 539 e borda `<=` do H1 vêm da revisão P7 (D6) |
 | Plugin no grafo do core | Implementado (`domain_tools`) |
 | Corpus e base de conhecimento | `data/corpus/` (NT 2018.005 + manifesto + regra 2B08-20) e `kb.py`: coleção híbrida `dfe_kb`, filtros de modelo/cStat/status antes da busca, abstenção sem fonte; ingestão real pendente de execução local (P3) |
 | UI de fatos × hipóteses | Tipos e rótulos no core; tela dedicada pendente |
-| Dataset e regressão | 100 casos sintéticos v1 (8 famílias, split dev/validation/blind) + regressão offline (`tests/test_regressao_dataset.py`); revisão fiscal pendente (P7, `docs/REVISAO_DATASET.md`) |
+| Dataset e regressão | 104 casos sintéticos v1 (8 famílias, split dev/validation/blind, todos aprovados na revisão P7; especialista fiscal pendente, P11) + regressão offline (`tests/test_regressao_dataset.py`); revisão fiscal pendente (P7, `docs/REVISAO_DATASET.md`) |
 | Integração SAP / SEFAZ | Fora do MVP (read-only, por contrato) |

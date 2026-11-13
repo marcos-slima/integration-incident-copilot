@@ -44,6 +44,12 @@ def _dv(body: str) -> str:
     return "0" if r < 2 else str(11 - r)
 
 
+def chave_cnf(n: int, cnf: int, cuf: str = "35") -> str:
+    """Mesma serie/numero com outro cNF: o que um reenvio com chave regerada produz."""
+    body = f"{cuf}2611{CNPJ}55001{n:09d}1{cnf:08d}"
+    return body + _dv(body)
+
+
 def chave(n: int, cuf: str = "35") -> str:
     body = f"{cuf}2611{CNPJ}55001{n:09d}1{n:08d}"
     return body + _dv(body)
@@ -168,7 +174,7 @@ def casos() -> list[dict]:
         add(
             f"UC03-MUT-{i:02d}", "uc03_mutacao_xsd", mut, [], ["F-xsd", "F-sig"]
         )  # alterar o infNFe quebra o digest (P9)
-    add("UC03-AMB-01", "uc03_homologacao_em_producao", POSITIVO, [], ["G-amb"], env="production")
+    add("UC03-AMB-01", "uc03_homologacao_em_producao", POSITIVO, [], ["F-amb"], env="production")
     # Seguranca / lacunas
     add(
         "SEC-XXE-01",
@@ -211,10 +217,10 @@ def _casos_v1(add) -> None:
         add(f"UC01-PROD-{i:02d}", "uc01_204_reenvio_producao", prot(k, "204", dup, tp_amb="1"),
             [ev("A", k, "2026-11-11T12:00:00Z", "sent"), ev("T", k, "2026-11-11T12:00:30Z", "timeout"),
              ev("B", k, "2026-11-11T12:00:31Z", "sent")], ["F-cStat", "F-204", "H1"], env="production")  # fmt: skip
-    k = chave(740)  # timeout no MESMO instante do segundo envio: nao esta "entre"
+    k = chave(740)  # timeout no MESMO instante do reenvio: conta (revisao P7, `<=`)
     add("UC01-BORDA-01", "uc01_204_timeout_simultaneo", prot(k, "204", dup),
         [ev("A", k, "2026-11-11T12:00:00Z", "sent"), ev("T", k, "2026-11-11T12:00:30Z", "timeout"),
-         ev("B", k, "2026-11-11T12:00:30Z", "sent")], ["F-cStat", "F-204", "G-204"])  # fmt: skip
+         ev("B", k, "2026-11-11T12:00:30Z", "sent")], ["F-cStat", "F-204", "H1"])  # fmt: skip
     k = chave(741)  # um unico envio com timeout: sem reenvio
     add("UC01-BORDA-02", "uc01_204_envio_unico", prot(k, "204", dup),
         [ev("A", k, "2026-11-11T12:00:00Z", "sent"), ev("T", k, "2026-11-11T12:00:30Z", "timeout")],
@@ -235,7 +241,8 @@ def _casos_v1(add) -> None:
               ("539", "Rejeicao: Duplicidade de NF-e com diferenca na Chave de Acesso"),
               ("999", "Rejeicao: Erro nao catalogado")]  # fmt: skip
     for i, (c, m) in enumerate(outros, start=1):
-        add(f"UC04-CSTAT-{i:02d}", f"uc04_cstat_{c}", prot(chave(800 + i), c, m), [], ["F-cStat"])
+        add(f"UC04-CSTAT-{i:02d}", f"uc04_cstat_{c}", prot(chave(800 + i), c, m), [],
+            ["F-cStat"] + (["G-539"] if c == "539" else []))  # fmt: skip
     for i, (c, m) in enumerate(outros[:5], start=1):  # retorno presente: timeout nao vira H-timeout
         k = chave(820 + i)
         add(f"UC04-COMTO-{i:02d}", f"uc04_cstat_{c}_com_timeout", prot(k, c, m),
@@ -243,7 +250,17 @@ def _casos_v1(add) -> None:
             ["F-cStat"])  # fmt: skip
     k = chave(830)
     add("UC04-RECI-01", "uc04_cstat_539_em_consulta_recibo",
-        ret("retConsReciNFe", prot(k, "539", outros[8][1])), [], ["F-cStat"])  # fmt: skip
+        ret("retConsReciNFe", prot(k, "539", outros[8][1])), [], ["F-cStat", "G-539"])  # fmt: skip
+    # 539 com reenvio de chave regerada (revisao P7, decisao 1)
+    for i in range(1, 4):
+        k1, k2 = chave_cnf(980 + i, 11111111), chave_cnf(980 + i, 22222222)
+        add(f"UC04-539H-{i:02d}", "uc04_539_reenvio_chave_regerada", prot(k2, "539", outros[8][1]),
+            [ev("A", k1, "2026-11-11T12:00:00Z", "sent"), ev("T", k1, "2026-11-11T12:00:30Z", "timeout"),
+             ev("B", k2, "2026-11-11T12:00:31Z", "sent")], ["F-cStat", "H539"])  # fmt: skip
+    k1, k2 = chave_cnf(990, 11111111), chave_cnf(991, 22222222)
+    add("UC04-539G-01", "uc04_539_numero_diferente", prot(k2, "539", outros[8][1]),
+        [ev("A", k1, "2026-11-11T12:00:00Z", "sent"), ev("T", k1, "2026-11-11T12:00:30Z", "timeout"),
+         ev("B", k2, "2026-11-11T12:00:31Z", "sent")], ["F-cStat", "G-539"])  # fmt: skip
 
     # UC05: lote e nfeProc
     for i in range(1, 3):
@@ -308,7 +325,7 @@ def _casos_v1(add) -> None:
     # UC03: ambiente
     for i in range(1, 3):
         add(f"UC03-AMBPROT-{i:02d}", "uc03_protocolo_homologacao_em_producao",
-            prot(chave(930 + i), "100", outros[0][1]), [], ["F-cStat", "G-amb"], env="production")  # fmt: skip
+            prot(chave(930 + i), "100", outros[0][1]), [], ["F-cStat", "F-amb"], env="production")  # fmt: skip
         add(f"UC03-PRODOK-{i:02d}", "uc03_protocolo_producao_em_producao",
             prot(chave(940 + i), "100", outros[0][1], tp_amb="1"), [], ["F-cStat"], env="production")  # fmt: skip
 
@@ -331,13 +348,19 @@ def _casos_v1(add) -> None:
         prot(chave(950), "100", outros[0][1]).replace(
             "<protNFe ", '<protNFe xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
             'xsi:schemaLocation="http://www.portalfiscal.inf.br/nfe http://exemplo.invalid/x.xsd" '), [], ["F-cStat"])  # fmt: skip
-    add("SEC-NS-01", "sec_namespace_nao_fiscal", prot(chave(951), "204", dup, ns=False), [], [])
+    add(
+        "SEC-NS-01",
+        "sec_namespace_nao_fiscal",
+        prot(chave(951), "204", dup, ns=False),
+        [],
+        ["G-ns"],
+    )
     add(
         "SEC-XINC-01",
         "sec_xinclude_nao_processado",
         '<x xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include href="file:///etc/passwd"/></x>',
         [],
-        [],
+        ["G-ns"],
     )
 
     # Lacunas de entrada

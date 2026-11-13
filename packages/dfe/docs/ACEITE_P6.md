@@ -2,8 +2,8 @@
 
 Revisão executada em 2026-11-13. Evidência de execução tem precedência sobre
 os estados históricos da documentação. A extração física e o versionamento
-dos contratos foram implementados e verificados. Imagem/release próprios do
-produto e homologação fiscal continuam fora do fechamento da P6.
+dos contratos foram implementados e verificados. Imagem e CI próprios foram tratados na P2 (`ACEITE_P2.md`); homologação
+fiscal permanece uma atividade distinta.
 
 | Critério | Evidência atual | Estado |
 |---|---|---|
@@ -14,7 +14,7 @@ produto e homologação fiscal continuam fora do fechamento da P6.
 | DF-e contra core empacotado | `scripts/test_product_isolation.py` instala wheel em diretório temporário e roda 214 testes fora do checkout | Verificado com dependências de terceiros do ambiente local |
 | Core em `packages/core` | Pacote `copilot-core` independente, implementação em `src/app`, recursos e manifest próprios; IIC e DF-e declaram a dependência | Verificado; imports `app.*` preservados |
 | Contratos versionados | HTTP, SDK e plugin 1.0; core-ui 0.1.0; header, catálogo, handshake do plugin e testes de incompatibilidade | Verificado; política em `packages/core/docs/CONTRACTS.md` |
-| Build/deploy próprios do DF-e | Shell tem build próprio; imagem Docker ainda é do IIC | P2, fora da separação física desta rodada |
+| Imagem/CI próprios do DF-e | Alvo Docker e workflow próprios entregues na P2 | Ver `ACEITE_P2.md`; sem publicação/deploy remoto |
 
 ## Resultados executados
 

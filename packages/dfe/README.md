@@ -98,3 +98,10 @@ Detalhes em [`frontend/README.md`](frontend/README.md).
 - `docs/DECISOES.md` — decisões do domínio fiscal
 - `docs/PENDENCIAS.md` — o que depende de ação humana ou infraestrutura
 - `docs/ESTUDO_ORIGEM.md` — estudo IIC → SAP AMS/DF-e (v3)
+
+## Imagem e execução próprias
+
+A P2 entrega o alvo Docker `dfe`, Compose isolado na porta 8002 e workflow
+próprio. Veja [execução e CI](docs/DEPLOY.md) para configurar o primeiro usuário,
+iniciar o produto e reproduzir os testes da imagem. O build não publica nem
+substitui serviços automaticamente.

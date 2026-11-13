@@ -357,3 +357,20 @@ Correções gerais para as causas da D8, sem ajuste nos casos blind.
   `packages/dfe/frontend/dist`.
 
 ---
+
+### D12. Distribuição e execução próprias (P2, 2026-11-13)
+
+- **Imagem:** alvo Docker `dfe`, sobre runtime compartilhado; sem shell IIC
+  nem documentos de exemplo do IIC. O alvo padrão do IIC permanece `final`.
+- **Distribuição:** wheels não editáveis de core e produto. Recursos fiscais
+  e UI via pacote, sem dependência de caminhos do checkout. O build de entrega
+  exige UI; o backend pode ser empacotado sozinho para testes.
+- **Operação local:** Compose próprio, porta 8002 em loopback, Qdrant/rede/volume
+  independentes, credenciais próprias e nomes de cookie configuráveis para
+  coexistência. Não há migração automática da base nativa para esse volume.
+- **CI:** workflow específico com testes de wheels e smoke autenticado da
+  imagem e do Compose. Artefatos de wheels; publicação e deploy continuam
+  ações explícitas, não automáticas.
+- **Validação:** XML sintético e credenciais efêmeras; inferência real,
+  serviços externos e homologação fiscal não são inferidos pelo smoke.
+- **Procedimento:** `DEPLOY.md` neste pacote.

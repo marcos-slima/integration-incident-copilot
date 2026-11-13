@@ -3609,6 +3609,16 @@ HTTP e plugin usam contrato 1.0, documentado em
 `packages/core/docs/CONTRACTS.md`, com rejeição de versões incompatíveis.
 Não houve publicação em registro; detalhes em `packages/dfe/docs/ACEITE_P6.md`.
 
+**Execução independente (P2).** O alvo Docker `dfe` instala os wheels de
+core/produto e incorpora o bundle fiscal. A base de runtime é compartilhada,
+sem shell ou exemplos do IIC; o alvo padrão `final` preserva o IIC. O Compose
+DF-e tem rede, volume Qdrant, credenciais e porta próprios. O nome do cookie
+pode ser configurado por instância, preservando o padrão IIC e isolando os
+produtos no mesmo navegador. O workflow específico verifica a distribuição,
+a imagem e o Compose com usuário efêmero e XML sintético. Procedimento e
+limites em `packages/dfe/docs/DEPLOY.md` e `packages/dfe/docs/ACEITE_P2.md`.
+Nenhuma publicação ou implantação remota é automática nesta entrega.
+
 **Validação.**
 - `tests/test_da95_sdk.py`: endpoint, plugin sem schema recusado, `app.sdk`
   sem carregar o grafo, proveniência, hook de prompt movido do produto para o

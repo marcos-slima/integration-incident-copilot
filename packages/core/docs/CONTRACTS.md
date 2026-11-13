@@ -35,5 +35,10 @@ endpoints futuros nem elimina a necessidade dos testes de contrato.
 O core já está em `packages/core`, com manifest e wheel próprios. Os produtos
 já declaram `copilot-core` como dependência; no monorepo uv resolve por workspace.
 Para outro repositório, remove-se a fonte workspace do manifest e fornece-se o
-wheel correspondente. A publicação em registro, imagem e release independentes
-do DF-e permanecem na P2; nenhuma publicação é executada por esses scripts.
+wheel correspondente. O DF-e dispõe de alvo Docker e CI específicos, descritos em
+`packages/dfe/docs/DEPLOY.md` na raiz do monorepo. Nenhuma publicação em
+registro ou deploy é executado pelos scripts locais.
+
+A sessão web aceita `SESSION_COOKIE_NAME` para separar instâncias no mesmo
+host. O valor padrão histórico permanece para clientes existentes; os produtos
+podem configurar seus nomes antes de importar a aplicação.

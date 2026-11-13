@@ -4,9 +4,8 @@
 // history: HistoryItem[] significa "array de HistoryItem"
 
 import { useTranslation } from 'react-i18next';
-import { formatTime } from '../i18n/format';
 import type { HistoryItem } from '../types/models';
-import { Badge } from './Badge';
+import { Badge, formatTime } from '@copilot/core-ui';
 
 interface HistoryViewProps {
   history: HistoryItem[];

@@ -1,6 +1,6 @@
 FROM node:22-slim AS frontend-build
 
-WORKDIR /frontend
+WORKDIR /ui
 
 # DA-24-fix: build do frontend a partir do codigo-fonte dentro do
 # Dockerfile (multi-stage) - antes disso, static/dist/ precisava ser
@@ -9,11 +9,18 @@ WORKDIR /frontend
 # docs/DEPLOY.md secao 2. Um "git clone" limpo seguido de
 # "docker build" falhava ou gerava imagem sem frontend, pois
 # static/dist/ esta no .gitignore.
-COPY frontend/package.json frontend/package-lock.json ./
+# DA-95: npm workspaces. O lock e' da raiz e o `npm ci` precisa do
+# package.json de todo workspace; so o core-ui e o shell do IIC entram com
+# fonte (esta imagem e' do IIC; o DF-e Copilot ganha imagem propria na P2).
+COPY package.json package-lock.json ./
+COPY packages/core-ui/package.json packages/core-ui/
+COPY frontend/package.json frontend/
+COPY packages/dfe/frontend/package.json packages/dfe/frontend/
 RUN npm ci
 
-COPY frontend/ ./
-RUN npm run build
+COPY packages/core-ui/ packages/core-ui/
+COPY frontend/ frontend/
+RUN npm run build -w @copilot/iic-ui
 
 # Validacao 2026-10-07 (DEP-01): o stage Python foi dividido em
 # "builder" (compiladores, uv, download de modelos) e "app" (runtime).
@@ -142,7 +149,7 @@ FROM app AS final
 
 # DA-24-fix: copia o frontend buildado no estagio anterior em vez de
 # exigir que static/dist/ ja exista no contexto de build.
-COPY --from=frontend-build --chown=appuser:appuser /static/dist static/dist
+COPY --from=frontend-build --chown=appuser:appuser /ui/static/dist static/dist
 
 EXPOSE 8000
 

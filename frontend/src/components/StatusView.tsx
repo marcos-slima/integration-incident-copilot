@@ -8,9 +8,8 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { formatUSD } from '../i18n/format';
 import { callHealth, callLlmPolicy } from '../api/health';
-import { ApiError } from '../api/diagnose';
+import { ApiError, formatUSD } from '@copilot/core-ui';
 import type { ConnectorHealthStatus, HealthResponse, InterfaceType, LlmPolicy } from '../types/models';
 
 // Nome de exibicao de cada conector - so rotulagem, o estado vem do backend
@@ -81,7 +80,7 @@ export function StatusView() {
         if (cancelled) return;
         setPolicyError(
           e instanceof ApiError
-            ? t('common.errorStatus', { status: e.status, message: e.message })
+            ? t('core.common.errorStatus', { status: e.status, message: e.message })
             : t('status.policyError'),
         );
       });
@@ -92,7 +91,7 @@ export function StatusView() {
       })
       .catch((e) => {
         if (cancelled) return;
-        if (e instanceof ApiError) setError(t('common.errorStatus', { status: e.status, message: e.message }));
+        if (e instanceof ApiError) setError(t('core.common.errorStatus', { status: e.status, message: e.message }));
         else setError(t('status.backendError'));
       })
       .finally(() => {

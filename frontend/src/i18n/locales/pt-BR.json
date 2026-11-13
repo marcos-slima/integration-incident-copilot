@@ -1,13 +1,7 @@
 {
   "common": {
     "appName": "Incident Copilot",
-    "appSub": "SAP Integration · AI",
-    "language": "Idioma",
-    "networkError": "Falha na comunicação com o servidor. Verifique se o backend está ativo.",
-    "networkErrorShort": "Falha na comunicação com o servidor.",
-    "errorStatus": "Erro {{status}}: {{message}}",
-    "checkingSession": "Verificando sessão…",
-    "sessionExpired": "Sua sessão expirou — faça login novamente."
+    "appSub": "SAP Integration · AI"
   },
   "nav": {
     "diagnose": "Diagnóstico",
@@ -22,40 +16,6 @@
     "unknownProvider": "provedor desconhecido",
     "session": "sessão",
     "logout": "Sair"
-  },
-  "login": {
-    "titleLogin": "Entrar",
-    "titleActivate": "Ativar conta",
-    "subLogin": "Autenticação de usuário — a sessão é um cookie HttpOnly assinado, válida por horas, enviado sozinho pelo navegador.",
-    "subActivate": "Primeiro acesso (DA-55): confirme o token enviado ao seu e-mail e depois o código enviado ao seu telefone.",
-    "username": "Usuário",
-    "usernamePlaceholder": "seu usuário",
-    "password": "Senha",
-    "passwordPlaceholder": "sua senha",
-    "emailToken": "Token do e-mail",
-    "emailTokenPlaceholder": "token recebido por e-mail (24h)",
-    "phoneCode": "Código do telefone",
-    "phoneCodePlaceholder": "6 dígitos (10 min)",
-    "fillUserPassword": "Preencha usuário e senha.",
-    "emailConfirmed": "E-mail confirmado — agora o código enviado ao seu telefone.",
-    "accountActivated": "Conta ativada — entre com usuário e senha.",
-    "submitting": "Entrando…",
-    "submit": "Entrar",
-    "confirming": "Confirmando…",
-    "confirmEmail": "Confirmar e-mail",
-    "confirmPhone": "Confirmar telefone",
-    "toActivate": "Ativar conta (primeiro acesso)",
-    "backToLogin": "Voltar ao login",
-    "foot": "Integrações não entram por aqui: usam o header X-API-Key (curl, MCP, A2A) — cada credencial na camada dela."
-  },
-  "auth": {
-    "sessionCheckFailed": "Falha ao consultar a sessão",
-    "tooManyLogin": "Muitas tentativas — aguarde um minuto e tente de novo",
-    "invalidCredentials": "usuário ou senha inválidos",
-    "tooMany": "Muitas tentativas — aguarde um minuto",
-    "invalidToken": "token inválido ou usuário inexistente",
-    "invalidCode": "código inválido ou usuário inexistente",
-    "activationRequiresDb": "Ativação de conta exige persistência configurada (DATABASE_URL)."
   },
   "diagnose": {
     "title": "Diagnóstico de incidente",
@@ -78,15 +38,6 @@
     "payloadPlaceholder": "Payload XML, JSON de erro, mensagem de exceção ABAP, etc.",
     "analyzing": "Analisando…",
     "start": "Iniciar diagnóstico",
-    "processingTitle": "Agente processando",
-    "processingSub": "Conector → RAG híbrido → LLM → guardrails",
-    "resultTitle": "Resultado do diagnóstico",
-    "rootCause": "Causa raiz provável",
-    "nextSteps": "Próximos passos",
-    "referenceDoc": "Documento de referência",
-    "explanation": "Por que deste diagnóstico",
-    "reportShow": "Ver relatório completo",
-    "reportHide": "Ocultar relatório completo",
     "demoIds": "Identificadores de demonstração",
     "needDescription": "Descreva o incidente para iniciar o diagnóstico.",
     "sessionExpired401": "Sessão expirada (401) — entre novamente.",
@@ -110,48 +61,6 @@
     "cpi401": "iFlow retornando HTTP 401 ao autenticar via OAuth2",
     "idoc51": "IDoc travado com status 51",
     "connRefused": "SM59 não conecta no sistema de destino"
-  },
-  "badge": {
-    "high": "Alta",
-    "mid": "Média",
-    "low": "Baixa",
-    "value": "{{label}} — {{pct}}"
-  },
-  "details": {
-    "okTitle": "Evidência suficiente",
-    "warnTitle": "Revisão humana recomendada",
-    "warnText": "{{reason}} Evidência principal: {{pct}}{{connector}}.",
-    "connectorReal": " · dado real de conector",
-    "connectorNotReal": " · sem dado real de conector",
-    "note": "Sinal informativo: nenhum modelo pago foi acionado por causa dele.",
-    "reasons": {
-      "grounded": "Evidência suficiente na base curada.",
-      "no_context": "Sem contexto: nenhum dado de conector nem documento recuperado.",
-      "abstained": "Os guardrails anularam a fonte: a resposta não tem lastro.",
-      "floor_tier_weak": "Só manuais genéricos sustentam a resposta, e com evidência fraca.",
-      "curated_tier_weak": "Há documento curado, mas o reranker não sustentou a correspondência."
-    },
-    "trust": {
-      "system_observed": "observado no sistema",
-      "rule_reference": "regra de referência",
-      "retrieved_document": "documento da base",
-      "web_untrusted": "web · não confiável",
-      "user_reported": "relato do usuário",
-      "simulated": "simulado (demo)"
-    },
-    "evidenceTitle": "Evidências ({{count}})",
-    "simulated_one": "{{count}} de dado simulado (conector em modo demonstração).",
-    "simulated_other": "{{count}} de dado simulado (conector em modo demonstração).",
-    "web_one": "{{count}} da web, tratada como não confiável: confirme na fonte.",
-    "web_other": "{{count}} da web, tratadas como não confiáveis: confirme na fonte.",
-    "rerank": "rerank {{score}}",
-    "provenance": "Proveniência",
-    "ruleEngine": "Regra determinística",
-    "noLlm": "sem LLM",
-    "zeroCost": "custo zero",
-    "unknownProvider": "provedor desconhecido",
-    "prompt": "prompt {{version}}",
-    "domain": "domínio {{domain}}"
   },
   "history": {
     "title": "Histórico da sessão",
@@ -208,17 +117,6 @@
       "local": "local",
       "cloud": "nuvem"
     }
-  },
-  "errors": {
-    "domain_context_invalid": "O contexto de domínio foi recusado pelo plugin do produto (ex.: DF-e). Confira os campos enviados.",
-    "budget_exhausted": "Orçamento do diagnóstico esgotado: nenhum provedor elegível cabe no limite configurado. Ajuste DIAGNOSIS_BUDGET_USD ou habilite um provedor local.",
-    "policy_violation": "A política de soberania não permite nenhum provedor para a sensibilidade deste incidente. Veja \"Soberania do dado\" em Stack.",
-    "overloaded": "Capacidade de diagnóstico esgotada no momento. Tente de novo em alguns segundos.",
-    "timeout": "O diagnóstico excedeu o tempo limite. {{detail}}",
-    "validation": "Dados inválidos: {{message}}",
-    "rateLimited": "Limite de requisições atingido. Aguarde e tente de novo.",
-    "generic": "Erro {{status}}: {{message}}",
-    "ref": " (ref. {{id}})"
   },
   "sovereigntyReason": {
     "origin_unresolved": "origem não resolvida para o provider '{{provider}}'",

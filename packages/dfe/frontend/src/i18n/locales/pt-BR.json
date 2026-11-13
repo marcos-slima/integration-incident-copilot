@@ -1,0 +1,50 @@
+{
+  "common": {
+    "appName": "DF-e Copilot",
+    "appSub": "Diagnóstico de documentos fiscais",
+    "logout": "Sair"
+  },
+  "fiscal": {
+    "title": "Diagnóstico de NF-e",
+    "subtitle": "Informe o incidente, o XML (NF-e, protocolo ou retorno de lote) e a linha do tempo. As ferramentas fiscais produzem os fatos; o LLM só propõe hipóteses sobre eles.",
+    "description": "Descrição do incidente",
+    "descriptionPlaceholder": "Ex.: NF-e rejeitada com cStat 204 depois de um timeout no envio",
+    "xml": "XML (opcional)",
+    "xmlPlaceholder": "<protNFe ...> ou <nfeProc ...> ou <NFe ...>",
+    "xmlLoad": "Carregar arquivo XML",
+    "xmlHint": "O XML é analisado sem acesso à rede; DTD e entidades externas são recusados.",
+    "xmlTooLarge": "Arquivo maior que {{max}} bytes.",
+    "xmlUnreadable": "Não foi possível ler o arquivo.",
+    "contextTitle": "Contexto fiscal",
+    "loadingContract": "Carregando o contrato do contexto fiscal…",
+    "pluginMissing": "Esta API não tem o plugin DF-e carregado. Suba o produto com: uvicorn dfe_copilot.main:app",
+    "needDescription": "Descreva o incidente.",
+    "fixFields": "Corrija os campos destacados do contexto fiscal.",
+    "submit": "Diagnosticar",
+    "readOnly": "Somente leitura: o DF-e Copilot nunca reenvia, cancela, inutiliza nem aciona contingência. Essas decisões ficam com o time fiscal."
+  },
+  "context": {
+    "fields": {
+      "environment": "Ambiente",
+      "jurisdiction": "UF",
+      "event_time": "Instante do evento (opcional)",
+      "events": "Linha do tempo",
+      "events_evidence_id": "ID da evidência",
+      "events_document_ref": "Chave de acesso",
+      "events_at": "Data e hora (com fuso)",
+      "events_event": "Evento"
+    },
+    "options": {
+      "environment": {
+        "homologation": "Homologação",
+        "production": "Produção"
+      },
+      "events_event": {
+        "sent": "Envio",
+        "timeout": "Timeout",
+        "response": "Resposta",
+        "error": "Erro"
+      }
+    }
+  }
+}

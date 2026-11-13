@@ -1,0 +1,11 @@
+/* DF-e Copilot - estilos so do shell do DF-e (DA-95). O design system comum
+   vem de @copilot/core-ui/styles.css. */
+.dfe-app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+.dfe-app .main{flex:1}
+.dfe-topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid #1E3A5F;background:#0A1628}
+.dfe-brand{padding:0}
+.dfe-brand-icon{background:#0F766E}
+.dfe-topbar-right{display:flex;align-items:center;gap:12px}
+.dfe-xml-actions{display:flex;align-items:center;gap:10px;margin-top:6px}
+.dfe-hint{font-size:11px;color:#475569}
+.dfe-readonly{font-size:11px;color:#94A3B8;margin-top:12px;line-height:1.6}

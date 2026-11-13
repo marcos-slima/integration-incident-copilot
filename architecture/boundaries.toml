@@ -1,0 +1,45 @@
+# Fronteiras de dependencia do monorepo (DA-95). Verificadas pelo gate
+# `import_boundaries` (app/evaluation/boundaries.py), que roda no CI.
+#
+# Regra geral: produtos dependem do core; o core nao depende de produto; um
+# produto nao depende de outro. Cada produto usa do core SO a superficie
+# publica (Python: app.sdk; UI: o indice de @copilot/core-ui). Separar um
+# produto em outro repositorio vira trocar essas superficies por dependencias
+# publicadas, sem reescrever codigo.
+#
+# Python - `paths` e' onde a regra vale; `forbid` lista modulos proibidos;
+# `only_via` restringe todo import de `root` aos modulos em `allow` (e
+# submodulos deles).
+# TypeScript - `forbid_dirs` reprova import relativo que resolva dentro do
+# diretorio; `forbid_packages` reprova o pacote; `public_entry` exige que o
+# pacote seja importado so pelo indice (mais os subcaminhos em `allow_subpaths`).
+
+[[python]]
+name = "core nao importa produto"
+paths = ["app", "scripts", "alembic"]
+forbid = ["dfe_copilot"]
+
+[[python]]
+name = "DF-e usa o core so por app.sdk"
+paths = ["packages/dfe/src", "packages/dfe/scripts", "packages/dfe/tests"]
+only_via = { root = "app", allow = ["app.sdk"] }
+
+[[typescript]]
+name = "core-ui nao importa shell de produto"
+paths = ["packages/core-ui/src"]
+forbid_dirs = ["frontend", "packages/dfe"]
+forbid_packages = ["@copilot/iic-ui", "@copilot/dfe-ui"]
+
+[[typescript]]
+name = "shell do IIC: sem DF-e e core-ui so pelo indice"
+paths = ["frontend/src"]
+forbid_dirs = ["packages"]
+forbid_packages = ["@copilot/dfe-ui"]
+public_entry = { package = "@copilot/core-ui", allow_subpaths = ["styles.css"] }
+
+[[typescript]]
+name = "shell do DF-e: sem IIC e core-ui so pelo indice"
+paths = ["packages/dfe/frontend/src"]
+forbid_dirs = ["frontend", "packages/core-ui"]
+forbid_packages = ["@copilot/iic-ui"]
+public_entry = { package = "@copilot/core-ui", allow_subpaths = ["styles.css"] }

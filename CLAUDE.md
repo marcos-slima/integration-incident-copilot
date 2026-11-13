@@ -151,11 +151,16 @@ Se o hook rodar ruff e reformatar arquivos → `git add` novamente + re-commit.
 
 ## Estrutura de pastas relevantes
 
-> **Monorepo (DA-94).** `app/` é o core compartilhado **e** o produto IIC.
-> O produto **DF-e Copilot** fica em `packages/dfe/` (pacote `dfe_copilot`,
-> testes e docs próprios) e só toca o core pelo protocolo
-> `app/agent/domain_plugins.py::DomainPlugin`. O core nunca importa
-> `dfe_copilot`. Documentação do DF-e: `packages/dfe/README.md`.
+> **Monorepo (DA-94/DA-95).** `app/` é o core compartilhado **e** o backend
+> do IIC. O produto **DF-e Copilot** fica em `packages/dfe/` (pacote
+> `dfe_copilot`, shell de UI em `packages/dfe/frontend`, testes e docs
+> próprios) e só toca o core por `app.sdk` (e pelo protocolo
+> `app/agent/domain_plugins.py::DomainPlugin`). UI: npm workspaces na raiz,
+> com `packages/core-ui` (`@copilot/core-ui`, sem produto), `frontend/` (shell
+> do IIC) e `packages/dfe/frontend` (shell do DF-e). As fronteiras ficam em
+> `architecture/boundaries.toml` e são verificadas pelo gate `import_boundaries`.
+> Não use `npm` dentro de um shell isolado: rode `npm ci` na raiz.
+> Documentação do DF-e: `packages/dfe/README.md`.
 
 ```
 app/
@@ -177,6 +182,8 @@ app/
                     # integrados (DA-49) + correlação de incidentes
                     # (correlation.py, DA-50); UI Jinja2 em /admin
                     # (models, usage, systems, incidents) + API /admin/api/*
+  sdk/              # DA-95: superficie publica do core para produtos
+                    # (__init__.py) + apoio de teste (testing.py)
   mcp/
     server.py       # DA-19: servidor MCP
     policy.py       # DA-27: Capability Registry (FAIL-CLOSED por default)
@@ -326,6 +333,7 @@ docs/               # índice em docs/README.md; ARCHITECTURE.md, DECISOES_DE_AR
 | DA-92 | Modelo canônico `qwen3.6:35b-a3b` (35B MoE, 128k ctx) desde 2026-10-13, substituindo `qwen3-coder-next:latest`; baseline histórica do promptfoo registra o Qwen; revalidação da revisão e do modelo dos manifests pendente (DA-51) | `app/config.py`, `.env.example`, `docker-compose.yml`, `promptfooconfig.yaml` |
 | DA-93 | Fatos × hipóteses: `DiagnosisResponse.findings`/`cause_status` montados por código (`build_findings`; LLM nunca declara fato) e `trust_level` `rule_reference` para o rule engine. As fases fiscais (contrato, XML/XSD, regras) foram movidas para o DF-e Copilot pela DA-94 | `app/agent/findings.py`, `app/models/models.py::Finding`, `app/agent/nodes.py::_assemble_evidence`, `tests/test_da93_findings.py` |
 | DA-94 | Separação de produto em monorepo: core (`app/`) com protocolo `DomainPlugin` carregado por `DOMAIN_PLUGINS` (vazio = core puro, fail-closed), `IncidentRequest.domain_context` validado pelo plugin (422 `domain_context_invalid`), nó `domain_tools` antes do `retrieve`; produto DF-e Copilot em `packages/dfe/` (`dfe_copilot`, docs próprias) | `app/agent/domain_plugins.py`, `app/agent/graph.py`, `app/main.py::diagnose`, `packages/dfe/`, `tests/test_da94_domain_plugins.py` |
+| DA-95 | Fronteiras de produto: fachada `app.sdk` (única superfície do core para produtos) + `app/sdk/testing.py`; `DomainPlugin.context_schema()` obrigatório e `GET /domain-plugins`; `UI_DIST_DIR` por produto; npm workspaces com `@copilot/core-ui` (cliente, sessão, i18n `core.*`, `DiagnosisResult`, `FindingsPanel`, `SchemaForm`), shell do IIC (`frontend/`) e shell do DF-e (`packages/dfe/frontend`); gate `import_boundaries` (`architecture/boundaries.toml`) | `app/sdk/`, `app/agent/domain_plugins.py`, `app/main.py::domain_plugins_catalog`, `app/evaluation/boundaries.py`, `architecture/boundaries.toml`, `packages/core-ui/`, `frontend/`, `packages/dfe/frontend/`, `tests/test_da95_sdk.py`, `tests/test_da95_boundaries.py` |
 
 **DAs candidatas (não entregues ou com implementação parcial):**
 - **DA-31 — SAP AI Agent Hub registration (MCP + A2A)** · bloqueada: exige tenant Kyma.

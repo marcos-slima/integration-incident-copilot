@@ -8,9 +8,9 @@ export function LanguageSelect({ compact = false }: { compact?: boolean }) {
   const current = (i18n.resolvedLanguage || 'en') as Locale;
   return (
     <label className={compact ? 'lang-select compact' : 'lang-select'}>
-      <span className="lang-select-label">{t('common.language')}</span>
+      <span className="lang-select-label">{t('core.common.language')}</span>
       <select
-        aria-label={t('common.language')}
+        aria-label={t('core.common.language')}
         value={SUPPORTED_LOCALES.includes(current) ? current : 'en'}
         onChange={(e) => setLocale(e.target.value as Locale)}
       >

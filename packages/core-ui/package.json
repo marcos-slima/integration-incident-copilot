@@ -1,0 +1,38 @@
+{
+  "name": "@copilot/core-ui",
+  "private": true,
+  "version": "0.1.0",
+  "description": "DA-95: biblioteca de UI do core - cliente da API, sessao, i18n e componentes neutros de diagnostico. Nao conhece nenhum produto.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./styles.css": "./src/styles.css"
+  },
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "oxlint src"
+  },
+  "peerDependencies": {
+    "i18next": "26.5.2",
+    "i18next-browser-languagedetector": "8.2.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-i18next": "17.1.0",
+    "react-markdown": "^10.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "i18next": "26.5.2",
+    "i18next-browser-languagedetector": "8.2.1",
+    "oxlint": "^1.81.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-i18next": "17.1.0",
+    "react-markdown": "^10.1.0",
+    "typescript": "~6.0.2"
+  }
+}

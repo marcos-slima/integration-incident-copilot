@@ -23,7 +23,7 @@ from app.a2a.server import router as a2a_router
 from app.admin.routes import router as admin_router  # DA-46/47/48
 from app.admin.security import ensure_admin_key_configured
 from app.admin.ui import ui_router as admin_ui_router
-from app.agent.domain_plugins import DomainContextError
+from app.agent.domain_plugins import DomainContextError, describe_plugins, load_plugins
 from app.agent.graph import run_diagnosis
 from app.api_errors import CodedHTTPException, coded_http_exception_handler
 from app.auth import ensure_session_secret_configured, verify_session_cookie
@@ -485,16 +485,19 @@ def _diagnosis_timeout_handler(request: Request, exc: DiagnosisTimeoutError):
 # (cenario "so backend", sem Node/npm instalado) continua funcionando;
 # "/" devolve 404 com uma mensagem clara em vez de FileNotFoundError
 # se ninguem buildou o frontend ainda.
-_STATIC_DIST_ASSETS_DIR = Path("static/dist/assets")
-_STATIC_DIST_INDEX = Path("static/dist/index.html")
+# DA-95: o diretorio vem de UI_DIST_DIR - cada produto serve o proprio shell.
+_STATIC_DIST_DIR = Path(settings.ui_dist_dir)
+_STATIC_DIST_ASSETS_DIR = _STATIC_DIST_DIR / "assets"
+_STATIC_DIST_INDEX = _STATIC_DIST_DIR / "index.html"
 
 if _STATIC_DIST_ASSETS_DIR.is_dir():
     app.mount("/assets", StaticFiles(directory=str(_STATIC_DIST_ASSETS_DIR)), name="assets")
 else:
     logger.warning(
-        "static/dist/assets nao encontrado - bundle do frontend (frontend/) nao foi "
-        "buildado ('npm ci && npm run build' em frontend/, ou 'docker compose build'). "
-        "A API sobe normalmente, mas GET / devolvera 404 ate o bundle existir."
+        "%s nao encontrado - bundle de UI nao foi buildado ('npm ci && npm run build "
+        "-w <shell>' na raiz, ou 'docker compose build'). A API sobe normalmente, mas "
+        "GET / devolvera 404 ate o bundle existir.",
+        _STATIC_DIST_ASSETS_DIR,
     )
 
 
@@ -505,9 +508,9 @@ def index() -> FileResponse | JSONResponse:
             status_code=status.HTTP_404_NOT_FOUND,
             content={
                 "detail": (
-                    "Frontend nao buildado (static/dist/index.html ausente). Rode "
-                    "'npm ci && npm run build' em frontend/, ou use a imagem Docker "
-                    "(que builda o frontend automaticamente)."
+                    f"Frontend nao buildado ({_STATIC_DIST_INDEX} ausente). Rode "
+                    "'npm ci && npm run build -w <shell>' na raiz, ou use a imagem "
+                    "Docker (que builda o frontend automaticamente)."
                 )
             },
         )
@@ -1013,6 +1016,15 @@ def review_incident_endpoint(
         "status": "reviewed",
         "graph_updated": True,
     }
+
+
+@app.get("/domain-plugins", dependencies=[Depends(verify_session_or_api_key)])
+def domain_plugins_catalog() -> dict:
+    """DA-95: plugins de dominio carregados e o JSON Schema do `domain_context`
+    de cada um. E' o contrato que os shells de UI usam para gerar o formulario
+    de entrada; o core publica o schema sem interpreta-lo. Sem plugin: lista
+    vazia (core puro)."""
+    return {"plugins": describe_plugins(load_plugins(settings.domain_plugins))}
 
 
 @app.get("/llm/policy", dependencies=[Depends(verify_session_or_api_key)])

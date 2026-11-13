@@ -1,0 +1,15 @@
+{
+  "name": "copilot-ui-workspace",
+  "private": true,
+  "description": "Workspaces de UI (DA-95): @copilot/core-ui (core, sem produto), @copilot/iic-ui e @copilot/dfe-ui (shells de produto).",
+  "workspaces": [
+    "packages/core-ui",
+    "frontend",
+    "packages/dfe/frontend"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present"
+  }
+}

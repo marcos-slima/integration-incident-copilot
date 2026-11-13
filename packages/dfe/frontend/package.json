@@ -1,0 +1,32 @@
+{
+  "name": "@copilot/dfe-ui",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Shell de UI do DF-e Copilot (DA-95). Depende so de @copilot/core-ui.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
+    "lint": "oxlint src",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@copilot/core-ui": "0.1.0",
+    "i18next": "26.5.2",
+    "i18next-browser-languagedetector": "8.2.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-i18next": "17.1.0",
+    "react-markdown": "^10.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "oxlint": "^1.81.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0"
+  }
+}

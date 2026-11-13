@@ -1,5 +1,5 @@
 // DA-73: formatacao sempre pelo locale resolvido (Intl), nunca fixa.
-import i18n from '.';
+import i18n from 'i18next';
 
 function locale(): string {
   const l = i18n.resolvedLanguage || 'en';

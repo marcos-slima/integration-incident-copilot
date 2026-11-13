@@ -335,4 +335,24 @@ Correções gerais para as causas da D8, sem ajuste nos casos blind.
   Ressalvas leves, sem nova versão do prompt: UC01-XSD-01 e UC06-SIG-01
   afirmam processamento ou rejeição no autorizador sem evidência.
 
+### D11. Interface própria e fronteira com o core (P6, 2026-11-13)
+
+- **Decisão:** o DF-e Copilot tem shell de UI próprio
+  (`packages/dfe/frontend`, `@copilot/dfe-ui`) sobre a biblioteca neutra do
+  core (`@copilot/core-ui`). Não usa a tela do IIC e não tem frontend
+  duplicado (DA-95 no core).
+- **Tela:** descrição, XML (colar ou carregar arquivo; análise sem rede) e
+  contexto fiscal; resultado com fatos × hipóteses, evidências e proveniência.
+  Sem ação de reenvio, cancelamento, inutilização ou contingência.
+- **Contexto fiscal gerado do contrato:** `DfePlugin.context_schema()` publica
+  o JSON Schema do `FiscalContext` (com o formato de cada evento da linha do
+  tempo em `TIMELINE_EVENT_SCHEMA`). A UI gera o formulário a partir dele e
+  só traduz os rótulos. A validação de evento continua em
+  `fiscal/correlation.py`: evento ruim vira `G-events`, nunca 422.
+- **Core só por `app.sdk`:** `kb.py`, `main.py`, os scripts e os testes
+  deixaram de importar internos do core. O gate `import_boundaries` reprova
+  qualquer recaída.
+- **Servir a própria UI:** `dfe_copilot.main` define `UI_DIST_DIR` para
+  `packages/dfe/frontend/dist`.
+
 ---

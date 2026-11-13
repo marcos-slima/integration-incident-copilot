@@ -1,5 +1,8 @@
-// Espelho exato dos modelos Pydantic em app/models.py
-// Se o backend mudar, este arquivo muda junto.
+// Tipos do produto IIC. Os contratos do core (DiagnosisResponse, Finding,
+// EvidenceItem...) vem de @copilot/core-ui (DA-95); aqui so o que e' do IIC.
+import type { CoreIncidentRequest, DiagnosisResponse } from '@copilot/core-ui';
+
+export type { DiagnosisResponse };
 
 export type InterfaceType =
   | 'odata'
@@ -13,104 +16,15 @@ export type InterfaceType =
   | 'apim'
   | 'po';
 
-export interface IncidentRequest {
-  description: string;
-  logs?: string;
-  payload?: string;
+// Request do IIC = campos do core + os de conector (so deste produto).
+export interface IncidentRequest extends CoreIncidentRequest {
   interface_type?: InterfaceType;
   identifier?: string;
   connector_source_system?: string;
   sensitivity_level?: 'public' | 'internal' | 'confidential' | 'secret';
   pii_detected?: boolean;
   redaction_applied?: boolean;
-  locale?: 'pt-BR' | 'en'; // DA-74: idioma do conteudo do diagnostico
 }
-
-// espelho de app/models.py::Evidence — proveniência de cada afirmação
-export interface EvidenceItem {
-  source_id: string;
-  source_type: 'connector' | 'rag' | 'graph' | 'web' | 'user' | 'rule_engine';
-  locator?: string | null;
-  excerpt: string;
-  retrieval_score?: number | null;
-  rerank_score?: number | null;
-  trust_level:
-    | 'system_observed'
-    | 'rule_reference'
-    | 'retrieved_document'
-    | 'web_untrusted'
-    | 'user_reported'
-    | 'simulated';
-}
-
-// espelho de app/models.py::Finding (DA-93): `fact` so vem de ferramenta,
-// conector ou regra; a causa proposta e' sempre `hypothesis`.
-export interface Finding {
-  id: string;
-  kind: 'fact' | 'hypothesis';
-  source: 'tool' | 'connector' | 'rule_reference' | 'rag' | 'llm';
-  statement: string;
-  evidence_refs?: string[];
-  confirmation_test?: string[];
-  alternatives?: string[];
-  rule_ref?: string;
-}
-
-// espelho de app/models.py::DiagnosisResponse. Campos nullable chegam
-// AUSENTES do JSON (exclude_none) — por isso são opcionais aqui, e não
-// `| null`. `llm_model`/`prompt_version`/`prompt_digest` ficam de fora
-// quando a rule engine respondeu sem LLM (DA-53, invariante 21).
-export interface DiagnosisResponse {
-  probable_root_cause: string;
-  model_confidence: number; // o que o LLM disse de si
-  diagnosis_confidence: number; // pós-guardrails — o que o badge mostra
-  next_steps: string[];
-  report_markdown: string;
-  matched_source?: string;
-  evidence_strength?: number;
-  llm_provider_used?: string;
-  agent_domain?: string;
-  llm_model?: string;
-  prompt_version?: string;
-  prompt_digest?: string;
-  locale?: 'pt-BR' | 'en'; // DA-74: idioma em que o diagnostico foi produzido
-  evidence?: EvidenceItem[];
-  findings?: Finding[]; // DA-93
-  cause_status?: 'hypothesis' | 'confirmed' | 'inconclusive'; // DA-93
-  incident_id?: string;
-  trace_id?: string;
-  escalation?: EscalationSignal;
-  // DA-76/DA-83: campos de resultado (nao do corpo de /verify).
-  ai_warning?: string;
-  explanation?: string;
-}
-
-// espelho de app/agent/escalation.py::EscalationDecision.as_log_fields (DA-44).
-// INFORMATIVO: o pipeline nao escala sozinho para um modelo pago.
-export type EscalationReason =
-  | 'grounded'
-  | 'no_context'
-  | 'abstained'
-  | 'floor_tier_weak'
-  | 'curated_tier_weak';
-
-export interface EscalationSignal {
-  escalation: EscalationReason | string; // codigo da razao
-  should_escalate: boolean;
-  tier: string;
-  abstained: boolean;
-  top_evidence: number;
-  connector_real: boolean;
-}
-
-// Corpo de erro da API: `code` e estavel (app/main.py, handlers de excecao);
-// `error_id` liga a resposta ao log do servidor.
-export type ApiErrorCode =
-  | 'budget_exhausted' // DA-67
-  | 'policy_violation' // DA-66/DA-43
-  | 'overloaded'
-  | 'timeout'
-  | 'internal_error';
 
 // Espelho de GET /llm/policy (app/llm/routing.py::describe_effective_policy)
 export interface ProviderPolicy {

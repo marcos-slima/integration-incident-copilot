@@ -3,7 +3,7 @@
 // app.connectors.connector_status). Consumido por StatusView.
 
 import type { HealthResponse, LlmPolicy } from '../types/models';
-import { apiErrorFrom } from './diagnose';
+import { apiErrorFrom } from '@copilot/core-ui';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? '';
 

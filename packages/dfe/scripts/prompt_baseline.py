@@ -17,14 +17,13 @@ from pathlib import Path
 
 from dfe_copilot.prompt import DFE_PROMPT
 
-from app.agent import prompts
-from app.agent.domain_plugins import domain_provenance
+from app import sdk
 
 BASELINE = Path(__file__).resolve().parents[1] / "data" / "eval" / "prompt_baseline.json"
 
 
 def current() -> dict[str, str]:
-    return domain_provenance(DFE_PROMPT, prompts.get_spec().digest)
+    return sdk.domain_prompt_provenance(DFE_PROMPT)
 
 
 def main() -> None:
@@ -42,7 +41,7 @@ def main() -> None:
         **{k: v for k, v in anterior.items() if k.startswith("measurement_blind")},
         "prompt_name": "dfe",
         **prov,
-        "base_prompt_digest": prompts.get_spec().digest,
+        "base_prompt_digest": sdk.base_prompt_digest(),
         "measured_by": "promptfoo (packages/dfe/promptfooconfig.yaml) via scripts/promptfoo_provider.py",
         "measurement": args.measurement,
     }

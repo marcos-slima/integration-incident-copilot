@@ -162,8 +162,9 @@ def test_every_admin_error_code_has_text_in_both_locales():
         assert codes <= set(errors), (loc, sorted(codes - set(errors)))
 
 
-def test_gate_fails_without_frontend_i18n(tmp_path):
+def test_gate_fails_without_core_ui_i18n(tmp_path):
+    # DA-95: o catalogo comum de UI vive no core-ui; sem ele nenhum shell traduz
     from app.evaluation.gates import check_ui_i18n
 
     findings = check_ui_i18n(tmp_path)
-    assert findings[0].is_failure and "frontend/src/i18n" in findings[0].message
+    assert findings[0].is_failure and "packages/core-ui/src/i18n" in findings[0].message

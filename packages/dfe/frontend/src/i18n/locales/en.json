@@ -1,0 +1,50 @@
+{
+  "common": {
+    "appName": "DF-e Copilot",
+    "appSub": "Electronic tax document diagnosis",
+    "logout": "Sign out"
+  },
+  "fiscal": {
+    "title": "NF-e diagnosis",
+    "subtitle": "Provide the incident, the XML (NF-e, protocol or batch return) and the timeline. The tax tools produce the facts; the LLM only proposes hypotheses about them.",
+    "description": "Incident description",
+    "descriptionPlaceholder": "E.g.: NF-e rejected with cStat 204 after a send timeout",
+    "xml": "XML (optional)",
+    "xmlPlaceholder": "<protNFe ...> or <nfeProc ...> or <NFe ...>",
+    "xmlLoad": "Load XML file",
+    "xmlHint": "The XML is analyzed without network access; DTDs and external entities are refused.",
+    "xmlTooLarge": "File larger than {{max}} bytes.",
+    "xmlUnreadable": "Could not read the file.",
+    "contextTitle": "Tax context",
+    "loadingContract": "Loading the tax context contract…",
+    "pluginMissing": "This API does not have the DF-e plugin loaded. Start the product with: uvicorn dfe_copilot.main:app",
+    "needDescription": "Describe the incident.",
+    "fixFields": "Fix the highlighted tax context fields.",
+    "submit": "Diagnose",
+    "readOnly": "Read-only: DF-e Copilot never resends, cancels, voids numbers or triggers contingency. Those decisions belong to the tax team."
+  },
+  "context": {
+    "fields": {
+      "environment": "Environment",
+      "jurisdiction": "State (UF)",
+      "event_time": "Event time (optional)",
+      "events": "Timeline",
+      "events_evidence_id": "Evidence ID",
+      "events_document_ref": "Access key",
+      "events_at": "Date and time (with offset)",
+      "events_event": "Event"
+    },
+    "options": {
+      "environment": {
+        "homologation": "Homologation",
+        "production": "Production"
+      },
+      "events_event": {
+        "sent": "Send",
+        "timeout": "Timeout",
+        "response": "Response",
+        "error": "Error"
+      }
+    }
+  }
+}

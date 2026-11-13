@@ -72,6 +72,10 @@ class DfePlugin:
     def __init__(self, kb_lookup: KbLookup | None | str = "default") -> None:
         self._kb_lookup = kb_lookup
 
+    def context_schema(self) -> dict[str, Any]:
+        """DA-95: JSON Schema do contexto fiscal, para o formulario da UI."""
+        return FiscalContext.model_json_schema()
+
     def validate_context(self, context: dict[str, Any]) -> dict[str, Any] | None:
         if context.get("family") not in (None, "nfe"):
             return None

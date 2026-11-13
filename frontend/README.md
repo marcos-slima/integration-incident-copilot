@@ -1,32 +1,26 @@
-# React + TypeScript + Vite
+# Integration Incident Copilot - shell de UI (`@copilot/iic-ui`)
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Shell de produto do IIC (DA-95). Contém só o que é do IIC: formulário com
+conector/interface/identificador, IDs de demonstração, histórico da sessão e
+a tela de status da stack. Sessão, login, idioma, cliente da API e o cartão
+de resultado (com fatos × hipóteses) vêm de
+[`@copilot/core-ui`](../packages/core-ui/README.md).
 
-Currently, two official plugins are available:
+## Comandos (na raiz do repositório, npm workspaces)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm ci
+npm run dev -w @copilot/iic-ui        # Vite em :5173, API em :8000 (proxy)
+npm run build -w @copilot/iic-ui      # gera ../static/dist, servido pelo FastAPI
+npm run typecheck -w @copilot/iic-ui
+npm run lint -w @copilot/iic-ui
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Regras
+
+- Importa do core só pelo índice: `import { ... } from '@copilot/core-ui'` e
+  `@copilot/core-ui/styles.css`. Import profundo ou de outro produto reprova
+  no gate `import_boundaries` (`architecture/boundaries.toml`).
+- Textos do produto em `src/i18n/locales`; textos comuns ficam em `core.*`
+  no catálogo do core-ui. O gate `ui_i18n` confere as duas pontas.
+- Estilos só do IIC em `src/iic.css`; o design system é o do core-ui.

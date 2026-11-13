@@ -103,6 +103,7 @@ final.
 | 92 | [83](#83-modelo-canônico-qwen3635b-a3b-da-92) | Modelo canônico `qwen3.6:35b-a3b` desde 2026-10-13, substituindo `qwen3-coder-next:latest`; re-baseline do promptfoo pendente (DA-51) |
 | 93 | [85](#85-fatos--hipóteses-e-domínio-fiscal-da-93) | Fatos × hipóteses (`findings`, `cause_status`, `rule_reference`); fases fiscais movidas para o DF-e Copilot |
 | 94 | [86](#86-separação-de-produto-core-compartilhado-e-df-e-copilot-da-94) | Separação de produto: core compartilhado + DF-e Copilot (monorepo, plugin de domínio) |
+| 95 | [87](#87-fronteiras-de-produto-app-sdk-core-ui-e-shells-da-95) | Fronteiras de produto: `app.sdk`, `@copilot/core-ui`, shells de UI e gate `import_boundaries` |
 | 64 | [84](#84-ontologia-quebrada-correção-de-bug-em-retrieve_node-da-64) | Ontologia quebrada (correção de bug em `retrieve_node`) |
 
 > **Ordenação da prosa:** as seções §42–§47 (DA-42, DA-38, DA-39, DA-40,
@@ -3551,6 +3552,69 @@ core sem import do produto) e `packages/dfe/tests/` (plugin real).
   `packages/dfe/pyproject.toml`, `cd packages/dfe && pytest`). A
   imagem Docker atual é só do IIC (`packages/` não é copiado).
 - Um plugin por requisição: o primeiro que aceitar o contexto.
+
+---
+
+### 87. Fronteiras de produto: app.sdk, core-ui e shells (DA-95)
+
+**O problema.** A DA-94 separou o DF-e Copilot como plugin, mas faltavam
+duas coisas para que ele pudesse virar outra solução sem reescrita. Primeiro,
+o produto importava internos do core (`app.rag.retriever._get_qdrant_client`,
+`app.agent.graph`, `app.agent.prompts`). Segundo, não havia interface: o
+único frontend era o do IIC, com conector, interface e identificador, campos
+que não fazem sentido para o usuário fiscal. Pôr a tela fiscal ali faria os
+dois produtos parecerem um só e acoplaria o domínio fiscal à UI do IIC.
+
+**A solução: superfícies públicas e shells por produto.**
+- **Backend, `app/sdk`:** fachada pública do core para produtos (diagnóstico,
+  catálogo de plugins, proveniência de prompt, backends de busca) e
+  `app/sdk/testing.py` para testes de produto sem tocar internos. Os imports
+  pesados são feitos sob demanda: importar `app.sdk` não carrega o grafo nem
+  a API.
+- **Contrato de UI do plugin:** `DomainPlugin.context_schema()` passa a ser
+  obrigatório (o JSON Schema do `domain_context`). `GET /domain-plugins`
+  publica nome, schema e versão do prompt de cada plugin carregado; o core
+  publica o schema sem interpretá-lo. `UI_DIST_DIR` escolhe o bundle servido
+  em `/`, e cada produto aponta para o próprio shell.
+- **UI, npm workspaces na raiz:** `@copilot/core-ui` (`packages/core-ui`)
+  tem cliente da API, sessão, i18n (textos comuns em `core.*`), design system e
+  componentes neutros: `SessionGate`, `LoginView`, `DiagnosisResult`,
+  `FindingsPanel` (fatos × hipóteses) e `SchemaForm` (formulário gerado do
+  schema do plugin). O IIC (`frontend/`, `@copilot/iic-ui`) virou shell sobre
+  ele, sem mudança funcional. O DF-e Copilot ganhou o próprio shell
+  (`packages/dfe/frontend`, `@copilot/dfe-ui`), com marca, idioma e tela
+  fiscal próprios.
+- **Fronteiras verificadas por máquina:** `architecture/boundaries.toml`
+  declara as regras e o gate `import_boundaries`
+  (`app/evaluation/boundaries.py`) as aplica em Python (ast) e TypeScript:
+  - o core não importa produto;
+  - o DF-e usa o core só por `app.sdk`;
+  - o `core-ui` não importa shell;
+  - um shell não importa o outro e usa o `core-ui` só pelo índice
+    (mais `styles.css`).
+- **i18n por superfície:** os gates `ui_i18n` e o inventário de texto
+  descobrem toda UI do monorepo (`frontend/src`, `packages/*/src`,
+  `packages/*/frontend/src`). Chave `core.*` resolve no catálogo do core-ui, e
+  catálogo de produto que define `core` reprova.
+
+**Validação.**
+- `tests/test_da95_sdk.py`: endpoint, plugin sem schema recusado, `app.sdk`
+  sem carregar o grafo, proveniência, hook de prompt movido do produto para o
+  core.
+- `tests/test_da95_boundaries.py`: as regras com violações sintéticas, o
+  repositório real limpo e o i18n das três superfícies.
+- `packages/dfe/tests` passa só com `app.sdk`.
+- CI de frontend: typecheck, lint e build do core-ui e dos dois shells.
+
+**Limitações (registradas de propósito).**
+- O backend do core continua em `app/` junto com o IIC; mover para
+  `packages/core` é a P1, agora mecânica: os produtos só enxergam `app.sdk`.
+- O `@copilot/core-ui` é pacote de código-fonte (TypeScript compilado pelo
+  shell). Publicar fora do monorepo exige um build de biblioteca, sem mudar
+  os imports.
+- A imagem Docker continua sendo do IIC. O DF-e Copilot tem shell e entrada
+  próprios, mas a imagem e o pipeline de release dele são a P2.
+- O cookie de idioma segue `iic_locale`, compartilhado com a Admin UI.
 
 ---
 

@@ -17,8 +17,7 @@ os.environ.setdefault("DOMAIN_PLUGINS", "dfe_copilot.plugin")
 os.environ.setdefault("RULE_ENGINE_ENABLED", "false")  # mede o LLM, nao a regra
 os.environ.setdefault("DFE_KB_ENABLED", "true")  # como o produto (dfe_copilot.main)
 
-from app.agent.graph import run_diagnosis
-from app.models import IncidentRequest
+from app import sdk
 
 CASES = ROOT / "data" / "eval" / "cases_v1.jsonl"
 
@@ -29,13 +28,13 @@ def main() -> None:
     case = next(
         c for c in map(json.loads, CASES.read_text().splitlines()) if c["case_id"] == case_id
     )
-    request = IncidentRequest(
+    request = sdk.incident_request(
         description=case.get("description")
         or f"Incidente NF-e (caso sintetico {case['case_id']}): rejeicao/erro na autorizacao",
         payload=case["payload"] or None,
         domain_context=case["domain_context"],
     )
-    result = run_diagnosis(request, llm_model=model)
+    result = sdk.run_diagnosis(request, llm_model=model)
     print(
         json.dumps(
             {

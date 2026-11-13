@@ -318,7 +318,7 @@ Para **adicionar um idioma** (ex.: `es`):
    Para outro idioma, crie um `prompts/case.<idioma>.txt` equivalente e troque
    `--prompt-locale`. Até medir, o gate `prompt_digest_measured` avisa que o
    idioma não foi medido.
-6. `cd frontend && npm run build`, e confira com `?lng=es`.
+6. `npm run build -w @copilot/iic-ui` (na raiz), e confira com `?lng=es`. Idioma novo também entra no catálogo do core-ui (`packages/core-ui/src/i18n/locales`) e no de cada shell.
 
 Uma regra nova do rule engine (seção 5) precisa da causa e dos passos em cada
 idioma não-default (`rules.<categoria>` nos catálogos de conteúdo); o gate

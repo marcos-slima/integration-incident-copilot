@@ -106,6 +106,16 @@
     "processingTitle": "Agente processando",
     "processingSub": "Conector → RAG híbrido → LLM → guardrails"
   },
+  "review": {
+    "title": "Revisão humana",
+    "pending": "O diagnóstico aguarda uma decisão humana antes de continuar.",
+    "persistenceRequired": "A revisão está pendente, mas a retomada exige checkpoint persistente (DATABASE_URL e CHECKPOINTING_ENABLED=true).",
+    "editLabel": "Causa raiz editada",
+    "approve": "Aprovar",
+    "edit": "Editar e continuar",
+    "reject": "Rejeitar",
+    "completed": "Revisão registrada. O grafo continuará a partir do checkpoint."
+  },
   "findings": {
     "title": "Fatos × hipóteses",
     "facts_one": "Fato ({{count}})",

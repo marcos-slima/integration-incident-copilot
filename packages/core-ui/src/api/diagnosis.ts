@@ -8,6 +8,19 @@ export function diagnose<T extends CoreIncidentRequest>(request: T): Promise<Dia
   return apiJson<DiagnosisResponse>('/diagnose', { method: 'POST', body: JSON.stringify(request) });
 }
 
+export type HumanReviewAction = 'approve' | 'edit' | 'reject';
+
+export function reviewIncident(
+  incidentId: string,
+  action: HumanReviewAction,
+  edit?: string,
+): Promise<{ incident_id: string; status: 'reviewed'; graph_updated: boolean }> {
+  return apiJson(`/incidents/${encodeURIComponent(incidentId)}/review`, {
+    method: 'POST',
+    body: JSON.stringify({ action, edit: action === 'edit' ? edit : undefined, reviewed_by: 'human' }),
+  });
+}
+
 /** GET /domain-plugins: plugins carregados e o schema de contexto de cada um. */
 export async function getDomainPlugins(): Promise<DomainPluginInfo[]> {
   const body = await apiJson<{ contract_version?: string; plugins: DomainPluginInfo[] }>('/domain-plugins');

@@ -350,6 +350,8 @@ textarea.field-input{resize:vertical;line-height:1.6}
 .finding-meta{font-size:11px;color:#94A3B8;margin-top:4px}
 .finding-ref{font-family:'JetBrains Mono',monospace;font-size:10px;background:#1E3A5F55;padding:0 4px;border-radius:3px;margin-right:4px;word-break:break-all}
 .finding-sublist{padding-left:16px;margin-top:2px}
+.human-review{margin:16px 0;padding:12px;border:1px solid #F59E0B55;border-radius:8px;background:#F59E0B0D}
+.review-hint{font-size:12px;line-height:1.5;color:#CBD5E1}
 @media (max-width:720px){.findings-grid{grid-template-columns:1fr}}
 
 /* SchemaForm */

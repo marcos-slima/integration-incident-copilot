@@ -106,6 +106,16 @@
     "processingTitle": "Agent working",
     "processingSub": "Connector → hybrid RAG → LLM → guardrails"
   },
+  "review": {
+    "title": "Human review",
+    "pending": "The diagnosis is waiting for a human decision before continuing.",
+    "persistenceRequired": "Review is pending, but resumption requires a persistent checkpoint (DATABASE_URL and CHECKPOINTING_ENABLED=true).",
+    "editLabel": "Edited root cause",
+    "approve": "Approve",
+    "edit": "Edit and continue",
+    "reject": "Reject",
+    "completed": "Review recorded. The graph will continue from the checkpoint."
+  },
   "findings": {
     "title": "Facts × hypotheses",
     "facts_one": "Fact ({{count}})",

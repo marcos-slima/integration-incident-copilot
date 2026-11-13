@@ -54,6 +54,15 @@ export interface Finding {
 
 export type CauseStatus = 'hypothesis' | 'confirmed' | 'inconclusive';
 
+export interface HumanReviewState {
+  status: 'pending' | 'reviewed';
+  incident_id?: string | null;
+  can_resume: boolean;
+  actions: Array<'approve' | 'edit' | 'reject'>;
+  reviewed_by?: 'human' | 'system' | null;
+  reviewed_at?: string | null;
+}
+
 // app/agent/escalation.py::EscalationDecision.as_log_fields (DA-44)
 export type EscalationReason =
   | 'grounded'
@@ -90,6 +99,7 @@ export interface DiagnosisResponse {
   evidence?: EvidenceItem[];
   findings?: Finding[];
   cause_status?: CauseStatus;
+  human_review?: HumanReviewState | null;
   incident_id?: string;
   trace_id?: string;
   escalation?: EscalationSignal;

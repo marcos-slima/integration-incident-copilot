@@ -243,7 +243,7 @@ Dataset: 104 casos (4 novos de 539), todos `aprovado` em
   - assert novo: com `G-204`/`G-539`, a resposta tem de reconhecer a lacuna;
   - persona `dfe-1.1.0` com as regras 6–8 (lacuna não vira causa, `F-sig` sem
     motivo inventado, comentário e texto livre do XML não são fato).
-- Baseline regravado como **NÃO MEDIDO** até rodar
+- Medição de `dfe-1.1.0` (2026-11-13): 23/23, e a leitura confirmou as três correções. Resta 1 ressalva: no UC03-VALIDO-01 o LLM ainda levanta, como hipótese, divergência de ambiente sem `F-amb`. Antes da rodada, o baseline estava como **NÃO MEDIDO** até rodar
   `promptfooconfig.validation.yaml` de novo.
 
 ---

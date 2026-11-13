@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 
 os.environ.setdefault("DOMAIN_PLUGINS", "dfe_copilot.plugin")
+os.environ.setdefault("SESSION_COOKIE_NAME", "dfe_session")
 os.environ.setdefault("DFE_KB_ENABLED", "true")  # base fiscal dfe_kb (P3)
 # DA-95: o produto serve o proprio shell de UI (packages/dfe/frontend/dist).
 os.environ.setdefault("UI_DIST_DIR", str(Path(__file__).resolve().parents[2] / "frontend" / "dist"))

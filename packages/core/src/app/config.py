@@ -374,6 +374,7 @@ class Settings(BaseSettings):
     # True em producao atras de TLS (Kyma, DA-24): marca o cookie como
     # Secure. Local em HTTP puro deixa False, senao o browser descarta.
     session_cookie_secure: bool = False
+    session_cookie_name: str = Field(default="iic_session", pattern=r"^[A-Za-z0-9_-]+$")
 
     # Validacao 2026-10-07 (DEP-01): /docs, /redoc e /openapi.json publicam o
     # mapa completo da API (rotas admin, headers de chave). Default True

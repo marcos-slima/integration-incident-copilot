@@ -68,6 +68,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+# Nome histórico, preservado para consumidores legados. O runtime usa settings.
 SESSION_COOKIE = "iic_session"
 PBKDF2_ITERATIONS = 600_000  # OWASP 2023 para PBKDF2-SHA256
 HASH_SCHEME = "pbkdf2_sha256"
@@ -230,7 +231,7 @@ def verify_session(token: str | None, secret: str) -> str | None:
 def session_cookie_kwargs() -> dict[str, object]:
     max_age = settings.session_ttl_hours * 3600
     return {
-        "key": SESSION_COOKIE,
+        "key": settings.session_cookie_name,
         "max_age": max_age,
         "httponly": True,
         "samesite": "strict",
@@ -325,18 +326,22 @@ def logout(request: Request, response: Response) -> dict[str, bool]:
     expirar (SEC-03 / R22)."""
     from app import auth_guard
 
-    sessao = _parse_session(request.cookies.get(SESSION_COOKIE), settings.session_secret)
+    sessao = _parse_session(
+        request.cookies.get(settings.session_cookie_name), settings.session_secret
+    )
     if sessao is not None:
         _nome, _emitido, expira, sid = sessao
         auth_guard.revoke_session(sid, max(1, expira - int(time.time())))
-    response.delete_cookie(SESSION_COOKIE, path="/")
+    response.delete_cookie(settings.session_cookie_name, path="/")
     return {"ok": True}
 
 
 @router.get("/session")
 def whoami(request: Request) -> dict[str, str | bool | int]:
     """Estado da sessao — e' o que a UI consulta para saber se pede login."""
-    username = verify_session(request.cookies.get(SESSION_COOKIE), settings.session_secret)
+    username = verify_session(
+        request.cookies.get(settings.session_cookie_name), settings.session_secret
+    )
     if username is None:
         return {"authenticated": False}
     return {
@@ -414,5 +419,5 @@ def verify_session_cookie(request: Request) -> str | None:
     o settings daqui (cookie so existe se o operador configurou).
     MCP/A2A/Event Mesh/admin NAO usam nenhuma das duas: chaves dedicadas.
     """
-    token = request.cookies.get(SESSION_COOKIE)
+    token = request.cookies.get(settings.session_cookie_name)
     return verify_session(token, settings.session_secret)

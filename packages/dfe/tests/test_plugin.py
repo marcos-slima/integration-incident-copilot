@@ -103,7 +103,13 @@ def test_run_diagnosis_com_plugin_dfe() -> None:
 
 
 class TestBaseFiscal:
-    HIT: ClassVar[dict] = {"evidence_id": "kb:NT_2018.005_v1.51.pdf#p23c0", "rule_ids": ["2B08-20"]}
+    HIT: ClassVar[dict] = {
+        "evidence_id": "kb:NT_2018.005_v1.51.pdf#p23c0",
+        "rule_ids": ["2B08-20"],
+        "source_id": "NT_2018.005_v1.51",
+        "text": "Trecho oficial",
+        "trust_level": "rule_reference",
+    }
 
     def _run(self, lookup) -> list[dict[str, Any]]:
         from dfe_copilot.plugin import DfePlugin
@@ -115,6 +121,8 @@ class TestBaseFiscal:
         f = self._run(lambda cstat: [self.HIT] if cstat == "204" else [])
         kbf = next(x for x in f if x["id"] == "F-kb")
         assert kbf["source"] == "rule_reference" and kbf["kind"] == "fact"
+        assert kbf["references"][0]["source_id"] == "NT_2018.005_v1.51"
+        assert kbf["references"][0]["excerpt"] == "Trecho oficial"
         assert (
             kbf["evidence_refs"] == ["kb:NT_2018.005_v1.51.pdf#p23c0"]
             and kbf["rule_ref"] == "2B08-20"

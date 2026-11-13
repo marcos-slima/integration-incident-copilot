@@ -56,7 +56,7 @@
     "note": "Sinal informativo: nenhum modelo pago foi acionado por causa dele.",
     "reasons": {
       "grounded": "Evidência suficiente na base curada.",
-      "no_context": "Sem contexto: nenhum dado de conector nem documento recuperado.",
+      "no_context": "As evidências disponíveis não são suficientes para confirmar a causa.",
       "abstained": "Os guardrails anularam a fonte: a resposta não tem lastro.",
       "floor_tier_weak": "Só manuais genéricos sustentam a resposta, e com evidência fraca.",
       "curated_tier_weak": "Há documento curado, mas o reranker não sustentou a correspondência."

@@ -17,7 +17,9 @@ import importlib
 import logging
 from collections.abc import Callable
 from functools import lru_cache
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.contracts.versioning import PLUGIN_CONTRACT_VERSION, compatible_version
 
@@ -38,6 +40,42 @@ class DomainPlugin(Protocol):
         """DA-95: JSON Schema do `domain_context` aceito pelo plugin. E' o
         contrato que as UIs usam para gerar o formulario de entrada; o core
         so o publica (GET /domain-plugins), nunca o interpreta."""
+
+
+class DomainReference(BaseModel):
+    """Contrato de plugin 1.1: referência recuperada, sem score de confiança."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    source_id: str = Field(min_length=1, max_length=300)
+    locator: str = Field(min_length=1, max_length=500)
+    excerpt: str = Field(min_length=1, max_length=6000)
+    trust_level: Literal["rule_reference", "retrieved_document"]
+
+
+def domain_references(findings: list[dict[str, Any]] | None) -> list[dict[str, str]]:
+    """Aceita somente referências ligadas a fatos de fonte declarada pelo plugin."""
+    out = []
+    seen = set()
+    for finding in findings or []:
+        if finding.get("kind") != "fact" or finding.get("source") != "rule_reference":
+            continue
+        references = finding.get("references") or []
+        if not isinstance(references, list):
+            continue
+        for raw in references[:12]:
+            try:
+                ref = DomainReference.model_validate(raw)
+            except ValidationError:
+                _logger.warning("referência de plugin recusada pelo contrato")
+                continue
+            key = (ref.source_id, ref.locator)
+            if ref.locator not in (finding.get("evidence_refs") or []) or key in seen:
+                continue
+            out.append(ref.model_dump())
+            seen.add(key)
+            if len(out) >= 12:
+                return out
+    return out
 
 
 def describe_plugins(plugins: tuple[DomainPlugin, ...]) -> list[dict[str, Any]]:
@@ -190,6 +228,8 @@ def render_domain_block(
             f"- [{f.get('id')}] {f.get('kind')}/{f.get('source')}: {statement}"
             + (f" (evidencias: {refs})" if refs else "")
         )
+    for ref in domain_references(findings):
+        lines.append(f"- [{ref['locator']}] {ref['source_id']}: {ref['excerpt'][:600]}")
     body = "\n".join(lines) if lines else "- (nenhum achado de dominio)"
     body = sanitize(body, "domain_findings")
     return DOMAIN_BLOCK_TEMPLATE.format(domain=domain, lines=body)

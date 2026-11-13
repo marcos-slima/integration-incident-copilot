@@ -56,7 +56,7 @@
     "note": "Informative signal: no paid model was called because of it.",
     "reasons": {
       "grounded": "Sufficient evidence in the curated knowledge base.",
-      "no_context": "No context: no connector data and no retrieved document.",
+      "no_context": "The available evidence is insufficient to confirm the cause.",
       "abstained": "The guardrails discarded the source: the answer is unsupported.",
       "floor_tier_weak": "Only generic manuals support the answer, and the evidence is weak.",
       "curated_tier_weak": "A curated document exists, but the reranker did not support the match."

@@ -104,7 +104,7 @@ def test_endpoint_domain_plugins(monkeypatch: pytest.MonkeyPatch, plugin_mod: st
     vazio = client.get("/domain-plugins", headers={"X-API-Key": _KEY})
     assert vazio.status_code == 200 and vazio.json() == {
         "contract_version": "1.0",
-        "plugin_contract_version": "1.0",
+        "plugin_contract_version": "1.1",
         "plugins": [],
     }
     monkeypatch.setattr(main_module.settings, "domain_plugins", plugin_mod)

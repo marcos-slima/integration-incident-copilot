@@ -36,7 +36,12 @@ from langgraph.prebuilt import create_react_agent
 from langgraph.types import interrupt
 
 from app.agent import prompts
-from app.agent.domain_plugins import domain_prompt_for, domain_provenance, render_domain_block
+from app.agent.domain_plugins import (
+    domain_prompt_for,
+    domain_provenance,
+    domain_references,
+    render_domain_block,
+)
 from app.agent.escalation import compute_escalation_signal
 from app.agent.rules import match_known_error
 from app.agent.state import CopilotState, DiagnosisModel
@@ -888,6 +893,19 @@ def _assemble_evidence(state: CopilotState) -> list[dict]:
             }
         )
 
+    for ref in domain_references(state.get("domain_findings")):
+        evidence.append(
+            {
+                "source_id": ref["locator"],
+                "source_type": "rag",
+                "locator": ref["source_id"],
+                "excerpt": _truncate(ref["excerpt"], 500),
+                "retrieval_score": None,
+                "rerank_score": None,
+                "trust_level": ref["trust_level"],
+            }
+        )
+
     for related in state.get("graph_history") or []:
         evidence.append(
             {
@@ -999,6 +1017,13 @@ def _apply_confidence_guardrails(diagnosis: dict, state: CopilotState) -> dict:
     # documento recuperado, nenhuma fonte citada e valida.
     retrieved = state.get("retrieved_context") or []
     valid_sources = {h["source"] for h in retrieved if h.get("source")}
+    # Plugins may expose a human-readable source_id while locator identifies
+    # the exact retrieved chunk. Both are contract fields for the same
+    # reference; accepting either keeps matched_source provenance strict
+    # without forcing products to duplicate document naming conventions.
+    for ref in domain_references(state.get("domain_findings")):
+        valid_sources.add(ref["source_id"])
+        valid_sources.add(ref["locator"])
     if claimed_source and claimed_source not in valid_sources and not is_rule_engine:
         diagnosis["matched_source"] = None
         model_confidence = min(model_confidence, 0.3)

@@ -1,4 +1,8 @@
-# DF-e Copilot
+# FISC — Fiscal Incident Support Copilot
+
+Nome técnico compatível: DF-e Copilot (`dfe-copilot`, pacote `dfe_copilot`,
+plugin `dfe`). A marca FISC é a identidade do produto; os identificadores
+técnicos permanecem estáveis para não quebrar contratos, imagens e integrações.
 
 Diagnóstico assistido de incidentes de **documentos fiscais eletrônicos**
 (NF-e modelo 55) para operações SAP AMS N2/N3. Produto independente que

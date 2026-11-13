@@ -1,4 +1,4 @@
-# DF-e Copilot - shell de UI (`@copilot/dfe-ui`)
+# FISC — Fiscal Incident Support Copilot (`@copilot/dfe-ui`)
 
 Interface do produto DF-e Copilot (DA-95). Uma tela: descrição do incidente,
 XML (NF-e, protocolo, `nfeProc` ou retorno de lote) e contexto fiscal; e o

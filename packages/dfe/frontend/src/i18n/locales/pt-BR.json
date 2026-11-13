@@ -1,7 +1,7 @@
 {
   "common": {
-    "appName": "DF-e Copilot",
-    "appSub": "Diagnóstico de documentos fiscais",
+    "appName": "FISC",
+    "appSub": "Fiscal Incident Support Copilot",
     "logout": "Sair"
   },
   "fiscal": {
@@ -21,7 +21,7 @@
     "needDescription": "Descreva o incidente.",
     "fixFields": "Corrija os campos destacados do contexto fiscal.",
     "submit": "Diagnosticar",
-    "readOnly": "Somente leitura: o DF-e Copilot nunca reenvia, cancela, inutiliza nem aciona contingência. Essas decisões ficam com o time fiscal."
+    "readOnly": "Somente leitura: o FISC nunca reenvia, cancela, inutiliza nem aciona contingência. Essas decisões ficam com o time fiscal."
   },
   "context": {
     "fields": {

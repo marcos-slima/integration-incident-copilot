@@ -168,7 +168,7 @@ def main(image: str, compose: bool = False, existing_env: Path | None = None) ->
                 assert [plugin["name"] for plugin in catalog["plugins"]] == ["dfe"]
             with request("/") as response:
                 html = response.read().decode()
-                assert "DF-e Copilot" in html
+                assert "FISC" in html
             assets = re.findall(r'(?:src|href)="([^"]+\.(?:js|css))"', html)
             assert assets, "Bundle não referenciado no HTML"
             for asset in assets:

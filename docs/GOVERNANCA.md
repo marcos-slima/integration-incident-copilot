@@ -187,7 +187,7 @@ O project tem 21 quality gates (todos obrigatórios para merge):
 
 ### 10.1. Technical debt
 
-- **Inspecionar mensalmente** com `uv run ruff check app/`.
+- **Inspecionar mensalmente** com `uv run ruff check packages/core/src/app/`.
 - **Revisar migrations** cada release.
 - **Apagar cache antigo** (`.mypy_cache`, `.pytest_cache`, `.ruff_cache`).
 

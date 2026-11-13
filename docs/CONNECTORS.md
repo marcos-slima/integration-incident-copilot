@@ -13,28 +13,28 @@ próprio (DA-15).
 
 ## 1. Como o conector entra no pipeline
 
-1. `app/agent/nodes.py::connector_node` chama `app/connectors/__init__.py::get_connector`
+1. `packages/core/src/app/agent/nodes.py::connector_node` chama `packages/core/src/app/connectors/__init__.py::get_connector`
    com o `interface_type` da requisição e executa `fetch(identifier)`.
 2. **Modo real ou demo** é decidido por **uma** variável por conector
-   (`app/connectors/__init__.py::_REAL_MODE_SETTING`):
+   (`packages/core/src/app/connectors/__init__.py::_REAL_MODE_SETTING`):
    - preenchida, o conector tenta o sistema real;
    - vazia, o conector devolve um **cenário de demonstração**, com
      `is_mock=True`.
    Os cenários são um dicionário por identificador (`_MOCK_SCENARIOS` em cada
    módulo); identificador fora deles devolve um resultado genérico de
    fallback (`is_fallback=True`).
-3. O resultado vira evidência em `app/agent/nodes.py::_assemble_evidence`:
+3. O resultado vira evidência em `packages/core/src/app/agent/nodes.py::_assemble_evidence`:
    - `system_observed` só com dado real;
    - `simulated` em modo demo.
    No guardrail, dado de fallback limita a confiança do diagnóstico a 0,4.
-4. **Circuit breaker por sistema** (`app/connectors/base.py::connector_circuit_breaker`,
+4. **Circuit breaker por sistema** (`packages/core/src/app/connectors/base.py::connector_circuit_breaker`,
    com Redis quando `REDIS_URL` existe): conta só indisponibilidade (5xx,
    429, falha de rede). Credencial errada (401/403) e 4xx não abrem o
    circuito (validação 2026-10-07, M-06).
 5. **Token OAuth2** fica em cache até `expires_in` menos 60 s.
 
 `GET /health` (com `X-API-Key` ou sessão) mostra o modo de cada conector,
-calculado por `app/connectors/__init__.py::connector_status`:
+calculado por `packages/core/src/app/connectors/__init__.py::connector_status`:
 
 ```json
 {"connectors": {"odata": {"status": "mock", "note": "ODATA_SERVICE_URL nao configurado"},
@@ -114,19 +114,19 @@ nona:
 
 | # | Superfície | Onde |
 |---|---|---|
-| 1 | Registro e variável de modo real | `app/connectors/__init__.py::_REGISTRY` e `_REAL_MODE_SETTING` |
-| 2 | Literal da requisição | `IncidentRequest.interface_type` em `app/models/models.py` |
-| 3 | Literal do evento | `IncidentEventData.interface_type` em `app/models/models.py` |
-| 4 | Domínio de roteamento (DA-63) | `domains.sap` ou `domains.saas` em `data/skills/diagnose_incident.yaml`; o supervisor (`app/agent/supervisor.py::_DOMAIN_INDEX`) deriva o roteamento daí (fora dos dois, como o `apim`, o domínio sai da descrição) |
-| 5 | CLI | `choices` de `--interface` em `app/agent/graph.py` |
-| 6 | Catálogo admin | `app/admin/models.py::CONNECTOR_TYPES` |
+| 1 | Registro e variável de modo real | `packages/core/src/app/connectors/__init__.py::_REGISTRY` e `_REAL_MODE_SETTING` |
+| 2 | Literal da requisição | `IncidentRequest.interface_type` em `packages/core/src/app/models/models.py` |
+| 3 | Literal do evento | `IncidentEventData.interface_type` em `packages/core/src/app/models/models.py` |
+| 4 | Domínio de roteamento (DA-63) | `domains.sap` ou `domains.saas` em `packages/core/data/skills/diagnose_incident.yaml`; o supervisor (`packages/core/src/app/agent/supervisor.py::_DOMAIN_INDEX`) deriva o roteamento daí (fora dos dois, como o `apim`, o domínio sai da descrição) |
+| 5 | CLI | `choices` de `--interface` em `packages/core/src/app/agent/graph.py` |
+| 6 | Catálogo admin | `packages/core/src/app/admin/models.py::CONNECTOR_TYPES` |
 | 7 | Seed da busca web (DA-57) | `SEED` em `alembic/versions/008_*.py` (nova migration, não edite a 008) |
-| 8 | Formulário de sistemas | `<select name="connector_type">` em `app/admin/templates/systems.html` |
+| 8 | Formulário de sistemas | `<select name="connector_type">` em `packages/core/src/app/admin/templates/systems.html` |
 | 9 | Mapa de cobertura (DA-58) | `data/connector_coverage.yaml`, depois `uv run python scripts/coverage_map.py --write` |
 
 Além disso:
 
-- campos no `app/config.py` com o prefixo do conector;
+- campos no `packages/core/src/app/config.py` com o prefixo do conector;
 - linha na matriz de validação de `docs/ARCHITECTURE.md`;
 - linha na tabela da seção 2 deste documento;
 - testes com `httpx.MockTransport`.

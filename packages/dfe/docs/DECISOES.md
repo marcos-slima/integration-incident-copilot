@@ -89,7 +89,7 @@ flag ligada e descarte com ela desligada.
 - `DiagnosisResponse.findings` (`Finding`: `fact`/`hypothesis`, fonte,
   evidências, teste de confirmação, alternativas) e `cause_status`
   (`hypothesis`/`inconclusive`; `confirmed` só por revisão humana).
-- `app/agent/findings.py::build_findings` monta a lista por código: fatos das
+- `packages/core/src/app/agent/findings.py::build_findings` monta a lista por código: fatos das
   ferramentas (`CopilotState.fiscal_findings`) e a causa proposta como
   `hypothesis`; um `fact` sem fonte determinística é rebaixado.
 - O `DiagnosisModel` (saída estruturada do LLM) **não** mudou: o LLM continua
@@ -337,6 +337,7 @@ Correções gerais para as causas da D8, sem ajuste nos casos blind.
 
 ### D11. Interface própria e fronteira com o core (P6, 2026-11-13)
 
+- **Atualização de continuidade:** core extraído para `packages/core` (`copilot-core`), mantendo imports `app.*`; SDK, HTTP e plugin com contrato 1.0. O DF-e declara o core como dependência e passa sua suíte contra o wheel instalado fora do checkout. Política em `../../core/docs/CONTRACTS.md`.
 - **Decisão:** o DF-e Copilot tem shell de UI próprio
   (`packages/dfe/frontend`, `@copilot/dfe-ui`) sobre a biblioteca neutra do
   core (`@copilot/core-ui`). Não usa a tela do IIC e não tem frontend

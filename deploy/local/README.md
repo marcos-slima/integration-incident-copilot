@@ -31,7 +31,7 @@ de `configmap-local.yaml` baixado.
 
 `host.docker.internal` é mapeado para o IP do host via `hostAliases` (o
 script lê `host.k3d.internal` do CoreDNS do k3d). A policy de soberania
-trata esse nome como loopback (`app/llm/origins.py::is_loopback_origin`).
+trata esse nome como loopback (`packages/core/src/app/llm/origins.py::is_loopback_origin`).
 
 ## Limites
 

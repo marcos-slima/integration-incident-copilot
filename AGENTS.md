@@ -19,11 +19,11 @@ Salesforce, Workday, Ariba, SuccessFactors, CAP, APIManagement, SAP PO/PI).
 | Layer | Technology |
 |---|---|
 | API | FastAPI + Pydantic |
-| Orchestration | LangGraph (`app/agent/graph.py`) |
-| LLM | Ollama local (default) → OpenAI/Azure fallback. Canonical model `qwen3.6:35b-a3b` (35B MoE, 128k ctx) from 2026-10-13 — default in `app/config.py`, `.env`, `docker-compose.yml` and the promptfoo config. `qwen3-coder-next:latest` (MoE 80B/3B) was the previous pick (DA-4/8, DA-12); re-baseline pending (DA-51) |
+| Orchestration | LangGraph (`packages/core/src/app/agent/graph.py`) |
+| LLM | Ollama local (default) → OpenAI/Azure fallback. Canonical model `qwen3.6:35b-a3b` (35B MoE, 128k ctx) from 2026-10-13 — default in `packages/core/src/app/config.py`, `.env`, `docker-compose.yml` and the promptfoo config. `qwen3-coder-next:latest` (MoE 80B/3B) was the previous pick (DA-4/8, DA-12); re-baseline pending (DA-51) |
 | RAG | LangChain + Qdrant (hybrid dense+sparse BM25, RRF fusion) |
 | Reranker | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` (DA-29 benchmark) — **do not change** |
-| GraphRAG | Neo4j (`app/rag/graph_store.py`), opt-in `GRAPH_RAG_ENABLED=true` |
+| GraphRAG | Neo4j (`packages/core/src/app/rag/graph_store.py`), opt-in `GRAPH_RAG_ENABLED=true` |
 | Observability | Langfuse (optional when `LANGFUSE_*` set) |
 | Package manager | `uv` — **never** `pip install` / `poetry add` directly |
 | Tests | `pytest` + `pytest-asyncio` (strict mode) |
@@ -125,7 +125,7 @@ To register a new DA: follow `CLAUDE.md` → "Como registrar uma nova DA"
 ## 6. File layout
 
 ```
-app/
+packages/core/src/app/
   agent/
     graph.py          # LangGraph + run_diagnosis() — entry point
     prompts.py        # DA-53: prompt artifact (version + digest)
@@ -133,7 +133,7 @@ app/
     rules.py          # DA-33: Rule Engine (22 rules in KNOWN_ERROR_RULES)
     escalation.py     # DA-44: 3-tier escalation signal
     supervisor.py     # DA-22: domain classifier (deterministic); domain index
-                      # from data/skills/ since DA-63
+                      # from packages/core/data/skills/ since DA-63
     state.py          # CopilotState (TypedDict)
   llm/
     factory.py        # DA-20: hybrid inference (Ollama → cloud)
@@ -143,7 +143,7 @@ app/
   mcp/
     server.py         # DA-19: MCP server (Streamable HTTP, /mcp)
     policy.py         # DA-27: Capability Registry (fail-closed)
-    skill_registry.py # DA-63: loads data/skills/*.yaml (one parser for
+    skill_registry.py # DA-63: loads packages/core/data/skills/*.yaml (one parser for
                       # policy, supervisor and the quality gate)
   contracts/          # DA-52: SAP contract drift detection
   rag/
@@ -194,19 +194,19 @@ scripts/
 | Migrations + 45 dashboard queries | `uv run alembic upgrade head && uv run alembic check` + `scripts/validate_dashboards.py` | CI job `migrations_and_dashboards` |
 | Integration (Ollama + Qdrant) | `uv run pytest tests/ -v` | when infra available |
 
-### Quality gate checks (DA-51, `app/evaluation/gates.py`)
+### Quality gate checks (DA-51, `packages/core/src/app/evaluation/gates.py`)
 
 - `implemented_das_documented` — every DA row in `CLAUDE.md` has a prose section
 - `das_index_current` — index table in `DECISOES_DE_ARQUITETURA.md` matches the registered DAs
-- `da_registered` — every DA referenced in `app/`, `scripts/`, `alembic/` has a `CLAUDE.md` row
-- `prompt_digest_measured` — prompt in `app/agent/prompts.py` matches `data/eval/prompt_baseline.json`
-- `connector_reachable` — every registered connector reaches each surface (registry, 2 Literals, routing domain in `data/skills/diagnose_incident.yaml` (DA-63; `apim` is generic by design), CLI, `CONNECTOR_TYPES`, UI dropdown, web-search seed, systems form) and the `Dockerfile` copies `data/skills/`
+- `da_registered` — every DA referenced in `packages/core/src/app/`, `scripts/`, `alembic/` has a `CLAUDE.md` row
+- `prompt_digest_measured` — prompt in `packages/core/src/app/agent/prompts.py` matches `data/eval/prompt_baseline.json`
+- `connector_reachable` — every registered connector reaches each surface (registry, 2 Literals, routing domain in `packages/core/data/skills/diagnose_incident.yaml` (DA-63; `apim` is generic by design), CLI, `CONNECTOR_TYPES`, UI dropdown, web-search seed, systems form) and the `Dockerfile` copies `packages/core/data/skills/`
 - `connector_coverage` — the 9th surface, `data/connector_coverage.yaml`, has its own gate (DA-58 coverage map consistency)
 - `connector_validation_matrix` — `docs/ARCHITECTURE.md` covers every registered connector
 - `candidate_das_fresh` — DAs marked "candidate" have no prose section yet
 
 **Gate regex note:** the index-table header `| DA | Seção | O que é |` is what
-`app/evaluation/gates.py::check_index_current` matches. It does not match the
+`packages/core/src/app/evaluation/gates.py::check_index_current` matches. It does not match the
 old `| Número | Título | Seção |` header that was removed in this session.
 
 ---
@@ -260,7 +260,7 @@ When answering questions about this project, **always**:
    source code or documentation first. If you are unsure, say so explicitly and
    verify before proceeding.
 2. **Use local artifacts as your primary evidence.** The authoritative sources are:
-   - `app/` — current source of truth (not memory or prior knowledge)
+   - `packages/core/src/app/` — current source of truth (not memory or prior knowledge)
    - `docs/DECISOES_DE_ARQUITETURA.md` — architecture decisions prose
    - `CLAUDE.md` — DA index + invariantes
    - `AGENTS.md` — this file

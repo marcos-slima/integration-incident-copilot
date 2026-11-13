@@ -26,7 +26,7 @@ at each build (Portuguese only).
 | Understand what exists today | [`ARCHITECTURE.md`](../ARCHITECTURE.md) (Portuguese only) |
 | Understand *why* it was done this way | [`DECISOES_DE_ARQUITETURA.md`](../DECISOES_DE_ARQUITETURA.md) (Portuguese only; index of 50 registered DAs, numbered DA-1 to DA-60) |
 | Debug a real incident | [`TUTORIAL_ARQUITETURA_DEBUG.md`](../TUTORIAL_ARQUITETURA_DEBUG.md) (Portuguese only) |
-| Change the knowledge base (RAG) | `python -m app.rag.ingest --help` (reference in the docstring of `app/rag/ingest.py`) |
+| Change the knowledge base (RAG) | `python -m app.rag.ingest --help` (reference in the docstring of `packages/core/src/app/rag/ingest.py`) |
 | Understand LLM quality | [`RERANKER_BENCHMARK.md`](../RERANKER_BENCHMARK.md) (Portuguese only) |
 
 ---

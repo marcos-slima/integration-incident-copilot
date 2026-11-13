@@ -69,8 +69,8 @@ Por isso existe `REQUIRE_AUTH` (`.env.example:217`):
   `EVENT_MESH_API_KEY` estiverem vazias. Não há geração automática.
 
 > ⚠️ **`REQUIRE_AUTH` não cobre `ADMIN_API_KEY`.** A verificação em
-> `app/main.py::_ensure_api_keys_configured` lista as 3 chaves de máquina; a admin é
-> tratada separadamente em `app/admin/security.py::ensure_admin_key_configured`, que
+> `packages/core/src/app/main.py::_ensure_api_keys_configured` lista as 3 chaves de máquina; a admin é
+> tratada separadamente em `packages/core/src/app/admin/security.py::ensure_admin_key_configured`, que
 > **também só avisa** e gera efêmera. Com `REQUIRE_AUTH=true` e `ADMIN_API_KEY` vazia, o
 > `/admin` sobe com chave que só existe no log de startup. **Configure `ADMIN_API_KEY`
 > manualmente** — é a única forma de fixá-la.
@@ -145,7 +145,7 @@ ollama pull qwen3.6:35b-a3b                                # canônico (produç�
 ```
 
 O modelo canônico de produção (diagnóstico de incidentes) é `qwen3.6:35b-a3b` (35B MoE,
-128k ctx), default em `app/config.py`. `qwen3-coder-next:latest` é modelo de ferramenta
+128k ctx), default em `packages/core/src/app/config.py`. `qwen3-coder-next:latest` é modelo de ferramenta
 de desenvolvimento (OpenCode: refactorings densos; ver `docs/AVALIACAO_MODELOS_LOCAIS.md`),
 não o modelo da aplicação. Em máquina sem RAM, use um modelo menor e **declare isso na avaliação**
 — o modelo muda a qualidade da resposta (I.1 tem o tamanho de cada um).
@@ -180,7 +180,7 @@ PATH="$PWD/.venv/bin:$PATH" uv run python -m app.rag.ingest --target incidents
 
 O target `incidents` procura **`data/knowledge_base/`** primeiro e só usa
 `data/sample_docs/` como *fallback* quando ela não existe ou está vazia
-(`app/rag/ingest.py::TARGETS`). Para avaliar com o acervo do seu cliente em vez do
+(`packages/core/src/app/rag/ingest.py::TARGETS`). Para avaliar com o acervo do seu cliente em vez do
 curado do projeto, basta colocar os arquivos em `data/knowledge_base/` (formatos
 aceitos: `.md`, `.pdf`, `.epub`) e rodar a ingestão. O aviso no log diz qual dos dois
 foi usado — confira, porque ele não é erro.
@@ -440,7 +440,7 @@ docker compose -f docker-compose.yml -f docker-compose.ingest.yml run --rm \
 Dois detalhes que decidem se isso funciona:
 
 - **O caminho é `/app/data/reference_library`, não `/corpus`.** `BASE_DIR` é
-  `parents[2]` de `app/rag/ingest.py` (`app/rag/ingest.py:77`), ou seja `/app`. Montar em
+  `parents[2]` de `packages/core/src/app/rag/ingest.py` (`packages/core/src/app/rag/ingest.py:77`), ou seja `/app`. Montar em
   outro lugar faz o script procurar um diretório que não existe e voltar sem erro.
 - **O override é necessário, não opcional.** O compose monta só `./data/sample_docs`;
   sem o `-f docker-compose.ingest.yml`, o container não enxerga o corpus nem o state.
@@ -769,7 +769,7 @@ medido nesta máquina com `ollama list`:
 | `bge-m3:latest` | 1,2 GB | encoder sparse/BM25 |
 
 O modelo **não** é negociável por variável de ambiente sem consequência: `llm_model` é
-texto livre (`app/config.py:179`), mas a escolha do modelo muda a qualidade da resposta,
+texto livre (`packages/core/src/app/config.py:179`), mas a escolha do modelo muda a qualidade da resposta,
 e a comparação que justifica o canônico foi medida com o promptfoo (DA-4/8/12).
 
 ⚠️ **51 GB de pesos não é o mesmo que 51 GB de RAM.** Para resident, some VRAM
@@ -889,7 +889,7 @@ Um `408 Request Timeout` esporádico é normal e se resolve relançando **sem** 
 
 > **Antes de `--reset-collection` num corpus grande:** a collection `reference_library`
 > é dense-only de propósito (medido: o dense já traz o termo exato no top-1 — ver
-> `app/rag/retriever.py`). Habilitar híbrido exigiria recriá-la e reindexar tudo sem
+> `packages/core/src/app/rag/retriever.py`). Habilitar híbrido exigiria recriá-la e reindexar tudo sem
 > ganhar recall.
 
 ## Apêndice B — Verificações antes de confiar

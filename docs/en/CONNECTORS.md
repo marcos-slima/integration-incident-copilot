@@ -16,28 +16,28 @@ to the diagnosis, and that data becomes evidence with its own confidence level
 
 ## 1. How the connector enters the pipeline
 
-1. `app/agent/nodes.py::connector_node` calls `app/connectors/__init__.py::get_connector`
+1. `packages/core/src/app/agent/nodes.py::connector_node` calls `packages/core/src/app/connectors/__init__.py::get_connector`
    with the `interface_type` from the request and executes `fetch(identifier)`.
 2. **Real or demo mode** is decided by **one** variable per connector
-   (`app/connectors/__init__.py::_REAL_MODE_SETTING`):
+   (`packages/core/src/app/connectors/__init__.py::_REAL_MODE_SETTING`):
    - filled, the connector attempts the real system;
    - empty, the connector returns a **demo scenario**, with
      `is_mock=True`.
    The scenarios are a dictionary per identifier (`_MOCK_SCENARIOS` in each
    module); identifiers outside them return a generic fallback result
    (`is_fallback=True`).
-3. The result becomes evidence in `app/agent/nodes.py::_assemble_evidence`:
+3. The result becomes evidence in `packages/core/src/app/agent/nodes.py::_assemble_evidence`:
    - `system_observed` only with real data;
    - `simulated` in demo mode.
    In the guardrail, fallback data limits diagnosis confidence to 0.4.
-4. **Circuit breaker per system** (`app/connectors/base.py::connector_circuit_breaker`,
+4. **Circuit breaker per system** (`packages/core/src/app/connectors/base.py::connector_circuit_breaker`,
    with Redis when `REDIS_URL` exists): counts only unavailability (5xx,
    429, network failure). Wrong credential (401/403) and 4xx do not open the
    circuit (validated on 2026-10-07, M-06).
 5. **OAuth2 token** stays in cache until `expires_in` minus 60 s.
 
 `GET /health` (with `X-API-Key` or session) shows the mode of each connector,
-calculated by `app/connectors/__init__.py::connector_status`:
+calculated by `packages/core/src/app/connectors/__init__.py::connector_status`:
 
 ```json
 {"connectors": {"odata": {"status": "mock", "note": "ODATA_SERVICE_URL not configured"},

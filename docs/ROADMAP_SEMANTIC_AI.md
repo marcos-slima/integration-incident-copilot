@@ -38,7 +38,7 @@ flowchart TB
 
     subgraph "Ontology Layer"
         D1["TTL (SKOS/RDF)"]
-        D2["app/ontology/error_codes.ttl"]
+        D2["packages/core/src/app/ontology/error_codes.ttl"]
         D3["Classes: OAuthTokenExpired, HTTP401, RFCFailure..."]
         D4["Properties: confidence, evidence_strength, next_steps"]
         D5["Relations: skos:broader, skos:narrower, skos:related"]
@@ -132,7 +132,7 @@ flowchart TB
 ### Classes (SKOS Concept Scheme)
 
 ```turtle
-# app/ontology/error_codes.ttl
+# packages/core/src/app/ontology/error_codes.ttl
 @prefix ex: <urn:error:>.
 @prefix skos: <http://www.w3.org/2004/02/skos/core#>.
 
@@ -206,7 +206,7 @@ ex:next_steps a rdfs:Property ;
 ### Restrições (SHACL - Fase 3, opcional)
 
 ```turtle
-# app/ontology/error_codes.shacl
+# packages/core/src/app/ontology/error_codes.shacl
 @prefix sh: <http://www.w3.org/ns/shacl#>.
 @prefix ex: <urn:error:>.
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
@@ -251,7 +251,7 @@ ex:AuthenticationErrorShape a sh:NodeShape ;
 ### Nova estrutura (current + proposed)
 
 ```
-app/
+packages/core/src/app/
   agent/
     graph.py           # Orquestração LangGraph
     prompts.py         # Prompt specifications
@@ -283,20 +283,20 @@ app/
 **Expansão Sugerida** (Fase 2):
 
 ```python
-# app/ontology/enrichment.py (NOVO)
+# packages/core/src/app/ontology/enrichment.py (NOVO)
 def enrich_incident_with_concepts(incident_id: str) -> None:
     """Link incident to ontology concepts and infer upper categories."""
     # Implementation: Cypher → SPARQL fallback if not found in Neo4j
     pass
 
 
-# app/rag/ontology_aware_retriever.py (NOVO)
+# packages/core/src/app/rag/ontology_aware_retriever.py (NOVO)
 def retrieve_with_ontology_aware_rag(query: str) -> list[Document]:
     """Hybrid RAG + ontology inference (SPARQL fallback)."""
     pass
 
 
-# app/agent/ontology_agent.py (NOVO)
+# packages/core/src/app/agent/ontology_agent.py (NOVO)
 def diagnose_with_ontology_agent(state: CopilotState) -> CopilotState:
     """LangGraph node: diagnosis + ontology reasoning."""
     pass
@@ -325,13 +325,13 @@ def link_incident_to_error_concept(incident_id: str, error_category: str) -> Non
 ### Exemplo: Inferência com OwlRL (Fase 3)
 
 ```python
-# app/ontology/inference.py
+# packages/core/src/app/ontology/inference.py
 from owlrl import DeductiveClosure, RDFS_Semantics
 
 
 def infer_subcategory(error_category: str) -> list[str]:
     """Infer upper categories via OwlRL."""
-    graph = Graph().parse("app/ontology/error_codes.ttl", format="turtle")
+    graph = Graph().parse("packages/core/src/app/ontology/error_codes.ttl", format="turtle")
     DeductiveClosure(RDFS_Semantics).closure(graph)
 
     query = """
@@ -346,14 +346,14 @@ def infer_subcategory(error_category: str) -> list[str]:
 ### Exemplo: SHACL Validation (Fase 3)
 
 ```python
-# app/ontology/validation.py
+# packages/core/src/app/ontology/validation.py
 from pyshacl import validate
 
 
 def validate_error_ttl() -> tuple[bool, str]:
     """Validate `error_codes.ttl` with `error_codes.shacl`."""
-    data_graph = Graph().parse("app/ontology/error_codes.ttl", format="turtle")
-    shacl_graph = Graph().parse("app/ontology/error_codes.shacl", format="turtle")
+    data_graph = Graph().parse("packages/core/src/app/ontology/error_codes.ttl", format="turtle")
+    shacl_graph = Graph().parse("packages/core/src/app/ontology/error_codes.shacl", format="turtle")
 
     conforms, results_graph, _ = validate(data_graph, shacl_graph=shacl_graph)
     return conforms, results_graph.serialize(format="turtle")
@@ -408,9 +408,9 @@ def validate_error_ttl() -> tuple[bool, str]:
 
 | Component | Build | Why |
 |---|---|---|
-| **`app/ontology/enrichment.py`** | ✅ Build | Cypher + TTL fallback, valor imediato |
-| **`app/rag/ontology_aware_retriever.py`** | ✅ Build | Semantic entailment, diferencial |
-| **`app/agent/ontology_agent.py`** | ✅ Build | Ontology-aware decisions |
+| **`packages/core/src/app/ontology/enrichment.py`** | ✅ Build | Cypher + TTL fallback, valor imediato |
+| **`packages/core/src/app/rag/ontology_aware_retriever.py`** | ✅ Build | Semantic entailment, diferencial |
+| **`packages/core/src/app/agent/ontology_agent.py`** | ✅ Build | Ontology-aware decisions |
 | **OWL/SHACL validator** | ❌ Don't Build (Fase 2) | Postergar para Fase 3 |
 | **Dedicated SPARQL endpoint** | ❌ Don't Build | Neo4j + `rdflib` basta |
 

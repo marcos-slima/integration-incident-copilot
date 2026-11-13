@@ -52,12 +52,12 @@ milhões a US$ 1 bilhão, dependendo da complexidade.
 *Fonte: [Cost of Running Local LLM: Break-Even Guide 2026](https://aisuperior.com/cost-of-running-local-llm/).*
 
 O `SAP Integration Copilot` já roda nessa faixa hoje (Ollama +
-qwen3-coder-next, default em `app/config.py`), como prova de conceito em produção, não como
+qwen3-coder-next, default em `packages/core/src/app/config.py`), como prova de conceito em produção, não como
 projeção teórica.
 
 ## Onde este projeto se encaixa
 
-O LLM Gateway (`app/llm/gateway.py`, sobre a factory `app/llm/factory.py`) deste projeto não força a escolha
+O LLM Gateway (`packages/core/src/app/llm/gateway.py`, sobre a factory `packages/core/src/app/llm/factory.py`) deste projeto não força a escolha
 entre "100% local" ou "100% nuvem": o mesmo grafo de diagnóstico roda
 sobre Ollama local (default, sem custo de API), ou sobre uma
 assinatura OpenAI/Azure OpenAI que o cliente já tenha — sem reescrever
@@ -73,7 +73,7 @@ produto técnico:
    produto, apontado para o provedor existente, sem custo adicional de
    infraestrutura de IA.
 3. **Cliente que está migrando para BTP/S4HANA e quer AI Core no
-   futuro**: a interface de conector (`app/connectors/base.py`) e o
+   futuro**: a interface de conector (`packages/core/src/app/connectors/base.py`) e o
    LLM Gateway já foram desenhados para essa troca não exigir reescrever
    o grafo — o caminho de evolução existe, sem forçar o cliente a pagar
    por ele antes de precisar.

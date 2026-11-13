@@ -39,7 +39,7 @@ uv run python -c "from app.config import settings; print(settings.llm_provider, 
 | `ValidationError` do pydantic | Valor fora do domínio. Exemplos: `LLM_PROVIDER` aceita `ollama`, `openai` e `azure_openai`; `DATA_SOVEREIGNTY_MODE` aceita `strict` e `cloud_with_dlp`; `EMBEDDING_BACKEND` aceita `ollama` e `fastembed`. Booleanos são `true`/`false`. |
 | Recusa subir por chave ausente | Com `REQUIRE_AUTH=true`, `API_KEY`, `A2A_API_KEY` e `EVENT_MESH_API_KEY` precisam estar definidas. Sem `REQUIRE_AUTH`, a chave vazia é gerada no boot e só aparece no log. |
 | `ConfigurationError` sobre a chave de evidência | Com `DATABASE_URL` preenchida, `LLM_CREDENTIALS_MASTER_KEY` é obrigatória (DA-60). |
-| Variável "ignorada" | O pydantic **ignora** nomes que não são campos do `Settings`. Confira o nome exato em `app/config.py` ou no `.env.example`. A conexão com o Qdrant é por `QDRANT_URL` (URL completa), e não existe variável de porta separada. |
+| Variável "ignorada" | O pydantic **ignora** nomes que não são campos do `Settings`. Confira o nome exato em `packages/core/src/app/config.py` ou no `.env.example`. A conexão com o Qdrant é por `QDRANT_URL` (URL completa), e não existe variável de porta separada. |
 | `.env` com BOM ou CRLF | `sed -i 's/\r//' .env` |
 
 ## 2. Consumidor AMQP não conecta
@@ -135,7 +135,7 @@ condições valem:
    `interface_type` (tela `/admin/web-search`). Sem `DATABASE_URL`, não há
    linha e, portanto, não há busca.
 
-A consulta passa por `app/agent/nodes.py::_sanitize_web_search_query`, que
+A consulta passa por `packages/core/src/app/agent/nodes.py::_sanitize_web_search_query`, que
 redige URLs, números de IDoc, GUIDs e tokens e trunca o texto. O DuckDuckGo
 limita por IP; falha da busca é logada e vira ausência de resultado, não erro do diagnóstico.
 
@@ -213,7 +213,7 @@ DA-73 (telas) e DA-74 (conteúdo).
 | `/diagnose` responde 422 com `locale nao suportado` | O conteúdo existe em `pt-BR` e `en`. Tags do navegador como `en-US` e `pt-PT` são aceitas; outros idiomas não. |
 | Texto entre `⟦ ⟧` na tela | Pseudo-locale de revisão (`?lng=xx`). Troque o idioma no seletor. |
 | Gate `prompt_digest_measured` com aviso sobre o prompt `en` | O digest `en` não está em `locales.en` (ou mudou depois da medição). Meça e regrave conforme [`CUSTOMIZACAO.md`](CUSTOMIZACAO.md) ("Idioma das interfaces"). |
-| Gate `content_i18n` reprova depois de uma regra nova | A categoria nova precisa de `rules.<categoria>` (causa e passos) em `app/i18n/locales/content.en.json`. |
+| Gate `content_i18n` reprova depois de uma regra nova | A categoria nova precisa de `rules.<categoria>` (causa e passos) em `packages/core/src/app/i18n/locales/content.en.json`. |
 | E-mail de ativação no idioma errado | Sai no idioma da Admin UI de quem cadastrou (ou no `locale` do cadastro). Usuários anteriores à migration 021 recebem em pt-BR. |
 
 ## Não resolveu?

@@ -30,16 +30,16 @@ por fazer".
 
 | Arquivo | O que é |
 |---|---|
-| `app/connectors/salesforce_connector.py` | Conector real (OAuth2 Client Credentials + SOQL) |
-| `app/connectors/workday_connector.py` | Conector real (OAuth2 + REST) |
-| `app/connectors/ariba_connector.py` | Conector real (OAuth2 + REST) |
-| `app/connectors/odata_connector.py` | Reescrito: ganhou `use_real` (mesmo padrão do RFC) |
-| `app/rag/graph_store.py` | GraphRAG real sobre Neo4j, desligado por default |
-| `app/agent/graph.py` | Nodes `graph_enrich`/`graph_write` (só entram no grafo se `GRAPH_RAG_ENABLED=true`) |
-| `app/a2a/agent_card.py` | Agent Card do protocolo A2A |
-| `app/a2a/task_manager.py` | Ciclo de vida de task A2A → `run_diagnosis()` |
-| `app/a2a/server.py` | Servidor JSON-RPC 2.0 (`POST /a2a`) |
-| `app/main.py` | Monta `/a2a` e `GET /.well-known/agent-card.json` |
+| `packages/core/src/app/connectors/salesforce_connector.py` | Conector real (OAuth2 Client Credentials + SOQL) |
+| `packages/core/src/app/connectors/workday_connector.py` | Conector real (OAuth2 + REST) |
+| `packages/core/src/app/connectors/ariba_connector.py` | Conector real (OAuth2 + REST) |
+| `packages/core/src/app/connectors/odata_connector.py` | Reescrito: ganhou `use_real` (mesmo padrão do RFC) |
+| `packages/core/src/app/rag/graph_store.py` | GraphRAG real sobre Neo4j, desligado por default |
+| `packages/core/src/app/agent/graph.py` | Nodes `graph_enrich`/`graph_write` (só entram no grafo se `GRAPH_RAG_ENABLED=true`) |
+| `packages/core/src/app/a2a/agent_card.py` | Agent Card do protocolo A2A |
+| `packages/core/src/app/a2a/task_manager.py` | Ciclo de vida de task A2A → `run_diagnosis()` |
+| `packages/core/src/app/a2a/server.py` | Servidor JSON-RPC 2.0 (`POST /a2a`) |
+| `packages/core/src/app/main.py` | Monta `/a2a` e `GET /.well-known/agent-card.json` |
 | `tests/test_connectors.py` | +14 testes na época da Fase 9 (Salesforce, Workday, Ariba, OData real) |
 | `tests/test_graph_store.py` | 9 testes na época da Fase 9 (sessão Neo4j fake) |
 | `tests/test_a2a.py` | 9 testes na época da Fase 9 (`TestClient` + `diagnosis_fn` stub) |
@@ -169,7 +169,7 @@ valor errado: HTTP 401).
 - A camada A2A não foi testada contra um cliente A2A externo de
   verdade (ex: um orquestrador real usando uma SDK A2A) — só via
   `curl`/`TestClient` simulando o formato de mensagem documentado.
-- `app/services/` continuava vazio na época da Fase 9, deliberadamente.
+- `packages/core/src/app/services/` continuava vazio na época da Fase 9, deliberadamente.
   *(Histórico: hoje o pacote contém `incident_recorder.py`,
   `incident_repository.py` e `web_search_sources.py` — ver
   `docs/ARCHITECTURE.md` para o estado atual.)*

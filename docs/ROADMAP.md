@@ -58,7 +58,7 @@ Este documento descreve o plano de execução para o Integration Incident Copilo
 **Saída:** `promptfoo eval -c promptfooconfig.compare.yaml` rodando com múltiplos modelos
 
 ### Passo 2: UI de gestão de RAG (Prioridade média)
-**Objetivo:** Substituir CLI `app/rag/ingest.py` por interface web
+**Objetivo:** Substituir CLI `packages/core/src/app/rag/ingest.py` por interface web
 
 **Tarefas:**
 - [ ] Endpoints `/admin/knowledge/documents` (GET/POST/DELETE)

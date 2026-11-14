@@ -43,6 +43,20 @@ promptfoo-output*
 .claude/settings.local.json
 
 # Backups locais (não versionados)
+backup/
+backups/
+*.bak
+*.bkp
+*.backup
+*.orig
+*~
+*.bak.*
+*.bkp.*
+*backup*.tar
+*backup*.tar.gz
+*backup*.tgz
+*backup*.zip
+*backup*.7z
 scripts/backup-scripts/
 *.trc
 dev_rfc.log

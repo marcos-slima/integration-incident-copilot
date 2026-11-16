@@ -43,5 +43,11 @@
   },
   "files": [
     "dist"
-  ]
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marcos-slima/integration-incident-copilot.git",
+    "directory": "packages/core-ui"
+  }
 }

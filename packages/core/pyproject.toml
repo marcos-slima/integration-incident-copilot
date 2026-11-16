@@ -3,6 +3,8 @@ name = "copilot-core"
 version = "1.4.0"
 description = "Core compartilhado de diagnóstico, contratos e infraestrutura de agentes"
 license = "MIT"
+license-files = ["LICENSE"]
+readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
@@ -90,6 +92,10 @@ dependencies = [
     "openpyxl>=3.1",
     "lxml>=6.1",
 ]
+
+[project.urls]
+Repository = "https://github.com/marcos-slima/integration-incident-copilot"
+Documentation = "https://github.com/marcos-slima/integration-incident-copilot/tree/feat/dfe-runtime-existing-kb/packages/core"
 
 [project.optional-dependencies]
 # DA-26: Opcional: so necessario se LLM_PROVIDER=openai ou azure_openai no

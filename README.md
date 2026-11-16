@@ -21,6 +21,37 @@ sources it relied on**, each tagged with how far it can be trusted.
 
 <p align="center"><sub>Real run of the quickstart below: the rule engine answers a known error with no LLM call. The UI is in Portuguese.</sub></p>
 
+## IIC, FISC and the shared core
+
+**Looking for fiscal incident support? Visit [FISC — Fiscal Incident Support Copilot](https://github.com/marcos-slima/fiscal-incident-support-copilot).**
+
+| Component | Scope | Where to start |
+|---|---|---|
+| **IIC** | Enterprise integration incident diagnosis across SAP and other vendors | This README |
+| **FISC** | NF-e model 55, layout 4.00 incident investigation for SAP AMS N2/N3 | [FISC presentation and documentation](https://github.com/marcos-slima/fiscal-incident-support-copilot) |
+| **Shared core** | Python SDK, orchestration, LLM gateway, RAG, evidence and authentication; shared UI components | [Core Python](https://github.com/marcos-slima/integration-incident-copilot/tree/feat/dfe-runtime-existing-kb/packages/core) and [core-ui](https://github.com/marcos-slima/integration-incident-copilot/tree/feat/dfe-runtime-existing-kb/packages/core-ui) |
+
+IIC and FISC are distinct products built on the same core. FISC owns its fiscal
+context, tools, correlation rules, knowledge base and product UI. Products use
+public core interfaces; neither product imports the other.
+
+FISC has its own public presentation repository. Its implementation remains in
+[`packages/dfe`](https://github.com/marcos-slima/integration-incident-copilot/tree/feat/dfe-runtime-existing-kb/packages/dfe) on the implementation branch
+`feat/dfe-runtime-existing-kb`, which also contains the core/product separation.
+These links identify that branch and do not imply that its changes have been
+released or integrated into the default branch.
+
+**FISC maturity:** MVP evaluated with synthetic cases, read-only analysis of
+fiscal documents and systems, with human review. Fiscal certification and
+operational validation against real SAP/SEFAZ systems have not been established.
+Shared infrastructure does not imply identical scope or validation across products.
+
+Use [FISC issues](https://github.com/marcos-slima/fiscal-incident-support-copilot/issues) for FISC-specific questions and requests, and its
+[contribution guide](https://github.com/marcos-slima/fiscal-incident-support-copilot/blob/main/CONTRIBUTING.md) to locate the right PR target.
+Code changes and shared-core issues remain in this monorepo. The
+[FISC documentation map](https://github.com/marcos-slima/fiscal-incident-support-copilot/blob/main/docs/ORGANIZACAO_DOCUMENTACAO.md) identifies
+the official sources for product and technical documentation.
+
 ## Why it exists
 
 Getting AI into SAP support usually runs through SAP AI Core and BTP, which

@@ -27,32 +27,26 @@ fontes em que se apoiou**, cada uma marcada com o quanto merece confiança.
 
 **Procura suporte a incidentes fiscais? Conheça o [FISC — Fiscal Incident Support Copilot](https://github.com/marcos-slima/fiscal-incident-support-copilot).**
 
-| Componente | Escopo | Por onde começar |
+| Componente | Escopo | Local oficial |
 |---|---|---|
-| **IIC** | Diagnóstico de incidentes de integração empresarial, SAP e outros fornecedores | Este README |
-| **FISC** | Investigação de incidentes de NF-e modelo 55, leiaute 4.00, para SAP AMS N2/N3 | [Apresentação e documentação do FISC](https://github.com/marcos-slima/fiscal-incident-support-copilot) |
-| **Core compartilhado** | SDK Python, orquestração, gateway LLM, RAG, evidências e autenticação; componentes de UI compartilhados | [Core Python](https://github.com/marcos-slima/integration-incident-copilot/tree/feat/dfe-runtime-existing-kb/packages/core) e [core-ui](https://github.com/marcos-slima/integration-incident-copilot/tree/feat/dfe-runtime-existing-kb/packages/core-ui) |
+| **IIC** | Diagnóstico de incidentes de integração empresarial, SAP e outros fornecedores | Este repositório |
+| **FISC** | Investigação de NF-e modelo 55, leiaute 4.00, para SAP AMS N2/N3 | [Código, documentação e CI do FISC](https://github.com/marcos-slima/fiscal-incident-support-copilot) |
+| **Bibliotecas compartilhadas** | SDK/infraestrutura Python e componentes neutros de UI | [Core 1.4.0](https://github.com/marcos-slima/integration-incident-copilot/releases/tag/core/v1.4.0) e [core-ui 0.1.0](https://github.com/marcos-slima/integration-incident-copilot/releases/tag/core-ui/v0.1.0) |
 
-IIC e FISC são produtos distintos sobre o mesmo core. O FISC mantém contexto,
-ferramentas, regras de correlação, base fiscal e interface próprios. Os produtos
-usam as interfaces públicas do core; um produto não importa o outro.
+O FISC mantém backend, frontend, testes e pipeline próprios. Consome bibliotecas
+versionadas mantidas aqui, sem copiar fontes do core para o produto.
+Veja a [extração e o histórico preservado](https://github.com/marcos-slima/fiscal-incident-support-copilot/blob/main/docs/EXTRACAO_CODIGO.md).
 
-O FISC possui repositório público próprio de apresentação. Sua implementação
-permanece em [`packages/dfe`](https://github.com/marcos-slima/integration-incident-copilot/tree/feat/dfe-runtime-existing-kb/packages/dfe), na branch
-`feat/dfe-runtime-existing-kb`, que também contém a separação entre core e produtos.
-Esses links identificam essa branch e não significam que suas mudanças já foram
-publicadas em release ou integradas à branch principal.
+O diretório packages/dfe nas branches de preparação do IIC permanece como
+snapshot histórico de compatibilidade enquanto suas dependências de workspace
+e CI são retiradas. Novas issues e PRs fiscais vão ao FISC. Alterações do core
+continuam no IIC e são adotadas por atualização explícita de dependências.
+Esta transição não altera instalações IIC existentes nem integra seus PRs de preparação.
 
-**Maturidade do FISC:** MVP avaliado com casos sintéticos, análise read-only de
-documentos e sistemas fiscais e revisão humana. Não há homologação fiscal nem
-validação operacional comprovada em SAP/SEFAZ reais. Compartilhar infraestrutura
-não implica escopo ou validação idênticos entre os produtos.
-
-Use as [issues do FISC](https://github.com/marcos-slima/fiscal-incident-support-copilot/issues) para dúvidas e demandas específicas do produto
-e seu [guia de contribuição](https://github.com/marcos-slima/fiscal-incident-support-copilot/blob/main/CONTRIBUTING.md) para escolher o destino
-do PR. Alterações de código e problemas do core permanecem neste monorepo.
-O [mapa documental do FISC](https://github.com/marcos-slima/fiscal-incident-support-copilot/blob/main/docs/ORGANIZACAO_DOCUMENTACAO.md) indica
-as fontes oficiais de documentação de produto e técnica.
+**Maturidade do FISC:** análise fiscal read-only, avaliação sintética e revisão
+humana; isso não implica homologação fiscal ou validação operacional SAP/SEFAZ.
+Consulte a [contribuição](https://github.com/marcos-slima/fiscal-incident-support-copilot/blob/main/CONTRIBUTING.md) e o
+[mapa documental](https://github.com/marcos-slima/fiscal-incident-support-copilot/blob/main/docs/ORGANIZACAO_DOCUMENTACAO.md).
 
 ## Por que existe
 

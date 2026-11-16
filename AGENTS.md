@@ -1,5 +1,13 @@
 # AGENTS.md — Integration Incident Copilot
 
+## FISC extraction — 2026-11-16
+
+The canonical FISC implementation is now https://github.com/marcos-slima/fiscal-incident-support-copilot.
+Fiscal product issues, code and CI changes belong there. Copilot-core and core-ui
+remain in IIC and are consumed through versioned releases. Historical packages/dfe
+snapshots in preparation branches remain for compatibility until their workspace
+and pipeline references are retired; they are not an active product fork.
+
 Instructions for AI coding agents (Claude Code, OpenCode, Codex, Aider, etc.).
 Read before any edit. The authoritative design record lives in the files cited
 below; this is the operational playbook.

@@ -32,3 +32,9 @@ O namespace Python é exclusivo deste pacote: não instale versões antigas do
 IIC que também distribuíam `app` no mesmo ambiente de produção. No workspace,
 `uv sync --locked` atualiza a distribuição raiz e evita esse conflito.
 A prova de distribuição é `uv run python scripts/test_product_isolation.py`.
+
+## Distribuição e operação
+
+Veja [canais e preparação de distribuição](docs/DISTRIBUTION.md) e o
+[pacote operacional de migrations](docs/OPERATIONS.md). O build prepara
+artefatos portáteis; não publica versões em registros.

@@ -1,0 +1,80 @@
+name: Shared libraries distribution
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shared-distribution-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    uses: ./.github/workflows/ci-scope.yml
+
+  distribution:
+    needs: changes
+    if: needs.changes.outputs.core == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Dependências nativas
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cmake make gcc libssl-dev libffi-dev libsasl2-dev libsasl2-2
+      - run: uv python install
+      - run: uv sync --locked --dev
+      - run: npm ci
+      - name: Lint das ferramentas de distribuição
+        run: |
+          uv run ruff check scripts/build_shared_distribution.py scripts/verify_shared_distribution.py
+          uv run ruff format --check scripts/build_shared_distribution.py scripts/verify_shared_distribution.py
+      - name: Regressão das ferramentas de CI e distribuição
+        run: python3 -m unittest discover -s scripts/tests -v
+      - name: Core isolado, pacote npm e recursos operacionais
+        run: uv run python scripts/build_shared_distribution.py --out-dir dist/shared-libraries
+      - name: Integridade e smoke fora do checkout
+        run: uv run python scripts/verify_shared_distribution.py dist/shared-libraries
+      - name: Testes de UI
+        run: npm test -w @copilot/core-ui
+      - name: Consumidores IIC e FISC contra tarball
+        run: node scripts/test_ui_distribution.mjs
+      - name: Quality gate
+        run: uv run python scripts/quality_gate.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shared-libraries-${{ github.sha }}-${{ github.run_attempt }}
+          path: dist/shared-libraries/
+          retention-days: 30
+          if-no-files-found: error
+
+  status:
+    name: Shared distribution status
+    if: always()
+    needs: [changes, distribution]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PYTHON'
+          import json, os
+          results = json.loads(os.environ['RESULTS'])
+          assert results['changes']['result'] == 'success', results
+          assert all(job['result'] in ('success', 'skipped') for job in results.values()), results
+          PYTHON

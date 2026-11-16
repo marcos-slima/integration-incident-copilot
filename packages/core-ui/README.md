@@ -39,3 +39,9 @@ npm run lint -w @copilot/core-ui
 metadados e documentação. Os scripts prebuild/predev/pretypecheck dos shells
 preparam a biblioteca. A versão do contrato de componentes é a versão do pacote
 (0.1.0); ela não substitui o versionamento do protocolo de plugin e da API HTTP.
+
+## Distribuição portátil
+
+O tarball preserva `@copilot/core-ui`, com ESM, tipos, CSS, README e licença.
+O pacote continua privado para impedir publicação acidental em registro;
+pode ser instalado por arquivo. Veja a [política técnica de distribuição](../core/docs/DISTRIBUTION.md).

@@ -34,6 +34,8 @@ class ScopeTests(unittest.TestCase):
             "package-lock.json",
             "architecture/boundaries.toml",
             "new-runtime.conf",
+            "data/sample_docs/corpus.md",
+            "packages/core/src/app/prompt.md",
             "packages/dfe/pyproject.toml",
             "packages/dfe/frontend/package.json",
             "frontend/package.json",

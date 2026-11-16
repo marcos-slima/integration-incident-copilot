@@ -30,7 +30,14 @@ def classify(paths: list[str]) -> dict[str, bool]:
             or path == "docker-compose.yml"
         ):
             scopes["iic"] = True
-        elif path.startswith("docs/") or path.endswith(".md"):
+        elif path.startswith(("docs/", "packages/core/docs/")) or path in {
+            "README.md",
+            "README.pt-BR.md",
+            "AGENTS.md",
+            "CLAUDE.md",
+            "packages/core/README.md",
+            "packages/core-ui/README.md",
+        }:
             continue
         else:
             # Core, tests, locks, scripts, workflows, and unknown paths are shared.

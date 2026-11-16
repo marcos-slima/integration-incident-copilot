@@ -4,7 +4,6 @@ on:
   push:
     branches: [master, main]
   pull_request:
-    branches: [master, main]
   workflow_dispatch:
 
 # Cancela execuções antigas do mesmo branch quando um novo push chega
@@ -13,7 +12,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    uses: ./.github/workflows/ci-scope.yml
+
   test:
+    needs: changes
+    if: needs.changes.outputs.iic == 'true'
     name: lint + tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -43,7 +47,7 @@ jobs:
         # `--extra prometheus`: os testes de app/metrics.py (DA-70) sao
         # pulados sem prometheus_client/instrumentator. Sem o extra, o
         # caminho nunca roda no CI (IIC-AUD-017).
-        run: uv sync --dev --extra prometheus
+        run: uv sync --locked --dev --extra prometheus
 
       - name: Ruff — lint
         run: uv run ruff check .
@@ -56,15 +60,6 @@ jobs:
         # que não existem no runner do GitHub.
         # §3.10: --cov + --cov-fail-under=80 — CI falha se cobertura < 80%.
         run: uv run pytest -m "not integration" -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=80
-
-      - name: Pytest — produto DF-e Copilot (DA-94)
-        # Suite propria, com a config de packages/dfe/pyproject.toml.
-        working-directory: packages/dfe
-        timeout-minutes: 3
-        run: ../../.venv/bin/python -m pytest -v --tb=short -p no:cacheprovider
-
-      - name: DF-e contra wheel do core fora do checkout
-        run: uv run python scripts/test_product_isolation.py
 
 
   security:
@@ -95,7 +90,7 @@ jobs:
             cmake make gcc libssl-dev libffi-dev libsasl2-dev libsasl2-2
 
       - name: Sincronizar dependências
-        run: uv sync --dev
+        run: uv sync --locked --dev
 
       # `--no-emit-project` nao e' opcional. `uv export` inclui o proprio
       # projeto como requirement editavel (file:///...), e o pip-audit instala
@@ -157,6 +152,8 @@ jobs:
           if-no-files-found: ignore
 
   compose-smoke:
+    needs: changes
+    if: needs.changes.outputs.iic == 'true'
     name: compose smoke — API /health
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -210,6 +207,8 @@ jobs:
         run: docker compose down -v
 
   rag-quality:
+    needs: changes
+    if: needs.changes.outputs.core == 'true'
     name: quality gate RAG (Qdrant real)
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -248,7 +247,7 @@ jobs:
         run: uv python install
 
       - name: Sincronizar dependencias
-        run: uv sync --dev
+        run: uv sync --locked --dev
 
       - name: Ingerir documentos de avaliacao no Qdrant
         env:
@@ -266,6 +265,8 @@ jobs:
         run: uv run pytest -m rag_quality -v --tb=short
 
   neo4j-smoke:
+    needs: changes
+    if: needs.changes.outputs.core == 'true'
     name: smoke test GraphRAG (Neo4j real)
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -307,7 +308,7 @@ jobs:
         run: uv python install
 
       - name: Sincronizar dependências
-        run: uv sync --dev
+        run: uv sync --locked --dev
 
       - name: Aguardar Neo4j aceitar conexoes Bolt
         # O healthcheck HTTP acima (porta 7474) so garante que o
@@ -338,6 +339,8 @@ jobs:
         run: uv run pytest -m neo4j_smoke -v --tb=short
 
   frontend:
+    needs: changes
+    if: needs.changes.outputs.iic == 'true'
     name: frontend — core-ui + shells (typecheck + lint + build)
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -363,8 +366,8 @@ jobs:
       - name: Instalar dependências (workspaces)
         run: npm ci
 
-      - name: Lint (oxlint, todos os workspaces)
-        run: npm run lint
+      - name: Lint (core-ui e IIC)
+        run: npm run lint -w @copilot/core-ui -w @copilot/iic-ui
 
       - name: Build do pacote neutro de UI
         run: npm run build -w @copilot/core-ui
@@ -373,15 +376,18 @@ jobs:
         run: npm test -w @copilot/core-ui
 
       - name: Typecheck (core-ui e shells)
-        run: npm run typecheck
+        run: npm run typecheck -w @copilot/core-ui -w @copilot/iic-ui
 
-      - name: Build dos shells (IIC e DF-e)
-        run: npm run build -w @copilot/iic-ui -w @copilot/dfe-ui
+      - name: Build do shell IIC
+        run: npm run build -w @copilot/iic-ui
 
       - name: Shells contra pacote distribuído de UI
+        if: needs.changes.outputs.core == 'true'
         run: node scripts/test_ui_distribution.mjs
 
   docker-build:
+    needs: changes
+    if: needs.changes.outputs.iic == 'true'
     name: valida build da imagem Docker
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -399,4 +405,23 @@ jobs:
         uses: actions/checkout@v4
 
       - name: docker build
-        run: docker build -t integration-incident-copilot:ci .
+        run: docker build --build-arg PRELOAD_MODELS=0 -t integration-incident-copilot:ci .
+
+  status:
+    name: IIC CI status
+    if: always()
+    needs: [changes, test, security, compose-smoke, rag-quality, neo4j-smoke, frontend, docker-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Verificar resultado dos jobs selecionados
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PYTHON'
+          import json, os
+          results = json.loads(os.environ['RESULTS'])
+          assert results['changes']['result'] == 'success', results
+          assert all(job['result'] in ('success', 'skipped') for job in results.values()), results
+          print('Jobs selecionados aprovados; skips representam escopos não alterados.')
+          PYTHON

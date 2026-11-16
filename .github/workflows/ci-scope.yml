@@ -1,0 +1,31 @@
+name: CI scope
+
+on:
+  workflow_call:
+    outputs:
+      core:
+        value: ${{ jobs.scope.outputs.core }}
+      iic:
+        value: ${{ jobs.scope.outputs.iic }}
+      fisc:
+        value: ${{ jobs.scope.outputs.fisc }}
+
+permissions:
+  contents: read
+
+jobs:
+  scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      core: ${{ steps.scope.outputs.core }}
+      iic: ${{ steps.scope.outputs.iic }}
+      fisc: ${{ steps.scope.outputs.fisc }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Regressão da seleção de escopos
+        run: python3 -m unittest discover -s scripts/tests -v
+      - id: scope
+        run: python3 scripts/ci_scope.py

@@ -1,36 +1,9 @@
-name: DF-e Copilot
+name: FISC — validation and candidate
 
 on:
   push:
     branches: [master, main]
-    paths:
-      - 'packages/dfe/**'
-      - 'packages/core/**'
-      - 'packages/core-ui/**'
-      - 'Dockerfile'
-      - '.dockerignore'
-      - 'package*.json'
-      - 'pyproject.toml'
-      - 'uv.lock'
-      - '.python-version'
-      - 'scripts/test_product_isolation.py'
-      - 'scripts/smoke_dfe_image.py'
-      - '.github/workflows/dfe.yml'
   pull_request:
-    branches: [master, main]
-    paths:
-      - 'packages/dfe/**'
-      - 'packages/core/**'
-      - 'packages/core-ui/**'
-      - 'Dockerfile'
-      - '.dockerignore'
-      - 'package*.json'
-      - 'pyproject.toml'
-      - 'uv.lock'
-      - '.python-version'
-      - 'scripts/test_product_isolation.py'
-      - 'scripts/smoke_dfe_image.py'
-      - '.github/workflows/dfe.yml'
   workflow_dispatch:
 
 permissions:
@@ -41,8 +14,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    uses: ./.github/workflows/ci-scope.yml
+
   product:
-    name: DF-e — pacotes, testes e imagem
+    needs: changes
+    if: needs.changes.outputs.fisc == 'true'
+    name: FISC — pacotes, testes e imagem
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -64,23 +42,25 @@ jobs:
       - run: uv sync --locked --dev
       - run: uv run ruff check packages/dfe scripts/test_product_isolation.py scripts/smoke_dfe_image.py
       - run: uv run ruff format --check packages/dfe scripts/test_product_isolation.py scripts/smoke_dfe_image.py
+      - name: SAST fiscal
+        run: uv run bandit -r packages/dfe/src/ -ll
       - run: npm ci
       - run: npm run lint -w @copilot/core-ui -w @copilot/dfe-ui
       - run: npm run typecheck -w @copilot/core-ui -w @copilot/dfe-ui
       - run: npm test -w @copilot/core-ui
       - run: npm run build -w @copilot/dfe-ui
+      - name: Testes do core para candidato manual
+        if: github.event_name == 'workflow_dispatch'
+        run: uv run pytest tests/ -m "not integration" -q --tb=short --cov=app --cov-fail-under=80
+      - name: Quality gate para candidato manual
+        if: github.event_name == 'workflow_dispatch'
+        run: uv run python scripts/quality_gate.py
       - name: Testes fiscais contra core e produto instalados dos wheels
         run: uv run python scripts/test_product_isolation.py
       - name: Wheels de entrega (com UI)
         run: |
           uv build --package copilot-core --wheel --out-dir dist/dfe-release
           DFE_BUILD_REQUIRE_UI=1 uv build --package dfe-copilot --wheel --out-dir dist/dfe-release
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dfe-wheels-${{ github.sha }}
-          path: dist/dfe-release/*.whl
-          retention-days: 7
-          if-no-files-found: error
       - name: Validar Compose próprio
         run: docker compose -f packages/dfe/compose.yaml config --quiet
       - name: Validar Compose para serviços existentes
@@ -95,3 +75,34 @@ jobs:
         run: uv run python scripts/smoke_dfe_image.py dfe-copilot:ci
       - name: Smoke do Compose isolado (inclui Qdrant próprio)
         run: uv run python scripts/smoke_dfe_image.py dfe-copilot:ci --compose
+
+      - name: Preservar imagem validada (candidato manual)
+        if: github.event_name == 'workflow_dispatch'
+        run: docker save dfe-copilot:ci | gzip > dist/dfe-release/dfe-image.tar.gz
+      - name: Manifesto e checksums da entrega
+        run: python3 scripts/fisc_candidate_manifest.py dist/dfe-release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fisc-candidate-${{ github.sha }}-${{ github.run_attempt }}
+          path: dist/dfe-release/
+          retention-days: 30
+          if-no-files-found: error
+
+  status:
+    name: FISC CI status
+    if: always()
+    needs: [changes, product]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Verificar resultado dos jobs selecionados
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PYTHON'
+          import json, os
+          results = json.loads(os.environ['RESULTS'])
+          assert results['changes']['result'] == 'success', results
+          assert all(job['result'] in ('success', 'skipped') for job in results.values()), results
+          print('Jobs selecionados aprovados; skips representam escopos não alterados.')
+          PYTHON

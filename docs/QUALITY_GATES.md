@@ -72,7 +72,9 @@ flowchart LR
         mf["data/index_manifest.json<br/>(gerado pelo ingest)"]
     end
 
-    subgraph pr["A cada push e PR"]
+    subgraph pr["Push e PR: seleção por impacto"]
+        ch["<b>changes</b><br/>diff completo; dúvida valida tudo"]
+        st["<b>status</b><br/>agregação sem tolerar falha/cancelamento"]
         det["<b>deterministic</b><br/>scripts/quality_gate.py<br/>24 gates"]
         mig["<b>migrations_and_dashboards</b><br/>alembic upgrade + check<br/>45 queries dos dashboards<br/>e2e da DA-52 no Postgres"]
         tst["<b>test</b><br/>ruff + pytest, cobertura >= 80%"]
@@ -95,6 +97,10 @@ flowchart LR
         ing["python -m app.rag.ingest"]
     end
 
+    ch --> tst
+    ch --> mig
+    tst --> st
+    det --> st
     docs --> rq
     ds --> rq
     ds --> det
@@ -123,6 +129,9 @@ flowchart LR
   consultas, ingestao do acervo) gera os artefatos que os gates conferem
   depois. Mudar o prompt sem regravar `prompt_baseline.json` reprova o
   `prompt_digest_measured` (invariante 20).
+
+A seleção de jobs por produto, os checks agregados e o candidato fiscal estão
+detalhados em [CI por produto](CI_PRODUTOS.md).
 
 ## Rodando localmente
 

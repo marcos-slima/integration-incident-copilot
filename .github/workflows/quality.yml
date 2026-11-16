@@ -8,7 +8,6 @@ on:
   push:
     branches: [master, main]
   pull_request:
-    branches: [master, main]
   schedule:
     # 03:17 UTC — fora do horario pico dos runners hospedados.
     - cron: "17 3 * * *"
@@ -24,6 +23,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    uses: ./.github/workflows/ci-scope.yml
+
   deterministic:
     name: quality gate — deterministico
     runs-on: ubuntu-latest
@@ -40,7 +42,7 @@ jobs:
         run: uv python install
 
       - name: Sincronizar dependências
-        run: uv sync --dev
+        run: uv sync --locked --dev
 
       - name: Quality gate (dataset, corpus, invariante DA-29, configs, docs)
         run: |
@@ -62,6 +64,8 @@ jobs:
           if-no-files-found: warn
 
   migrations_and_dashboards:
+    needs: changes
+    if: needs.changes.outputs.core == 'true'
     name: migrations + 45 queries dos dashboards
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -92,7 +96,7 @@ jobs:
         run: uv python install
 
       - name: Sincronizar dependências
-        run: uv sync --dev
+        run: uv sync --locked --dev
 
       # Alembic so foi validado a mao (DA-49 migration 004). Aqui ele roda
       # contra banco limpo: migration que so funciona na sua base local
@@ -194,3 +198,22 @@ jobs:
           name: promptfoo-results
           path: resultados.json
           if-no-files-found: ignore
+
+  status:
+    name: Quality CI status
+    if: always()
+    needs: [changes, deterministic, migrations_and_dashboards, llm_eval]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Verificar resultado dos jobs selecionados
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PYTHON'
+          import json, os
+          results = json.loads(os.environ['RESULTS'])
+          assert results['changes']['result'] == 'success', results
+          assert all(job['result'] in ('success', 'skipped') for job in results.values()), results
+          print('Jobs selecionados aprovados; skips representam escopos não alterados.')
+          PYTHON

@@ -1,253 +1,55 @@
-# Deploy em Outro Ambiente (Docker Compose) — Integration Incident Copilot
+# Implantação do IIC
 
-> Guia para levar o projeto, como está hoje, para um ambiente novo (cliente, servidor, outra máquina) via `docker compose`. Cobre os problemas reais encontrados ao validar esse fluxo do zero e como resolvê-los.
+Para execução nativa e instalação do wheel, siga [primeira execução](GETTING_STARTED.md).
+O Dockerfile e o Compose deste produto não precisam das fontes do core ou do FISC.
 
-Para rodar localmente sem Docker (`uv run uvicorn app.main:app --reload`), veja [GETTING_STARTED.md](GETTING_STARTED.md).
+## Preparar configuração e operações
 
----
+Copie `.env.example` para `.env`, ajuste URLs/modelos e configure credenciais
+fora do Git. O Compose exige `POSTGRES_PASSWORD`, `GRAFANA_PASSWORD` e
+`NEO4J_PASSWORD` na interpolação, mesmo quando os respectivos profiles não são
+iniciados. Não use senhas de exemplo ou de produção em testes.
 
-## Pré-requisitos
+Após sincronizar as dependências como no quickstart:
 
-| Requisito | Versão mínima | Verificar |
-|---|---|---|
-| Docker | 24+ | `docker --version` |
-| Docker Compose | v2 | `docker compose version` |
-| Node.js | 18+ | `node --version` (só para dev do frontend fora do Docker; a imagem builda com `node:22-slim`) |
-| uv | qualquer | `uv --version` (ingest e migrations rodam do host, seções 5-6) |
-| Ollama (se local) | qualquer | `ollama --version` |
+~~~bash
+uv run --no-sync python scripts/fetch_operations.py .operations
+docker compose --env-file .env config --quiet
+~~~
 
----
+O fetch confere SHA-256 antes de extrair o bundle fixado em shared-libraries.json.
+Dashboards são montados de `.operations/deploy/grafana/dashboards`.
+A cadeia canônica de migrations vive na plataforma, não neste checkout.
 
-## 1. Clone e configure
+## Imagem e serviços
 
-```bash
-git clone https://github.com/marcos-slima/integration-incident-copilot.git
-cd integration-incident-copilot
-cp .env.example .env
-```
+~~~bash
+docker compose --env-file .env up -d --build api
+~~~
 
-**Obrigatório antes de qualquer `docker compose`:** o `docker-compose.yml`
-usa `${VAR:?...}` para `POSTGRES_PASSWORD`, `GRAFANA_PASSWORD` e
-`NEO4J_PASSWORD`, e o Compose interpola todos os serviços, inclusive os de
-perfis inativos. No `.env.example` as três estão comentadas, então até
-`docker compose up -d` falha com `required variable POSTGRES_PASSWORD is
-missing a value`. Defina-as, junto com `LLM_CREDENTIALS_MASTER_KEY` — o
-compose sempre injeta `DATABASE_URL` na API, e com ela a API não sobe sem
-essa chave (DA-60):
+O Compose inicia as dependências declaradas para `api`; não representa ativação
+de todos os profiles. Ollama é um serviço do host por padrão; o profile
+`container-ollama` é opt-in. Qdrant e os modelos precisam corresponder ao ambiente.
+Não foi feita validação nova de inferência, SAP ou deployment de produção nesta migração.
 
-```bash
-for v in POSTGRES_PASSWORD GRAFANA_PASSWORD NEO4J_PASSWORD; do
-  echo "$v=$(python3 -c 'import secrets;print(secrets.token_urlsafe(24))')" >> .env
-done
-echo "LLM_CREDENTIALS_MASTER_KEY=$(python3 -c 'import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())')" >> .env
-docker compose config -q   # sem saída = interpolação ok
-```
+O build padrão `PRELOAD_MODELS=1` incorpora e verifica caches offline dos modelos.
+Para verificar apenas empacotamento, use:
 
----
+~~~bash
+docker build --build-arg PRELOAD_MODELS=0 -t iic-copilot:ci .
+uv run --no-sync python -I scripts/smoke_image.py iic-copilot:ci
+~~~
 
-## 2. Build do frontend
+Esse smoke verifica auth, UI, pacotes, operações, usuário não-root e TLS; não
+faz diagnóstico por LLM real. Não altera serviços do deployment.
 
-O `Dockerfile` builda o frontend (React/Vite) a partir do código-fonte em um estágio próprio (`frontend-build`, base `node:22-slim`) e copia o resultado (`frontend/dist`) para `static/dist` no estágio final da imagem. Não há passo manual: `docker compose build` (ou `docker build .`) já builda o frontend sozinho.
+## Migrations e outros ambientes
 
-Se quiser rodar o frontend fora do Docker (dev local com hot-reload), use `npm install && npm run dev -w @copilot/iic-ui` na raiz (npm workspaces, DA-95).
+Migrations são uma ação explícita sobre banco autorizado, após confirmar destino,
+compatibilidade e backup. No checkout: `uv run --no-sync alembic -c .operations/alembic.ini upgrade head`.
+Na imagem, a configuração continua em `/app/alembic.ini`; o build não executa migrations.
+Perfis, worker e reporter são definidos em docker-compose.yml.
 
----
-
-## 3. Decida a estratégia de LLM/Ollama
-
-Por padrão a API usa o Ollama **do host**: `OLLAMA_HOST=http://host.docker.internal:11434` é fixo no `x-common-env` do `docker-compose.yml` (sobrepõe o `.env`). O serviço `ollama` do compose é opt-in (perfil `container-ollama`). Duas situações:
-
-### A) Ambiente novo, sem Ollama nativo instalado
-Use o Ollama em container. Ele publica só em `127.0.0.1:11434` do host, que o `host.docker.internal` (gateway do bridge) **não** alcança — então aponte a API para o nome do serviço na rede do compose com um `docker-compose.override.yml` (lido automaticamente pelo Compose):
-```yaml
-services:
-  api:
-    environment:
-      OLLAMA_HOST: http://ollama:11434
-```
-(repita para `worker` se usar o perfil `async`). Suba e baixe os modelos dentro do container:
-```bash
-docker compose --profile container-ollama up -d
-docker compose exec ollama ollama pull qwen3.6:35b-a3b
-docker compose exec ollama ollama pull nomic-embed-text
-```
-O ingest da seção 6 roda no host e usa o `OLLAMA_HOST=http://127.0.0.1:11434` do `.env`, que alcança a porta publicada.
-
-### B) Já existe um Ollama nativo (systemd) rodando na máquina
-Situação comum em máquinas de desenvolvimento (como a estação de estudo do autor) e o caminho default do compose. Se você subir também o perfil `container-ollama`, o sintoma é `failed to bind host port 127.0.0.1:11434/tcp: address already in use`.
-
-**Passo 1 — não subir o container `ollama` (sem o perfil `container-ollama`):**
-```bash
-docker compose up -d --no-deps qdrant api
-```
-
-**Passo 2 — garantir que o container `api` alcança o Ollama nativo do host.**
-O `docker-compose.yml` já traz isto no serviço `api` (via `x-common-env`); confira se não foi removido:
-```yaml
-  api:
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    environment:
-      OLLAMA_HOST: http://host.docker.internal:11434
-```
-
-**Passo 3 — garantir que o Ollama nativo aceita conexões vindas do bridge do Docker.**
-Por padrão, o `ollama.service` (systemd) escuta só em `127.0.0.1:11434` — recusa conexões vindas de containers (`172.17.0.x`). Verifique:
-```bash
-ss -tlnp | grep 11434
-```
-Se aparecer `127.0.0.1:11434` (e não `0.0.0.0` ou `*:11434`), configure:
-```bash
-sudo mkdir -p /etc/systemd/system/ollama.service.d
-echo -e "[Service]\nEnvironment=\"OLLAMA_HOST=0.0.0.0:11434\"" | sudo tee /etc/systemd/system/ollama.service.d/override.conf
-sudo systemctl daemon-reload
-sudo systemctl restart ollama
-```
-
----
-
-## 4. Bug conhecido (corrigido no Dockerfile desde DA-24): `uv run` no `CMD` tentava ressincronizar no startup
-
-Historicamente o `CMD` do `Dockerfile` rodava `uv run uvicorn ...`, e `uv run` por padrão tenta ressincronizar o ambiente a cada start — incluindo dependências de dev (`pre-commit` → `virtualenv` → `python-discovery`). Em um container sem saída de rede (ou rede restrita, como um cluster Kyma com Network Policies), isso derrubava o container com erro de DNS/timeout.
-
-**Corrigido na origem (DA-24)**: o `Dockerfile` agora chama `.venv/bin/uvicorn` diretamente no `CMD`, sem passar por `uv run` - `docker-compose.yml` e os manifests Kyma (`deploy/kyma/`) não precisam mais de nenhum override de `command:` para contornar isso. Se você estiver usando uma imagem construída antes desta fase, seu próprio `command:` override (o de baixo) continua funcionando como workaround:
-```yaml
-  api:
-    command: [".venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
----
-
-## 5. Suba e valide
-
-```bash
-docker compose up -d --no-deps --build qdrant api                # cenário B (Ollama nativo)
-# ou
-docker compose --profile container-ollama up -d --build          # cenário A (Ollama containerizado + override da seção 3-A)
-
-curl http://127.0.0.1:8000/health
-```
-
-Esperado: `{"status":"ok"}`.
-
-Se for usar persistência de incidentes (perfil `observability`), suba o
-Postgres e aplique as migrations do host — o Alembic lê `DATABASE_URL` do
-`.env`, que no host aponta para `127.0.0.1` (a API no container continua
-usando o `postgres` injetado pelo compose):
-
-```bash
-docker compose --profile observability up -d postgres grafana
-echo "DATABASE_URL=postgresql+asyncpg://iic:$(grep ^POSTGRES_PASSWORD= .env | cut -d= -f2-)@127.0.0.1:5432/iic" >> .env
-uv run alembic upgrade head
-```
-
----
-
-## 6. Indexe a base de conhecimento
-
-O Qdrant deste compose é uma instância própria e vazia (design intencional — ver [ARCHITECTURE.md](ARCHITECTURE.md), Decisão de Arquitetura sobre portabilidade para demos de terceiros). Popule-a:
-
-```bash
-QDRANT_URL=http://127.0.0.1:${QDRANT_HOST_PORT:-6333} uv run python -m app.rag.ingest --target incidents
-QDRANT_URL=http://127.0.0.1:${QDRANT_HOST_PORT:-6333} uv run python -m app.rag.ingest --target reference
-```
-
-Sem `--reset`, o ingest processa só documentos ainda não indexados (idempotente — seguro rodar de novo).
-
----
-
-## 7. Teste end-to-end
-
-Desde a DA-18, `/diagnose` sempre exige autenticação: o header `X-API-Key`
-ou, desde a DA-54, o cookie de sessão da UI (login em `POST /auth/login`).
-Para `curl`, use a chave. Se você não configurou `API_KEY` no `.env`, uma
-chave aleatória é gerada a cada `docker compose up`/restart e avisada em
-nível `WARNING` no log de startup:
-
-```bash
-docker logs integration-incident-copilot-api-1 2>&1 | grep "API_KEY"
-```
-
-Use essa chave (ou a que você configurou em `API_KEY=` no `.env`, se
-preferir uma chave estável entre restarts):
-
-```bash
-curl -s -X POST http://127.0.0.1:8000/diagnose \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: <chave-do-log-ou-do-.env>" \
-  -d '{"description":"IDoc travado com status 51, erro de mapeamento de material"}'
-```
-
-Deve retornar um JSON com `probable_root_cause`, `model_confidence`, `diagnosis_confidence`, `next_steps` e `report_markdown`. Sem o header (ou com valor errado): `401 Unauthorized`; depois de `AUTH_FAILURES_PER_MINUTE` falhas (default 10) do mesmo IP no minuto, `429 Too Many Requests`.
-
-O mesmo diagnóstico também está disponível via **MCP** (DA-19) em
-`POST /mcp/` (com barra final - sem ela, `307 Temporary Redirect`),
-reusando o mesmo `X-API-Key`:
-
-```bash
-curl -s -X POST http://127.0.0.1:8000/mcp/ \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json, text/event-stream" \
-  -H "X-API-Key: <chave-do-log-ou-do-.env>" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"cliente-teste","version":"1.0"}}}'
-```
-
-Deve retornar um evento `message` com `serverInfo.name == "sap-integration-copilot"` e as ferramentas `diagnose_incident`/`list_connectors` disponíveis.
-
-Desde a **DA-23**, também existe um caminho de **ingestão orientada a
-evento**: `POST /events/incident` simula o que um assinante de webhook
-do SAP Event Mesh (modo REST/Webhook push subscription) receberia -
-dispara o mesmo diagnóstico automaticamente, sem chamada manual.
-Requer o header dedicado `X-Event-Mesh-Api-Key` (chave separada de
-`X-API-Key`/`X-A2A-Api-Key` - ver log de startup ou `EVENT_MESH_API_KEY`
-no `.env`):
-
-```bash
-curl -s -X POST http://127.0.0.1:8000/events/incident \
-  -H "Content-Type: application/json" \
-  -H "X-Event-Mesh-Api-Key: <chave-do-log-ou-do-.env>" \
-  -d '{
-        "specversion": "1.0",
-        "type": "com.sap.integration.incident.detected.v1",
-        "source": "/sap/cpi/monitor",
-        "id": "evt-0001",
-        "data": {"description": "IDoc travado com status 51", "interface_type": "rfc"}
-      }'
-```
-
-O envelope segue CloudEvents 1.0: `specversion`, `type`, `source` e `id` são
-obrigatórios, e o par (`source`, `id`) é a chave de deduplicação — reenviar o
-mesmo evento não dispara um segundo diagnóstico. Um `type` diferente de
-`com.sap.integration.incident.detected.v1`, ou a falta de um dos quatro
-atributos, retorna `422 Unprocessable Content`.
-
----
-
-## Resolução de problemas
-
-| Sintoma | Causa | Fix |
-|---|---|---|
-| `port is already allocated` (6333) | Outro Qdrant já usa a porta (ex: stack pessoal de dev) | Definir `QDRANT_HOST_PORT` no `.env` (ex: `QDRANT_HOST_PORT=6335`) — o `docker-compose.yml` já suporta via `${QDRANT_HOST_PORT:-6333}` |
-| `address already in use` (11434) | Ollama nativo já rodando | Ver seção 3-B |
-| `ConnectionError: Failed to connect to Ollama` dentro do container | `OLLAMA_HOST` errado, ou Ollama nativo só em `127.0.0.1` | Ver seção 3-B, passos 2 e 3 |
-| Container `api` reinicia sozinho com erro de DNS/`python-discovery` | `uv run` tentando sync sem rede | Ver seção 4 |
-| `401 Unauthorized` em `/diagnose` ou `/a2a` | Header `X-API-Key`/`X-A2A-Api-Key` ausente ou errado (DA-18: chave sempre exigida, gerada automaticamente se não configurada) | Ver a chave gerada no log de startup (`docker logs ... \| grep API_KEY`), ou configure `API_KEY`/`A2A_API_KEY` no `.env` |
-| `429 Too Many Requests` em `/diagnose`, `/a2a`, `/events/incident` ou `/admin` mesmo depois de corrigir a chave | O IP errou a chave `AUTH_FAILURES_PER_MINUTE` vezes (default 10) na janela de 60 s (`app/auth_guard.py`, SEC-03) | Esperar o minuto virar; atrás de proxy, conferir `FORWARDED_ALLOW_IPS` (ver [RATE_LIMITING.md](RATE_LIMITING.md)) |
-| `required variable POSTGRES_PASSWORD is missing a value` (ou `GRAFANA_PASSWORD`/`NEO4J_PASSWORD`) em qualquer `docker compose` | Senhas comentadas no `.env.example`; o Compose interpola os `:?` de todos os perfis | Ver seção 1 |
-| `DATABASE_URL configurada sem LLM_CREDENTIALS_MASTER_KEY valida` no startup da API | O compose sempre injeta `DATABASE_URL`; a evidência é cifrada (DA-60) | Ver seção 1 |
-| `401 Unauthorized` em `/events/incident` | Header `X-Event-Mesh-Api-Key` ausente/errado, ou reusando `X-API-Key` por engano (DA-23: chave dedicada, não compartilhada com `/diagnose`/`/a2a`) | Ver a chave gerada no log de startup, ou configure `EVENT_MESH_API_KEY` no `.env` |
-| `422 Unprocessable Content` em `/events/incident` | Campo `type` diferente de `com.sap.integration.incident.detected.v1` (DA-23: único tipo reconhecido hoje), ou falta `specversion`/`id`/`source` (CloudEvents 1.0) | Ajustar o payload; o corpo do 422 indica o campo (`loc`) sem ecoar o valor enviado |
-| `307 Temporary Redirect` em `POST /mcp` | Faltou a barra final - `app.mount()` do Starlette redireciona `/mcp` → `/mcp/` antes de checar autenticação (comportamento padrão, não é bug do MCP) | Chame `/mcp/` (com barra final) diretamente, ou configure o cliente MCP para seguir redirects |
-| `RuntimeError: Directory 'static/dist/assets' does not exist` | Frontend não buildado / não copiado para a imagem | Ver seção 2 |
-| `Collection 'sap_incident_docs' doesn't exist` | Qdrant do compose está vazio (esperado em ambiente novo) | Ver seção 6 |
-| `Collection 'sap_reference_library' doesn't exist` (500 em `/diagnose`) | Até esta correção, o fallback de `_retrieve_unified` não capturava o 404 (`UnexpectedResponse`) do Qdrant | Corrigido em `app/rag/retriever.py` (fallback é ignorado com WARNING). Em imagens antigas: criar a collection vazia — `curl -X PUT localhost:${QDRANT_HOST_PORT:-6333}/collections/sap_reference_library -H 'Content-Type: application/json' -d '{"vectors":{"size":768,"distance":"Cosine"}}'` |
-| `container qdrant/ollama is unhealthy`, log com `exec: "curl": executable file not found` | As imagens oficiais do Qdrant e do Ollama não incluem `curl`/`wget` | Healthchecks usam `/dev/tcp` (Qdrant) e `ollama list` (Ollama) no `docker-compose.yml` |
-| `dependency failed to start: container ...-ollama-1 is unhealthy` | Stack antigo com `api`/`worker` dependendo do Ollama em container | O Ollama do host é o padrão; o container `ollama` só sobe com `--profile container-ollama` |
-| `401` mesmo com `API_KEY` no `.env` | A variável não chega ao container (precisa estar em `x-common-env`), ou há linhas `API_KEY=` duplicadas/vazias no `.env`, ou a chave foi colada na linha anterior (`.env` sem quebra de linha final) | `docker compose exec api env \| grep ^API_KEY` deve mostrar a chave; `grep -n ^API_KEY= .env` deve mostrar uma única linha |
-| `"/frontend/dist": not found` no build | O Vite gera em `../static/dist` (`outDir`), ou seja, `/static/dist` no estágio `frontend-build` | Dockerfile usa `COPY --from=frontend-build /static/dist static/dist` |
-| `CONTAINER_DATABASE_URL` com `@localhost` falha dentro do container | `localhost` é o próprio container. O `DATABASE_URL` do `.env` não chega ao container: `x-common-env` define `DATABASE_URL` (variável de ambiente vence o `.env` no Pydantic Settings) | Deixar `CONTAINER_DATABASE_URL` vazio (usa `@postgres:5432`, com `--profile observability`) ou apontar para um host alcançável pelo container. Não há como desligar o Postgres no modo container: o default sempre aponta para `postgres` |
-| Variável de `.env` com `$` interpretada como interpolação do Compose (warning `variable is not set`) | `$` literal em segredo (ex: `CAP_CLIENT_SECRET`) | Escapar como `$$` no `.env` |
-
----
-
-*Integration Incident Copilot · github.com/marcos-slima/integration-incident-copilot*
+Manifests e overlays continuam em [deploy/kyma](../deploy/kyma/README.md) e
+[deploy/local](../deploy/local/README.md). Seus registros antigos de k3d/Kyma
+são históricos; valide a imagem e a configuração no ambiente de destino antes de uso.

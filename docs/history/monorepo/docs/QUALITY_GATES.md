@@ -1,0 +1,342 @@
+# Registro histórico — QUALITY_GATES.md
+
+> Snapshot anterior à organização documental de 2026-11-17. Não usar como
+> instrução de instalação atual. Origem: [arquivo e commit](https://github.com/marcos-slima/integration-incident-copilot/blob/bf552a6b98b693ab8927da0b176eb4b23633308d/docs/QUALITY_GATES.md).
+> Links relativos foram fixados no snapshot de origem; comandos antigos são evidência histórica.
+
+# Quality Gates (DA-51)
+
+A suite de testes responde "o código faz o que promete?". Os gates respondem
+outra pergunta: **"o que o projeto afirma sobre a própria qualidade continua
+verdade?"** Antes da DA-51, as afirmações mais fortes do README — "10/10 no
+promptfoo", "hit@1 0.923 do mmarco", "45 queries de dashboard" — eram
+verificadas à mão, uma vez, e nunca mais.
+
+## Mapa dos gates
+
+| Gate | O que protege | Custo | Onde roda |
+|---|---|---|---|
+| `rag_dataset_schema` | `data/eval/rag_eval_dataset.json`: campos obrigatórios, `interface_type` dentro do Literal do pipeline, piso de 15 casos | instantâneo | todo push/PR |
+| `corpus_coverage` | todo `expected_sources` existe em `data/sample_docs/` | instantâneo | todo push/PR |
+| `dataset_difficulty_mix` | existe ao menos um caso `hard` e um `out_of_scope` | instantâneo | todo push/PR |
+| `reranker_invariant` | o modelo em produção foi medido, passa do piso de hit@1 e nenhum candidato é significativamente melhor (McNemar exato pareado, p < 0,05); vantagem pontual não significativa só avisa; sem dados por consulta, vale a margem mínima | instantâneo | todo push/PR |
+| `promptfoo_configs` | configs do promptfoo são YAML válido, têm `prompts`/`tests`/`providers`, e os scripts `exec:` referenciados existem | instantâneo | todo push/PR |
+| `llm_baseline` | existe baseline versionado do promptfoo (comparação de regressão de LLM) | instantâneo | todo push/PR |
+| `candidate_das_fresh` | nenhuma DA marcada como "candidata" no `CLAUDE.md` já entregue em `docs/ARCHITECTURE.md` | instantâneo | todo push/PR |
+| `implemented_das_documented` | toda DA registrada no `CLAUDE.md` tem prosa localizável (seção `### N. ... (DA-N)` em `docs/DECISOES_DE_ARQUITETURA.md`, ou `docs/ARCHITECTURE.md` como local alternativo declarado) — e, no sentido inverso, nenhuma seção `(DA-N)` órfã | instantâneo | todo push/PR |
+| `das_index_current` | o índice de DAs de `docs/DECISOES_DE_ARQUITETURA.md` é único (sem tabela colada duas vezes), lista exatamente o mesmo conjunto do registro do `CLAUDE.md`, cada linha aponta para seção que existe, e o número da coluna Seção é o do heading real (não o da seção vizinha) | instantâneo | todo push/PR |
+| `da_registered` | toda DA citada no código de produto (`app/`, `scripts/`, `alembic/`) tem linha na tabela de DAs do `CLAUDE.md`. Nove DAs estavam fora do livro-razão com a prosa só na docstring: três delas (soberania de dados, AMQP 1.0, circuit breaker Redis) são das mais arquiteturais do projeto e invisíveis para quem navega pelas DAs | instantâneo | todo push/PR |
+| `da_table_unique` | nenhuma DA aparece em duas linhas do registro do `CLAUDE.md`; duplicatas eram invisíveis porque `_registered_das` usa `set` | instantâneo | todo push/PR |
+| `preflight_delegates` | o preflight de RAM do harness é `app/evaluation/ram_preflight.py`, não python inline no `scripts/promptfoo_remote.sh` | instantâneo | todo push/PR |
+| `prompt_digest_measured` | o prompt em produção (`app/agent/prompts.py`) tem o mesmo digest do prompt **medido** no `data/eval/prompt_baseline.json` | instantâneo | todo push/PR |
+| `docs_markup_integrity` | fences de código balanceados e links relativos `.md` resolvendo, em `docs/`, `README.md` e `CLAUDE.md` | instantâneo | todo push/PR |
+| `docs_code_references` | referências `app/x.py::símbolo` e `app/x.py:N` citadas na documentação existem no código e na linha; caminhos crus em backticks (`app/…`, `tests/…`, `scripts/…`, `alembic/…`) existem no `CLAUDE.md`/`README.md`; e toda citação de arquivo .md em backticks existe em lugar real (raiz, `docs/`, `data/sample_docs/` ou ao lado do doc). Relatórios históricos de auditoria ficam fora da checagem de caminho cru: eles descrevem o commit auditado, não a árvore atual | instantâneo | todo push/PR |
+| `docs_env_vars` | toda variável de ambiente citada na documentação (`VAR=` em bloco de código ou em backticks, e nome em backticks com prefixo deste projeto) é lida pelo projeto: campo do `Settings`, compose, manifests, workflows ou `.env.example`. Motivo: o `CONNECTORS.md` antigo mandava configurar variáveis inexistentes e o conector ficava em modo demo sem aviso | instantâneo | todo push/PR |
+| `connector_reachable` | todo conector registrado em `app/connectors/__init__.py` é aceito pelo Literal de `interface_type`, pelas choices do `--interface` do CLI, pelo dropdown da UI web (`SYSTEMS` em `frontend/src/components/DiagnoseView.tsx`), é documentado em `app/models/models.py`/`app/admin/models.py`, e tem domínio em `data/skills/*.yaml` lido pelo mesmo parser do runtime (`app/mcp/skill_registry.py`; exceto `apim`, cross-vendor por decisão); com o supervisor declarativo (DA-63), reprova também se `data/skills/` faltar ou se o `Dockerfile` não copiar o diretório para a imagem | instantâneo | todo push/PR |
+| `ui_i18n` | as UIs prontas para i18n (DA-73; superfícies descobertas desde a DA-95: core-ui, shells de produto e admin): catálogos `pt-BR`/`en` com as mesmas chaves e as mesmas variáveis `{{x}}`; chave `core.*` resolve no catálogo do core-ui e produto não define `core`; toda chave usada no React, nos templates e no JS do admin existe; nenhum texto visível fora do catálogo (`app/i18n/inventory.py`; heurístico, `i18n-ignore` com motivo para falso positivo) | instantâneo | todo push/PR |
+| `content_i18n` | o conteúdo do diagnóstico existe em todo idioma suportado (DA-74): catálogos `content.<idioma>.json` com as mesmas chaves e variáveis, toda categoria do rule engine (TTL + `rules.py`) com causa raiz e passos em cada idioma não-default, e todo idioma com instrução de idioma no prompt | instantâneo | todo push/PR |
+| `import_boundaries` | fronteiras de dependência do monorepo (DA-95, `architecture/boundaries.toml`): o core não importa produto; o DF-e usa o core só por `app.sdk`; o `@copilot/core-ui` não importa shell; um shell não importa outro e usa o core-ui só pelo índice (+ `styles.css`). Python por `ast`, TypeScript por regex de import | instantâneo | todo push/PR |
+| `connector_validation_matrix` | todo conector registrado em `app/connectors/__init__.py` tem linha na matriz de validação de `docs/ARCHITECTURE.md` — a única fonte de verdade sobre o que foi testado contra instância real — e nenhuma linha órfã sobrou para conector removido. Apodreceu em silêncio uma vez: `successfactors` ficou meses sem linha, com todos os gates verdes | instantâneo | todo push/PR |
+| `connector_coverage` | o mapa de cobertura (DA-58) ainda corresponde ao código: todo conector registrado tem linha em `data/connector_coverage.yaml` (9ª superfície da invariante 23), nenhuma declaração aponta para produto ou conector inexistente, e `docs/COVERAGE_MAP.md` — que é **gerado**, não editado — está em dia com os dados. Reprova por **incoerência**, nunca por lacuna: exigir cobertura completa seria exigir 76 conectores novos para o CI ficar verde | instantâneo | todo push/PR |
+| `migrations_and_dashboards` (job) | `alembic upgrade head` em banco limpo + as 45 queries dos 4 dashboards | ~1 min | todo push/PR |
+| `llm_eval` (job) | promptfoo contra o baseline; falha em regressão de caso | runner com Ollama+Qdrant | manual (`workflow_dispatch`) |
+
+### WARNs conhecidos (IIC-AUD-023)
+
+O gate completo termina com dois avisos permanentes, ambos informativos:
+
+- `reranker_invariant`: `bge-reranker-base` tem vantagem pontual sobre a
+  produção (0,989 × 0,978), mas não significativa (McNemar p = 1,0). O
+  mmarco continua sendo o modelo de produção (DA-29).
+- `deployed_model_evaluated`: o ConfigMap do Kyma
+  (`deploy/kyma/configmap.yaml`) aponta para `gpt-4o-mini`, enquanto o
+  baseline mediu `qwen3.6:35b-a3b`. O aviso é correto: a qualidade só está
+  medida para o modelo que o baseline registra. Rode o promptfoo com o modelo
+  em uso antes de promover uma release.
+
+O prompt `en` foi medido em 2026-10-20 com `qwen3.6:35b-a3b` (17 casos:
+12 via LLM + 5 via rule engine, 0 falhas) e o digest está em `locales.en` do
+`data/eval/prompt_baseline.json`. Se o aviso `prompt_digest_measured` voltar,
+o texto `en` mudou depois da medição ou o baseline foi regravado sem medir.
+
+## Pipeline de avaliacao
+
+Como uma mudanca de modelo, prompt, reranker ou corpus e medida antes de
+chegar a producao. Os nomes dos jobs sao os de `.github/workflows/tests.yml`
+e `.github/workflows/quality.yml`, e `tests/test_diagramas.py` reprova se o
+diagrama e os workflows divergirem.
+
+```mermaid
+flowchart LR
+    subgraph artefatos["Artefatos versionados"]
+        docs["data/sample_docs/"]
+        ds["data/eval/rag_eval_dataset.json"]
+        rb["data/eval/reranker_benchmark_results.json"]
+        pb["data/eval/prompt_baseline.json"]
+        fb["data/eval/promptfoo_baseline.json<br/>(ainda nao gravado)"]
+        cfg["promptfooconfig*.yaml"]
+        mf["data/index_manifest.json<br/>(gerado pelo ingest)"]
+    end
+
+    subgraph pr["A cada push e PR"]
+        det["<b>deterministic</b><br/>scripts/quality_gate.py<br/>24 gates"]
+        mig["<b>migrations_and_dashboards</b><br/>alembic upgrade + check<br/>45 queries dos dashboards<br/>e2e da DA-52 no Postgres"]
+        tst["<b>test</b><br/>ruff + pytest, cobertura >= 80%"]
+        rq["<b>rag-quality</b><br/>ingest com fastembed no Qdrant<br/>pytest -m rag_quality"]
+        sec["<b>security</b>"]
+        cs["<b>compose-smoke</b>"]
+        n4["<b>neo4j-smoke</b>"]
+        fe["<b>frontend</b>"]
+        db["<b>docker-build</b>"]
+    end
+
+    subgraph agenda["Manual (workflow_dispatch)"]
+        llm["<b>llm_eval</b><br/>promptfoo eval<br/>--compare-promptfoo"]
+    end
+
+    subgraph manual["Manual, na maquina com Ollama"]
+        bm["scripts/benchmark_rerankers.py"]
+        pf["promptfoo + --write-promptfoo-baseline"]
+        pd["--write-prompt-baseline"]
+        ing["python -m app.rag.ingest"]
+    end
+
+    docs --> rq
+    ds --> rq
+    ds --> det
+    docs --> det
+    rb --> det
+    pb --> det
+    cfg --> det
+    fb --> det
+    mf --> det
+    cfg --> llm
+    fb --> llm
+    bm --> rb
+    pf --> fb
+    pd --> pb
+    ing --> mf
+```
+
+**Leitura:**
+
+- **O que e deterministico roda em todo push:** forma do dataset, corpus,
+  invariante do reranker, digest do prompt, configs do promptfoo,
+  documentacao, alcance dos conectores. Sem LLM e sem infraestrutura.
+- **O que mede o LLM roda manual** (`llm_eval`) e compara com o baseline
+  gravado; sem baseline, o gate `llm_baseline` avisa em vez de passar.
+- **O que so roda na sua maquina** (Ollama de 80B, reranker com mais
+  consultas, ingestao do acervo) gera os artefatos que os gates conferem
+  depois. Mudar o prompt sem regravar `prompt_baseline.json` reprova o
+  `prompt_digest_measured` (invariante 20).
+
+## Rodando localmente
+
+```bash
+# todos os gates determinísticos
+uv run python scripts/quality_gate.py
+
+# um gate só
+uv run python scripts/quality_gate.py --only reranker_invariant
+
+# relatório JSON (mesmo artefato que o CI publica)
+uv run python scripts/quality_gate.py --json /tmp/quality-gate.json
+
+# promote aviso a falha
+uv run python scripts/quality_gate.py --strict
+```
+
+Exit code `1` = falha. O relatório vai para `$GITHUB_STEP_SUMMARY` no CI.
+
+```bash
+# job de migrações + dashboards, local, contra um banco descartável
+docker exec <container-postgres> createdb -U iic iic_ci_check
+DATABASE_URL="postgresql://iic:<senha>@localhost:5432/iic_ci_check" uv run alembic upgrade head
+uv run python scripts/validate_dashboards.py --dsn "postgresql://iic:<senha>@localhost:5432/iic_ci_check"
+```
+
+## O gate de LLM, com honestidade
+
+O promptfoo deste repositório roda **modelo local** via `exec:` provider
+(`scripts/promptfoo_provider.py`). Um runner hospedado do GitHub não tem Ollama
+nem o modelo de 51 GB, então o job `llm_eval` só roda **manual**, em um runner
+com Ollama e Qdrant com o corpus ingerido. Ele não roda no agendado: agendar
+em runner hospedado só produzia uma falha diária.
+
+Sem infraestrutura, o job **não fica verde**: ele escreve "NÃO EXECUTADO" no
+summary e falha com mensagem explícita. Um gate que reporta sucesso sem ter
+rodado é pior que não existir.
+
+Para fechar o ciclo quando rodar localmente:
+
+```bash
+npx promptfoo eval -c promptfooconfig.yaml -o resultados.json
+uv run python scripts/quality_gate.py --write-promptfoo-baseline resultados.json  # grava data/eval/promptfoo_baseline.json
+git add data/eval/promptfoo_baseline.json
+```
+
+Depois disso, `--compare-promptfoo resultados.json` falha quando um caso que
+passava no baseline falha agora, avisa quando um caso some do resultado e
+ignora casos novos (que ainda não estão no baseline). O payload malformado é
+recusado com exit 1 — nunca interpretado como "zero regressões".
+
+## O que estes gates **não** cobrem
+
+- **Qualidade do RAG de verdade.** `reranker_invariant` confere que o modelo em
+  produção é o vencedor *medido antes*. Reexecutar o benchmark exige Qdrant com
+  o corpus ingerido e o cross-encoder; isso vive em `scripts/benchmark_rerankers.py`,
+  rodado a mão. Um gate que dependesse disso só rodaria no CI com GPU.
+- **O promptfoo em todo PR.** Por custo e pelo modelo local, não roda em PR;
+  é manual em runner preparado.
+- **Resultado visual dos painéis.** `validate_dashboards.py` prova que a query
+  roda; não prova que o painel mostra o que alguém espera.
+- **Erros que só aparecem com um filtro específico selecionado.** O validador
+  substitui as variáveis de template por "All".
+- **`prompt_digest_measured` não prova que a medição ainda é válida.** O gate
+  compara o digest de produção com o digest gravado. Ele prova que o texto
+  não mudou *desde a última vez que alguém regravou o arquivo* — mas nada
+  impede que alguém rode `--write-prompt-baseline` sem ter executado o
+  promptfoo. O arquivo é uma declaração, não uma prova; o valor está em ele
+  ser versionado e revisável no diff. Uma evolução natural é ligar o digest ao
+  resultado do promptfoo em `data/eval/promptfoo_baseline.json`, para que
+  gravar um digest exija um resultado de medição junto.
+- **O digest não cobre o conteúdo variável do prompt.** Logs, payload, chunk
+  RAG e dados do conector entram a cada incidente. Dois incidentes com o
+  mesmo digest usaram o mesmo *template*, não necessariamente o mesmo
+  contexto.
+- **Se o número da DA no código é a DA certa.** `da_registered` exige que `DA-N` apareça na
+  tabela do `CLAUDE.md`; ele não confere que a linha descreva aquilo que o código faz. Uma DA
+  registrada com a prosa trocada passa. É o mesmo limite de toda documentação versionada:
+  o gate garante a amarração, não a verdade.
+- **A prosa em si.** `implemented_das_documented` verifica que a seção
+  *existe* e que a DA está amarrada a ela. Ele não avalia se o texto explica o
+  problema, a solução e as limitações — um gate de estilo documental reprovar
+  por redação seria o primeiro a ser desligado, e desligar um gate é
+  exatamente o que ele existe para evitar.
+- **Seções marcadas como `(nota informal — sem DA)`.** São decisões reais que
+  nunca receberam numeração e por isso escapam da conferência. O marcador é
+  explícito para que a omissão seja visível no diff, mas nada cobra que
+  permaneçam informais.
+- **A legitimidade do local alternativo.** `implemented_das_documented` aceita
+  `docs/ARCHITECTURE.md` para DA-32/33/34/35 sem perguntar se o texto de lá
+  está atualizado. Ele confere presença, não atualidade.
+- **A prosa fora de `app/x.py::símbolo`.** `docs_code_references` só verifica a
+  forma precisa de citar código, que é a que a documentação de debug usa para
+  mandar abrir um breakpoint. Identificadores em prosa solta
+  (`ANTHROPIC_API_KEY`, `RFC_SYSTEM_INFO`, `${QDRANT_HOST_PORT:-6333}`) são
+  deliberadamente ignorados: o primeiro não existe, o segundo é Function
+  Module ABAP, o terceiro é variável de shell. Um gate que acuse esses três é
+  um gate que alguém desliga.
+- **Se a documentação está *certa*, apenas está desatualizada.**
+  `docs_code_references` prova que `report_node` é definido em
+  `app/agent/nodes.py`; não prova que o tutorial manda abrir o arquivo
+  certo, nem que o texto em volta do link está correto. Ele pega referência
+  quebrada, não equivalente errada.
+- **Fences balanceados não significam markdown válido.** `docs_markup_integrity`
+  conta abre/fecha de bloco de código. Tabelas malformadas, listas aninhadas
+  erradas e âncoras `#link` que não existem passam.
+- **Identificadores citados dentro de bloco de código.** O gate procura
+  `app/…py::símbolo` em qualquer lugar do markdown, inclusive dentro de
+  blocos ``` ; um exemplo ilustrativo num fence pode ser acusado.
+- **Se a matriz de capacidade do produto SAP está certa.** `connector_coverage`
+  (DA-58) confere que o mapa é **coerente com o código** — conector registrado
+  tem declaração, produto declarado existe, doc gerado em dia. Não confere
+  nada sobre a matriz de capacidade: ela foi transcrita de uma fonte de
+  referência **sem citação publicada e sem release SAP** (`data/sap_products.yaml`),
+  e a tradução dos glifos (`✓✓`→`native`, `✓/cenários`→`conditional`) é
+  interpretação nossa. O gate garante que o mapa não envelheceu; ele não sabe
+  se a afirmação de fundo é verdadeira. O mesmo limite de
+  `connector_validation_matrix`: exige que a matriz *exista* e cubra os
+  conectores, não que a afirmação dela seja verdadeira.
+- **Se o conector funciona contra um tenant real.** `connector_reachable`,
+  `connector_validation_matrix` e `connector_coverage` conferem presença e
+  coerência: que todo
+  conector registrado tem linha na matriz de
+  [docs/ARCHITECTURE.md](https://github.com/marcos-slima/integration-incident-copilot/blob/bf552a6b98b693ab8927da0b176eb4b23633308d/docs/ARCHITECTURE.md#conectores---mock-vs-real-hoje)
+  e que nenhuma linha órfã sobrou. Nenhum dos dois confere a **verdade** da
+  afirmação "validado". `connector_validation_matrix` é o gate que impede a
+  apodrecer, não o que atesta: ele exige que a matriz * exista* e cubra todo
+  conector registrado, porque `SuccessFactorsConnector` (DA-34) ficou meses
+  sem linha nenhuma com todos os gates verdes. Já a matriz é uma afirmação
+  versionada, revisável no diff — o mesmo limite de `prompt_digest_measured`
+  (ver acima). Atestar a validação exigiria o artefato da execução real
+  (log da chamada contra o tenant, data, versão do produto), que hoje não
+  existe versionado para nenhum dos dez conectores, nem para os quatro
+  validados.
+
+## Lições do processo
+
+1. **O primeiro gate erra a premissa.** A primeira versão rejeitava
+   `expected_sources: []` — mas os dois casos `out_of_scope` têm essa lista
+   vazia de propósito ("fora do escopo, não deve recuperar nada"). O gate
+   estava certo sobre a forma e errado sobre o significado, e teria sido
+   desligado na primeira semana. Hoje `out_of_scope` *exige* lista vazia, e
+   lista preenchida nesse caso é falha: o caso se contradiz.
+2. **Um gate que aceita "nenhum resultado" é um falso verde.**
+   `normalize_promptfoo_results` recusa payload vazio ou desconhecido.
+3. **O primeiro `candidate_das_fresh` acusou a DA-32** — listada como
+   "candidata, aguardam Kyma" no `CLAUDE.md` embora entregue em `67b78e8`. Era
+   um bug de documentação real que nenhuma suite pegava.
+4. **O próprio gate se quebrou com a própria documentação.** Depois que a
+   linha da DA-51 na tabela de DAs passou a citar "das DAs candidatas" numa
+   célula, a busca pela *primeira ocorrência* da frase casava ali, recortava
+   um bloco sem nenhum `DA-N` e devolvia lista vazia: o gate virava aviso e a
+   lista de candidatas deixava de ser verificada sem ninguém perceber. O
+   regex passou a ancorar no título, no início da linha, com teste de
+   regressão que reproduz o caso real.
+5. **Teste verde não prova que o código roda.** O preflight de RAM era um
+   heredoc de 92 linhas dentro de `scripts/promptfoo_remote.sh`, sem
+   cobertura: a aritmética que decide se a suite carrega 48 G só podia ser
+   conferida com a RAM à mão. O cálculo foi movido para
+   `app/evaluation/ram_preflight.py` (núcleo puro, 15 testes), e
+   `preflight_delegates` vigia que o script continua delegando — sem ele, a
+   matemática poderia voltar para dentro do shell com a suite ainda verde,
+   testando um módulo que ninguém chama. E o inverso também vale: **o job que roda não
+   prova que a coisa medida está medida.** O `rag-quality` rodava com
+   `EMBEDDING_BACKEND=fastembed` (DA-38) porque o GitHub Actions não tem
+   Ollama, mas a *ingestão* ignorava essa variável e indexava com
+   `OllamaEmbeddings` fixo. O retriever consultava com bge-small (384 dims)
+   numa collection criada com nomic-embed-text (768), e a busca morria com
+   `Wrong input: Vector dimension error: expected dim: 768, got 384`. O job
+   era verde por never ter recuperado nada — a falha era de nao
+   mensurável, e só apareceu quando o gate passou a ser rodado de verdade.
+   Duas correções: a ingestão passou a usar o mesmo resolvedor de embedder
+   da consulta (`retriever._get_embeddings`), e `_FastEmbedWrapper` ganhou
+   `embed_documents`, que só a consulta usava — sem ele a ingestão falhava
+   com `'_FastEmbedWrapper' object has no attribute 'embed_documents'`.
+6. **O limiar precisa discriminar os grupos, não existir.** O
+   `oos_rejection_rate` media `hits[0]["score"] < 0.7`, e `score` é cosseno
+   denso puro. Medido no corpus de avaliação: in-scope vai de 0.719 a 0.871,
+   out-of-scope dá 0.753 e 0.779 — **os grupos se sobrepõem**, e o único
+   limiar que separaria (0.780) rejeitaria junto 4 dos 13 in-scope. O gate
+   media similaridade de cosseno e chamava isso de rejeição. O sinal que
+   discrimina é `rerank_score_calibrated` (DA-42): in-scope ≥ 0.975,
+   out-of-scope ≤ 0.050. O gate passou a medir o mesmo número que decide a
+   admissão na pipeline, no ponto neutro da sigmoid (σ(0) = 0.50), que fica
+   a 0.45 dos dois lados. E quando o hit vem sem esse campo — rerank não
+   rodou — o gate **erra** em vez de tratar a ausência como 0.0, que seria
+   um falso verde pela regra 2. Verificado por perturbação: com a sigmoid
+   forçada a 0.99 o gate reprova, e com o `rerank()` neutralizado ele levanta
+   `RuntimeError`.
+   **Atualização (validação 2026-10-07):** até o RAG-01, a *pipeline* não
+   seguia esta lição: a admissão era `max(cosseno, sigmoid)`, e um caso fora
+   de escopo com cosseno 0.753 e sigmoid 0.0067 era admitido enquanto o
+   gate reportava rejeição. Hoje `app/rag/retriever.py::_evidence_admission_score`
+   usa só o sigmoid quando há reranker, e gate e pipeline medem o mesmo
+   número. O dataset passou de 2 para **10** casos out-of-scope (M-19); 9 de
+   10 são rejeitados.
+7. **Gate que só checa um sentido passa pelo buraco.** `candidate_das_fresh`
+   pergunta "esta DA marcada como candidata já foi entregue?". Nunca fez a
+   pergunta inversa — "a DA entregue tem a prosa localizável?" — e por isso
+   15 seções de decisão do `README.md` sobreviveram sem rótulo `(DA-N)`,
+   invisíveis para qualquer `grep "DA-15"`, e a DA-30 ficou sem seção
+   própria em lugar nenhum. A prosa existia; a amarração não. Um gate
+   unidirecional não é metade da verificação, é uma verificação que dá
+   sensação de cobertura.
+8. **Contar errado é pior que não contar.** Auditando a documentação da
+   DA-52, o texto dizia "cinco estados" e o invariante 15 do `CLAUDE.md`
+   repetia o número, enquanto o enum `ObservationStatus` tinha quatro e a
+   seção de limitações do próprio README afirmava que os dois estados extras
+   nem existiam. Três artefatos, três afirmações, uma falsa. Por isso
+   `TestEstadosDocumentados` compara a tabela e a contagem do README com o
+   enum em vez de fixar um literal — o número é consequência, não constante.

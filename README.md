@@ -2,8 +2,8 @@
 
 **An AI agent that diagnoses enterprise integration incidents — SAP and beyond — and shows the evidence behind every answer.**
 
-[![tests](https://github.com/marcos-slima/integration-incident-copilot/actions/workflows/tests.yml/badge.svg)](https://github.com/marcos-slima/integration-incident-copilot/actions/workflows/tests.yml)
-[![quality gates](https://github.com/marcos-slima/integration-incident-copilot/actions/workflows/quality.yml/badge.svg)](https://github.com/marcos-slima/integration-incident-copilot/actions/workflows/quality.yml)
+[![tests](https://github.com/marcos-slima/integration-incident-copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/marcos-slima/integration-incident-copilot/actions/workflows/ci.yml)
+[![quality gates](https://github.com/marcos-slima/integration-incident-copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/marcos-slima/integration-incident-copilot/actions/workflows/ci.yml)
 [![python](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml)
 [![license](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -21,30 +21,14 @@ sources it relied on**, each tagged with how far it can be trusted.
 
 <p align="center"><sub>Real run of the quickstart below: the rule engine answers a known error with no LLM call. The UI is in Portuguese.</sub></p>
 
-## IIC, FISC and the shared core
+## IIC, FISC e Copilot Platform
 
-**Looking for fiscal incident support? Visit [FISC — Fiscal Incident Support Copilot](https://github.com/marcos-slima/fiscal-incident-support-copilot).**
-
-| Component | Scope | Canonical location |
-|---|---|---|
-| **IIC** | Enterprise integration incident diagnosis across SAP and other vendors | This repository |
-| **FISC** | NF-e model 55, layout 4.00 investigation for SAP AMS N2/N3 | [FISC code, documentation and CI](https://github.com/marcos-slima/fiscal-incident-support-copilot) |
-| **Shared libraries** | Python SDK/infrastructure and neutral UI components | [Core 1.4.0](https://github.com/marcos-slima/integration-incident-copilot/releases/tag/core/v1.4.0) and [core-ui 0.1.0](https://github.com/marcos-slima/integration-incident-copilot/releases/tag/core-ui/v0.1.0) |
-
-FISC now owns its backend, frontend, tests and delivery pipeline. It consumes
-versioned shared libraries maintained here; no core source is copied into the
-product. See the [extraction and preserved history](https://github.com/marcos-slima/fiscal-incident-support-copilot/blob/main/docs/EXTRACAO_CODIGO.md).
-
-The packages/dfe tree in IIC preparation branches is a historical compatibility
-snapshot while their workspace and CI dependencies are retired. New fiscal
-issues and code PRs belong in FISC. Shared-core changes remain in IIC and are
-adopted by explicit dependency updates. This cutover does not change existing
-IIC installations or merge its preparation PRs.
-
-**FISC maturity:** read-only fiscal analysis, synthetic evaluation and human
-review; no fiscal certification or operational SAP/SEFAZ validation is implied.
-Use [FISC contributions](https://github.com/marcos-slima/fiscal-incident-support-copilot/blob/main/CONTRIBUTING.md) and its
-[documentation map](https://github.com/marcos-slima/fiscal-incident-support-copilot/blob/main/docs/ORGANIZACAO_DOCUMENTACAO.md).
+O IIC mantém o produto de diagnóstico de integrações empresariais.
+[FISC](https://github.com/marcos-slima/fiscal-incident-support-copilot) mantém seu domínio fiscal.
+[Copilot Platform](https://github.com/marcos-slima/copilot-platform) mantém core Python,
+core-ui e operações, com versões independentes. O IIC consome artefatos por versão e hash.
+As releases antigas permanecem disponíveis para instalações anteriores.
+Consulte [a adoção da plataforma](docs/PLATFORM_CONSUMPTION.md).
 
 ## Why it exists
 
@@ -127,7 +111,7 @@ docker compose up -d qdrant
 uv run python -m app.rag.ingest --target incidents
 
 # API
-uv run uvicorn app.main:app
+uv run uvicorn iic_copilot.main:app
 ```
 
 In a second terminal, diagnose an IDoc stuck in status 51 using the RFC

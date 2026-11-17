@@ -2,7 +2,7 @@ name: IIC CI
 'on':
   push:
     branches:
-    - main
+    - master
   pull_request: null
   workflow_dispatch: null
 permissions:

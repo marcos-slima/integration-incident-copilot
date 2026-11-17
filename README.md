@@ -15,7 +15,7 @@ Python core, core-ui and operational bundle, each independently versioned.
 |---|---|---|
 | copilot-core | 1.4.1 | shared-libraries.json and uv.lock |
 | @copilot/core-ui | 0.1.1 | frontend/package-lock.json |
-| copilot-operations | 1.0.0 | shared-libraries.json |
+| copilot-operations | 1.0.1 | shared-libraries.json |
 
 The product manifest declares 1.4.0; this is not a new product release.
 Existing tags and releases remain immutable. See [release ownership](docs/VERSIONAMENTO.md).

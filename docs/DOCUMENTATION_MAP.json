@@ -1,0 +1,573 @@
+{
+  "architecture": "independent-products-shared-platform",
+  "date": "2026-11-17",
+  "source_commit": "bf552a6b98b693ab8927da0b176eb4b23633308d",
+  "statuses": {
+    "current": "maintained operational/product guide",
+    "reference": "design/decision reference; dated sections retain original scope",
+    "historical": "frozen evidence; not current setup",
+    "redirect": "compatibility URL to current owner or guide"
+  },
+  "documents": [
+    {
+      "path": "AGENTS.md",
+      "status": "current",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "CLAUDE.md",
+      "status": "reference",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "status": "current",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "README.md",
+      "status": "current",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "README.pt-BR.md",
+      "status": "current",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "deploy/kyma/README.md",
+      "status": "current",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "deploy/local/README.md",
+      "status": "current",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/ARCHITECTURE.md",
+      "status": "current",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/AVALIACAO_ARQUITETURAL_PRODUTO_AI.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/AVALIACAO_MODELOS_LOCAIS.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/CASOS_DE_USO.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/CONNECTORS.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/COVERAGE_MAP.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/CUSTOMIZACAO.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/DECISOES_DE_ARQUITETURA.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/DEPLOY.md",
+      "status": "current",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/DEPLOYMENT.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/DIVIDAS_TECNICAS.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/DOCUMENTATION_POLICY.md",
+      "status": "current",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/EVIDENCIA_K3D_2026-10-18.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/GETTING_STARTED.md",
+      "status": "current",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/GLOSSARY.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/GOVERNANCA.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/GRM_AUDIT.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/GRM_CHECKLIST.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/GRM_MAPPING.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/MANUAL.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/PLATFORM_CONSUMPTION.md",
+      "status": "current",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/QUALITY_GATES.md",
+      "status": "current",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/RATE_LIMITING.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/README.md",
+      "status": "current",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/RERANKER_BENCHMARK.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/ROADMAP.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/ROADMAP_SEMANTIC_AI.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/ROTEIRO_DE_AVALIACAO.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/SECURITY.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/TCO_SAP_AI_CORE_VS_SELF_HOSTED.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/TRACEABILITY.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/TROUBLESHOOTING.md",
+      "status": "current",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/TUTORIAL_ACESSIBILIDADE_MULTIVENDOR.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/TUTORIAL_ARQUITETURA_DEBUG.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/TUTORIAL_FASE9_MULTIVENDOR_GRAPHRAG_A2A.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/TUTORIAL_K3D_KUBERNETES_LOCAL.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/USER_GUIDE.md",
+      "status": "current",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/VERSIONAMENTO.md",
+      "status": "current",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/dossier/05-solution-architecture.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/en/ARCHITECTURE.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/en/ARCHITECTURE_DECISIONS.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/en/CONNECTORS.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/en/DEPLOY.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/en/GETTING_STARTED.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/en/GLOSSARY.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/en/QUALITY_GATES.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/en/README.md",
+      "status": "current",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/en/TROUBLESHOOTING.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/en/USER_GUIDE.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/en/USE_CASES.md",
+      "status": "redirect",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/README.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/README.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/README.pt-BR.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/deploy/kyma/README.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/deploy/local/README.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/ARCHITECTURE.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/AVALIACAO_ARQUITETURAL_PRODUTO_AI.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/AVALIACAO_MODELOS_LOCAIS.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/CASOS_DE_USO.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/CONNECTORS.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/COVERAGE_MAP.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/CUSTOMIZACAO.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/DECISOES_DE_ARQUITETURA.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/DEPLOY.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/DEPLOYMENT.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/DIVIDAS_TECNICAS.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/EVIDENCIA_K3D_2026-10-18.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/GETTING_STARTED.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/GLOSSARY.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/GOVERNANCA.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/GRM_AUDIT.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/GRM_CHECKLIST.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/GRM_MAPPING.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/MANUAL.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/QUALITY_GATES.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/RATE_LIMITING.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/README.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/RERANKER_BENCHMARK.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/ROADMAP.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/ROADMAP_SEMANTIC_AI.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/ROTEIRO_DE_AVALIACAO.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/SECURITY.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/TCO_SAP_AI_CORE_VS_SELF_HOSTED.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/TRACEABILITY.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/TROUBLESHOOTING.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/TUTORIAL_ACESSIBILIDADE_MULTIVENDOR.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/TUTORIAL_ARQUITETURA_DEBUG.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/TUTORIAL_FASE9_MULTIVENDOR_GRAPHRAG_A2A.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/TUTORIAL_K3D_KUBERNETES_LOCAL.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/USER_GUIDE.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/dossier/05-solution-architecture.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/en/ARCHITECTURE.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/en/ARCHITECTURE_DECISIONS.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/en/CONNECTORS.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/en/DEPLOY.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/en/GETTING_STARTED.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/en/GLOSSARY.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/en/QUALITY_GATES.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/en/README.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/en/TROUBLESHOOTING.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/en/USER_GUIDE.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/docs/en/USE_CASES.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "docs/history/monorepo/frontend/README.md",
+      "status": "historical",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "frontend/README.md",
+      "status": "current",
+      "owner": "integration-incident-copilot"
+    },
+    {
+      "path": "packages/core-ui/README.md",
+      "status": "current",
+      "owner": "integration-incident-copilot"
+    }
+  ]
+}

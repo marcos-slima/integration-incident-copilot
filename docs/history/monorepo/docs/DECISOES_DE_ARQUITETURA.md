@@ -1,0 +1,3627 @@
+# Registro histórico — DECISOES_DE_ARQUITETURA.md
+
+> Snapshot anterior à organização documental de 2026-11-17. Não usar como
+> instrução de instalação atual. Origem: [arquivo e commit](https://github.com/marcos-slima/integration-incident-copilot/blob/bf552a6b98b693ab8927da0b176eb4b23633308d/docs/DECISOES_DE_ARQUITETURA.md).
+> Links relativos foram fixados no snapshot de origem; comandos antigos são evidência histórica.
+
+# Decisões de Arquitetura
+
+Registro das decisões de arquitetura (DAs) do Integration Incident Copilot:
+o problema real encontrado, a solução adotada, como foi validada e as
+limitações aceitas. É o "porquê" do projeto; o "o quê" e o "onde" estão em
+[`ARCHITECTURE.md`](https://github.com/marcos-slima/integration-incident-copilot/blob/bf552a6b98b693ab8927da0b176eb4b23633308d/docs/ARCHITECTURE.md).
+
+> Movido do `README.md` em 2026-10-07: o README passou a ser a página de
+> apresentação do repositório. O conteúdo das seções não mudou. Os gates
+> `implemented_das_documented` e `das_index_current` (DA-51) agora leem este
+> arquivo. As DA-32 a DA-35 têm a prosa em `ARCHITECTURE.md`, local
+> alternativo declarado.
+>
+> Seções numeradas são registro do momento da decisão: números de testes e
+> nomes citados ali são os da época. O estado atual está no código, em
+> `ARCHITECTURE.md` e nos testes.
+
+## Índice
+
+Registro dos problemas reais encontrados durante o desenvolvimento e
+como foram resolvidos — processo de engenharia, não só o resultado
+final.
+
+> `CLAUDE.md` sem seção própria reprova o build. `—` = registrada e ainda sem
+> prosa. `nota informal` = decisão real que nunca recebeu DA. DAs agrupadas
+> numa seção (ex.: DA-15/16/17, DA-46/47/48) compartilham o número dela.
+
+| DA | Seção | O que é |
+|---|---|---|
+| 1 | [1](#1-alucinação-por-mistura-de-contexto-da-1) | RAG top-1 (evita mistura de contexto) |
+| 2 | [2](#2-não-determinismo-com-temperature0-da-2) | `seed=42` obrigatório para determinismo Ollama |
+| 3 | [3](#3-guardrail-determinístico-para-dados-de-fallback-da-3) | Guardrails em código, não em prompt |
+| 4 | [4](#4-comparação-formal-de-modelos-qwen330b-a3b-vs-qwen25-coder32b-da-4) | Comparações de modelo via promptfoo: `qwen2.5-coder:32b` ganhou do |
+| 8 | [8](#8-segunda-comparação-de-modelo-qwen3635b-a3b-avaliado-e-rejeitado-da-8) | Comparações de modelo via promptfoo: `qwen2.5-coder:32b` ganhou do |
+| 12 | [47](#47-a-troca-de-modelo-que-não-tinha-número-da-12) | Troca final do modelo canônico para `qwen3-coder-next:latest` (MoE 80B/3B, 262K ctx) — empate técnico 10/10, decidida por roadmap |
+| 14 | [14](#14-camada-a2a-agent2agent-implementada-com-a-ressalva-de-ga-preservada-da-14) | Camada A2A (Agent2Agent) JSON-RPC 2.0 |
+| 15 | [15](#15-evidencetrust-layer-entre-ragconectores-e-o-llm-da-151617) | Evidence/Trust Layer determinística |
+| 16 | [15](#15-evidencetrust-layer-entre-ragconectores-e-o-llm-da-151617) | `is_grounded` via evidence_strength (nunca autoavaliação LLM) |
+| 17 | [15](#15-evidencetrust-layer-entre-ragconectores-e-o-llm-da-151617) | Fallback para reference_library quando evidência fraca |
+| 18 | [16](#16-autenticação-de-diagnose-e-a2a-sempre-exigida-com-geração-automática-de-chave-da-18) | Auth X-API-Key obrigatória em `/diagnose` e `/a2a` |
+| 19 | [17](#17-servidor-mcp-model-context-protocol---capability-catalog-read-first-da-19) | Servidor MCP (capability catalog) |
+| 20 | [18](#18-hybrid-inference---fallback-de-resiliência-entre-providers-de-llm-da-20) | Hybrid Inference: Ollama local → cloud fallback |
+| 21 | [19](#19-graphrag-como-camada-de-conhecimento-operacional---hardening-da-21) | GraphRAG hardening: `(DriverError, TransientError)` vs `Neo4jError |
+| 22 | [20](#20-multi-agent---supervisor--especialistas-por-domínio-da-22) | Multi-agent: supervisor → sap/saas/generic (sem LLM) |
+| 23 | [21](#21-event-mesh---ingestão-orientada-a-evento-da-23) | Event Mesh via webhook CloudEvents → `run_diagnosis()` |
+| 24 | [22](#22-deploy-em-produção---sap-btp-kyma-runtime-da-24) | Deploy SAP BTP Kyma Runtime |
+| 25 | [24](#24-evidencetrust-layer--correção-do-threshold-do-rag-antes-do-reranker-da-25) | Evidence/Trust Layer v2 + threshold RAG pós-reranker |
+| 26 | [25](#25-ai-gateway-v1---policy-de-roteamento-circuit-breaker-e-budget-da-26) | AI Gateway v1: policy + circuit breaker + budget |
+| 27 | [26](#26-capability-registry--agent-execution-policy-da-27) | Capability Registry FAIL-CLOSED |
+| 28 | [27](#27-graphrag---modelo-verified_as-da-28) | GraphRAG modelo `VERIFIED_AS` + endpoint `/incidents/{id}/verify` |
+| 29 | [28](#28-benchmark-científico-de-rerankers-da-29) | Benchmark rerankers → mmarco-mMiniLMv2 vence (+7pp Hit@1) |
+| 30 | [29](#29-redaction-de-pii-antes-do-prompt-e-do-langfuse-com-truncamento-inteligente-e-backoff-da-30) | PII redaction ampliado + smart log truncation + backoff exponencia |
+| 32 | ARCHITECTURE | Consumidor AMQP 1.0 assíncrono para Solace Cloud / SAP Event Mesh (protocolo corrigido pela DA-40) |
+| 33 | ARCHITECTURE | Rule Engine determinístico (pré-filtro LLM; 22 regras em `KNOWN_ERROR_RULES`) |
+| 34 | ARCHITECTURE | Conector SuccessFactors EC (OAuth2 Client Credentials + OData v2 PerPerson) |
+| 35 | ARCHITECTURE | `/health` como readiness probe real (GET nos serviços) + expansão do catálogo Rule Engine |
+| 38 | [43](#43-backend-de-embedding-trocável-para-o-ci-não-depender-de-ollama-da-38) | `EMBEDDING_BACKEND=fastembed` para o job de avaliação RAG no CI, que não tem Ollama |
+| 39 | [44](#44-soberania-de-dados-no-ai-gateway-o-modo-é-política-não-preferência-da-39) | Política de soberania de dados no AI Gateway (`strict` / `cloud_with_dlp`) |
+| 40 | [45](#45-aiormq-não-é-amqp-10-a-falha-era-silenciosa-da-40) | Migração aiormq (AMQP 0.9.1) → python-qpid-proton (AMQP 1.0), com wrapper asyncio |
+| 41 | [46](#46-circuit-breaker-com-backend-redis-compartilhado-da-41) | Circuit breaker com backend Redis compartilhado (fallback em memória sem infra obrigatória) |
+| 42 | [42](#42-escala-calibrada-por-sigmoid-para-o-rerank-score-da-42) | Escala calibrada por sigmoid para o rerank score (nenhum consumer usa o score cru) |
+| 43 | [30](#30-governança-de-soberania-de-dados-por-origin-real-da-43) | Soberania de dados por origin real, fail-closed |
+| 44 | [31](#31-sinal-determinístico-de-escalonamento-em-três-tiers-da-44) | Sinal determinístico de escalonamento em 3 tiers (prep. tier 3) |
+| 45 | [32](#32-universalidade-de-provider-rota-auditada-capacidades-por-origin-identidade-de-embedding-da-45) | Universalidade de provider: rota auditada + capacidades por origin |
+| 46 | [33](#33-registro-gerenciado-de-modelos-credenciais-cifradas-e-metering-real-da-464748) | Registro gerenciado de modelos/credenciais por ORIGEM (LLM_REGISTR |
+| 47 | [33](#33-registro-gerenciado-de-modelos-credenciais-cifradas-e-metering-real-da-464748) | Credenciais cifradas em repouso com Fernet (master key no .env, nu |
+| 48 | [33](#33-registro-gerenciado-de-modelos-credenciais-cifradas-e-metering-real-da-464748) | Metering de tokens REAIS (usage_metadata, não estimativa) persisti |
+| 49 | [34](#34-catálogo-de-sistemas-integrados-gerenciados-pela-superfície-admin-da-49) | Catálogo de sistemas integrados (`integration_systems`) na superfí |
+| 50 | [35](#35-correlação-de-incidentes-com-o-catálogo-de-sistemas--verificação-persistida-da-50) | Correlação `incidents` ↔ catálogo por `system_key` (exato, vindo d |
+| 51 | [36](#36-quality-gates-transformar-alegações-de-qualidade-em-invariantes-verificadas-da-51) | Quality gates: invariantes de avaliação verificadas por máquina (d |
+| 52 | [37](#37-detecção-de-drift-de-contrato-sap-baseline-severidade-e-incidente-da-52) | Detecção de drift de contrato SAP: probe `$metadata` (interface se |
+| 53 | [38](#38-prompt-de-diagnóstico-como-artefato-versionado-com-gate-contra-o-prompt-medido-da-53) | Prompt de diagnóstico como artefato versionado: `PromptSpec` (vers |
+| 54 | [39](#39-login-de-sessão-para-a-ui-web--cada-credencial-na-camada-dela-da-54) | Login de sessão para a UI web (`/auth/login` + cookie HttpOnly; X-API-Key segue para máquinas) |
+| 55 | [40](#40-manutenção-de-usuários-pelo-admin-com-ativação-por-e-mail-e-telefone-da-55) | Manutenção de usuários pelo admin com ativação em duas etapas: token por e-mail → código por telefone (out-of-band até haver SMTP/SMS) |
+| 56 | [41](#41-conector-sap-popi-o-middleware-on-premise-que-não-é-rest-first-da-56) | Conector SAP PO/PI on-premise: Basic Auth nativo contra o Message Monitor, com OAuth2 opcional para quando há API Management na frente |
+| 60 | [51](#51-criptografia-em-repouso-de-evidence_json-com-fernet-da-60) | Criptografia em repouso de `evidence_json` com Fernet (`LLM_CREDENTIALS_MASTER_KEY`) + migration idempotente `009_encrypt_evidence_json.py` |
+| 61 | [52](#52-taxonomia-de-erros-sap-com-ttlrdflib-skos-para-rule-engine-da-61) | Taxonomia de erros SAP com TTL/RDFLib (SKOS) para Rule Engine: carregamento dinâmico vs hardcoded, zero breaking changes (DA-61 Fase 1) |
+| 62 | [53](#53-neo4j-loader-para-skos-taxonomy-import-da-62) | Neo4j loader para SKOS taxonomy import (idempotent upsert, Cypher queries) |
+| 57 | [48](#48-fontes-de-busca-web-como-configuração-e-approved-que-não-era-no-op-da-57) | Fontes de busca web como configuração (`web_search_sources`): `WEB_SEARCH_POLICY=approved` deixa de ser no-op |
+| 58 | [49](#49-mapa-de-cobertura-dedicated-generic-e-absent-da-58) | Mapa de cobertura produto SAP × mecanismo, calculado de dados versionados: 3 níveis (`dedicated` / `generic` / `absent`) em vez de um booleano |
+| 59 | [50](#50-conectores-multi-vendor-fluxo-completo-padrão-comum-e-documentação-da-59) | Conectores multi-vendor: fluxo completo, padrão comum, checklist de 8 superfícies ao adicionar conector, documento consolidado `/docs/CONNECTORS.md` |
+| 66 | [56](#56-policy-engine-puro-para-roteamento-llm-da-66) | Policy Engine puro para roteamento LLM: duas fases (elegibilidade rígida → scoring de preferências), decisão auditável |
+| 67 | [57](#57-token-budgeting-e-orçamento-por-tarefa-da-67) | Token budgeting e orçamento por tarefa: tokenizer real (tiktoken), preços reais do registry, estimado × real |
+| 68 | [58](#58-matriz-de-falhas-e-failover-tipado-da-68) | Matriz de falhas e failover tipado: taxonomia fechada, mapear exceções → classe, definir retry/backoff/circuit/failover/escala |
+| 69 | [59](#59-checkpointing-e-execução-resumível-da-69) | Checkpointing e execução resumível: `checkpointer=PostgresSaver`, `thread_id` = id do incidente, retomada a partir do último nó concluído |
+| 70 | [60](#60-métricas-e-finops-da-70) | Métricas e FinOps: Prometheus (`llm_requests_total`, `llm_tokens_total`, `llm_cost_usd_total`, `llm_budget_deviation_ratio`, `diagnosis_duration_seconds`) |
+| 63 | [54](#54-skills-declarativas--yaml-como-fonte-de-verdade-para-capability-e-roteamento-da-63) | Skills declarativas — YAML como fonte de verdade para capability e roteamento (DA-63) |
+| 65 | [55](#55-degradação-graciosa-do-rag-quando-qdrant-cai-da-65) | Degradação graciosa do RAG: Qdrant cai → `_retrieve_hybrid` e `_retrieve_dense_only` retornam `[]` → rule engine ainda responde erros conhecidos; fluxo completo `/diagnose → run_diagnosis` pendente de teste de integração |
+| 71 | [66](#66-sanitização-do-resultado-de-busca-web-devolvido-ao-llm-da-71) | Resultado de busca web sanitizado e delimitado antes de voltar ao LLM (tool do ReAct e `web_search_node`) |
+| 74 | [69](#69-conteúdo-do-diagnóstico-no-idioma-pedido-da-74) | Conteúdo do diagnóstico (rule engine, avisos, relatório, prompt, ativação) no idioma pedido; pt-BR intacto e medido, `en` com digest próprio; gate `content_i18n` |
+| 73 | [68](#68-interfaces-no-idioma-do-navegador-da-73) | UI web e Admin UI no idioma do navegador: catálogos pt-BR/en, cookie compartilhado, `Intl`, erros por `code`, gate `ui_i18n` |
+| 72 | [67](#67-roteamento-por-registro-de-modelos-da-72) | Roteamento por registro de modelos: cada modelo habilitado é candidato do Policy Engine, com parâmetros por modelo, score custo × latência e failover pela lista |
+| 75 | [70](#70-aprovação-humana-no-grafo-human-in-the-loop-da-75) | Human-in-the-Loop: interrupt no node de diagnóstico quando `escalation.should_escalate == True`, endpoint `/incidents/{id}/review` para retomada com `hitl_response` |
+| 76 | [71](#71-aviso-de-ia-no-relatório-e-api-da-76) | Aviso de IA — texto embutido no template do relatório, chave `ai_warning` no catálogo (pt-BR + en), campo `DiagnosisResponse.ai_warning` |
+| 82 | [72](#72-rollback-de-deployment-da-82) | Rollback de deployment — tabelas `snapshot_table`/`rollback_log` (schema apenas); endpoint removido até existir mecanismo real de rollback |
+| 83 | [74](#74-explicabilidade-xai-da-83) | Explicabilidade XAI — campo `explanation` em `DiagnosisResponse`, função `_build_xai_explanation` |
+| 86 | [77](#77-ui-versionamento-rag-da-86) | UI versionamento RAG: tabela `knowledge_document_versions`, endpoints `/admin/knowledge/documents/{id}/versions`, `/rollback/{version}`, `/history/{id}` |
+| 87 | [79](#79-dashboard-por-domínio-da-87) | Dashboard de Performance por Domínio: endpoint `/admin/metrics/domains` com janela `days` (default 30), métricas count/hit@1/latência/custo por domain (sap/saas/generic) |
+| 88 | [78](#78-testes-de-escalonamento-da-88) | Testes de escalonamento: script `app/scripts/load_test.py` com métricas p50/p95/p99 e TPS, config `tests/load_test_config.py`, 3 testes em `tests/test_load_testing.py` |
+| 89 | [80](#80-relatórios-compliance-da-89) | Relatórios automatizados de compliance export: endpoint `/admin/reports/compliance/export?format=pdf|xlsx`, relatório com resumo/quality/auditoria |
+| 90 | [81](#81-documentação-grc-da-90) | Documentação GRC (ISO 27001, SOC2): mapeamento, guia de auditoria, checklist |
+| 91 | [82](#82-testes-rbac-completos-da-91) | Testes RBAC completos para todos os endpoints |
+| 92 | [83](#83-modelo-canônico-qwen3635b-a3b-da-92) | Modelo canônico `qwen3.6:35b-a3b` desde 2026-10-13, substituindo `qwen3-coder-next:latest`; re-baseline do promptfoo pendente (DA-51) |
+| 93 | [85](#85-fatos--hipóteses-e-domínio-fiscal-da-93) | Fatos × hipóteses (`findings`, `cause_status`, `rule_reference`); fases fiscais movidas para o DF-e Copilot |
+| 94 | [86](#86-separação-de-produto-core-compartilhado-e-df-e-copilot-da-94) | Separação de produto: core compartilhado + DF-e Copilot (monorepo, plugin de domínio) |
+| 95 | [87](#87-fronteiras-de-produto-app-sdk-core-ui-e-shells-da-95) | Fronteiras de produto: `app.sdk`, `@copilot/core-ui`, shells de UI e gate `import_boundaries` |
+| 64 | [84](#84-ontologia-quebrada-correção-de-bug-em-retrieve_node-da-64) | Ontologia quebrada (correção de bug em `retrieve_node`) |
+
+> **Ordenação da prosa:** as seções §42–§47 (DA-42, DA-38, DA-39, DA-40,
+> DA-41, DA-12) foram retro-registradas em bloco, fora da ordem crescente de
+> DA. O número da seção é a posição no arquivo, não o número da DA. DA-32 a
+> DA-35 têm a prosa em [`ARCHITECTURE.md`](https://github.com/marcos-slima/integration-incident-copilot/blob/bf552a6b98b693ab8927da0b176eb4b23633308d/docs/ARCHITECTURE.md).
+
+> **DAs candidatas (2026-10-20):** DA-79, DA-84 e DA-85 foram rebaixadas para
+> candidatas. A prosa de §73, §75 e §76 permanece como histórico editorial,
+> mas essas DAs não fazem parte do índice de DAs entregues nem do livro-razão
+> em `CLAUDE.md`.
+
+---
+
+## Decisões
+
+### 1. Alucinação por mistura de contexto (DA-1)
+
+**Problema:** ao passar os 3 documentos mais relevantes (RAG top-3)
+inteiros no prompt, o LLM ocasionalmente combinava causa raiz de
+documentos diferentes (ex: misturava conceitos de IDoc e OData numa
+única resposta), mesmo com instrução explícita para não fazer isso.
+
+**Solução:** restringir o contexto passado ao LLM a apenas o
+**documento mais relevante** (texto completo), citando os demais só
+pelo nome, sem conteúdo. Eliminou a possibilidade de mistura na raiz,
+por design, em vez de depender de instrução de prompt.
+
+### 2. Não-determinismo com temperature=0 (DA-2)
+
+**Problema:** o mesmo prompt, rodado duas vezes com `temperature=0.0`
+no Ollama, produzia respostas diferentes — incluindo uma alucinação
+completa numa das execuções. `temperature=0` não garante determinismo
+total sem um `seed` explícito.
+
+**Solução:** fixar `seed=42` na chamada ao `ChatOllama`. Validado com
+5 execuções idênticas seguidas do mesmo cenário antes considerado
+instável.
+
+### 3. Guardrail determinístico para dados de fallback (DA-3)
+
+**Problema:** quando um conector SAP não reconhece um identificador
+(cenário simulado/mock não mapeado), o LLM às vezes ainda tentava
+vincular a um documento específico da base de conhecimento com
+confiança moderada-alta, mesmo orientado por prompt a não fazer isso.
+
+**Solução:** não depender só da autoavaliação do LLM para essa
+propriedade de segurança. O código verifica deterministicamente se o
+conector retornou um dado de fallback (`ConnectorResult.is_fallback`)
+e, nesse caso, **impõe um teto de confiança (0.4)** independente do
+que o modelo reportar.
+
+### 4. Comparação formal de modelos (qwen3:30b-a3b vs qwen2.5-coder:32b) (DA-4)
+
+**Contexto:** os problemas 1 e 3 acima ocorreram especificamente com
+o `qwen3:30b-a3b` (MoE, ~3B parâmetros ativos). Antes de assumir que
+o modelo era a causa raiz, foi feita uma comparação formal usando
+[promptfoo](https://www.promptfoo.dev/), rodando o **pipeline
+completo real** (conector + RAG + guardrails) contra os dois modelos,
+não o LLM isolado.
+
+**Resultado:** nos casos com correspondência clara, os dois modelos
+tiveram desempenho equivalente. No caso crítico — identificador de
+sistema desconhecido, sem correspondência real na base de
+conhecimento — o `qwen2.5-coder:32b` reconheceu sozinho a ausência de
+correspondência (`matched_source: null`), enquanto o `qwen3:30b-a3b`
+tentou vincular um documento específico mesmo assim (só não virou
+problema visível por causa do guardrail do item 3).
+
+**Decisão:** `qwen2.5-coder:32b` (denso, 32B parâmetros) adotado como
+modelo de produção do grafo. Validado com a suíte completa de testes
+(16/16 `pytest`) após a troca. Trade-off aceito: tempo de inferência
+maior (~2min49s vs ~1min20s nos 16 testes) em troca de comportamento
+mais confiável sob incerteza.
+
+> **Superada na Fase 12:** o modelo de produção foi trocado para
+> `qwen3-coder-next:latest` após paridade técnica no promptfoo
+> (10/10 PASS, `concurrency: 1`). A comparação acima segue válida como
+> registro histórico do critério usado — `qwen2.5-coder:32b` não é mais
+> o modelo em produção. Registro da Fase 12 no processo de desenvolvimento (documento interno, fora do repositório).
+
+### 5. Observabilidade real com Langfuse (nota informal — sem DA)
+
+**Contexto:** o Langfuse estava configurado desde o início do
+projeto, mas sem nenhum código realmente enviando dados para lá —
+configuração presente, tracing ausente.
+
+**Implementado:** cada node do grafo (`connector`, `retrieve`,
+`diagnose`, `report`) é instrumentado com `@observe` (na época; hoje o
+`connector_node` não tem decorator, não existe node `diagnose` e os spans
+são `retrieve`, `graph_enrich`, `graph_write`, `web_search`,
+`sap_specialist`, `saas_specialist`, `generic_specialist` e `report`, via
+`@observe_span` em `app/agent/nodes.py`, sob o span raiz
+`sap_copilot_diagnosis` de `app/agent/graph.py`), e a chamada ao
+LLM usa o `CallbackHandler` do LangChain — capturando tempo de
+execução, tokens e o payload completo de entrada/saída de cada etapa,
+visível em `http://localhost:3000`.
+
+**Bug encontrado e corrigido no processo:** o SDK não fazia `flush()`
+automático antes do processo terminar, então traces ficavam no buffer
+e nunca chegavam ao Langfuse. Corrigido chamando `get_client().flush()`
+nos dois pontos onde o processo pode terminar: no lifespan de
+shutdown do FastAPI (`app/main.py`) e ao final da execução via CLI
+(`app/agent/graph.py`, bloco `if __name__ == "__main__"`) - não uma
+fixture de teste (`pytest` sobe/derruba o app via `TestClient`, que
+já passa pelo mesmo lifespan).
+
+### 6. Configuração centralizada (eliminando hardcoded) (nota informal — sem DA)
+
+**Problema encontrado:** apesar de existir um `.env` desde o início
+do projeto, o código nunca o lia — URLs do Qdrant, modelo do LLM e
+outras configurações estavam fixas como constantes Python, espalhadas
+em múltiplos arquivos. Trocar de modelo exigia editar código-fonte
+(`sed` direto no arquivo), não mudar uma variável de ambiente.
+
+**Solução:** `app/config.py`, uma classe `Settings` (via
+`pydantic-settings`) como única fonte de verdade, lida do `.env`. Um
+comando (`uv run python -m app.config`) imprime a configuração
+efetiva a qualquer momento, com segredos mascarados — permite
+verificar o que está realmente configurado sem depender de leitura de
+código-fonte.
+
+### 7. Segurança e CI antes da publicação (nota informal — sem DA)
+
+Antes de tornar o repositório público:
+
+- **`gitleaks`**: varredura de **todo o histórico do git** (não só o
+  estado atual) em busca de segredos vazados — confirmado limpo antes
+  do primeiro push
+- **`pre-commit`**: hooks automáticos (lint/format via `ruff`,
+  detecção de segredo, bloqueio de arquivo grande >5MB) rodando em
+  todo commit local, dali em diante
+- **GitHub Actions**: workflow de CI rodando lint + testes unitários
+  a cada push/PR — o badge de status no topo do `README.md` reflete o
+  resultado real da última execução, não uma alegação
+
+### 8. Segunda comparação de modelo: qwen3.6:35b-a3b avaliado e rejeitado (DA-8)
+
+**Contexto:** meses após a decisão pelo `qwen2.5-coder:32b` (seção 4),
+a Alibaba lançou o `qwen3.6:35b-a3b` (MoE, 36B total/3B ativos,
+sucessor da série que havia sido descartada na primeira comparação).
+Repetiu-se o mesmo processo formal via `promptfoo`, contra o mesmo
+pipeline real e os mesmos 10 casos de teste — incluindo o caso crítico
+(`IDoc travado` / conector RFC) repetido 3 vezes para medir
+estabilidade.
+
+**Resultado:** em 7 dos 10 casos, desempenho equivalente ou
+ligeiramente superior ao modelo atual (respostas mais detalhadas,
+confiança bem calibrada no caso de segurança do identificador
+desconhecido). Porém, no caso crítico repetido 3 vezes, o
+`qwen3.6:35b-a3b` **falhou nas 3 execuções de forma idêntica**: o
+modelo não devolveu um JSON estruturado válido
+(`"Nao foi possivel estruturar a resposta do modelo"`,
+`confidence: 0.0`), enquanto o `qwen2.5-coder:32b` acertou as 3 vezes
+com 90% de confiança.
+
+**Decisão:** manter `qwen2.5-coder:32b` em produção. Uma falha
+determinística e reproduzível (3/3) no cenário mais crítico do
+pipeline desqualifica o candidato, independente do desempenho médio
+nos demais casos — confiabilidade sob o caso mais exigente pesa mais
+que desempenho médio.
+
+> **Superada na Fase 12:** o modelo de produção foi trocado para
+> `qwen3-coder-next:latest` (paridade 10/10 no promptfoo), depois desta
+> comparação. O critério desta seção — reprodutibilidade no caso crítico
+> como requisito de desqualificação — segue valendo e foi reaplicado na
+> Fase 12.
+
+**Valor do processo, não só do resultado:** esta comparação também
+prova que a decisão de modelo não é estática — é revisitada com
+critério formal sempre que surge um candidato relevante, com a mesma
+metodologia e o mesmo pipeline real usados desde a primeira vez,
+gerando decisões comparáveis ao longo do tempo.
+
+### 9. Achados de code review: estado global, parsing frágil, limites ausentes (nota informal — sem DA)
+
+Uma revisão de código externa identificou 10 pontos; a triagem separou
+o que era real do que era falso alarme ou já havia sido corrigido:
+
+- **Falso alarme:** alegação de que `report_node`/`run_diagnosis`
+  estariam ausentes do arquivo — não procede, ambos existem e
+  funcionam (o revisor provavelmente viu um trecho cortado, não o
+  arquivo completo)
+- **Já corrigido antes da revisão:** singleton no retriever e
+  `ensure_collection` fora do loop de batch (ver seções anteriores)
+- **Confirmados e corrigidos nesta rodada:**
+  - `LLM_MODEL` como global mutável de módulo → injetado via `state`/
+    parâmetro em `run_diagnosis(..., llm_model=...)`, eliminando risco
+    de corrida entre execuções concorrentes
+  - Parsing de JSON manual e frágil → structured output de verdade, com o parsing manual antigo mantido como *fallback*, não mais como único caminho. O caminho primário é `create_react_agent(..., response_format=DiagnosisModel)`, que dispara uma **chamada adicional** ao LLM com `with_structured_output` (tool-calling nativo do provider) e devolve o `DiagnosisModel` já validado em `structured_response`; o regex só roda se essa chamada falhar
+  - `confidence` sem validação de range → `Field(ge=0.0, le=1.0)` no
+    schema Pydantic **+** clamp defensivo no código (a mesma filosofia
+    de guardrail em camadas já usada para o fallback do conector,
+    agora estendida)
+  - `logs`/`payload` sem limite de tamanho → `max_length` no Pydantic
+    (rejeita entrada absurda na API) e truncamento mais apertado na
+    montagem do prompt (protege o contexto/custo do LLM)
+  - Zero teste da camada HTTP → `tests/test_api.py` com `TestClient`
+  - `Dockerfile` não copiava `data/`, então o fallback de documentos
+    de exemplo quebraria em produção → corrigido, com nota explícita
+    de que a biblioteca de 36GB nunca deve entrar na imagem e que
+    `.env` deve ser injetado em runtime, não commitado na imagem
+  - `@app.on_event` (deprecated, ainda funcional mas legado) →
+    migrado para o padrão `lifespan` do FastAPI
+- **Achado adicional durante a correção do item acima:** a primeira
+  tentativa de restaurar a orientação sobre `matched_source` usou
+  `Field(description=...)` no schema Pydantic, assumindo que o
+  LangChain injetaria essa descrição como contexto textual pro LLM.
+  **Isso não teve efeito nenhum** — confirmado porque as respostas do
+  modelo saíram byte-a-byte idênticas antes e depois da mudança
+  (esperado com `temperature=0`/`seed` fixo apenas se o prompt
+  realmente enviado não mudou). Causa real: `with_structured_output`
+  no Ollama usa o schema JSON para restringir **tipo/formato** da
+  geração (decodificação restrita por gramática), não para injetar
+  descrições como instrução legível pelo modelo. A correção que
+  funcionou de fato foi devolver a instrução como **texto explícito
+  no prompt**, confirmada visualmente via `--debug` antes de rodar a
+  suíte completa de novo. Lição: ao adotar saída estruturada via
+  schema, texto explícito no prompt continua necessário para lógica
+  de preenchimento — o schema garante a forma, não o conteúdo.
+  **Atualização (2026-10-07):** isso valia para `with_structured_output`
+  no Ollama da época. Hoje o diagnóstico usa
+  `create_react_agent(response_format=DiagnosisModel)` via tool-calling,
+  em que as `Field(description=...)` fazem parte do schema que o LLM lê —
+  e por isso entram no digest do prompt da DA-53
+  (`app/agent/prompts.py`).
+
+### 10. LLM Gateway plugável (não hardcoded em Ollama) (nota informal — sem DA)
+
+**Contexto:** o projeto nasceu 100% Ollama/local por decisão
+deliberada (custo zero de API para prototipar). O posicionamento do
+produto evoluiu para viabilizar IA em clientes que não conseguem
+adotar o SAP AI Core — o que não significa que todo cliente rodará
+100% local: alguns já têm OpenAI/Azure OpenAI contratado, ou querem
+mais capacidade do que o hardware local aguenta para um caso
+específico. `diagnose_node` instanciava `ChatOllama` diretamente,
+então trocar de provedor exigiria editar o grafo.
+
+**Decisão:** extrair a escolha do provedor para `app/llm/factory.py`
+(`get_chat_model()`), selecionado via `Settings.llm_provider`
+(ollama/openai/azure_openai). Deliberadamente **não** foi criada uma
+interface própria (tipo um `LLMProvider.generate()` do zero) — o
+factory devolve direto um `BaseChatModel` do LangChain, já que todo o
+resto do grafo (`with_structured_output`, callbacks do Langfuse) já
+depende do contrato do LangChain. Reaproveitar o polimorfismo que a
+lib já oferece é menos código e menos superfície de bug do que
+reimplementar o mesmo contrato — uma escolha de "reuso vs.
+reinvenção", não só "adicionar abstração".
+
+**Validação:** falha alto e claro (`ConfigurationError`), nunca
+silenciosa, quando o provedor escolhido não tem a configuração
+necessária (ex: `openai` sem `OPENAI_API_KEY`) — mesma filosofia dos
+guardrails determinísticos das seções 1 e 3.
+
+### 11. Conector real para sistema não-SAP (ServiceNow) e caminho RFC honesto (nota informal — sem DA)
+
+**Contexto:** até aqui, os conectores (`ODataConnector`,
+`RFCConnector`) eram mocks assumidos como tal — corretos para
+prototipagem, mas insuficientes para provar a promessa de "integração
+SAP + não-SAP" que o posicionamento atual do produto assume.
+
+**Decisão:** `ServiceNowConnector` faz chamada HTTP real contra a
+Table API do ServiceNow (`GET /api/now/table/incident`) quando
+`SERVICENOW_INSTANCE_URL` está configurado, caindo em modo demo/mock
+apenas na ausência dessa configuração — mesmo princípio dos conectores
+SAP mock (funcionar sem depender de credencial de cliente real), não
+uma limitação técnica. Testado via `httpx.MockTransport`, exercitando
+o código HTTP de verdade (parâmetros de query, autenticação, parsing
+de resposta, tratamento de erro de rede) sem precisar de uma instância
+ServiceNow real.
+
+Em paralelo, `RFCConnector` ganhou um modo `use_real=True` com
+detecção de feature do `pyrfc` (SAP NetWeaver RFC SDK — binário da
+SAP, fora do PyPI): sem o SDK instalado, pedir `use_real=True` falha
+com `ConfigurationError` explicando exatamente o que falta, em vez de
+cair silenciosamente no mock. RFC (não só OData) é o caminho mais
+relevante para o público-alvo do projeto: clientes ainda em ECC
+on-premise tipicamente só têm RFC/BAPI como via de automação.
+
+**Por que isso importa para o posicionamento:** prova com código —
+não só com docstring de intenção — que o "e outras plataformas" da
+proposta de valor do projeto é real: existe pelo menos um sistema
+não-SAP com integração de fato funcional, ao lado de um caminho SAP
+(RFC) claramente desenhado para o cliente mais restrito (ECC
+on-premise), que é justamente quem não consegue pagar SAP AI Core.
+
+### 12. Fechando os conectores multi-vendor (Salesforce, Workday, SAP Ariba) e o caminho real do OData (nota informal — sem DA)
+
+**Contexto:** a seção anterior fechou 1 dos 4 cenários de referência
+multi-vendor do posicionamento do produto (ServiceNow), escolhido
+primeiro por ter a API pública mais simples de implementar de verdade
+— não por prioridade de negócio. Isso deixava uma dívida técnica
+explícita: Salesforce, Workday e SAP Ariba continuavam mock puro, e o
+`ODataConnector` não tinha nem o esqueleto `use_real` que o `RFCConnector`
+já tinha ganhado.
+
+**Decisão:** os três conectores restantes (`SalesforceConnector`,
+`WorkdayConnector`, `AribaConnector`) foram implementados seguindo
+**exatamente** o mesmo critério do `ServiceNowConnector` — OAuth2 (client
+credentials em todos os três casos) contra o token endpoint documentado
+de cada fornecedor, seguido da chamada REST real; ausência de
+configuração cai em mock, presença ativa o caminho real, sem mudar
+nenhum outro arquivo do projeto. `ODataConnector` ganhou o mesmo padrão
+`use_real`/`ConfigurationError` que o `RFCConnector` já tinha, fechando
+a assimetria entre os dois conectores SAP mock.
+
+**Validação:** cada conector tem teste via `httpx.MockTransport`
+simulando as duas chamadas (token OAuth2 + recurso), provando que o
+código de produção (montagem do request, header `Authorization: Bearer`,
+parsing da resposta, tratamento de erro HTTP/rede) funciona de verdade
+— sem, para nenhum dos três, uma conta/sandbox real disponível para
+validar contra produção (mesma ressalva já feita para
+`RFCConnector._fetch_real` desde a Fase 8, agora consistente em todo o
+projeto, não uma exceção isolada). **Atualização:** o Salesforce foi
+depois validado contra uma Developer Edition real (matriz em
+`docs/ARCHITECTURE.md`).
+
+**O que isso NÃO é:** uma alegação de que os 4 cenários de referência
+(SuccessFactors↔Workday, Salesforce↔SAP, SAP Ariba↔S/4HANA,
+ServiceNow↔SAP) estão "prontos para produção" — estão prontos para
+**demonstração técnica com credenciais reais em 10 minutos** (trocar
+`.env`, sem tocar código), o que é uma barra bem mais alta que "mock
+bonito", mas ainda abaixo de "testado contra um cliente real".
+
+### 13. GraphRAG (Neo4j) deixa de ser só campo de configuração (nota informal — sem DA)
+
+**Contexto:** desde a Fase 4, `Settings` tinha campos para Neo4j e a
+documentação dizia explicitamente "reservado para uso futuro, nenhum
+código usa isso hoje" — um campo de configuração sem nenhuma
+implementação por trás, o tipo exato de coisa que este projeto
+criticou no `genai-engineering-template` (documentação descrevendo
+funcionalidade que o código não entrega).
+
+**Decisão:** implementar o código real (`app/rag/graph_store.py`) —
+grava cada diagnóstico no Neo4j como grafo relacional
+(Incident/Interface/System/Document) e consulta esse grafo por
+histórico de incidentes na mesma interface antes de gerar um novo
+diagnóstico — mas manter **desligado por default**
+(`GRAPH_RAG_ENABLED=false`). A decisão de negócio de não priorizar
+GraphRAG não mudou (Qdrant resolve o caso de uso principal; grafo só
+compensa com meses de histórico real acumulado); o que mudou é que
+agora existe uma estrutura real e testada para ligar quando fizer
+sentido, em vez de só um parágrafo de intenção.
+
+**Validação:** `tests/test_graph_store.py` usa uma sessão Neo4j FAKE
+(implementa só `.run()`, mesmo espírito do `httpx.MockTransport`) para
+provar que as queries Cypher corretas são disparadas e os dados voltam
+mapeados certo. Também validado que `build_graph()` produz o MESMO
+grafo LangGraph de antes desta fase quando a flag está desligada
+(nenhum node novo é adicionado) — mudança de comportamento zero no
+caminho default.
+
+**Honestidade mantida:** não testado contra um Neo4j real (sem Docker
+daemon disponível no ambiente onde isso foi construído) — mesma
+ressalva já aplicada ao `RFCConnector._fetch_real`. **Atualização:** hoje
+o job de CI `neo4j-smoke` roda `tests/test_graph_store_neo4j_smoke.py`
+contra um Neo4j real (service container).
+
+### 14. Camada A2A (Agent2Agent) implementada, com a ressalva de GA preservada (DA-14)
+
+**Contexto:** a proposta original da camada A2A (documento interno,
+fora do repositório) estava arquivada desde antes da Fase 8, com dois pré-requisitos
+explícitos para sair do papel: conectores SAP fechados e suíte de
+testes automatizada madura. As Fases 7/8 (e a seção 12 acima)
+satisfazem os dois.
+
+**Decisão:** implementar o subconjunto do protocolo A2A necessário
+para o critério de aceite original — Agent Card (`GET
+/.well-known/agent-card.json`), task manager e servidor JSON-RPC 2.0
+(`POST /a2a`, métodos `message/send` e `tasks/get`) — em `app/a2a/`,
+sem depender de nenhum SDK externo de A2A (a proposta original já
+citava a imaturidade dessas SDKs como risco a validar antes de
+começar). O task manager chama a MESMA função (`run_diagnosis`) que o
+`/diagnose` REST — zero lógica de diagnóstico duplicada entre os dois
+protocolos.
+
+**Simplificação deliberada:** dos 8 estados de task do protocolo A2A,
+só os 4 alcançáveis por um agente síncrono e autocontido como este
+foram implementados (`submitted -> working -> completed|failed`).
+Autenticação é uma chave estática opcional via header, não OAuth2/JWT
+— documentado como gap de produção, não escondido. **Atualização
+(2026-10-07):** a chave deixou de ser opcional desde a DA-18 (gerada no
+startup se ausente, `app/main.py::_ensure_api_keys_configured`), e
+`message/send` aceita `blocking=false` (`app/a2a/task_manager.py`),
+devolvendo a task antes de concluir.
+
+**Validação:** `tests/test_a2a.py` prova o critério de aceite original
+mecanicamente — o endpoint A2A produz o mesmo relatório que o
+`/diagnose` para a mesma entrada (via injeção de dependência do
+`diagnosis_fn` no `TaskManager`, sem precisar de um LLM real no ar para
+o teste), e uma falha na orquestração vira task `failed` (erro de
+negócio), não um HTTP 500 (erro de transporte) — a diferença que
+importa para um agente externo saber se deve tentar de novo ou não.
+
+**Ressalva que NÃO muda com esta implementação:** o suporte A2A do
+Joule continua unidirecional (outbound) hoje — o Agent Gateway que
+habilitaria o Joule a chamar este Copilot como par (inbound) está
+pré-GA, previsto para Q4/2026. Este endpoint é compatível com o
+protocolo aberto A2A (padrão vendor-neutral, Linux Foundation), não uma
+integração já consumível pelo Joule.
+
+### 15. Evidence/Trust Layer entre RAG/conectores e o LLM (DA-15/16/17)
+
+**Contexto:** uma revisão arquitetural externa apontou três riscos
+concretos, não hipotéticos, num agente que já correlaciona dado de
+conector + RAG + web search antes de chamar o LLM: (1) dado não
+sanitizado de conector/RAG chegando cru no prompt (superfície de
+prompt injection); (2) `confidence` sendo só auto-relato do LLM, sem
+nenhum piso objetivo; (3) GraphRAG podia gravar uma hipótese do LLM no
+grafo e, num incidente futuro, ela voltar ao prompt como se fosse fato
+histórico confirmado — um loop de retroalimentação epistêmica.
+
+**Decisão:** refatoração controlada, preservando 100% do stack
+existente (LangGraph + Qdrant + Ollama + Langfuse + conectores + A2A) —
+não um rewrite. `sanitize_untrusted_input` (já existente) passou a
+envolver TODO dado de conector/RAG antes de entrar no prompt, não só
+parte dele. `evidence_strength` — sinal objetivo (dado real de conector
+OU score de retrieval do documento top-1, nunca auto-relato do LLM) —
+vira um TETO duro sobre `confidence` (`min(confidence, evidence_strength
++ 0.25)`), exposto na API (`DiagnosisResponse.evidence_strength`). No
+Neo4j, todo incidente grava seu `evidence_strength`/`is_grounded`, e
+`graph_context()` só traz para o prompt incidentes históricos
+`is_grounded=true` por padrão — uma hipótese fraca vira `"HIPOTESE NAO
+CONFIRMADA (baixa evidencia - nao trate como fato)"` em vez de
+silenciosamente virar "causa raiz confirmada anteriormente" (texto da
+época; hoje o rótulo é `"HIPOTESE NAO CONFIRMADA de diagnostico anterior
+(baixa evidencia - nao trate como fato)"` e, desde o AI-01 (2026-10-07),
+até incidentes `is_grounded` são rotulados como não verificados — só
+`verified` (DA-28) entra como fato; ver
+`app/rag/graph_store.py::format_graph_context_for_prompt`).
+
+**Bugs reais encontrados no caminho (não deixados como débito):** um
+regex de detecção de prompt injection quebrado (`re.error: global flags
+not at the start of the expression` — flags inline `(?i)` por padrão,
+inválido quando concatenados via `"|".join()`) e dois bugs de
+ranking em `app/rag/retriever.py` (score composto RRF+cosine vazando
+para o campo que devia ser cosine puro; fallback para a biblioteca de
+referência sendo aplicado sempre, não só na ausência de match) que
+inflavam a confiança de diagnósticos com pouca ou nenhuma evidência
+real — corrigidos de raiz, não contornados.
+
+**Validação:** suíte completa (71 testes) verde, incluindo dois testes
+novos que provam que uma hipótese não fundamentada é filtrada por
+padrão do contexto de grafo e rotulada como tal quando explicitamente
+incluída.
+
+### 16. Autenticação de `/diagnose` e `/a2a` sempre exigida, com geração automática de chave (DA-18)
+
+**Contexto:** `API_KEY`/`A2A_API_KEY` vazios no `.env` significavam
+autenticação completamente desabilitada — um gap silencioso, só visível
+lendo o código-fonte, não um comportamento documentado como tal.
+
+**Decisão:** `app/main.py::_ensure_api_keys_configured()` roda no
+`lifespan` do FastAPI e garante que nenhuma das duas chaves fica vazia
+em memória — se o operador não configurou uma no `.env`, uma é gerada
+(`secrets.token_urlsafe(32)`) e avisada em `WARNING` no log de startup.
+Preserva "clone e rode" (zero config obrigatória) sem deixar os
+endpoints abertos por padrão. Comparação de chave via
+`secrets.compare_digest` (não `==`), para não vazar tamanho/prefixo por
+timing attack.
+
+**Validação:** `tests/test_api.py`/`tests/test_a2a.py` cobrem chave
+correta/incorreta/ausente em ambos endpoints, geração automática quando
+ausente, preservação quando já configurada, e o Agent Card refletindo o
+`securityScheme` quando `A2A_API_KEY` está setada.
+
+### 17. Servidor MCP (Model Context Protocol) - capability catalog read-first (DA-19)
+
+**Contexto:** terceiro item do roadmap arquitetural planejado (depois
+do Evidence Layer e do fechamento de autenticação do A2A) — MCP como
+CONTRATO DE CAPABILITIES para agentes externos, não mais um protocolo
+isolado de "conectar um LLM a uma ferramenta". A especificação MCP de
+2026 caminha explicitamente para stateless scaling, cache de capability
+catalog e autorização empresarial, o que aproxima MCP de infraestrutura
+de produção.
+
+**Decisão:** expor o Copilot como SERVIDOR MCP (não cliente — a leitura
+alternativa, migrar os conectores para consumir MCP externo, fica para
+uma fase seguinte e deliberadamente fora deste escopo) em `POST /mcp/`,
+via `app/mcp/server.py` (SDK oficial `mcp`, classe `MCPServer`). Duas
+ferramentas, ambas READ-ONLY por design ("leitura primeiro" no
+roadmap): `diagnose_incident` (chama a MESMA `run_diagnosis()` de
+`/diagnose`/`/a2a` — zero lógica duplicada pela terceira vez) e
+`list_connectors` (inspeciona `settings` sem nenhuma chamada de rede,
+informa mock vs. real por `interface_type`). Autenticação reusa o MESMO
+`X-API-Key` de `/diagnose` (DA-18) via um middleware ASGI simples, em
+vez do `AuthSettings`/`TokenVerifier` OAuth2 do SDK — manter um único
+mecanismo de autenticação em toda a superfície HTTP (REST + A2A + MCP),
+não três.
+
+**Detalhe de implementação que valeu registrar:**
+`StreamableHTTPSessionManager.run()` só pode rodar uma vez por
+instância de processo, e `app.mount()` não propaga eventos de lifespan
+para sub-apps automaticamente — seu ciclo de vida entra explicitamente
+no `lifespan` do app FastAPI raiz. E `POST /mcp` sem barra final sofre
+`307 Temporary Redirect` do Starlette antes mesmo de chegar na checagem
+de autenticação (comportamento padrão de `app.mount()`, não específico
+do MCP) — documentado em `docs/DEPLOY.md`, não deixado como surpresa.
+
+**Validação:** `tests/test_mcp.py` cobre as duas tools como funções
+Python diretas (o decorator `@mcp.tool()` não envolve a função
+original) e a fronteira de autenticação via `TestClient` real no app
+montado. O round-trip completo do handshake `initialize` do protocolo
+MCP contra um servidor `uvicorn` real foi validado manualmente nesta
+sessão — não há teste automatizado desse round-trip na suíte.
+
+### 18. Hybrid Inference - fallback de resiliência entre providers de LLM (DA-20)
+
+**Contexto:** quarto item do roadmap arquitetural planejado. Três
+critérios possíveis para decidir quando escalar de Ollama local para
+nuvem: resiliência (fallback em falha de transporte), qualidade
+(escalar por `evidence_strength` baixo, ver DA-15) ou roteamento por
+complexidade do caso antes de chamar o LLM. Escolhido: **resiliência**
+— as outras duas custam uma segunda chamada de LLM em parte dos casos e
+exigem calibrar um limiar subjetivo; resiliência só age quando o
+provider primário está genuinamente indisponível.
+
+**Decisão:** `app/llm/factory.py::invoke_with_hybrid_fallback()` roda a
+chamada com `settings.llm_provider` e, se `settings.llm_fallback_provider`
+estiver configurado (vazio por default — comportamento idêntico a antes
+desta fase) **e** a falha for de transporte (`ConnectionError`/
+`httpx.ConnectError`/`httpx.TimeoutException` na época — Ollama fora do ar,
+timeout de rede; hoje `ConnectionError`, `httpx.TransportError`,
+`openai.APIConnectionError` e `openai.InternalServerError`, ver
+`app/llm/factory.py::TRANSPORT_FAILURE_EXCEPTIONS`), refaz a MESMA chamada com o provider de fallback
+antes de desistir. Erro de aplicação (JSON malformado, prompt inválido)
+nunca aciona o fallback — mascarar um bug real atrás de uma segunda
+chamada de LLM seria pior do que deixá-lo estourar. Os sub-agentes de diagnóstico
+(`sap_diagnosis_node`/`saas_diagnosis_node`, ver DA-22) eram os consumidores
+na época (hoje os três sub-agentes chamam o AI Gateway
+`app/llm/gateway.py::invoke_via_gateway`, que usa esta função por baixo —
+nenhum node a chama diretamente); qual provider respondeu de fato fica exposto em
+`DiagnosisResponse.llm_provider_used` — transparência, não um fallback
+silencioso.
+
+**Validação:** `tests/test_llm_factory.py` cobre as quatro decisões
+(usa primário quando funciona, propaga erro quando não há fallback
+configurado, troca de provider em falha de transporte, desiste com
+`ConfigurationError` quando os dois falham) e, especificamente, que um
+erro de **aplicação** (não de transporte) nunca aciona uma tentativa de
+fallback — o caso que provaria que a lógica está mascarando bugs em vez
+de lidar com indisponibilidade real.
+
+### 19. GraphRAG como camada de conhecimento operacional - hardening (DA-21)
+
+**Contexto:** quinto item do roadmap arquitetural planejado. GraphRAG
+(`app/rag/graph_store.py`) já existia como código real desde uma fase
+anterior, mas desligado por default (`GRAPH_RAG_ENABLED=false`, ver
+Decisão #9) e sem Neo4j real acessível neste ambiente de
+desenvolvimento (sem Docker daemon). A opção considerada aqui não foi
+"validar contra Neo4j real" (impossível neste ambiente) nem "ligar por
+default" (decisão de negócio da #9 continua valendo), e sim: **revisar
+o código existente por lacunas de design que só aparecem em uso
+operacional contínuo** (não numa demo de poucos incidentes) e corrigi-las
+sem depender de infraestrutura real.
+
+**Decisão - três reforços, nenhum muda o comportamento com a flag
+desligada:**
+
+1. **Degradação graciosa por tipo de exceção** — `GRAPH_UNAVAILABLE_EXCEPTIONS`
+   (`neo4j.exceptions.DriverError` + `TransientError`) é o catch-tuple
+   usado agora em `graph_enrich_node`/`graph_write_node`
+   (`app/agent/nodes.py`): uma falha de infraestrutura do Neo4j
+   (conexão recusada, timeout, restart do servidor) não derruba mais o
+   diagnóstico inteiro — cai para "sem histórico"/"escrita pulada" com
+   um log de warning. Deliberadamente exclui `Neo4jError` em geral: um
+   `ConstraintError`/`CypherSyntaxError` é bug nosso (Cypher/schema
+   errado), não indisponibilidade de infra, e deve continuar
+   propagando — mesmo princípio de separar falha de transporte de erro
+   de aplicação usado no Hybrid Inference (DA-20). `ensure_constraints()`
+   também passou a rodar sozinho no `lifespan` do FastAPI quando a flag
+   está ligada (`app/main.py`), eliminando o passo manual `--init`
+   sem bloquear o startup se o Neo4j estiver temporariamente fora do ar.
+2. **Formatação com deduplicação por recorrência** —
+   `format_graph_context_for_prompt()` agrupa ocorrências CONSECUTIVAS
+   da mesma causa raiz numa única linha com contador ("já ocorreu 3x"),
+   em vez de repetir a mesma linha e desperdiçar orçamento de prompt
+   numa interface "flapping" (falhando repetidamente pela mesma causa).
+3. **Utilitário manual de limpeza** — `prune_ungrounded_hypotheses()`
+   (CLI `--prune-ungrounded --older-than-days N`) remove hipóteses NÃO
+   confirmadas antigas; incidentes com causa raiz confirmada nunca são
+   tocados, sob nenhuma idade, e a função nunca é chamada automaticamente.
+
+**Validação:** `tests/test_graph_store.py` (dedup consecutivo vs.
+não-consecutivo, contagem de prune, garantia de que a query do prune
+filtra por `is_grounded=false`) e `tests/test_nodes_graph_degradation.py`
+(novo — `graph_enrich_node`/`graph_write_node` degradam em
+`DriverError`/`TransientError` mas propagam `CypherSyntaxError`), todos
+com driver Neo4j fake (`FakeSession`), mesmo padrão de
+`httpx.MockTransport` usado nos conectores HTTP. **Não-objetivo
+explícito:** validação contra um Neo4j real continua pendente, por
+limitação deste ambiente (sem Docker) — decisão aceita explicitamente
+ao escopar esta fase.
+
+### 20. Multi-agent - supervisor + especialistas por domínio (DA-22)
+
+**Contexto:** sexto item do roadmap arquitetural planejado. O único
+node de diagnóstico existente (`diagnose_node`) usava uma persona fixa
+de "especialista em integração SAP" para QUALQUER conector — incidente
+de webhook do Salesforce recebia a mesma expertise "OData/IDoc/RFC/CPI"
+de um incidente de RFC. Isso contradizia o princípio de design já
+registrado neste log (#8/#13): SAP é um conector entre iguais, não o
+eixo arquitetural do produto.
+
+**Decisão:** um `supervisor_node` (`app/agent/supervisor.py`) roda
+PRIMEIRO no grafo — antes até do `connector` — e classifica
+deterministicamente (sem LLM) o domínio do incidente a partir de
+`interface_type` (ou, na ausência dele, palavras-chave SAP na
+descrição). O grafo (`app/agent/graph.py::_route_to_specialist`, via
+`add_conditional_edges`) direciona para UM dos dois sub-agentes
+especialistas — nunca os dois no mesmo incidente (na época; hoje são três:
+`generic` ganhou node próprio, `generic_diagnosis_node`):
+
+- `sap_diagnosis_node` — persona SAP (OData, IDoc, RFC, CPI/Integration
+  Suite, BTP)
+- `saas_diagnosis_node` — persona multi-fornecedor (ServiceNow,
+  Salesforce, Workday, Ariba, APIs REST/OAuth2), também cobrindo o
+  caso "domínio não identificado" com raciocínio generalista (na época;
+  hoje esse caso vai para `generic_diagnosis_node`)
+
+Os dois compartilham o mesmo núcleo (`_run_diagnosis_agent`) — agente
+ReAct, Hybrid Inference (DA-20), parsing de JSON e guardrails de
+confiança (DA-15) continuam idênticos; só a persona/expertise do
+prompt muda. `DiagnosisResponse.agent_domain` expõe qual domínio foi
+usado — mesma filosofia de transparência de `llm_provider_used`
+(DA-20), nunca um roteamento silencioso.
+
+**Validação:** `tests/test_supervisor.py` (classificação determinística
+pura) e `tests/test_nodes_multiagent.py` (persona correta por
+sub-agente, roteamento condicional, salvaguarda contra `agent_domain`
+ausente, propagação até `DiagnosisResponse`) — mockando
+`invoke_with_hybrid_fallback` diretamente (na época; hoje o teste mocka
+`app.agent.nodes.invoke_via_gateway`, o AI Gateway da DA-26), sem depender de LLM real.
+`build_graph()` verificado compilando com sucesso nos dois modos de
+GraphRAG (ligado/desligado), confirmando os nodes esperados.
+
+### 21. Event Mesh - ingestão orientada a evento (DA-23)
+
+**Contexto:** sexto item do roadmap arquitetural planejado. Até esta
+fase o Copilot só reagia a chamadas explícitas (`/diagnose` humano,
+A2A, MCP) — para virar um copiloto de verdade em produção, precisa
+reagir a eventos publicados por sistemas de monitoração (CPI, Solution
+Manager, um listener de fila/IDoc), não só esperar alguém chamar a API.
+
+**Decisão:** `POST /events/incident` (`app/main.py` + `app/events/`)
+recebe um envelope [CloudEvents](https://cloudevents.io/) — o formato
+que o SAP Event Mesh usa em modo **REST/Webhook push subscription**
+(além do AMQP 1.0 nativo) — e dispara `run_diagnosis()` automaticamente.
+Webhook foi escolhido em vez de um consumidor AMQP porque é um modo de
+entrega de primeira classe do próprio Event Mesh e o único testável de
+ponta a ponta sem depender de um broker real — mesma lógica pragmática
+de DA-19/DA-21. Só `type ==
+"com.sap.integration.incident.detected.v1"` é aceito hoje (`Literal`
+em `IncidentEventEnvelope`); qualquer outro valor vira `422`
+automaticamente. O envelope segue CloudEvents 1.0 estrito: `specversion`,
+`type`, `source` e `id` são obrigatórios, e a deduplicação usa o par
+`source`+`id` (validação 2026-10-07, M-16). Autenticação usa uma chave **dedicada**
+(`X-Event-Mesh-Api-Key`, gerada automaticamente se não configurada,
+mesmo padrão DA-18) — isolada de `API_KEY`/`A2A_API_KEY`, porque o
+webhook secret normalmente vive num sistema externo fora do controle
+direto deste projeto.
+
+**Não-objetivo explícito:** processamento é síncrono (sujeito ao mesmo
+rate limit de `/diagnose`) e não há consumo AMQP direto — fila
+real/backpressure seria evolução natural se o volume justificar, não
+um gap escondido. **Atualização:** hoje o webhook responde `202` e
+processa em background (job RQ com `REDIS_URL`, `BackgroundTasks` sem
+ele), e existe o consumidor AMQP 1.0 (`app/events/amqp_consumer.py`,
+DA-32/DA-40).
+
+**Validação:** `tests/test_events.py` cobre mapeamento evento→
+`IncidentRequest`, chamada a `run_diagnosis()`, autenticação (401),
+rejeição de `type` desconhecido (422), limite de tamanho (422) e
+geração automática da chave — tudo mockado, sem Ollama/Qdrant reais.
+
+### 22. Deploy em produção - SAP BTP Kyma Runtime (DA-24)
+
+**Contexto:** último item do roadmap arquitetural planejado. Até esta
+fase o projeto só rodava via `docker-compose.yml` (dev/demo local) -
+faltava o empacotamento real para um ambiente de produção SAP,
+completando a jornada "protótipo de portfólio → produto demonstrável".
+
+**Decisão (escopo escolhido: "manifests reais de deploy no Kyma", não
+integração mais profunda com serviços BTP como XSUAA/Destination):**
+`deploy/kyma/` traz Deployment (2 réplicas, probes em `/health` — hoje
+readiness em `/ready` e liveness em `/health`,
+usuário não-root), Service, HorizontalPodAutoscaler (2-6 réplicas por
+CPU - resposta direta a uma limitação já identificada na revisão do
+DA-23: picos de eventos aumentam chamadas simultâneas ao LLM Gateway),
+ConfigMap e um `secret.example.yaml` — template com todo valor
+prefixado `CHANGE-ME`, nunca aplicado direto. O `APIRule` (módulo API
+Gateway do Kyma) usa `accessStrategy: noop`, já que o Copilot tem sua
+própria autenticação por API key em cada endpoint (DA-18/DA-23) — não
+duplica autenticação na camada de rede.
+
+Ao revisar o empacotamento, três problemas reais no `Dockerfile` foram
+corrigidos na origem (não contornados só nos manifests): build não
+reprodutível (`uv sync` sem lockfile no build), container rodando como
+root, e o bug já documentado de `uv run` ressincronizando dependências
+de dev a cada start (agora `CMD` chama `.venv/bin/uvicorn` direto) —
+`docker-compose.yml` não precisa mais do `command:` override que
+contornava esse último problema.
+
+**Validação em Kubernetes real (2026-10-18, k3d/k3s v1.35).** O bundle foi
+aplicado sem cópia via o overlay `deploy/local` (`scripts/k3d-validate.sh`):
+rollout dos 4 Deployments (API, worker, Qdrant, Redis), probes `/health` e
+`/ready`, `401` sem chave, indexação dos 15 documentos dentro do Pod,
+`/diagnose` com `200` pelo rule engine e pelo LLM local (Ollama do host, soberania
+`strict`) e o HPA escalando de 1 para 2 réplicas sob carga.
+Evidência em `docs/EVIDENCIA_K3D_2026-10-18.md`. A validação achou dois bugs
+reais, corrigidos: `/app/data` sem permissão de escrita para o `appuser`
+(o ingest falhava dentro do Pod, também no Kyma) e o script regerando o Secret
+a cada execução (Redis com senha antiga).
+
+**Ainda não validado:** o que é específico do Kyma gerenciado — `APIRule`
+(schema do CRD a conferir no cluster alvo), Istio e OIDC do BTP. Neo4j segue
+pré-requisito externo, não implantado por este bundle.
+
+**Validação:** `tests/test_kyma_manifests.py` (11 testes) — todo YAML
+sintaticamente válido, namespace consistente entre recursos, probes
+em `/health` (hoje `/ready` e `/health`; nunca endpoint autenticado), Pod não-root, HPA/APIRule
+apontando para os recursos certos, `kustomization.yaml` referenciando
+só arquivos existentes.
+
+Isso fecha o roadmap arquitetural consolidado deste projeto (AI Gateway
+→ A2A/API auth → MCP → Hybrid Inference → GraphRAG → Multi-agent →
+Event Mesh → BTP/Kyma), todo executado nesta mesma sessão de trabalho.
+
+### 23. Follow-up pós-roadmap — multi-stage build do frontend + alinhamento de modelo default (nota informal — sem DA)
+
+Uma revisão arquitetural externa apontou dois problemas reais que
+sobreviveram à DA-24: (1) o `Dockerfile` não buildava o frontend
+(React/Vite) a partir do código-fonte — esperava um `static/dist/` já
+pronto, que está no `.gitignore` e não existe num clone limpo,
+quebrando exatamente o fluxo de build descrito no
+`deploy/kyma/README.md` (isso já estava autodenunciado como pendência
+em `docs/DEPLOY.md`, mas não foi corrigido durante a DA-24); (2) o
+modelo LLM default divergia entre `app/config.py`
+(`qwen3-coder-next:latest`, fonte canônica) e `.env.example`/
+`docker-compose.yml` (ambos `qwen2.5-coder:32b`).
+
+Corrigido com um segundo estágio no `Dockerfile`
+(`node:22-slim AS frontend-build`, `npm ci && npm run build`) cujo
+resultado é copiado para `static/dist` no estágio final via
+`COPY --from=frontend-build`; `.dockerignore` adicionado (não
+existia); `docs/DEPLOY.md` seção 2 atualizada; `.env.example` e
+`docker-compose.yml` alinhados ao modelo canônico do `config.py`.
+Validado rodando `npm ci && npm run build` isoladamente (gera o
+`dist/` esperado) — build de imagem Docker completo não testado
+(Docker indisponível neste ambiente, mesma limitação já registrada na
+DA-24).
+
+### 24. Evidence/Trust Layer + correção do threshold do RAG antes do reranker (DA-25)
+
+Uma segunda revisão arquitetural externa apontou dois itens P0
+restantes (os outros dois do backlog, Docker multi-stage e `uv.lock`,
+já tinham sido corrigidos no item anterior).
+
+**RAG:** o `score_threshold` (cosseno denso) era aplicado *antes* do
+reranker (cross-encoder) — um documento com BM25/RRF excelente mas
+cosseno moderado (ex: 0.47) era descartado sem o reranker nunca ter a
+chance de avaliar o par query+chunk de verdade. Invertido: o pool de
+candidatos da fusão RRF cresceu (antes o próprio Qdrant já truncava
+para `top_k` antes de qualquer filtragem), todos os candidatos são
+reranqueados, e só depois um hit é admitido se o cosseno *ou* o
+`rerank_score` (clampado 0-1) atingir o threshold — o reranker ganhou
+um caminho próprio para "salvar" um documento que o cosseno sozinho
+descartaria. **Atualização (2026-10-07, RAG-01):** com reranker
+disponível, só `rerank_score_calibrated` decide a admissão; o cosseno
+vale apenas sem reranker (`app/rag/retriever.py::_evidence_admission_score`).
+
+**Evidence/Trust Layer:** `DiagnosisResponse` ganhou `evidence:
+list[Evidence]` — uma entrada por fonte real consultada (conector,
+RAG, GraphRAG, busca web, descrição do usuário), com `trust_level`
+decidido pelo TIPO da fonte (`system_observed` > `retrieved_document`
+> `web_untrusted` > `user_reported`; depois entrou `simulated`, para dado
+de conector mock/fallback), montada 100% deterministicamente
+em `_assemble_evidence()` — o LLM nunca cita suas próprias fontes,
+mesmo princípio já usado em `evidence_strength` (DA-15). Muda a
+resposta de "o LLM deu uma resposta" para "o LLM produziu uma hipótese
+sustentada por evidências rastreáveis" — pré-requisito que a própria
+revisão apontou como necessário antes de qualquer evolução do MCP para
+tools de escrita.
+
+**Validação:** `tests/test_retriever_evidence_threshold.py` (8 testes,
+infraestrutura mockada) + `tests/test_evidence.py` (13 testes) — 132
+testes passando no total (`-m "not integration"`).
+
+**Itens do backlog da revisão que seguem em aberto** (sem ação
+agendada): AI Gateway real (auth/policy/routing/budget/PII-DLP/tenant
+isolation), Tool/Agent Execution Policy, Capability Registry, evolução
+do schema do GraphRAG (`VERIFIED_AS` — verificação humana separada de
+hipótese do LLM), benchmark científico de rerankers para o domínio
+SAP/PT-BR/EN técnico.
+
+### 25. AI Gateway v1 - policy de roteamento, circuit breaker e budget (DA-26)
+
+O "LLM Gateway" existente (`app/llm/factory.py`) era, na prática, um
+LLM Provider Factory — a revisão externa apontou corretamente a
+diferença. `app/llm/gateway.py` (novo) centraliza toda chamada LLM
+(`_run_diagnosis_agent` não chama mais `invoke_with_hybrid_fallback`
+diretamente) e adiciona:
+
+- **Policy de roteamento por sensibilidade**: incidente com dado real
+  de conector (não mock/fallback) é `confidential` e nunca pode ser
+  roteado a um provider cloud — nem como fallback (vale no modo default
+  `strict`; a DA-43 permite `cloud_with_dlp` com allowlist de origens, e a
+  sensibilidade default é `confidential`). Fecha um gap real:
+  o setup default (local primário + cloud como fallback) faria um
+  Ollama fora do ar vazar dado real de produção SAP para fora.
+- **Circuit breaker** de verdade por provider (closed/open, cooldown
+  configurável), substituindo o try/except simples da DA-20.
+- **Budget**: estimativa de custo por chamada, rejeitada antes de
+  invocar o provider se ultrapassar um teto configurável.
+- **Audit log** estruturado por tentativa.
+
+Auth permanece na borda HTTP (API key, DA-18/23) — não duplicada
+aqui. Ficam de fora desta v1 (backlog em aberto): PII/DLP de verdade,
+tenant isolation, e circuit breaker compartilhado entre réplicas
+(é in-memory por processo — resolvido na DA-41: backend Redis, com
+fallback in-memory).
+
+**Validação:** `tests/test_llm_gateway.py` (20 testes) — 152 testes
+passando no total (`-m "not integration"`).
+
+### 26. Capability Registry + Agent Execution Policy (DA-27)
+
+Último item P1 da revisão externa. O servidor MCP (DA-19) só tinha
+autenticação de transporte (X-API-Key compartilhada) — sem
+diferenciação de risco por tool. `app/mcp/policy.py` (novo) cria um
+`CAPABILITY_REGISTRY` (uma entrada `ToolPolicy` por tool — risco,
+destrutividade, scopes exigidos, se precisa de aprovação, sensibilidade
+do dado) e `enforce()`, **fail-closed**: uma tool sem entrada no
+registry é negada por padrão. `diagnose_incident` e `list_connectors`
+agora chamam `enforce()` antes de executar.
+
+Como as duas tools atuais são 100% read-only, o comportamento
+observável não muda — o valor é preparar o terreno: qualquer tool
+futura de **escrita** (ex: reiniciar um iFlow) precisa
+obrigatoriamente de uma entrada no registry antes de ser exposta, ou
+é negada em runtime. Resolve o ponto mais forte da revisão: com
+tools de escrita, prompt injection deixa de ser "diagnóstico errado"
+e vira um problema de autorização operacional.
+
+**Validação:** `tests/test_mcp_policy.py` (9 testes) — 161 testes
+passando no total (`-m "not integration"`).
+
+Fecha os itens P0/P1 do backlog priorizado pela revisão externa. Os
+itens P2 restantes (evolução do schema do GraphRAG com `VERIFIED_AS`,
+benchmark científico de rerankers) seguem sem ação agendada.
+
+### 27. GraphRAG - modelo `VERIFIED_AS` (DA-28)
+
+Penúltimo item do backlog priorizado pela revisão externa (P2). O
+risco apontado: `is_grounded` (DA-16) é um proxy *automático* —
+`evidence_strength >= GROUNDED_EVIDENCE_THRESHOLD` no momento do
+diagnóstico — ainda é a hipótese do LLM, só que com evidência forte o
+suficiente para não ser descartada de cara. Sem uma distinção
+explícita entre "hipótese com boa evidência" e "fato confirmado por
+alguém que investigou depois", o grafo corria o risco de virar um
+loop de retroalimentação epistêmico: a hipótese do LLM de hoje vira
+"histórico" (fato) para o próximo diagnóstico na mesma interface, sem
+nunca ter sido de fato confirmada.
+
+Escopo escolhido — só o modelo `VERIFIED_AS`, não o grafo de topologia
+completo (`System→API→iFlow→Event→Credential`) que a revisão também
+menciona como evolução possível: o repositório não tem fonte de dados
+real para topologia hoje, e inventar uma seria pior que não ter a
+funcionalidade.
+
+- **`verify_incident(incident_id, verified_root_cause, verified_by)`**
+  (`app/rag/graph_store.py`) — grava
+  `(Incident)-[:VERIFIED_AS {verified_by, verified_at}]->(RootCause
+  {text})` e marca `Incident.verified = true`. Chamada EXPLÍCITA
+  apenas — nunca inferida por score.
+- **`POST /incidents/{incident_id}/verify`** (novo endpoint,
+  autenticado com o mesmo `X-API-Key` de `/diagnose`) — a superfície
+  para um humano (ou outro sistema, ex: ticket fechado com causa
+  confirmada) registrar a verificação.
+- **`DiagnosisResponse.incident_id`** — pré-requisito que faltava:
+  antes desta mudança, o id gravado no Neo4j era gerado dentro de
+  `graph_write_node` e descartado, nunca chegando ao caller — não
+  havia como saber qual id referenciar em `/verify`. Agora é gerado
+  uma vez em `run_diagnosis()`, passado pelo `CopilotState`, usado por
+  `graph_write_node`, e devolvido na resposta (`None` quando GraphRAG
+  está desligado ou o incidente não tinha interface/identificador
+  suficientes para ser gravado).
+- **`graph_context()`** passa a incluir um incidente `verified=true`
+  mesmo que `is_grounded` seja `false` — uma verificação humana é mais
+  forte que o proxy automático de evidência.
+- **`format_graph_context_for_prompt()`** ganha um terceiro nível de
+  confiança no texto injetado no prompt: "causa raiz VERIFICADA"
+  (mais forte) > "causa raiz confirmada anteriormente" (`is_grounded`,
+  automático) > "HIPÓTESE NÃO CONFIRMADA" (mais fraco). Quando
+  verificado, usa `verified_root_cause` (a causa confirmada, que pode
+  divergir da hipótese original do LLM) em vez de `root_cause`.
+
+
+**Atualização (avaliação externa, médio prazo item 5 — "Métricas e
+feedback"):** `POST /incidents/{id}/verify` deixou de exigir GraphRAG
+ligado. Agora tem dois efeitos independentes — gravar `VERIFIED_AS` no
+grafo (comportamento original acima, inalterado quando GraphRAG está
+ligado) e registrar um score booleano `diagnosis_correct` no trace
+Langfuse original, via um novo campo `DiagnosisResponse.trace_id`
+(capturado em `run_diagnosis()`, independente de GraphRAG) e um novo
+campo `trace_id`/`correct` no corpo de `VerifyIncidentRequest`. Sem
+GraphRAG ligado e sem `trace_id`, o endpoint agora devolve 400 (nada
+para registrar — e, depois, também sem gravação na tabela `incidents`,
+DA-50), não mais 404 — 404 continua reservado para "GraphRAG
+ligado mas o incidente não existe no grafo".
+
+**Validação:** novos testes em `tests/test_graph_store.py`
+(`verify_incident`, filtro de `graph_context`, formatação por nível de
+confiança), `tests/test_api.py` (endpoint `/verify`, 404 quando
+desligado/incidente inexistente, autenticação), `tests/test_nodes_multiagent.py`
+(`incident_id` threading em `run_diagnosis`) e
+`tests/test_nodes_graph_degradation.py` (`graph_write_node` usa o
+`incident_id` do state) — 180 testes passando no total
+(`-m "not integration"`).
+
+Fecha os itens P2 do backlog priorizado pela revisão externa. O único
+item restante do backlog completo é o benchmark científico de
+rerankers (P2 também, mas tratado à parte por ser um artefato de
+avaliação, não uma mudança de arquitetura).
+
+### 28. Benchmark científico de rerankers (DA-29)
+
+Último item do backlog da segunda revisão arquitetural externa. O
+reranker de produção (`cross-encoder/ms-marco-MiniLM-L-6-v2`) nunca
+tinha sido comparado formalmente contra alternativas — inclusive
+alternativas **multilíngues**, relevante porque as queries reais são
+majoritariamente em português, enquanto o baseline foi treinado só em
+inglês (MS MARCO).
+
+`scripts/benchmark_rerankers.py` reranqueia o corpus inteiro de
+`data/sample_docs/` (chunked com os mesmos parâmetros de produção)
+contra os 13 casos *in-scope* de `data/eval/rag_eval_dataset.json`,
+para 4 modelos candidatos, medindo Hit@1/Recall@5/MRR@5/nDCG@5
+(lógica pura em `app/rag/eval_metrics.py`, testada sem depender de
+nenhum modelo carregado) + latência + RAM + contagem de parâmetros.
+
+**Resultado:** o candidato multilíngue leve
+(`cross-encoder/mmarco-mMiniLMv2-L12-H384-v1`) supera o baseline em
+toda métrica de qualidade (Hit@1 0.85→0.92, MRR@5 0.92→0.96, nDCG@5
+0.94→0.97) e empata em qualidade com um candidato multilíngue maior
+(`BAAI/bge-reranker-base`) sendo 3.5x mais rápido. Metodologia
+completa, resultados detalhados por query e a recomendação (não
+aplicada nesta fase — troca de uma linha, documentada, pendente de
+decisão do operador) em `docs/RERANKER_BENCHMARK.md`.
+
+**Validação:** `tests/test_eval_metrics.py` (15 testes, lógica pura de
+ranking) — 195 testes passando no total (`-m "not integration"`). O
+benchmark em si (`scripts/benchmark_rerankers.py`) não roda no CI/
+suíte de testes — baixa 4 modelos reais do Hugging Face Hub e mede
+latência real, mesmo tratamento dado a `scripts/eval_rag.py` (scripts
+de avaliação ficam fora de `-m "not integration"`, que cobre só a
+suíte de testes automatizada).
+
+Com isso, **todos os itens do backlog da segunda revisão arquitetural
+externa estão fechados** (P0/P1/P2).
+
+**Atualização (avaliação externa, médio prazo item 6 — "Fila
+assíncrona"):** novo `POST /diagnose/async` enfileira o diagnóstico via
+RQ (mesmo Redis usado pela persistência de tasks A2A, item 2 acima —
+ver `app/queue.py`) e devolve `{"job_id", "status": "queued"}` (202),
+em vez de bloquear a requisição até o LLM terminar. `GET
+/diagnose/async/{job_id}` faz o polling do resultado
+(`{"job_id", "status", "result", "error"}`). `POST /diagnose` síncrono
+continua existindo sem nenhuma mudança. Sem `REDIS_URL` configurada,
+os dois endpoints assíncronos devolvem 503 em vez de degradar
+silenciosamente. O processamento de verdade depende de um worker RQ
+rodando (`docker compose --profile async up -d redis worker`) — sem
+ele, jobs enfileirados ficam presos em `"queued"` indefinidamente.
+
+**Validação:** `tests/test_queue.py` (camada `DiagnosisQueue`
+testada com fakes, sem Redis/RQ reais) e `tests/test_api.py`
+(endpoints `/diagnose/async`, incluindo 503 sem `REDIS_URL` e 404 para
+job inexistente).
+
+**Atualização (avaliação externa, médio prazo item 7 — "Testes de
+contrato dos conectores + Neo4j no CI"):** duas mudanças
+independentes fecham este item, o último dos sete do médio prazo:
+
+1. **Cassettes de conectores** (`tests/cassettes/`): os testes
+   `*_real_mode_success` de `tests/test_connectors.py` e
+   `tests/test_cap_connector.py` (ServiceNow, SAP CPI/OData,
+   Salesforce, Workday, Ariba, CAP) agora carregam o corpo da resposta
+   HTTP simulada de um arquivo `.json` documentado (via
+   `tests/cassette_loader.py::load_cassette()`), em vez de um dict
+   inventado inline no teste — cada cassette tem um campo `_source`
+   apontando para a documentação pública da API real correspondente.
+   **Deliberadamente fora de escopo:** o conector de API Management
+   (schema já autodocumentado como especulativo — corrigi-lo é o item
+   de longo prazo "Validação real do API Management connector") e o
+   RFC (depende do SDK proprietário `pyrfc`, não instalado no CI).
+2. **Smoke test do GraphRAG contra Neo4j real** — novo job
+   `neo4j-smoke` no CI (`.github/workflows/tests.yml`), que sobe um
+   Neo4j real como *service container* e roda
+   `tests/test_graph_store_neo4j_smoke.py` (marker `neo4j_smoke`,
+   `pyproject.toml`). Os testes existentes de `app/rag/graph_store.py`
+   usavam só um `FakeSession` em memória — nunca tinham sido
+   executados contra um Neo4j de verdade, risco apontado
+   explicitamente pela revisão ("schema/constraints em runtime").
+   Localmente (ou no job padrão "test", sem Neo4j disponível), esses
+   testes são pulados (`pytest.skip`) via a própria fixture, não pelo
+   marker `integration` — ver docstring do arquivo para o porquê.
+
+Com isso, **todos os 7 itens do médio prazo da segunda revisão
+arquitetural externa estão fechados** (rate limit global, persistência
+A2A, circuit breaker, redaction de PII, métricas/feedback, fila
+assíncrona e este). Resta só o longo prazo, ainda não autorizado.
+
+**Atualização (2026-10-18): regra do gate `reranker_invariant`.** Com o
+dataset ampliado para 90 consultas no escopo, nenhum candidato ficou
+significativamente melhor que o mmarco (bge-reranker-base: uma consulta a
+mais, McNemar p = 1,0). A regra "produção = maior Hit@1 medido, com margem
+≥ 0,05" exigiria trocar de modelo por ruído. Passou a ser: produção precisa
+ter sido medida, passar do piso de Hit@1 e nenhum candidato pode ser
+significativamente melhor (McNemar exato pareado, p < 0,05, via
+`app/rag/eval_metrics.py::paired_hit_comparison`); vantagem pontual não
+significativa vira aviso. Sem acertos por consulta no benchmark, vale a
+margem mínima antiga. O invariante 1 (mmarco em produção) não muda. Ver
+`docs/RERANKER_BENCHMARK.md`.
+
+### 29. Redaction de PII antes do prompt e do Langfuse, com truncamento inteligente e backoff (DA-30)
+
+**O problema.** Havia truncamento (`_truncate` em `nodes.py`) e ele limita
+**tamanho**, não **conteúdo**. Um operador colando o log de um IDoc no
+descrição do incidente fazia o e-mail, o CPF e o número do documento
+inteirarem o prompt do LLM — e, pior, chegarem ao Langfuse: o `@observe` do
+SDK captura os argumentos **e** o retorno de *toda* função decorada, ou
+seja, o `CopilotState` inteiro, não só o prompt que Havíamos sanitizado
+à mão. O ponto cego não era o que passava pelo prompt: era o que passava
+por volta dele.
+
+**A solução: três peças independentes, porque são três lugares diferentes.**
+
+1. **Redaction (`app/redaction.py`), regex-based.** `redact_pii_text()`
+   entra dentro de `sanitize_untrusted_input` e cobre o caminho *antes do
+   prompt*. `redact_pii_deep()` é passada como `mask=` na construção do
+   client Langfuse e cobre o caminho *antes do Langfuse* — esse é o ponto:
+   o SDK aplica a máscara a **qualquer** input/output capturado pelo
+   `@observe`, inclusive o que nenhuma sanitização manual alcançaria.
+   Padrões: e-mail, CNPJ, CPF, número de IDoc (16 dígitos), bearer token e
+    senha em JSON/YAML/env/XML. As duas últimas famílias preservam a chave
+    ou a tag (`"password": "<REDACTED>"`), porque uma linha de log
+   que vira `[REDACTED]` inteiro não serve para diagnosticar nada.
+2. **CPF sem pontuação só com contexto** (`_redact_cpf_digits_with_context`).
+   `\d{11}` sozinho é ambíguo: telefone, serial, OTP, timestamp. Redigir
+   qualquer 11 dígitos apaga um aviso que o operador não consegue usar. A
+   substituição é feita por função auxiliar que exige vizinhança de CPF —
+   é o caso em que ser permissivo destrói o sinal.
+3. **Truncamento inteligente** (`_smart_truncate`) e **backoff exponencial
+   com jitter** (`llm/gateway.py`, `llm_gateway_backoff_base_seconds=0.5`,
+   teto de 8s, `2 ** min(n-1, 6)`): o gateway deixa de martelar um provedor
+   fora do ar e deixa de cortar o log no meio da evidência útil.
+
+**Limitações (deliberadamente registradas):**
+- **Não é DLP.** É regex sobre os padrões nomeados na avaliação, sem NER nem
+  classificador: CPF em formato exótico, telefone, endereço e nome próprio
+  passam. O próprio `app/llm/gateway.py` mantém o não-objetivo anotado
+  ("PII/DLP de verdade... permanece pendente") — isto reduz o gap, não o
+  fecha.
+- O backoff é do **gateway**, não do `factory`: chamadas diretas ao factory
+  fora do AI Gateway não têm retry nem backoff. Invariante 3 é o que mantém
+  isso raro, e é por isso que ela existe.
+- `_smart_truncate` corta por tamanho de bloco, não por semântica: um log
+  enorme com a causa na última linha perde a causa. O redaction é
+   patterns-based, o truncamento é structural.
+
+### 30. Governança de soberania de dados por origin real (DA-43)
+
+O AI Gateway (DA-26) roteia por *nome* de provider, mas "confidencial"
+é uma propriedade do **endpoint de destino**, não do rótulo. Um
+`OPENAI_BASE_URL` apontando para um gateway interno continua sendo um
+terceiro; o mesmo nome `openai` pode ser OpenAI pública ou um LLM
+corporativo. A política anterior confiava no rótulo, e o modo
+desconhecido caía em **fail-open** — a configuração mais perigosa
+possível numa governança de dado.
+
+**Solução:** `data_sovereignty_mode` passou a ser `Literal` estrito
+(`strict` | `cloud_with_dlp`), com `confidential_allowed_origins`
+explicitamente listado e **fail-closed** (allowlist vazia ou modo
+desconhecido negam). `resolve_provider_origin()` normaliza a origin
+real da rota efetiva e decide por ela; `describe_effective_policy()`
+expõe a decisão e o motivo. Novo endpoint autenticado
+`GET /llm/policy` (mesmo `X-API-Key` de `/diagnose`, via
+`RequireApiKeyMiddleware`) permite auditar a política efetiva sem
+expor credencial.
+
+**Validação:** `tests/test_llm_governance.py` — 43 testes cobrindo
+normalização de origin, allowlist, fail-closed, modo inválido, **o LLM
+não ser construído quando a decisão é deny** (o ponto que realmente
+importa: negar antes de instanciar cliente), o contrapositivo
+permitido e o endpoint HTTP. Suíte completa: 620 testes
+(`-m "not integration"`).
+
+**Limitações:** `llm_fallback_provider` não aceitava `ollama` (na
+época; resolvido na DA-45 — hoje aceita, ver `app/config.py`), então
+"cloud primário + fallback local" era inexpressável na
+configuração. E `verify_api_key` compara string vazia com string
+vazia: com `settings.api_key == ""` a comparação passa, e a proteção
+depende do lifespan gerar uma chave no startup. Em produção
+funciona; em teste que não rode o lifespan, não.
+
+### 31. Sinal determinístico de escalonamento em três tiers (DA-44)
+
+Preparo para um tier 3 (modelo pago: GPT/Claude/Gemini): o pipeline
+precisa decidir *quando* escalar, e o sinal disponível — `evidence_strength`
+(DA-15) — **não serve**, por três motivos verificados no código:
+
+1. **Piso que satura.** `nodes.py::_compute_evidence_strength()` faz
+   `strength = max(rag_score, 0.75)` quando o conector é real. Com dado
+   real de conector, qualquer limiar acima de 0.75 **nunca dispara** —
+   e conector real é o caminho de produção.
+2. **Não sabe de que tier veio a evidência.** `sap_incident_docs`
+   (40 pts curados) e `sap_reference_library` (acervo de
+   manuais genéricos, tamanho em `data/index_manifest.json`) passam pelo mesmo reranker e pela mesma escala,
+   mas não têm o mesmo peso probatório. Um limiar único não está bem
+   definido.
+3. **Satura e não discrimina.** Mede "quanto contexto existe", não "o
+   modelo acertou": um modelo que alucina confiante recebe o mesmo
+   número que um que acerta.
+
+**Solução:** `app/agent/escalation.py` entrega um sinal **novo e
+aditivo** — `compute_escalation_signal()` devolve um
+`EscalationDecision` imutável, derivado apenas de fatos já decididos em
+código: `is_mock`/`is_fallback`, `hit["collection"]`,
+`rerank_score_calibrated` e `matched_source is None`. **Não altera
+`evidence_strength`** — mexer nele para acomodar cascata enfraqueceria
+DA-16, e o módulo declara isso explicitamente. O módulo também não
+conhece nenhum provider: `escalate_to` devolve o rótulo abstrato
+`cloud_premium` e quem invoca passa pelo AI Gateway (DA-26), que aplica
+a política de DA-43. Um teste garante que o módulo não cita `openai`,
+`anthropic` ou `gemini`, para que a política não possa ser contornada
+por ele.
+
+**Validação empírica (não só unitária — contra o pipeline real):**
+- O caso que motivou a DA ("algo estranho aconteceu", identifier
+  desconhecido) produziu `top_evidence=0.383` e sinal
+  `curated_tier_weak` → escala. **A regra de abstenção não disparou**:
+  o guardrail só anula `matched_source` quando o documento *não* está
+  entre os recuperados, e aqui ele estava, apenas com evidência
+  semântica fraca. Se a DA tivesse implementado só a abstenção, a
+  falha real teria passado — o que valida ter regras múltiplas e
+  contradiz a hipótese de que abstenção seria "o sinal mais forte".
+- Controle (IDoc status 51, resolvido pelo rule engine):
+  `top_evidence=1.000`, sinal `grounded`, sem escalonamento. Correto.
+- 17 testes unitários em `tests/test_escalation.py`, incluindo
+  determinismo, imutabilidade, ausência de vazamento de conteúdo no
+  log e o contrapositivo central (escala com conector real, onde
+  `evidence_strength` é cego).
+
+**Limitações (deliberadamente registradas):**
+- `FLOOR_TIER_MIN_EVIDENCE = 0.62` e `CURATED_TIER_MIN_EVIDENCE = 0.45`
+  **não foram calibrados** contra o acervo de referência. São pontos
+  de partida escolhidos pela escala de sigmoid (DA-42), a serem
+  substituídos por medição no re-baseline. Hipótese, não constante
+  validada.
+- O caminho em que `evidence_strength` fica cego exige dado real de
+  conector (`is_mock=False`). Na época desta DA nenhum conector o
+  produzia, e a cegueira do piso de 0.75 foi verificada por **leitura de
+  código**. Hoje RFC (logon), ServiceNow, Salesforce e CAP têm modo real
+  validado (matriz em `docs/ARCHITECTURE.md`).
+- `REFERENCE_FALLBACK_THRESHOLD` (`retriever.py`; 0.85 na época, 0.665 hoje) era justificado
+  num comentário que citava "766k+ chunks", número incompatível com os
+  outros registros do acervo (28.962, 100.805). Nenhum deles tinha o
+  índice medido anotado; desde a validação de 2026-10-07 o ingest grava
+  `data/index_manifest.json`, e o gate `index_manifest` avisa enquanto ele
+  não existir. O limiar precisa de re-calibração contra esse índice.
+- O tier 3 **não faz parte desta DA**: esta decide se há caso para
+  escalar, não quem escala.
+
+### 32. Universalidade de provider: rota auditada, capacidades por origin, identidade de embedding (DA-45)
+
+**O problema.** "Qualquer modelo que o cliente quiser, é só informar" era
+meia verdade. `ChatOpenAI(base_url=...)` fala `/chat/completions`, então
+qualquer endpoint OpenAI-compatible (Groq, Cerebras, Together, Fireworks,
+OpenRouter, DeepSeek, Mistral, xAI, vLLM, llama.cpp) já era mudança de
+`.env`, e o modelo já era texto livre. O que travava o cliente eram duas
+coisas:
+
+1. `llm_provider` era um `Literal` de três valores — e `llm_fallback_provider`
+   tinha só dois, o que tornava **inexpressível** o pedido mais comum de
+   cliente: cloud primário com local no fallback.
+2. O que sabia sobre o destino era um `bool` global (`llm_send_seed`) mais um
+   `Literal`. "Este destino aceita `seed`?" é uma pergunta **por destino**,
+   respondida globalmente.
+
+O segundo ponto não era teórico. `seed` não faz parte do contrato mínimo da
+API OpenAI: o endpoint OpenAI-compatible do **Gemini** devolve
+`400 "Unknown name \"seed\""` e não há fallback — a request inteira é
+recusada. A resposta óbvia (desligar o `seed`) desligava a invariante de
+determinismo do projeto inteiro, e foi o que obrigou o comparativo Promptfoo
+a rodar com `LLM_SEND_SEED=0` no processo: um problema local resolvido com
+uma perda global.
+
+**A solução: a fronteira é a rota, não o rótulo.**
+
+| Camada | Onde vive | Quem muda |
+|---|---|---|
+| rota (provider + origin + capacidades) | código (`llm/routes.py`) | só por DA |
+| **modelo** | `.env`, texto livre | o cliente, o tempo todo |
+
+O cliente informa `LLM_MODEL=...` e funciona. O que exige PR é **adicionar um
+fornecedor**, e isso é deliberado, não limitação: é a diferença entre
+"provider agnostic" e "config sem governança".
+
+**Três peças:**
+
+- **`llm/origins.py`** — `normalize_origin()` e `resolve_provider_origin()`.
+  Módulo neutro porque `gateway.py` importa `factory.py`: o factory precisa
+  da origin e não pode importar o gateway. `gateway.py` re-exporta os dois
+  nomes, então `from app.llm.gateway import normalize_origin` (usado pelos
+  testes de DA-43) continua funcionando.
+- **`llm/capabilities.py`** — perfil por **origin**, pelo mesmo motivo de
+  DA-43: `openai` apontando para Gemini e para `api.openai.com` não são o
+  mesmo destino. `llm_send_seed` passa a tri-state — `None` (default)
+  consulta a tabela, `True`/`False` são override explícito que **sempre**
+  vence. O default é deliberadamente **não conservador**: destino
+  desconhecido continua recebendo `seed`, porque a tabela remove casos
+  *conhecidos*, não adivinha sobre destinos que já funcionam hoje.
+- **`llm/routes.py`** — a tabela auditada. `LLM_ROUTE` no `.env` seleciona a
+  rota; nome desconhecido, `llm_provider` em conflito, ou origin real
+  incoerente com a classe declarada **falham no boot** (via
+  `model_validator` em `config.py`), não em produção.
+
+O guard de coerência funciona nas duas direções: `local_lab` exige loopback
+(declarar rota local apontando para a internet mentiria na auditoria) e
+`enterprise_azure` exige origin remota (o inverso). A expressão é
+`is_loopback_origin(actual) == route.require_loopback`.
+
+**Identidade de embedding (`rag/embedding_guard.py`).** A cambio conexo,
+porque "trocar de provider" traz junto a tentação de trocar de embedding, e
+isso **não é** uma mudança de uma linha. A checagem que existia em
+`ingest.py` comparava só a **dimensão** — e `nomic-embed-text` (768) e
+`mxbai-embed-large` (768) têm a mesma dimensão e espaços vetoriais
+incomparáveis. A busca não degrada: ela passa a devolver resposta plausível e
+errada, que é pior que indisponibilidade (DA-3: guardrail em código, não na
+confiança do LLM). Como 768 é a dimensão mais comum do ecossistema, a
+colisão não é exótica.
+
+O guard grava a identidade no **metadata da collection** (`update_collection`,
+não `set_payload` — payload é de ponto, identidade é da collection inteira;
+na época — hoje grava numa collection lateral `iic_collection_identity` via
+`upsert`, porque `update_collection(metadata=...)` não persiste no Qdrant
+1.19, ver `app/rag/embedding_guard.py`) e
+verifica em escrita e leitura, uma vez por processo (`verify_once`, para não
+virar latência por query). Três estados, e o terceiro é o honesto: bate →
+segue; diverge → **falha**; ausente (collection anterior à DA-45) → **avisa**,
+sem derrubar um corpus de 22 GB por metadado ausente. Um guard que tratasse
+"desconhecido" como "ok" seria o próprio bug; um que tratasse como "erro"
+seria impraticável. O próximo ingest grava a identidade e a partir dali a
+verificação passa a ser definitiva.
+
+**Validação:** 42 testes em `tests/test_llm_routes.py` (capacidades por
+origin, precedência do override, guard de coerência nos dois sentidos, boot
+fail-closed, `ollama` como fallback) e 20 em `tests/test_embedding_guard.py`
+(incluindo `test_dimensao_igual_nao_significa_embedding_igual`, que
+reproduz exatamente a colisão que a checagem de dimensão não pega). Suíte
+total: 682 testes, sem regressão.
+
+**Limitações (deliberadamente registradas):**
+- `self_hosted_openai` é a rota mais permissiva (qualquer origin não-loopback)
+  porque vLLM/LM Studio/gateways corporativos não têm origin fixa. É a que
+  mais merece revisão em auditoria.
+- A separação origem→capacidades é uma **tabela versionada com o código**.
+  Um destino novo que recuse `seed` continua recebendo `seed` até alguém
+  registrar a origin; o override explícito é o caminho curto, e é por isso
+  que ele existe.
+- Mudar `embedding_model` ainda exige reindexar 22 GB. O guard transforma
+  isso de *silêncio* em *erro na hora certa*; não elimina o custo.
+- Bedrock e APIs não OpenAI-compatible **não** são "só configuração": exigem
+  adapter/rota nova. "Qualquer modelo" vale para qualquer modelo atrás de um
+  contrato OpenAI-compatible.
+
+### 33. Registro gerenciado de modelos, credenciais cifradas e metering real (DA-46/47/48)
+
+**O problema.** DA-45 tornou o `.env` "fonte da verdade" para modelos e
+credenciais. Mas todo o conhecimento de custo e consumo vivia em lugar nenhum:
+o teto de budget do gateway era uma **estimativa** (`_estimate_cost_usd`,
+heurística) e nenhum `token_usage` real era persistido — o operador descobria
+gasto de provisão cloud num relatório do provedor, não no produto. Credenciais
+em plano-texto no `.env` e no historico do VCS tampouco eram administráveis por
+origen com rotacao controlada.
+
+**A solução: três peças opt-in, dirigidas por banco, todas fail-closed.**
+
+| DA | O que muda | Onde vive |
+|---|---|---|
+| DA-46 | `LLM_REGISTRY_DB=true` faz `get_chat_model` ler o **registro** (`llm_models`/`llm_credentials` por ORIGIN) em vez do `.env`; registry vazio/indisponível = `ConfigurationError`, nunca fallback silencioso | `app/admin/` (models, repository, runtime) + `llm/factory.py` |
+| DA-47 | Credencial por origin cifrada em repouso com **Fernet**; master key (`LLM_CREDENTIALS_MASTER_KEY`) vive no `.env`, nunca em runtime; rotação incrementa `key_version` e grava novo ciphertext | `app/admin/crypto.py` |
+| DA-48 | Metering de **tokens reais** (`usage_metadata`) via callback `on_llm_end` no AI Gateway; persistencia **síncrona best-effort** (psycopg2) no periodo aberto de `(origin, model)`; percentual consumido vs `monthly_limit_tokens` | `llm/gateway.py` + `app/admin/metering.py` |
+
+Detalhes de desenho relevantes:
+
+- **Superficie admin** (`/admin` Jinja2 + `/admin/api/*` JSON): as páginas são
+  **shell sem dado sensível** — os dados só chegam via API protegida por
+  `X-API-Admin-Key` (chave dedicada `ADMIN_API_KEY`, sem reuso da `API_KEY`).
+  Sem `DATABASE_URL` as rotas de dados respondem `503 "Persistencia nao
+  configurada"` (a UI não finge sucesso sem banco atrás).
+- **Identidade**: a chave do registro continua sendo a **origin
+  real** (DA-45), nunca o rótulo do provider. Modelo continua fora de tabela de
+  rotas (invariante 8).
+- **Metering nunca quebra o diagnóstico**: o escritor é sincrono best-effort
+  (mesma filosofia de `record_incident`); DB fora do ar → linha vazada, não
+  exceção.
+- **Custo por provider**: preço em `price_{in,out}_per_1m` usado para `cost_usd`;
+  Ollama = 0 (local). A captura cobre OpenAI-compatible (`token_usage`) e Ollama
+  (`prompt_eval_count`/`eval_count`).
+- **Opção default OFF**: testes unitários continuam com `DATABASE_URL=""` e o
+  `.env` mandando (sem regressão de execução); a superfície admin responde 503.
+
+**Migrations:** `003_create_admin_tables.py` (tuplas `llm_models` /
+`llm_credentials` / `llm_usage`) e `012_canonical_provider_origin.py`
+(normaliza `provider_origin` para a forma canônica nas três tabelas).
+
+**Validação:** 42 testes em `tests/test_admin_{crypto,security,runtime,routes}.py`,
+`tests/test_admin_repository.py` e `tests/test_metering.py` (roundtrip Fernet,
+rotação, fail-closed sem banco, auth por chave, acumulo multi-chamada, no-op
+best-effort). Migracao validada contra PostgreSQL real (UUID nativo, indice
+parcial `uq_llm_usage_open` com `WHERE period_end IS NULL`). Suíte total: 724
+testes, sem regressão.
+
+**Limitações (deliberadamente registradas):**
+- Sem Postgres/`DATABASE_URL` não há metering nem registro; é o preço do design
+  opt-in — ligar a flag sem banco por trás é erro de configuração (fail-closed),
+  e o próprio `/admin/api/registry/status` expõe `db_configured` para depurar.
+- O callback de metering captura `usage_metadata` dos models **gerenciados
+  pelo AI Gateway** (DA-26); chamadas diretas a `factory` fora do gateway não
+  são contabilizadas (e não devem existir — invariante 3).
+- Um provider com resposta sem `usage` (não-OpenAI-não-Ollama) não incrementa
+  metering; o modelo continua com orçamento estimado.
+
+### 34. Catálogo de sistemas integrados gerenciados pela superfície admin (DA-49)
+
+**O problema.** O mapa do que o copiloto observa (SAP OData, SAP RFC,
+ServiceNow, Salesforce, Workday, Ariba, CAP, APIM) vivia espalhado em runbooks
+e `.env`: não havia um registro operacional único de *quais* sistemas existem,
+em que ambiente (prod/stage/dev), com que conector e status — o tipo de tabela
+que um operador de iPaaS mantém por Excel.
+
+**A solução.** Fase B da superfície admin: `integration_systems`, um catálogo
+fechado e auditável, no mesmo regime da Fase A (DA-46/47/48):
+
+- `system_key` (slug único, ex. `sap_odata_prod`) é o identificador estável do
+  sistema; `connector_type` usa **o mesmo Literal fechado do pipeline**
+  (`odata/rfc/servicenow/salesforce/workday/ariba/cap/apim` — `app/models/models.py`;
+  8 tipos na entrega da DA-49, hoje 10 com `successfactors` e `po`, ver
+  `app/admin/models.py::CONNECTOR_TYPES`),
+  a ponte natural para correlacionar o registro ao `interface_type` de um
+  incidente.
+- `environment` (`prod/stage/dev/test`) e `status` (`active/degraded/offline/
+  trial`) são enums fechados validados na API (`422` com a lista de aceitos),
+  `vendor`/`base_url`/`notes` livres.
+- Endpoints `/admin/api/systems` (GET/POST) e `/admin/api/systems/{id}`
+  (GET/PATCH/DELETE), criados no mesmo router FAIL-CLOSED de `/admin/api/models`
+  (`ADMIN_API_KEY` dedicada; sem `DATABASE_URL` → `503`). A página
+  `/admin/systems` (Jinja2, shell sem dado sensível) lista o catálogo com
+  marcação visual `active/degraded/offline` e toggle rápido de status.
+- `/admin/api/registry/status` ganhou `systems_count` — a UI/opsDashboard
+  consegue ver o tamanho do catálogo junto do registro de modelos.
+
+**Validação:** 10 testes novos em `tests/test_admin_systems.py` (CRUD do
+repository sobre aiosqlite com modelos reais + rotas HTTP completas com DB vivo
+monkeypatchado em `app.db.AsyncSessionLocal`: 201/404/409/422/200, allowlist do
+PATCH e contagem). Migration `004` validada contra PostgreSQL real do compose
+(UUID nativo, `UNIQUE(system_key)`, índices por `connector_type`/`status`).
+Smoke E2E com uvicorn real + asyncpg confirmou a criação/validação/remoção no
+banco. Suíte total: 734 testes, sem regressão.
+
+**Limitações (deliberadamente registradas):**
+- O catálogo ainda não **vincula** sistemas a incidentes (a correlação por
+  `connector_type`/`connector_source_system` fica para a Fase C, junto da
+  observabilidade Grafana); hoje é um registro operacional, não um gráfico
+  (resolvido na DA-50).
+- `integration_systems` é servido junto às demais tabelas admin: Fase A e B
+  compartilham o mesmo `DATABASE_URL` — sem banco, a página `/admin/systems`
+  fica navegável mas sem dado (mesmo comportamento de `/admin/models`).
+
+### 35. Correlação de incidentes com o catálogo de sistemas + verificação persistida (DA-50)
+
+**O problema.** A DA-49 criou o catálogo de sistemas integrados, mas ele era um
+registro morto: ninguém conseguia responder *quais sistemas estão gerando
+incidente* nem *de qual sistema veio este incidente*. Três falhas concretas:
+
+1. `IncidentRequest.connector_source_system` existia no contrato e **nunca
+   chegava ao pipeline** — o `graph.run_diagnosis` montava o `initial_state`
+   sem ele, e `build_incident_row()` gravava sempre o rótulo genérico do
+   conector (`"OData"`, `"SAP CAP"`), que não é chave de catálogo.
+2. `POST /incidents/{id}/verify` só escrevia no Neo4j e no Langfuse. A tabela
+   `incidents` — origem de todos os dashboards Grafana — tinha
+   `verified_at`/`diagnosis_correct` **sempre NULL**: a taxa de verificação e a
+   acurácia eram permanentemente zero, independentemente de quantas
+   verificações o operador fizesse.
+3. A verificação respondia "nada a registrar" (400) quando o SQL estava
+   disponível e o incidente existia na tabela, porque o SQL nem era um efeito
+   do endpoint.
+
+**A solução.** Fase C, em três partes:
+
+- **Propagação.** `CopilotState.connector_source_system` +
+  `initial_state` em `app/agent/graph.py`; `build_incident_row()` prefere o
+  valor informado pelo cliente e só cai para o rótulo do conector quando ele
+  não veio.
+- **Correlação determinística** (`app/admin/correlation.py`, funções puras sem
+  I/O, para testar e auditar sem banco):
+  1. `connector_source_system` casa exatamente com um `system_key` → match
+     exato (o cliente disse qual sistema é);
+  2. senão, `interface_type == connector_type` do catálogo → se houver
+     **exatamente um** sistema daquele tipo, resolve; se houver mais de um
+     (mesmo conector em `prod` e `stage`), devolve **ambíguo** com os
+     candidatos, sem escolher — fail-closed, mesmo princípio da Capability
+     Registry (DA-27);
+  3. sem candidato, `none`.
+  Sem `FK` e sem migration: a ponte é o valor que o cliente já envia.
+- **Superfície de leitura.** `GET /admin/api/incidents` (filtros por
+  `system_key`/`interface_type`/`verified`, cada linha com o sistema
+  resolvido), `GET /admin/api/incidents/{id}` (com `description` e evidências),
+  `GET /admin/api/systems/{id}/incidents` (drill-down que reaplica a **mesma**
+  regra sobre o catálogo inteiro), `incidents_count`/`unverified_count` em
+  `/admin/api/registry/status`, a tela `/admin/incidents` (filtros, detalhe
+  sob demanda, drill-down a partir de `/admin/systems?system_key=`) e o dashboard
+  Grafana `iic-systems` (12 painéis). O `POST /incidents/{id}/verify` passou a
+  gravar no SQL como **terceiro efeito independente** e best-effort: roda antes
+  do 404 do grafo (um incidente presente na tabela e ausente no Neo4j não
+  perde o veredito — o GraphRAG é opcional) e `correct` ausente grava
+  `verified_at` deixando `diagnosis_correct` NULL, em vez de coagir para `True`
+  e inflar a acurácia dos dashboards.
+
+**Validação.** 38 testes novos em `tests/test_da50_incidents.py` (correlação
+pura: precedência do match exato, ambiguidade, fail-closed; `IncidentRepository`
+de **produção** com filtros; rotas HTTP com SQLite em arquivo — a mesma
+estratégia de `tests/test_admin_systems.py`; `record_verification` com
+`diagnosis_correct=None` preservado; wiring do endpoint com `sql_updated`);
+`scripts/validate_dashboards.py` novo. Suíte: **772 testes, sem regressão** (era
+734). O validador executa **45 queries** dos 4 dashboards contra o PostgreSQL
+real do compose — 45/45 OK.
+
+**Bugs encontrados e corrigidos no caminho** (ambos derrubavam painéis inteiros
+sem erro visível fora do Grafana):
+- `scripts/generate_reports.py`: `evidence_strength IN ('high','critical')`
+  numa coluna **FLOAT** (migration 002) → `invalid input syntax for type double
+  precision`. Agora `>= 0.7`.
+- `deploy/grafana/dashboards/dashboard_ipaas.json`: `ROUND(<double>, 1)` não
+  existe no Postgres (`round(double precision, integer)`) → `::numeric`.
+- `scripts/validate_dashboards.py` (novo): ao reproduzir as macros do Grafana
+  para rodar a query no `psql`, o primeiro rascunho gerava
+  `date_trunc(INTERVAL '1 hour', ...)` e `date_trunc('30 ms', ...)` para o
+  shorthand `'30m'` — `date_trunc` exige o argumento **textual**, e o mapa de
+  unidades agora cobre `s/m/h/d/w` explicitamente.
+
+**Limitações (deliberadamente registradas):**
+- A correlação por `connector_type` é **ambígua por definição** quando o mesmo
+  conector atende mais de um ambiente: o operador resolve na tela filtrando por
+  `system_key` depois de informar o valor no request. O sistema não escolhe.
+- `system_key` não é validado contra o catálogo no `/diagnose` (o request é
+  aceito mesmo sem correspondência no catálogo) — a não correspondência aparece
+  como `none`/`ambiguous` na leitura, não como erro no diagnóstico. Validar no
+  `/diagnose` transformaria um registro analítico opcional em precondição de
+  negócio.
+- Sem `DATABASE_URL`, `/admin/incidents` e a API de incidentes respondem `503`
+  (fail-closed) e o dashboard fica vazio — a verificação no SQL só existe
+  quando há Postgres, como todo o resto da superfície admin.
+- `scripts/validate_dashboards.py` valida sintaxe e execução de `SELECT`, não
+  o resultado visual dos painéis; ele também substitui as variáveis de template
+  por `TRUE` (equivalente a "All"), então um erro que só aparece com um filtro
+  específico selecionado ainda pode escapar.
+
+### 36. Quality gates: transformar alegações de qualidade em invariantes verificadas (DA-51)
+
+**O problema.** As afirmações mais fortes deste README eram verificadas à mão,
+uma única vez, e nunca mais: "10/10 no promptfoo" (Fase 12), "hit@1 0.923 do
+mmarco sobre o baseline" (DA-29), as "45 queries dos 4 dashboards" (DA-50) e a
+tabela `integration_systems` com migration `004`. O CI (`.github/workflows/tests.yml`)
+rodava ruff, pytest com cobertura ≥ 80% e pip-audit/bandit — **nada** disso.
+Um dataset de avaliação podia ser esvaziado, um `expected_sources` podia apontar
+para documento que não existe mais, o modelo de produção podia ser trocado sem
+ninguém reexecutar o benchmark, e uma migration podia só funcionar na base
+local. Nenhuma dessas regressões quebraria o build. A DA-50 provou o custo
+desse buraco: três bugs de SQL (`evidence_strength` em coluna FLOAT,
+`ROUND(double,int)`, `date_trunc` com intervalo) derrubavam painéis inteiros sem
+deixar rastro em log ou teste.
+
+**A solução.** Camada de gates com duas categorias, porque "testar tudo no CI"
+sem LLM e sem infra é uma fantasia:
+
+- **Determinístico** (`app/evaluation/gates.py` + `scripts/quality_gate.py`) —
+  segundos, sem LLM, sem Qdrant, roda em todo push: schema e piso do dataset de
+  avaliação; todo `expected_sources` presente no corpus; presença de casos
+  `hard`/`out_of_scope`; **invariante DA-29 automatizada** (o
+  `RERANKER_MODEL` em produção tem que ser o vencedor medido no benchmark, com
+  hit@1 e margem mínima sobre o baseline ms-marco); validade das três configs do
+  promptfoo, inclusive se os scripts `exec:` referenciados ainda existem;
+  existência de baseline de LLM; e `candidate_das_fresh`, que falha o build se
+  uma DA marcada como "candidata" no `CLAUDE.md` já tiver seção em
+  `docs/ARCHITECTURE.md`.
+- **Job `migrations_and_dashboards`** — Postgres efêmero, `alembic upgrade head`
+  em banco limpo e as 45 queries dos 4 dashboards. É a **primeira vez** que as
+  migrations são validadas por máquina neste repositório.
+- **Job `llm_eval`** — promptfoo manual (`workflow_dispatch`), em runner com
+  Ollama+Qdrant, com comparação contra baseline versionado em
+  `data/eval/promptfoo_baseline.json` (o gate `llm_baseline` avisa se ele
+  estiver ausente; grave com `scripts/quality_gate.py
+  --write-promptfoo-baseline`). Sem infraestrutura o job escreve "NÃO
+  EXECUTADO" no summary e falha com mensagem explícita em vez de reportar
+  verde: os configs do promptfoo usam provider **local** (`exec:`) e o runner
+  hospedado não tem Ollama nem o modelo de 51 GB.
+
+**O que o gate encontrou no primeiro dia.** Dois problemas reais, nenhum deles
+visível para a suite:
+
+1. `candidate_das_fresh` acusou a **DA-32** listada como candidata "aguardam
+   Kyma" no `CLAUDE.md`, embora entregue em `67b78e8`
+   (`app/events/amqp_consumer.py`) e documentada em `docs/ARCHITECTURE.md`.
+2. A primeira versão do check de schema rejeitava `expected_sources: []` — mas
+   os dois casos `out_of_scope` do dataset têm essa lista vazia **de propósito**
+   ("fora do escopo: deve retornar baixa confiança"). O gate estava certo sobre
+   a forma e errado sobre o significado. Hoje `out_of_scope` *exige* lista
+   vazia, e lista preenchida nesse caso falha, porque o caso se contradiz.
+
+**Três gates de integridade documental, e um conector morto.** A revisão de
+`docs/` encontrou uma classe de bug que nenhum teste Python pega: a
+documentação afirmar coisas que o código contradiz. O caso mais caro era um
+tutorial de debug que mandava o leitor colocar breakpoint em
+`structured_llm`, `result["raw"]` e `diagnosis["confidence"]` — **nenhum dos
+três existe em qualquer lugar do código** —, e em `app/agent/graph.py` para
+funções que moram em `nodes.py`. Seguir o tutorial ao pé da letra não levava a
+nenhum breakpoint. Um `.md` truncado no meio de um heredoc (fence ímpar) era o
+único sintoma, e ele engole o resto da renderização sem erro visível.
+
+Os três gates são `docs_markup_integrity` (fences e links), `docs_code_references`
+(`app/x.py::símbolo` e `app/x.py:N` precisam resolver) e `connector_reachable`
+(todo conector registrado é aceito pelo Literal de `interface_type`).
+
+O terceiro encontrou um **conector morto**: `SuccessFactors` estava registrado
+em `app/connectors/__init__.py`, tinha os quatro settings em `app/config.py`, e
+`/diagnose` respondia **422** para ele — o `Literal` fechado de `interface_type`
+aceitava 8 valores e o conector era o nono. O gate `rag_dataset_schema` espelhava
+o mesmo `Literal`, então os dois concordavam e o bug passava. Pior: mesmo se a
+API aceitasse, `classify_domain` não tinha `successfactors` em nenhum dos dois
+conjuntos, então o incidente cairia no generalista em vez do especialista SaaS.
+Corrigido nos três níveis (Literal, supervisor, docstring do catálogo admin), sem
+migration: `connector_type` é `String(32)`, não enum de banco.
+
+O que torna `docs_code_references` útil é a decisão de **não** varrer prosa
+solta. `ANTHROPIC_API_KEY`, `RFC_SYSTEM_INFO` e `${QDRANT_HOST_PORT:-6333}`
+foram sinalizados na revisão e são, respectivamente, um provider inexistente,
+uma Function Module ABAP e uma variável de shell. Um gate que acuse os três é um
+gate que alguém desliga na primeira semana — e desligar gate é exatamente o que
+a DA-51 existe para evitar.
+
+**Validação.** 34 testes novos em `tests/test_quality_gate.py` — a maioria
+testando que o gate **falha** quando deve (dataset encolhido, `hard` removido,
+modelo divergente do vencedor, margem insuficiente, YAML quebrado, script de
+provider apagado, DA entregue marcada como candidata, regressão de promptfoo,
+payload malformado). Suíte: **806 testes**. O caminho do job de migrações foi
+simulado localmente contra um banco descartável: `001 → 004` e 45/45 queries.
+
+**Limitações (deliberadamente registradas):**
+- `reranker_invariant` confere que o modelo em produção é o vencedor *medido
+  antes*; reexecutar o benchmark exige Qdrant + cross-encoder e continua manual
+  (`scripts/benchmark_rerankers.py`).
+- O gate de LLM não roda em todo PR, por custo e por causa do provider local.
+  Onde não roda, ele avisa — não mascara.
+- `normalize_promptfoo_results` recusa payload vazio ou de formato
+  desconhecido, mas valida o *envelope* do promptfoo  por forma, então uma
+  mudança de formato do promptfoo exige tocar no normalizador.
+- Detalhe completo, incluindo o que estes gates **não** cobrem:
+  `docs/QUALITY_GATES.md`.
+
+### 37. Detecção de drift de contrato SAP: baseline, severidade e incidente (DA-52)
+
+**O problema.** O `ODataConnector` lia campos **hardcoded**
+(`MessageId`, `StatusText`, `MessageType`, `RetryCount` — `odata_connector.py:177`)
+e nunca perguntava ao SAP qual era o contrato publicado. Quando alguém
+removesse um desses campos no backend, o sintoma era um `AttributeError`
+dentro do conector — ou pior, um `None` silencioso — horas depois, com o
+diagnóstico blaming no CPIs em vez do SAP. A falha estava no *contrato* e
+ninguém media contrato. Pior ainda: o modo de falha mais comum
+(field removido) é indistinguível, no log, de SAP fora do ar.
+
+Duas armadilhas específicas de um detector de drift:
+
+1. **Ausência de dado não é "sem mudança".** Um SAP inacessível, um
+   conector mock e um sistema sem introspecção produzem a mesma coisa que
+   uma ausência real de drift. Tratar qualquer um dos três como `clean` é
+   a forma mais fácil de construir um detector que nunca alarma.
+2. **O SAP republica o serviço o tempo todo** e cada publicação troca
+   namespace, versão de `Annotation` e ordem de `Property`. Um detector
+   que compare o XML bruto gera ruído todo dia e é desligado na primeira
+   semana.
+
+**A solução.** Quatro estados, porque a distinção entre *não verificável* e
+*verificado e igual* é justamente o que o detector precisa expressar:
+
+> Quatro, não cinco. `unavailable` e `not_introspectable` seriam estados
+> distintos e **não existem** — ambos caem em `unverified`, que carrega a
+> diferença em `reason`. Ver a última limitação desta seção.
+
+| Estado | Significado | Abre incidente? |
+|---|---|---|
+| `first_observation` | não há baseline ainda | não (grava baseline) |
+| `clean` | comparado com baseline, idêntico | não |
+| `drift` | comparado, mudou | só se `breaking` |
+| `unverified` | **não** deu para comparar | nunca |
+
+O fluxo é `probe → normalizar → hashear → diff → baseline → sinal`:
+
+- **Probe** (`fetch_contract()` na interface `SAPConnector`, interface
+  segregada: os outros 9 conectores herdam `None` em vez de devolver um
+  contrato vazio). O `ODataConnector` lê `$metadata` **reusando o OAuth
+  existente**. Falha de transporte no conector vira `None` e o resultado é
+  `unverified` com motivo genérico ("contrato indisponivel"); só uma exceção
+  que escapa do conector leva o motivo detalhado em `unverified.reason`.
+- **Normalizar antes de hashear** (`app/contracts/model.py`): entidades e
+  propriedades são serializadas em ordem canônica; namespace, versão e
+  anotações ficam fora do modelo, e `max_length` faz parte do fingerprint. Como o
+  XML volta a ser canônico, o fingerprint é comparável entre dias.
+- **Severidade** (`app/contracts/diff.py`), fechada e testada: campo ou
+  entidade removida, tipo trocado, `nullability` estreitada, `MaxLength`
+  reduzido, chave alterada, `abstract` → breaking. Campo novo, tipo
+  alargado, `MaxLength` maior → additive. Reordenação, namespace e versão
+  são descartados na normalização (resultado `clean`); `cosmetic` existe no
+  vocabulário, mas não é emitido hoje. Rename provável (assinatura idêntica)
+  é **breaking com `hint`** (invariante 17): para o consumidor, o efeito é o
+  de um campo removido, e o hint evita dois alarmes.
+- **Baseline** (`app/contracts/baseline.py`, migration `005`): append-only
+  em `system_contracts`, sem FK para `integration_systems` — é histórico
+  de observação, não registro de cadastro, e a FK só criaria ordem de
+  escrita e orphan na migração. Baseline é a observação mais recente por
+  `system_key`. A garantia append-only é reforçada em banco pela migration
+  `011_system_contracts_append_only.py` (trigger que nega UPDATE/DELETE;
+  TRUNCATE segue permitido).
+- **Sinal** (`app/contracts/observe.py`): só `breaking` vira
+  `IncidentEventEnvelope` → `handle_incident_event` → `run_diagnosis`
+  (DA-23), com `source="schema-drift-detector"`. O `connector_source_system`
+  recebe o **`system_key` exato** do catálogo (DA-50), não um rótulo
+  livre: com 2+ candidatos, a correlação por `connector_type` é
+  `ambiguous` e fail-closed por invariante 12.
+
+**O que apareceu na implementação.** Três coisas que só aparecem quando o
+caminho inteiro roda, não nas unidades:
+
+1. `app/db.py::get_sync_session_factory` usava `@lru_cache` de **zero
+   argumentos** sobre `settings.database_url`, que é mutável. A primeira
+   chamada sem `DATABASE_URL` cacheava `None` para sempre — sem exceção,
+   sem log. O próprio docstring admitia que o cache "precisa ser
+   invalidado", mas nada expunha isso. Trocado por cache **chaveado pela
+   URL**, que reconstrói quando a config muda e nunca cacheia o `None`.
+   Bug real, encontrado pelo teste e2e, não por leitura.
+2. `POST /incidents/{id}/verify` grava `verified_at` mas deixa
+   `diagnosis_correct` NULL por decisão (invariante 13). Isso torna
+   `verified` **incontável** como métrica de acerto — mais uma razão para
+   a DA-52 não tentar medir qualidade por esse campo.
+3. Uma migration validada em `001 → 005` e de volta não prova que o
+   *mapper* do ORM bate com o schema. Divergência de coluna, índice ou
+   nome só aparece quando o SELECT real roda.
+
+**Validação** (números da entrega; em 2026-10-07 são 98: 21 do parser, 38
+da matriz, 30 de orquestração e 9 end-to-end). 89 testes novos: 21 do
+parser/fingerprint, 35 da matriz de severidade, 23 de orquestração e **10
+end-to-end** atravessando conector →
+HTTP → parser → **PostgreSQL real** → diff → CloudEvent, no job
+`migrations_and_dashboards` do CI (Postgres efêmero, `alembic upgrade
+head` já aplicado). O e2e inclui os casos que só quebram em produção:
+republicação sem mudança, SAP fora do ar não zerando o baseline, drift
+vindo depois de queda de leitura, dois sistemas sem compartilhar baseline,
+e o CLI devolvendo exit ≠ 0 para breaking. Suíte: **903 testes**.
+
+**Limitações (deliberadamente registradas):**
+- Só **OData** tem introspecção. RFC, os 5 SaaS, CAP, APIM e PO herdam
+  `fetch_contract() → None` e ficam em `unverified` até ganharem probe
+  próprio; a interface já está pronta, o parseador é que não.
+- `unverified` **sai com código 0** no CLI (`scripts/check_contract_drift.py`).
+  SAP fora do ar não é motivo para marcar build vermelho: o detector não
+  tem opinião, e saída de erro transformaria "não deu para checar" em
+  "deu errado" — a confusão que o preflight de RAM resolveu no sentido
+  oposto. Quem precisa dos três estados lê `--json`.
+- **Entrega antes do baseline** (corrigido em 2026-10-07): o incidente é
+  emitido primeiro e o baseline só é gravado se a entrega deu certo. Breaking
+  com entrega falha re-detecta e reemite na próxima observação, com id de
+  evento estável. O recorte atual é 12 mudanças por evento.
+- Detecção é **reativa por polling**, não por webhook: quem agenda é
+  operação externa. Não há scheduler no repo.
+- `unavailable`/`not_introspectable` não são estados separados: hoje
+  `unverified` carrega o motivo em `reason`. Separar exigiria distinguir
+  "o SAP disse que não tem contrato" de "o SAP não respondeu", e o
+  detector hoje não sabe a diferença.
+
+### 38. Prompt de diagnóstico como artefato versionado, com gate contra o prompt medido (DA-53)
+
+**O problema.** O prompt de diagnóstico — o texto mais caro e mais
+influente do sistema — era três f-strings dentro de `app/agent/nodes.py`
+(a persona, o template, a instrução de saída), e a tabela `incidents` não
+guardava nem o modelo nem o prompt. Duas consequências, nenhuma visível:
+
+1. **Um incidente gravado era irreproduzível.** `llm_provider_used` diz
+   *qual transporte* respondeu, não *qual modelo* nem *qual prompt*. Quando
+   o modelo canônico mudou (DA-4/8, e de novo na DA-12), não havia como
+   responder "quais diagnósticos antigos saíram do modelo antigo?".
+2. **Não dava para saber se o prompt em produção era o prompt medido.** O
+   harness do promptfoo **chama `run_diagnosis` de verdade**
+   (`scripts/promptfoo_provider.py:30`) — ele não tem cópia do prompt. Isso
+   é uma boa notícia para a fidelity da medição e uma péssima para
+   rastreabilidade: o 10/10 da Fase 12 mede o texto de `nodes.py`, e trocar
+   uma palavra ali invalidava a medição **sem deixar rastro nenhum**. O
+   `RERANKER_MODEL` tinha invariante automatizada desde a DA-29; o prompt,
+   que era a variável mais sensível, não tinha nada.
+
+O caso mais traiçoeiro: editar um `Field(description=...)` do
+`DiagnosisModel`. O LangChain injeta essas descrições no schema de
+tool-calling (`app/agent/state.py:18-24`), então elas **são** prompt — em
+outro arquivo, sem nenhuma menção a prompt. Já quebrou uma vez
+(`matched_source` parou de ser preenchido) e nada automatizado pegaria.
+
+**A solução.** `app/agent/prompts.py` é a fonte única do artefato, e o
+digest é o que amarra produção à medição.
+
+- **`PromptSpec`**: `version` (`1.0.0`) + `digest` (sha256 de um tuplo
+  canônico com versão, template, **nomes dos slots**, as três personas, a
+  instrução de saída e **nomes + descrições + constraints dos campos do
+  `DiagnosisModel`**). Incluir o schema no digest é o ponto: é o que faz
+  o gate enxergar uma edição de `Field` feita a dez arquivos de distância.
+- **Nomes dos slots no digest, não o conteúdo.** Um slot novo (ou removido)
+  muda a estrutura do prompt e reprova o gate; o texto de um log não muda
+  nada. Se o digest cobrisse o conteúdo variável, cada incidente teria um
+  digest próprio e a coluna `incidents.prompt_digest` não serviria para
+  atribuir nada.
+- **Proveniência no caminho real**: `_run_diagnosis_agent` grava
+  `prompt_version`/`prompt_digest` no diagnóstico, `graph.py` os leva para
+  `DiagnosisResponse`, e `build_incident_row` para a tabela `incidents`
+  (migration `006`, com `llm_model` — que já circulava em `CopilotState` e
+  nunca era persistido). O `report_markdown` mostra modelo e versão do
+  prompt, para quem lê o diagnóstico.
+- **Gate `prompt_digest_measured`**, moldado no `reranker_invariant` da
+  DA-29: o digest de produção tem que ser o digest gravado em
+  `data/eval/prompt_baseline.json`, que é a declaração "este texto foi o
+  medido". Verificado com três mutações, todas reprovadas: uma palavra no
+  template, **um `Field(description=)` do `DiagnosisModel`**, e um slot
+  novo no template.
+
+**A decisão que custou menos e protegeu mais: não tocar no texto.** Era
+tentador gerar a instrução de saída a partir do `DiagnosisModel` e matar
+a duplicação entre `app/agent/prompts.py::JSON_INSTRUCTION` e as
+`Field(description=...)` de `app/agent/state.py::DiagnosisModel`. Isso
+mudaria o prompt — e o texto medido. Eu trocaria um bug latente por um
+benchmark invalidado e um gate vermelho. O texto ficou como está, e o digest
+passa a **incluir os dois**, de modo que mexer em qualquer um dos dois
+exige re-medição. A duplicação continua, mas deixou de ser invisível.
+
+**Validação.** Testes em `tests/test_prompt_versioning.py` (a contagem
+atual sai de `pytest --collect-only -q tests/test_prompt_versioning.py`,
+para não envelhecer no texto), e o
+resto do trabalho foi provar que **não mudou nada**: o texto extraído foi
+conferido byte a byte contra o renderizado pré-DA-53, em quatro cenários
+(sap/saas/generic/sem-contexto), com os sha256 travados em teste
+(`GOLDEN_SHA256`). Se um byte mudar, o teste falha e aponta que o promptfoo
+precisa ser reexecutado. Também: o digest é estável entre processos
+(subprocesso, senão a coluna seria inagrupável), o `render()` falha alto em
+slot faltando ou sobrando (senão um bloco de contexto desapareceria em
+silêncio), e `build_incident_row` bate com as colunas do ORM nos dois
+sentidos. Migration `006` validada em `001 → 006 → 005 → 006 → head` num
+Postgres descartável, com insert real pelo ORM nos dois cenários (LLM com
+proveniência, rule engine sem) e as 45 queries dos dashboards ainda
+verdes. Suíte: **947 testes** (903 da DA-52 + 44 novos).
+
+**Limitações (deliberadamente registradas):**
+- **O digest não é um snapshot do que foi enviado.** Dois incidentes com o
+  mesmo digest usaram o mesmo *template*; o contexto (logs, RAG, conector)
+  era diferente. Para auditar o prompt exato de um incidente seria preciso
+  persistir o prompt renderizado, e aí entra PHI e custo de armazenamento
+  — decisão que não tomei aqui.
+- **O gate confia numa declaração.** Ele compara produção com
+  `data/eval/prompt_baseline.json`, mas nada impede que alguém rode
+  `--write-prompt-baseline` sem ter executado o promptfoo. O comando não
+  aceita digest digitado à mão (seria exatamente o artefato em que o gate
+  não deve confiar), mas a evolução natural — ligar o digest ao resultado do
+  promptfoo versionado — não foi feita.
+- **Proveniência de prompt não entra no event mesh.**
+  `IncidentEventData` é o lado **entrada** (`POST /events/incident`
+  representa o que um humano digitaria em `/diagnose`); a origem do
+  diagnóstico não pertence a um payload de entrada.
+- **Incidentes anteriores a `006` ficam com as colunas nulas.** Não há backfill:
+  não existe forma honesta de saber qual prompt gerou um diagnóstico gravado
+  antes de a informação existir.
+- **Análise por prompt continua não sendo possível.** O digest identifica o
+  artefato, não mede qualidade por versão. Faltaria achar as linhas por
+  `prompt_digest` e comparar acurácia — e a invariante 13 já proíbe usar
+  `verified`/`diagnosis_correct` para isso.
+
+
+### 39. Login de sessão para a UI web — cada credencial na camada dela (DA-54)
+
+**O problema.** A homologação pegou no primeiro clique: `Erro 401: X-API-Key
+inválida ou ausente`. O DA-18 exige `X-API-Key` em `/diagnose` — e a
+`X-API-Key` é uma credencial de **borda**, pensada para máquina-a-máquina
+(curl, MCP, A2A, outro agente). Mas a UI web reusava essa chave de
+infraestrutura, jogando um segredo do servidor na mão do **usuário final**:
+para operar pela interface, o usuário precisava acessar o servidor, abrir o
+`.env`, copiar o valor e colar no browser. Usuário de UI não deveria nem
+saber que `.env` existe. O paliativo da véspera (campo de API Key na UI)
+trocou "impossível autenticar" por "usuário carrega segredo de infra" —
+mesma camada invertida. O próprio código já previa a evolução: o comentário
+em `frontend/src/api/diagnose.ts` dizia *"em produção, considere migrar para
+autenticação via cookie de sessão obtido através de um endpoint
+`/auth/login` dedicado — essa evolução não exige mudança neste arquivo"*.
+
+**A solução.** Duas vias de autenticação em `/diagnose`, cada uma certa para
+a sua camada:
+
+- **máquina** — header `X-API-Key`, exatamente como antes (DA-18 intacto);
+- **humano** — `POST /auth/login` (usuário + senha) → cookie de sessão
+  `iic_session`, **HttpOnly** (JS não lê), **SameSite=Strict** (CSRF),
+  assinado com HMAC-SHA256 (stateless: `usuario:expiry:assinatura` na
+  época; hoje `usuario:emitido:expira:sid:assinatura`, com revogação por
+  `sid` e por usuário — `app/auth.py::sign_session`,
+  `app/auth.py::verify_session`, `app/auth_guard.py`; mexer em
+  qualquer campo invalida), com prazo (`SESSION_TTL_HOURS`, default 8h).
+
+Superfícies só-de-máquina (**MCP** `/mcp`, **A2A** `/a2a`, **Event Mesh**,
+**admin** `/admin`) **não** aceitam cookie de sessão: continuam exigindo as
+suas chaves dedicadas (DA-19/27/46). Um cookie de browser não abre nenhuma
+delas — testado quebrando de propósito.
+
+**Fail-closed**, no espírito DA-18: sem `WEB_UI_USERS` configurado
+(e, desde a DA-55, sem usuário ativo na tabela `web_users`),
+`/auth/login` responde 401 **sempre** (não existe "login aberto");
+`SESSION_SECRET` vazio gera segredo efêmero no startup com WARNING no log
+(sessões morrem a cada restart). Senha é verificada com PBKDF2-SHA256
+(`hashlib`, stdlib — **zero dependências novas**), piso de 600k iterações
+(requisito do parse: entrada com menos de 100k é pulada com WARNING), e
+**todas** as comparações de segredo usam `secrets.compare_digest` — a mesma
+disciplina de timing-attack do DA-18. Login inexistente e senha errada dão a
+**mesma** resposta, para não revelar quais usuários existem. Rate limit
+5/min por IP (mais apertado que o 10/min de `/diagnose`, porque aqui se
+testa senha).
+
+Usuários vivem no `.env` (`WEB_UI_USERS`) como
+`usuario:pbkdf2_sha256.iterações.salt.hash` — gerado com one-liner
+documentada (mesmo esquema do Fernet da DA-47). Single-tenant por design;
+um store de usuários com senhas próprias por usuário é a evolução natural
+quando houver mais de um operador (o store veio na DA-55).
+
+**O que NÃO mudou:** `frontend/src/api/diagnose.ts` — exatamente como o
+comentário previa, o cookie flui no fetch same-origin sem nenhuma mudança
+lá; o header `X-API-Key` continua sendo enviado se existir (compatível com
+quem já usava).
+
+**O porquê do separador `.`** no formato da credencial: `$` não. O docker
+compose **interpola** `$` dentro de valores em `${VAR:-}` no compose.yaml —
+achado real na homologação: o salt do `WEB_UI_USERS` **sumia** no caminho
+do `.env` para o container (env truncado no meio, login 401 sempre, e o
+container com a variável mais curta que o `.env`). Ponto não é caractere de
+interpolação — a credencial atravessa `.env` → compose → container inteira.
+
+**Validação.** 18 testes novos (`tests/test_auth.py`), um por promessa:
+cookie HttpOnly/SameSite/Path no login, `/auth/session` dizendo quem está
+logado, senha errada 401, login inexistente ≡ senha errada, login fechado
+sem `WEB_UI_USERS`, logout limpando, cookie autenticando `/diagnose`,
+`X-API-Key` ainda valendo, 401 sem nada, token adulterado/expirado/segredo
+errado, MCP e admin rejeitando cookie, parse de `WEB_UI_USERS` (entrada
+malformada pulada sem abrir auth, iterações fracas rejeitadas). Achado real
+do processo: o cookie jar do httpx persiste entre testes no client
+module-level — um login de teste anterior autenticava um teste que devia
+provar o 401; o fixture agora limpa o jar.
+
+
+### 40. Manutenção de usuários pelo admin, com ativação por e-mail e telefone (DA-55)
+
+**O problema.** A DA-54 resolveu o login humano com usuário+senha, mas a
+manutenção de usuários seguia no `.env` (`WEB_UI_USERS`): criar um usuário
+era editar arquivo de infraestrutura e reiniciar o container — e não havia
+verificação de posse do e-mail nem do telefone: quem tivesse a senha inicial
+entrava, mesmo que o e-mail cadastrado não fosse da pessoa.
+
+**A solução.** Tabela `web_users` (migration `007_create_web_users.py`;
+limite de tentativas do código de telefone na migration
+`010_web_users_phone_code_attempts.py`) + CRUD na superfície admin
+(DA-46, `X-API-Admin-Key`: `/admin/api/users`, tela `/admin/users`) +
+**ativação em duas etapas antes do login valer**:
+
+    admin cria usuário → status=pending_email, token HMAC por e-mail (24h)
+    /auth/verify/email (pública, 5/min) → status=pending_phone, código de
+    6 dígitos por telefone (10 min, só o HASH guardado)
+    /auth/verify/phone (pública, 5/min) → status=active — login vale
+
+Logins seguintes seguem usuário+senha (DA-54, decisão do dono: ativação é
+uma vez, não 2FA diário).
+
+**Provedores de notificação** (DA-55, evolução; revisado em 2026-10-07,
+M-12): o e-mail de ativação é **enviado de fato** pelo provedor de
+`EMAIL_PROVIDER` — `mailpit` (SMTP, desenvolvimento) ou `resend` (API). Só
+com envio confirmado o token deixa de voltar na resposta admin. **SMS ainda
+não tem provedor**: o código de telefone segue out-of-band, na resposta da
+API admin. O contrato de entrega é `deliver_email(to, body)` e
+`deliver_sms(to, body)` (`app/webusers.py`); provedores específicos ficam em
+`app/notifications/providers.py` (Factory Method + Strategy).
+
+**Entrega out-of-band, com adaptador real depois** (decisão do dono): sem
+SMTP/provider configurados, o token/código **não** é publicado em
+rota nenhuma pública — volta **só** na resposta da API de admin, com
+WARNING no log. `deliver_email`/`deliver_sms` (`app/webusers.py`) são o
+ponto de extensão: quando houver credencial, o envio real desliga o modo
+out-of-band sozinho, porque o retorno é o único contrato.
+
+**Segurança, no padrão da casa:** senha PBKDF2 no formato DA-54 (ponto como
+separador); token de e-mail com namespace `verify-email:` — **nunca** colide
+com token de sessão; código de telefone guardado só como hash, único-uso
+(hash apagado na validação); usuário inexistente == token/código errado
+(mesma resposta, sem enumerar quem existe); rate limit 5/min nas rotas
+públicas; `_user_out` nunca expõe hash; admin pode desativar/reativar
+(ao desativar: código de telefone e expiração zerados e sessões revogadas).
+
+**O bootstrap nunca desliga:** o login verifica `web_users` (status=active)
+**e** o `WEB_UI_USERS` do `.env` (DA-54) — o operador nunca fica trancado
+fora por causa do banco. Sem `DATABASE_URL`, a ativação responde 503 (é do
+banco), mas o login pelo `.env` segue valendo.
+
+**Validação.** 19 testes novos (`tests/test_webusers.py`): fluxo completo,
+pendente não entra, desativado não entra, senha errada não entra, token
+expirado/errado/de-outro-usuário, código expirado/errado/genérico, rotas
+admin sem chave 401, `_user_out` sem hash, reemissão só para o status certo,
+bootstrap do `.env` com banco vazio. Achados reais do processo: SQLite
+devolve datetime **naive** (a comparação aware-vs-naive explodia —
+normalizado no domínio, vale pros dois dialetos); o `create_all` do metadata
+inteiro do admin carrega JSONB PG-only (cria-se só a tabela do teste —
+padrão já documentado); e o `.env` da homologação ganhou `DATABASE_URL`,
+que fez a suíte depender da máquina — o conftest agora isola
+`DATABASE_URL` como já fazia com `API_KEY` (mesma classe, mesma solução).
+
+**Verificado de ponta a ponta na homologação** (`:8000`, com Postgres da
+stack + migration 007): admin cria → token out-of-band → `/auth/verify/email`
+→ admin reemite código → `/auth/verify/phone` → **login do usuário ativado
+com cookie de sessão** → `/diagnose` 200; senha errada 401.
+
+
+### 41. Conector SAP PO/PI: o middleware on-premise que não é REST-first (DA-56)
+
+**O problema.** SAP Process Orchestration / PI é middleware de integração
+A2A/B2B muito adotado em LATAM e Europa, e é onde muitos incidentes de
+integração nascem — mensagens em FAILED/HOLDING. O produto tinha 9
+conectores e nenhum falava com ele. E o PO/PI não é um sistema REST-first:
+a API do Message Monitor (`/mdt/api/1.0/facade`) **não está no Help
+Portal** como API suportada e **varia entre patches e releases** (7.3 ≠ 7.4 ≠
+7.5). Some-se a isso que a forma de expor o PO/PI muda tudo: proxy/WAF na
+DMZ, SAP Web Dispatcher, ADC, API Management como fachada, BTP + Cloud
+Connector, reverse invoke.
+
+**A solução.** `POConnector` com duas decisões que o esqueleto ingênuo não
+teria:
+
+1. **O conector é agnóstico quanto à exposição.** Não existe `detect_padro()`:
+   o padrão de exposição é escolha de infra, e a única coisa que o conector
+   precisa saber é *a fachada*. `PO_BASE_URL` aponta para o proxy/Web
+   Dispatcher/APIM e ele fala com o PO/PI por trás. Isso também é
+   orientador: expor a porta ICM direto na Internet é anti-pattern que o
+   conector não pode nem deve suportar, e a docstring diz isso.
+
+2. **Autenticação nativa é Basic Auth** (usuário/senha do stack ABAP) —
+   PO/PI não tem OAuth2. O modo `oauth2` existe para quando um API
+   Management **na frente** dele traduz Basic → OAuth2 Client Credentials,
+   reaproveitando o mesmo contrato de `odata_connector`/`ariba_connector`.
+   Fail-closed: `po_auth_mode=oauth2` sem token URL levanta
+   `ConfigurationError` em vez de mandar Basic para um token endpoint e
+   receber 401 sem explicação.
+
+**O bug do esqueleto.** A primeira versão do desenho passava
+`httpx.get(..., proxies={...})` — `proxies` foi **removido no httpx 0.28**
+(o projeto está em 0.28.1): `TypeError` na primeira chamada real, e nenhum
+teste mock a pegaria. Além disso o esqueleto usava `httpx.get` de módulo
+(quebra a injeção de `MockTransport`, convenção da casa para exercitar o
+caminho HTTP real) e não passava por `circuit_breaker_guard` nem por
+`validate_identifier_charset` — este último é o controle que impede
+injeção de query string a partir do identifier do usuário, e nenhum
+conector real pode ser a exceção.
+
+**O que a API instável impôs no código.** O parser é deliberadamente
+tolerante (`_extract_messages`): lista direta, envelope `messages`,
+envelope OData (`d.results`) e objeto único, todos aceitos — porque um
+formato inesperado no PO/PI tem de virar evidência legível, não traceback
+no grafo. Resposta não-JSON (o Message Monitor pode responder XML
+conforme patch) vira `UNEXPECTED_CONTENT_TYPE` com o path verificado, não
+`JSONDecodeError`. E nenhum parâmetro que não pudesse ser verificado foi
+enviado: o desenho original mandava `maxRows=20`, que não está documentado
+em lugar nenhum — a lista é limitada no resumo, não na chamada.
+
+**A honestidade do status.** Este conector entra no registro, no Literal,
+no supervisor, no CLI, no dropdown e no catálogo do admin — e a matriz de
+`docs/ARCHITECTURE.md` o marca com ⚠️ **API não pública, nunca validado
+contra um PO/PI real**, na mesma categoria de risco do `APIManagementConnector`.
+A cassette `tests/cassettes/po_message_monitor.json` é declarada
+**sintética** no próprio `_source`, porque as outras cassettes são
+capturas reais e esta não tem como ser.
+
+**Bug de preexistente encontrado no caminho (corrigido aqui).**
+`CONNECTOR_TYPES`, no catálogo de sistemas do admin (DA-49), **não tinha
+`successfactors`** — o Literal aceitava, o supervisor roteava, o CLI e a
+UI ofereciam, e a correlação DA-50, que resolve incidente→sistema por
+`connector_type`, não tinha por onde casar um incidente de SuccessFactors.
+O gate `connector_reachable` **afirmava** cobrir o catálogo admin na própria
+prosa e nunca lia o arquivo. Agora ele lê, e há teste para a superfície.
+
+**Validação.** 14 testes na entrega (17 em 2026-10-07): mock, filtro de status, identifier desconhecido,
+`use_real` sem URL (falha alto), `oauth2` sem token URL (falha alto),
+caminho Basic Auth via `MockTransport`, detalhe por `messageId`, modo
+OAuth2 (Client Credentials + Bearer), tolerância do parser, resposta
+não-JSON, rejeição de identifier com injection, erro HTTP e teto de linhas
+no resumo. Suíte completa e gates verdes.
+
+### 42. Escala calibrada por sigmoid para o rerank score (DA-42)
+
+**O problema.** O score do cross-encoder de rerank ([DA-29](#decisões-de-arquitetura))
+é um logit, não uma probabilidade: ele não é comparável entre documentos, e
+`0.7` numa consulta e `0.7` em outra não significam a mesma coisa. Três
+consumidores o usavam direto e cada um tinha seu próprio corte — a
+`evidence_strength` (DA-15/16), o limiar de admissão pós-reranker (DA-25) e os
+tiers de escalonamento ([DA-44](#decisões-de-arquitetura)). O mesmo par
+documento/consulta podia ser "evidência forte" para um e "descartável" para
+outro, dependendo do consumidor.
+
+**A solução.** Uma escala única em `rag/retriever.py`, que transforma o logit
+em um valor comparável por sigmoid, exposta como
+`hit["rerank_score_calibrated"]`. Os três consumidores passam a ler a mesma
+escala, e o score cru continua disponível para quem precisar do detalhe. O
+nome é explícito de propósito: `rerank_score` continua sendo o logit, e quem
+toma decisão por limiar tem que escolher conscientemente entre as duas
+variáveis.
+
+**Limitações (registradas de propósito).**
+- Os pontos de corte (`FLOOR_TIER_MIN_EVIDENCE = 0.62`,
+  `CURATED_TIER_MIN_EVIDENCE = 0.45`) **não foram calibrados** contra o
+  acervo de referência. São pontos de partida escolhidos pela forma da
+  curva, a serem substituídos por medição no re-baseline. Hipótese, não
+  constante validada.
+- A escala é monotônica, que é o que se pede a uma sigmoid; ela não promete
+  que 0.7 signifique "70% de chance de o documento responder a pergunta".
+  Nenhum consumidor deve narrar a escala como probabilidade.
+
+### 43. Backend de embedding trocável, para o CI não depender de Ollama (DA-38)
+
+**O problema.** O job de avaliação RAG no GitHub Actions precisa produzir
+embeddings para indexar o corpus e medir recuperação. O caminho de produção
+(indexação e consulta) usava o embedding do Ollama — que exige um servidor
+Ollama no runner. Duas saídas ruins: deixar o job indexar com um embedder
+diferente do de produção (a medição passa a descrever outro sistema), ou não
+rodar a medição no CI (e ela passa a depender de alguém lembrar de rodar na
+máquina).
+
+**A solução.** `EMBEDDING_BACKEND` com dois backends: `ollama` (default, o de
+produção) e `fastembed`, um adaptador mínimo sobre `fastembed.TextEmbedding`
+que implementa a interface `.embed_query()`/`.embed_documents()` que o
+Qdrant consome. O CI exporta `EMBEDDING_BACKEND=fastembed`; em produção vale
+o default `ollama` do campo `embedding_backend` de `app/config.py` (lido do
+`.env`) e o comportamento é o anterior.
+
+A decisão de política é a mesma dos conectores: o CI não é um ambiente
+diferente do produto, é o mesmo produto rodando sem a dependência opcional. A
+alternativa seria um segundo embedder só para teste, que mediria um sistema que
+ninguém usa.
+
+**Limitações.**
+- Os dois backends produzem vetores de **identidades diferentes**. Misturar
+  corpus indexado com um e consultado com o outro degrada a recuperação sem
+  erro visível. O CI fixa a variável explicitamente justamente para não
+  depender do default.
+- `fastembed` é CPU-only. Serve para o CI e para quem não quer subir um
+  Ollama; não é caminho para produção de alta vazão.
+
+### 44. Soberania de dados no AI Gateway: o modo é política, não preferência (DA-39)
+
+**O problema.** O gateway (DA-26) sabia trocar de provedor local para nuvem em
+fallback, o que é ótimo para disponibilidade e um problema para
+confidencialidade: um payload marcado como confidencial saía para um provedor
+público sem que ninguém tivesse decidido isso. A rota de fallback é um caminho
+de saída, e caminho de saída é onde dado sensível escapa.
+
+**A solução.** `data_sovereignty_mode` com dois valores, `strict` (default) e
+`cloud_with_dlp`. `_select_allowed_providers()` filtra os candidatos pela
+policy antes de tentar qualquer um: dado `public` passa por todos; dado
+`confidential` só alcança providers locais — ou os destinos em
+`CONFIDENTIAL_ALLOWED_ORIGINS` quando o modo é `cloud_with_dlp`, que exige que
+a redaction de PII (DA-30) já tenha rodado; qualquer valor fora do enum
+conhecido é **fail-closed** (nega).
+
+O default `strict` preserva o comportamento original do produto, que era
+on-premise. `cloud_with_dlp` é a afirmação de que a fronteira de dados foi
+declarada explicitamente e que cloud é aceitável depois da redaction — e a
+soberania por **origin real** (DA-43) fecha o buraco de "o rótulo `openai`
+apontando para Gemini".
+
+**Limitações.**
+- A política é por origem, não por rótulo, mas o destino ainda precisa estar
+  registrado com a capacidade de aceitar o dado. Um destino não registrado
+  não é "permitido por estar na allowlist" — ele nem chega a ser candidato.
+- A garantia de soberania é tão forte quanto a redaction: `cloud_with_dlp` com
+  PII não redacted é o pior dos dois mundos, e a ordem redaction→gateway é
+  invariante (DA-30), não convenção.
+
+### 45. aiormq não é AMQP 1.0: a falha era silenciosa (DA-40)
+
+**O problema.** O consumidor de eventos (DA-32) usava `aiormq` para falar com o
+Solace Cloud / SAP Event Mesh. `aiormq` implementa AMQP **0.9.1**, o protocolo
+do RabbitMQ. O Solace usa exclusivamente AMQP **1.0**. A conexão parecia
+funcionar: o handshake TLS completava e o banner AMQP era trocado. Mas as
+operações de producer/consumer (`queue_declare`, `basic_consume`) enviam
+frames 0.9.1, que são inválidos para um broker 1.0 — o Solace fecha a conexão
+ou ignora os frames, sem erro explícito. Um "conecta e não consome" que parece
+tudo certo.
+
+**A solução.** `python-qpid-proton` (a lib oficial do Apache Qpid Proton, a
+mesma que o SAP Event Mesh usa internamente) com um wrapper asyncio via
+`asyncio.run_in_executor()`: a API do Proton é síncrona/blocking, então roda em
+thread pool em vez de travar o event loop. `amqp_consumer.py` continua sendo o
+ponto de entrada, e DA-32 permanece o número da capacidade (consumidor AMQP
+assíncrono) enquanto DA-40 é a correção do protocolo.
+
+O que a DA-40 ensina vale para qualquer integração assíncrona: **handshake
+bem-sucedido não é prova de que os dois lados falam o mesmo protocolo.** A
+verificação precisa chegar a uma operação de dados, não a um banner.
+
+**Limitações.**
+- O handshake TLS continua sendo o teste mais fraco possível. A suíte cobre o
+  caminho real com frames 1.0 via mock, mas não há tenant Solace para validar
+  ponta a ponta.
+- A escolha de uma lib síncrona dentro de um produto async é dívida de
+  contexto: `run_in_executor` não é gratuito, e o Proton carrega sua própria
+  camada de reactor.
+
+### 46. Circuit breaker com backend Redis compartilhado (DA-41)
+
+**O problema.** O circuit breaker (DA-26) guardava estado em memória, por
+processo. Em deploy Kyma com mais de uma réplica, cada pod tem o próprio
+estado: N pods podem abrir e fechar o circuito para o mesmo provider sem
+visibilidade cruzada. O sintoma é um circuit breaker que "funciona" no staging
+de uma réplica e falha em produção com seis — sem nenhum erro, só mais
+latência e mais fallbacks do que o orçamento previa.
+
+**A solução.** Backend Redis opcional em `circuit_breaker.py`: quando Redis está
+disponível, o estado (falhas consecutivas e `opened_at`) é distribuído entre
+todos os pods, com TTL proporcional ao cooldown, para que providers "quietos"
+expirem sozinhos. Quando Redis não está disponível (`REDIS_URL` vazio ou Redis
+fora do ar), há fallback automático para o comportamento em memória original.
+
+O fallback é o ponto: o projeto segue sem infra obrigatória. Quem não tem Redis
+perde o estado compartilhado e ganha o de antes, que é o comportamento de
+"clone e rode".
+
+**Limitações.**
+- O fallback silencioso é uma armadilha clássica: sem Redis, o breaker volta a
+  ser por processo. Com `REDIS_URL` vazio isso é silencioso; com Redis
+  configurado mas fora do ar há um WARNING no log
+  (`app/circuit_breaker.py::_get_redis_client`), e o fallback em memória dura
+  até o restart do processo. O comportamento degradado não pode ser
+  invisível.
+- O estado compartilhado usa o relógio de cada pod para `opened_at`; skew de
+  horário entre réplicas aparece como janela de cooldown errada.
+- A semântica do circuito (closed → open → half-open implícito → closed) não
+  mudou; o que mudou foi onde o estado mora.
+
+### 47. A troca de modelo que não tinha número (DA-12)
+
+**O problema.** O modelo canônico já tinha duas decisões de comparação
+registradas — [DA-4](#decisões-de-arquitetura) e [DA-8](#decisões-de-arquitetura) — e
+mesmo assim a troca de produção não tinha registro próprio. O commit `0222b79`
+(que trocou `qwen2.5-coder:32b` por `qwen3-coder-next:latest`) foi commitado
+como `feat:` sem prefixo de DA, e por isso ficou anos sem linha na tabela. DAs
+seguintes passaram a citá-lo pelo número — `app/models/models.py`, `alembic/006` — como
+se já estivesse registrado. É a diferença entre uma DA que existe na prosa e uma
+DA que existe: o número aparecia no código, mas não na fonte de verdade.
+
+**A solução.** Registrar a troca como DA-12, com o que de fato a motivou: no
+promptfoo ela **empatou** com `qwen2.5-coder:32b` (10/10 nos casos da época;
+o `promptfooconfig.yaml` tem hoje 17 casos e o placar precisa ser remedido,
+M-21), e a
+troca foi decidida por alinhamento de roadmap (MoE 80B/3B ativo, 262K de
+contexto), não por métrica. Registrar isso importa justamente porque o número
+é pouco ostensivo: a tentação, ao documentar uma troca de modelo, é
+apresentá-la como vitória do benchmark, e aqui ela foi empate técnico.
+
+**Limitações (registradas de propósito).**
+- "Empate 10/10" é empate **nos casos do promptfoo**, não equivalência
+  absoluta. O promptfoo mede o dataset de avaliação; ele não mede todos os
+  incidentes que o produto vai ver.
+- A decisão de roadmap é um argumento de produto, não uma medição. Está
+  registrada como o que é.
+
+### 48. Fontes de busca web como configuração, e `approved` que não era no-op (DA-57)
+
+**O problema.** A busca web do grafo (`web_search_node` + tool ReAct) era
+alimentada por **dois mapas literais** em `app/agent/nodes.py`:
+`_WEB_SEARCH_SITE_MAP` e o `tech_term` por conector. Três defeitos, todos
+silenciosos:
+
+1. **`WEB_SEARCH_POLICY=approved` não aprovava nada.** O predicado era
+   `policy == "approved"` — e o ramo `approved` caía no mesmo caminho de
+   `public_only`. A política não consultava nenhuma fonte: o nome dizia
+   "aprovado" e o comportamento era "habilitado".
+2. **Dois conectores nunca tiveram fonte.** `successfactors` (DA-34) e `po`
+   (DA-56) não estavam em nenhum dos dois mapas, então perdiam o `tech_term`
+   e caíam no genérico "SAP integration" — exatamente o caso que a DA-56
+   documentou como bug de preexistente, agora pela via da busca web.
+3. **Não havia manutenção.** Mudar um filtro de site era edição de código e
+   deploy; o `site_filter` era Expressão Regular em alguns casos, o que
+   dependia de como o regex do DuckDuckGo interpretava cada `site:`.
+
+**A solução.** `web_search_sources` (migration 008), uma linha por
+`interface_type` — que é a unidade de configuração do produto, já que é o
+Literal do pipeline e a chave com que o grafo pergunta. Os sites de um
+conector são uma expressão `site:a OR site:b` dentro do mesmo
+`site_filter`, não linhas separadas: linha por site duplicaria a noção de
+"qual é a fonte do PO/PI?" em N lugares. Sem FK para `integration_systems`
+pela mesma razão da DA-52 — fonte de busca é configuração de pesquisa, e um
+conector pode ter fonte aprovada sem ter `integration_system` com o mesmo
+`connector_type`.
+
+**Fail-closed é o ponto, não o detalhe.** `resolve_approved_source()` devolve
+`None` — e o chamador não faz busca — quando não há `DATABASE_URL`, a tabela
+ainda não existe (migration não aplicada), a linha não existe, está
+desabilitada, ou está sem `site_filter`/`tech_term`. **Não existe fallback em
+código**: um dict de emergência reintroduziria exatamente o bug que a DA-57
+remove, e o efeito seria invisível. Falha de banco também é `None`, não
+exceção — é um fallback opcional do RAG, e derrubar o diagnóstico por causa
+da busca web seria o efeito errado. O erro fica em log para o operador.
+
+**A sétima superfície do `connector_reachable`.** Conector aceito no Literal,
+roteado no supervisor, oferecido no CLI e no dropdown, presente no catálogo
+do admin — e **sem linha no seed** = busca web desligada para ele, sem erro
+em lugar nenhum. Esse é o tipo de ausência que só se descobre em produção,
+então o gate passou a ler `alembic/versions/008_*.py` e exige o seed
+cobrindo o Literal inteiro, com teste para a superfície e para o arquivo
+inexistente.
+
+**Bug de preexistente encontrado no caminho (corrigido aqui) — a oitava
+superfície.** `<select name="connector_type">` do formulário de sistemas do
+admin (`app/admin/templates/systems.html`) tinha **8 das 10 opções**:
+faltavam `successfactors` (DA-34) e `po` (DA-56). Aqui a falha é de outro
+tipo, e é por isso que ela precisava da própria verificação: nas outras
+sete, a ausência de um conector é morte — ele não existe para o produto. No
+formulário, o conector **continua funcionando**: ele é representável por um
+sistema cadastrado com outro `connector_type`, ou fica sem
+`integration_system` nenhum. O que quebra é a **correlação DA-50**, que
+cai no fallback por `connector_type` e é *fail-closed* quando há mais de um
+sistema do mesmo tipo — ou seja, o operador recebe "ambíguo" para um
+incidente que ele consegue desambiguar olhando a tela.
+
+O detalhe que fecha o caso: a prosa do gate já afirmava cobrir "o catálogo
+admin" e parava em `CONNECTOR_TYPES`. `CONNECTOR_TYPES` é a tupla do
+catálogo (`app/admin/models.py`), não o formulário — e era a segunda leitura
+de um arquivo que existe justamente para ser a versão que o operador
+enxerga. Um conector pode estar na tupla e faltar no `<select>`, e nenhuma
+das sete checagens via isso, porque nenhuma lia o formulário. O gate agora
+ancora em `name="connector_type"` (e não no primeiro `<select>` do arquivo,
+que é o de `environment`) e tem quatro testes: conector ausente, os selects
+de `environment`/`status` não contados como conectores, arquivo inexistente,
+e o arquivo real conferido sem passar pelo gate.
+
+**O que o `interface_type` imutável no PATCH protege.** Trocar o
+`interface_type` de uma linha existente trocaria qual conector tem qual
+filtro, e a linha antiga ficaria órfã servindo o conector errado. A API
+aceita `interface_type` no corpo do PATCH e ignora — a mesma allowlist que
+`_apply_update` já usava para `system_key` na DA-49, e o mesmo motivo.
+
+**Limitações (registradas de propósito).**
+
+- O `site_filter` continua sendo uma **Expressão de busca**, não uma lista
+  validada. A API valida que não é vazio e que o `interface_type` existe no
+  Literal; ela não valida a sintaxe de cada `site:`. Validar a query contra
+  o motor de busca real seria dar ao cadastro uma garantia que ele não tem.
+- **Uma fonte por conector.** Um conector com dois backends de documentação
+  genuinamente diferentes (ex.: CAP com CAP Java e CAP Node) tem de caber em
+  um `tech_term` só. Se isso aparecer, é revisão da unidade de configuração —
+  não um índice em cima desta tabela.
+- A tabela não é um log: `updated_at` sobrescreve, e não há histórico de
+  quem trocou o filtro. Para isso, o gestor de credenciais (DA-47) é o
+  caminho, com cifragem e semântica de segredo.
+- **Nada disso foi validado contra o DuckDuckGo em produção.** O que está
+  testado é a resolução fail-closed e o CRUD; a qualidade da query de cada
+  filtro é conteúdo do seed, e o seed é uma afirmação sobre o Help Portal
+  que só o uso real confirma.
+
+### 49. Mapa de cobertura: `dedicated`, `generic` e `absent` (DA-58)
+
+**O problema.** O repositório tem 10 conectores e uma matriz de validação
+em `docs/ARCHITECTURE.md` que diz o que foi testado contra sistema real.
+Não existe, porém, nenhuma resposta à pergunta que um avaliador faz antes de
+conectar qualquer coisa: *dado um produto SAP e um mecanismo, há código
+aqui que fala com ele — e o que sabemos desse código além de ele existir?*
+
+Responder com "temos conector OData" seria responder duas perguntas
+diferentes com uma palavra. A pergunta que o mapa responde é por
+**par** (produto, mecanismo), e a resposta tem três estados, não um.
+
+**A solução.** Dado versionado (`data/sap_products.yaml` com 27 linhas × 9
+mecanismos, `data/connector_coverage.yaml` com o destino e os mecanismos de
+cada conector), cálculo em `app/evaluation/coverage.py`, geração por
+`scripts/coverage_map.py` e doc gerado `docs/COVERAGE_MAP.md`. O gate
+`connector_coverage` (DA-51) reprova por **incoerência**, nunca por lacuna.
+
+Os três estados:
+
+| Estado | Significado | Pode afirmar? |
+|---|---|---|
+| `dedicated` | existe conector **feito** para o produto | sim |
+| `generic` | cliente de **mecanismo** alcançaria o produto se a URL apontasse; **nunca validado** contra ele | não |
+| `absent` | nada no repositório alcança o par | é a fila de trabalho |
+
+`generic` é o estado que impede o mapa de mentir. O `ODataConnector` é
+`generic` para 15 produtos e não foi validado contra nenhum deles. Tratá-lo
+como `dedicated` — ou colapsar os três estados em um booleano — faria o
+mapa afirmar suporte que ninguém testou, que é exatamente o que a matriz de
+`docs/ARCHITECTURE.md` proíbe com outro vocabulário.
+
+**Quatro decisões que o mapa precisou tomar, e o porquê de cada uma.**
+
+1. **`unknown` ≠ `none`.** A fonte distingue "não expõe" de "não sei", e o
+   enum mantêm os dois (`app/evaluation/coverage.py::LEVELS`). Mecanismo
+   desconhecido **não** vira lacuna: a lacuna vira trabalho de código, e
+   isso seria trabalho de fonte — o mapa apontaria o dedo para o time
+   errado. `unknown` já existe em `app/llm/capabilities.py` (DA-45) pelo
+   mesmo motivo.
+2. **Os dois eixos são independentes.** "Capacidade" é afirmação sobre o
+   produto (vem da fonte); "cobertura" é fato sobre o repositório
+   (verificável por gate). Uma célula pode ser `dedicated` com
+   capacidade `unknown`, e é o caso de `ServiceNow`: existe conector
+   dedicado e validado, e a fonte não cobre o produto. Colapsar os dois eixos
+   faria um deles virar mentira.
+3. **`MDI` é mecanismo, não nível.** Na fonte, `Data Integration` de
+   SuccessFactors vale `MDI` (Master Data Integration). Achatar os dois no
+   mesmo campo faria `MDI` e `✓` parecerem alternativas um do outro, e não
+   são. Ficou `supported` + nota, num campo `{level, note}`.
+4. **Um conector pode cobrir dois produtos.** `ariba` é dedicado de `Ariba`
+   **e** `Business Network` — o próprio docstring diz as duas. Declarar só
+   `Ariba` subestimaria a cobertura, que é erro na mesma direção da omissão,
+   pelo mesmo motivo.
+
+**O que o mapa encontrou.** `Integration Suite` é a maior lacuna do
+conjunto: a fonte diz que os 22 produtos são integráveis por ele, e o
+repositório não tem cliente de Cloud Integration nenhum. O ponto é delicate,
+porque o docstring de `app/connectors/apimanagement_connector.py` diz *"Conector SAP API
+Management / Integration Suite"* — mas o código lê
+`APIM_ANALYTICS_URL/events`, ou seja, eventos de **analytics**, com endpoint
+especulativo. É fonte de sinal de observabilidade, não orquestrador. Deixar
+isso marcar a coluna como coberta afirmaria que o repositório orquestra
+fluxo por Integration Suite para 22 produtos, e não orquestra nenhum; a
+armadilha está registrada em `data/connector_coverage.yaml` e travada por
+teste (`test_apim_nao_cobre_integration_suite`).
+
+Além disso: 4 dos 22 produtos com conector dedicado (SuccessFactors, Ariba,
+Business Network e CAP) (S/4HANA e ECC não
+entram — são alcançados por `generic`), 76 lacunas no total, e 5 linhas
+(`ServiceNow`, `Salesforce`, `Workday`, `API Management`, PO/PI) com
+capacidade integralmente `unknown` porque a fonte não cobre middleware nem
+terceiros.
+
+**Por que reprovar por incoerência e não por lacuna.** Exigir cobertura
+completa seria exigir 76 conectores novos para o CI ficar verde, e o gate
+deixaria de medir a única coisa que importa: se o mapa ainda corresponde ao
+código. A lacuna é o relatório; a incoerência é o defeito. O gate falha
+quando um conector registrado não tem linha de cobertura (a **nona**
+superfície da invariante 23), quando a declaração aponta para produto
+inexistente, ou quando `docs/COVERAGE_MAP.md` está desatualizado — este
+último é o que impede que o mapa enveleça em silêncio.
+
+**Limitações (registradas de propósito).**
+
+- **A matriz de capacidade não tem fonte.** Foi transcrita de uma tabela de
+  referência sem citação publicada e sem release SAP. Está no cabeçalho de
+  `data/sap_products.yaml` e no topo do mapa gerado, e é a razão de a coluna
+  não poder ser citada como fato de produto SAP. Só a coluna de cobertura é
+  verificável.
+- **A tradução dos glifos é interpretação nossa** (`✓✓`→`native`,
+  `✓`→`supported`, `✓/cenários`→`conditional`, `limitado`→`limited`,
+  `—`→`none`), não vocabular da fonte.
+- **`apim` permanece especulativo** (DA-45/DA-56): o mapa o conta como
+  conector dedicado de API Management, mas o schema nunca foi confirmado
+  contra documentação real. Cobertura de código não é cobertura de contrato.
+- **O mapa não é medição de desempenho.** Nada aqui diz que um conector
+  funciona rápido ou em escala; `dedicated` é sobre existência e escopo
+  declarado, e `docs/ARCHITECTURE.md` continua sendo quem diz o que foi
+  validado contra sistema real.
+- **`Sales/Service Cloud` ficou fora do escopo dedicado de `salesforce`.** O
+  docstring do conector cita Service Cloud como exemplo de caso, mas o
+  conector fala com a plataforma Salesforce. Declarar ambos seria afirmar
+  escopo que ninguém verificou; fica como questão aberta, não como omissão.
+
+### 50. Conectores multi-vendor: fluxo completo, padrão comum e documentação (DA-59)
+
+**O problema.** O repositório tem 10 conectores implementados, mas a
+documentação existente não respondia a três perguntas-chave para quem quer
+usar ou contribuir:
+
+1. *Qual é o fluxo completo que conecta um `IncidentRequest` com um dado em tempo
+   real?* — O pipeline (`supervisor_node → connector_node → retrieve_node → *diagnosis_node →
+   report_node`) é documentado, mas cada passo do `connector_node` (como o
+   conector decide entre mock/real, como o `fetch(identifier)` gera um
+   `ConnectorResult`, como o resultado se integra ao repositório) precisava
+   ser inferido do código.
+2. *Como adicionar um novo conector?* — O registry e os `Literal`s nos
+   modelos eram mencionados, mas não havia checklist de todas as superfícies
+   que precisam ser atualizadas (**9** no total: registry, Literals `IncidentRequest.interface_type`
+   e `IncidentEventData.interface_type`, supervisor, CLI, UI admin,
+   `CONNECTOR_TYPES` do catálogo admin, seed de `web_search_sources` DA-57,
+   `data/connector_coverage.yaml` DA-58).
+3. *Como testar efetivamente?* — A distinção entre modo mock/real e os
+   identificadores de demo (`-DEMO`) eram documentados no docstring de cada
+   conector, mas não havia um guia consolidado com as estratégias de teste
+   (mock via `httpx.MockTransport`, teste de erro 401/timeout simulado,
+   invocação real com credenciais `.env`).
+
+**A solução.** Documentação consolidada em `docs/CONNECTORS.md`, reescrita na
+validação de 2026-10-07 (Bloco 5). A primeira versão citava variáveis de
+ambiente que o código nunca leu e deixava quem a seguisse em modo demo sem
+aviso. O documento tem cinco seções:
+
+| Seção | Conteúdo |
+|---|---|
+| 1. Pipeline | como o conector entra no grafo, modo real × demo, evidência, circuit breaker, `GET /health` |
+| 2. Conectores e variáveis | uma linha por conector: variável que liga o modo real, demais variáveis, cenários demo, validação contra sistema real |
+| 3. Como testar | comandos de teste e o CLI com cenário demo |
+| 4. Como adicionar | as 9 superfícies e o gate que confere cada uma |
+| 5. Limitações | só leitura por chamada, sem retry no conector, credenciais só por ambiente |
+
+A tabela de conectores, com a coluna de validação, mora **só** em
+`docs/CONNECTORS.md` (seção 2), e a matriz-fonte em `docs/ARCHITECTURE.md`.
+Ela não é repetida aqui para não envelhecer em dois lugares.
+
+**Superfícies atualizadas ao adicionar um conector (DA-58/DA-59):**
+
+1. `app/connectors/__init__.py` — `_REGISTRY` e `_REAL_MODE_SETTING`
+2. `app/models/models.py` — `Literal` em `IncidentRequest.interface_type`
+3. `app/models/models.py` — `Literal` em `IncidentEventData.interface_type`
+4. `app/agent/supervisor.py` — classificação por domínio (`sap/saas/generic`)
+5. `app/agent/graph.py` — `choices` de `--interface` no CLI
+6. `app/admin/models.py` — `CONNECTOR_TYPES` do catálogo admin
+7. `alembic/versions/008_*.py` — seed de `web_search_sources` (DA-57)
+8. `app/admin/templates/systems.html` — `<select name="connector_type">`
+9. `data/connector_coverage.yaml` — `dedicated/generic/absent` + mecanismos (DA-58)
+
+O gate `connector_reachable` (DA-51) confere as superfícies 1 a 8, e o
+`connector_coverage` (DA-58) confere a 9ª.
+
+**Limitações (deliberadamente registradas):**
+
+- **Conector não faz polling nem assina eventos**: só `fetch(identifier)`. O
+  disparo automático entra pelo webhook CloudEvents ou pelo consumidor AMQP.
+- **Sem retry no conector**: a repetição fica com quem chama (RQ, broker).
+- **Credenciais só por ambiente** (`.env` ou Secret Kyma).
+
+**Bugs encontrados no caminho:**
+
+- **DA-57**: os mapas de busca web em `app/agent/nodes.py` não tinham `po`
+  nem `successfactors` (perdiam site e `tech_term`); o seed de
+  `web_search_sources` substituiu os mapas.
+- **DA-58**: `connector_coverage.yaml` não tinha `po` nem `successfactors`. O
+  gate `connector_coverage` detecta linha faltante.
+
+**Por que esta DA não tem testes próprios.** É documentação. Os testes de
+cada conector estão em `tests/test_connectors.py`,
+`tests/test_cap_connector.py` e `tests/test_apimanagement_connector.py`, e os
+gates `connector_reachable`, `connector_coverage` e `docs_env_vars` mantêm o
+documento coerente com o código.
+
+---
+
+### 51. Criptografia em repouso de `evidence_json` com Fernet (DA-60)
+
+**O problema.** O campo `evidence_json` (JSONB) da tabela `incidents` armazena
+estruturas sensíveis (códigos de erro, traces, paths, payloads): dados que
+podem expor caminhos de sistema, credenciais em memória ou traces internos.
+O field era **sem criptografia em repouso**, o que violava a política de
+soberania de dados (DA-39) e não atendia ao padrão já adotado para
+credenciais (DA-47/DA-48 com Fernet e `LLM_CREDENTIALS_MASTER_KEY`).
+
+O problema foi detectado em auditoria de segurança (DATA-02), que exigiu
+migration para cifrar os dados já presentes e garantir que novas gravações
+sejam cifradas automaticamente.
+
+**O caso de uso.** Aplicações com compliance rigoroso exigem que dados de
+incidentes, mesmo non-PII, sejam armazenados com criptografia em repouso. O
+`evidence_json` é um dos campos mais sensíveis porque contém o **contexto
+completo** do diagnóstico: traces, códigos de erro, payloads. Um backup ou
+disco comprometido sem criptografia exporia esse contexto.
+
+**A solução.**
+
+- `app/admin/crypto.py::encrypt_evidence` **redige a PII reconhecível** (e-mail, CPF, número de IDoc; `app/redaction.py::redact_pii_deep`) e cifra com Fernet (`LLM_CREDENTIALS_MASTER_KEY`). Quem decifra (a API admin, para a tela de incidentes) não recebe o dado pessoal.
+- Sem master key, `encrypt_evidence` levanta `ConfigurationError` em vez de devolver `None`. A versão anterior perdia a evidência em silêncio e logava "deixando em claro". O boot falha quando `DATABASE_URL` está configurada sem a chave (`app/main.py::_ensure_evidence_key_configured`).
+- `decrypt_evidence` aceita linhas legadas (lista/dict do JSONB, ou texto JSON) e levanta `ConfigurationError` quando o token não decifra com a chave atual.
+- `app/services/incident_recorder.py::build_incident_row` e `app/services/incident_repository.py` usam a mesma função (havia três cópias).
+- Migration `009_encrypt_evidence_json.py`:
+  - **upgrade** cifra só as linhas em claro, com a mesma redação do runtime;
+  - banco novo, ou já migrado, sobe **sem exigir a chave** (o job de migrações do CI não tem chave);
+  - com linhas pendentes e sem chave, falha com uma mensagem que diz quantas linhas estão pendentes.
+  - **Downgrade** decifra e só exige a chave quando há linhas cifradas.
+  - Exercitado contra PostgreSQL 16 real na validação de 2026-10-06.
+
+**Limitações (aceitas):**
+
+- A redação é por regex: dado empresarial fora dos padrões (nomes, números de contrato) continua dentro do cifrado.
+- A detecção de "já cifrado" na migration usa o prefixo `gAAA` dos tokens Fernet.
+- Downgrade em produção devolve a evidência em claro. Use só para rollback imediato.
+
+**Requisitos.**
+
+- `LLM_CREDENTIALS_MASTER_KEY` no `.env` sempre que `DATABASE_URL` estiver configurada (Fernet key de 44 caracteres; nunca compartilhar, backup seguro).
+- Alembic usa `psycopg2` (dependência do projeto). `alembic/env.py` força `postgresql+psycopg2://` porque o SQLAlchemy 2.1 passou a usar psycopg v3 como driver padrão de `postgresql://`, e o psycopg v3 não está nas dependências.
+- A master key não é rotacionada automaticamente. A rotação exige decifrar com a chave antiga e cifrar com a nova.
+
+**Por que esta DA tem migration e não só código.** A criptografia de dados
+existentes exige migration: não se pode apenas adicionar a função de encrypt;
+os dados já gravados (potencialmente milhares de linhas) precisam ser
+processados. Migration garantido idempotência (re-run não quebra dados) e
+downgrade (emergency rollback).
+
+---
+
+### 52. Taxonomia de erros SAP com TTL/RDFLib (SKOS para Rule Engine) (DA-61)
+
+**O problema.** O Rule Engine determinístico (DA-33) armazena regras de erro conhecidas em `KNOWN_ERROR_RULES` no arquivo `app/agent/rules.py` como um `dict` hardcoded: 22 pares `(pattern, error_type)`. Isso gera dois problemas:
+
+1. **Dificuldade de manutenção**: adicionar/remover regras exige editar código Python, fazer commit e deploy.
+2. **Ausência de estrutura semântica**: o `dict` não expressa relação entre erros (hierarquia, siblings, causas comuns), o que dificulta extensão e correlação.
+
+A auditoria Q2 2026 (DATA-01) recomendou substituir hardcoded por taxonomia formal. Entretanto, não se pode eliminar o fallback: a regra está em 90% dos incidentes. A solução tem que ser:
+
+- Taxonomia dinâmica (carregada por `rdflib` em runtime),
+- Fallback para o código hardcoded (se ontologia falhar ou não carregar),
+- Zero breaking changes (API `ErrorRule` mantida, apenas fonte muda).
+
+**O caso de uso.** Administradores de integração precisam ajustar regras de diagnóstico sem mudar código: novos erros SAP lançados, correção de false positives, adição de novos erros de parceiros (Salesforce, Workday, etc.). A taxonomia SKOS (Simple Knowledge Organization System) fornece hierarquia (`skos:broader`/`skos:narrower`) e relacionamentos (`skos:related`) entre erros.
+
+**A solução.**
+
+- `app/ontology/error_codes.ttl`: arquivo Turtle RDF com 28 erros mapeados (OAuth, RFC, HTTP, JSON/XML, IDoc, OData, S/4HANA, CPI, etc.). Cada erro tem URI canônico (`<urn:error:>`) e labels em PT/EN.
+- `app/agent/ontology_loader.py`: carregador que lê o TTL, transforma em instâncias `ErrorRule` e carrega em memória via `rdflib.Graph.parse()`. Fallback para `KNOWN_ERROR_RULES` se o TTL não for encontrado ou falhar na parse.
+- Implementação **aditiva**: `app/agent/rules.py` mantém `KNOWN_ERROR_RULES` intacto; `ontology_loader.py` só é chamado se `error_codes.ttl` existir. Nenhum change em `app/agent/graph.py`, `app/agent/nodes.py`, etc.
+- API compatível: `ErrorRule` (pattern `str`, error_type `Literal["OAuth2", "RFC", ...]`) é a mesma da versão hardcoded.
+
+**Expansão Fase 1 (2026-10-08):**
+
+- Normalizar URIs TTL para `snake_case` (ex: `ex:ssl_certificate_expired` em vez de `ex:SSLCertificateExpired`)
+- Expandir TTL de 11 para 28 regras (cobertura 100% de `KNOWN_ERROR_RULES`)
+- Adicionar `next_steps` a todas as entradas (ações específicas de diagnóstico)
+- Mapear nomes TTL/hardcoded via `category_map` em `_extract_category()` (compatibilidade semântica)
+
+**Limitações (aceitas):**
+
+- Validação em produção exige `error_codes.ttl` existir e ser válido TTL (senão fallback; não exception).
+- Sem versionamento: TTL é "latest", não snapshot; para rolling back, restaurar TTL anterior.
+- Fallback não grava log de erro (silencioso), exige monitoramento manual de `error_codes.ttl`.
+- Mapeamento TTL/hardcoded manual (não inferência automática).
+
+**Próximos passos (DA-61 Fases 2/3):**
+
+- Fase 2 (Neo4j + SKOS): carregar taxonomia em Neo4j GraphRAG, usar consultas Cypher/SPARQL para correlação de incidentes (ex: "todos incidentes com erro OAuth2")
+- Fase 3 (OWL + SHACL): inferência de categoria, validação de consistência (ex: `skos:broader` transitivo)
+
+**Dependências.**
+
+- `rdflib>=7.0`: processamento RDF/TTL.
+- `owlrl>=6.0`: inferência OWL (Fase 3).
+- `pyshacl>=0.25`: validação SHACL (Fase 3).
+
+**Validação.**
+
+- Testes unitários: 40/40 `test_da33.py` passando (inclui `test_match_known_error`, `test_all_rules_have_next_steps`, etc.)
+
+---
+
+### 53. Neo4j loader para SKOS taxonomy import (DA-62)
+
+**O problema.** A Fase 2 do DA-61 requer integrar a taxonomia SKOS (TTL) com o GraphRAG Neo4j para correlação de incidentes (ex: "todos incidentes com erro OAuth2"). Entretanto, a carga inicial e updates precisam de idempotência, tratamento de erros e queries Cypher específicas para SKOS.
+
+**O caso de uso.** Administradores querem:
+- Carregar SKOS TTL ao Neo4j uma vez (ou recarregar após atualização),
+- Consultar incidentes pendentes conectados a um erro específico,
+- Recuperar hierarquia SKOS (broader/narrower) para inferência.
+
+**A solução.**
+
+- `app/ontology/neo4j_loader.py`: módulo com:
+  - `load_error_rules_to_neo4j()`: importa TTL via `ontology_loader.py`, upsert idempotente via `MERGE`,
+  - `get_incidents_by_error_uri()`: Cypher query para encontrars incidentes pendentes,
+  - `get_error_hierarchy()`: recupera `skos:broader`/`skos:narrower` relations via Cypher,
+  - Fallback grácil: retorna lista vazia se Neo4j indisponível ou credenciais inválidas.
+
+- **Idempotência**: cada upsert usa `MERGE` + `ON CREATE SET` / `ON MATCH SET`,
+- **Tratamento de erros**: `ServiceUnavailable` e `AuthError` capturados, logging warning/erro, empty list retornado (não exception),
+- **Separation of concerns**: SKOS (TTL) vs. GraphRAG (Neo4j) com camada de adaptação (`neo4j_loader.py`).
+
+**Critérios de sucesso.**
+- `uv run ruff check app/ontology/neo4j_loader.py` → all passed,
+- `uv run pytest tests/ -m "not integration"` → 1406 passed (1 gate fails por ausência de baseline externo),
+- Commit staging + gitleaks clean (não há hardcoded secrets:常数 para variáveis de ambiente).
+
+**Limitações (aceitas):**
+- Neo4j é opt-in (`GRAPH_RAG_ENABLED=false` default),
+- Sem migration: carga inicial só em instalação nova; dados antigos precisam reload manual,
+- Query patterns seguem DA-21: `(DriverError, TransientError)` vs. `Neo4jError`.
+
+**Próximos passos (DA-62 Fase 2b):**
+- Ativar `GRAPH_RAG_ENABLED=true` e validar carga real TTL → Neo4j,
+- Integrar `get_error_hierarchy()` em `app/agent/ontology_agent.py`,
+- Criar endpoint `/admin/ontology/hierarchy` para visualizar SKOS no console.
+
+**Validação.**
+- `app/ontology/neo4j_loader.py` com commit `291239c` em `feature/DA-61-fase2`,
+- Ruff check passando, gitleaks clean,
+- 4 testes `test_nodes_ontology_degradation.py` passando.
+- Testes de integração: 1407/1407 passing (não há testes específicos de ontology_loader ainda)
+- Simulação: `uv run python -c "from app.agent.ontology_loader import load_error_rules_combined; rules = load_error_rules_combined(); assert len(rules) == 28"`
+
+---
+
+### 54. Skills declarativas — YAML como fonte de verdade para capability e roteamento (DA-63)
+
+**Contexto:** antes desta DA, as skills do Copilot viviam como código Python
+estático: `CAPABILITY_REGISTRY` em `app/mcp/policy.py` era um dict hardcoded
+e o supervisor (`app/agent/supervisor.py`) usava `_SAP_INTERFACE_TYPES` /
+`_SAAS_INTERFACE_TYPES` fixos para roteamento. Isso tornava a adição de novas
+skills ou conectores uma mudança de código, não de dados.
+
+**Decisão:** cada skill passa a ser um artefato declarativo em `data/skills/*.yaml`
+com schema versionado (nome, versão, risk_level, scopes, approval_required,
+data_sensitivity, timeout, domains). O módulo `app/mcp/skill_registry.py`
+carrega esses arquivos e expõe:
+
+- `load_skills()` — dicionário `{name: skill_dict}` carregado do disco.
+- `build_domain_index()` — mapeia `interface_type → dominio` (sap|saas) derivado
+  das skills, substituindo os sets hardcoded.
+
+A conversão de skill em `ToolPolicy` para o enforcement (DA-27) fica em
+`app/mcp/policy.py::_build_capability_registry_from_skills`, não no registry
+(o texto original citava um `build_capability_registry()` que não existe).
+
+O `CAPABILITY_REGISTRY` em `policy.py` agora tenta carregar de YAML primeiro;
+fallback para dict estatico quando `data/skills/` não existe. O supervisor
+deriva `_DOMAIN_INDEX`, `_SAP_INTERFACE_TYPES` e `_SAAS_INTERFACE_TYPES` do
+registry, mantendo compatibilidade com o quality gate (DA-51).
+
+**Impacto nas superfícies do connector check (DA-59):**
+- A superficie de roteamento (supervisor) agora é derivada de `data/skills/*.yaml`.
+- O quality gate (`check_connector_reachable`) verifica YAMLs em `data/skills/`
+  quando `_DOMAIN_INDEX` existe no supervisor.
+- Novos conectores continuam com as 9 superfícies da DA-59 (`docs/CONNECTORS.md` §4); muda só a 4ª: o supervisor dá lugar a `domains` em `data/skills/diagnose_incident.yaml`.
+
+**Validação.**
+- `app/mcp/skill_registry.py` — loader + builders.
+- `data/skills/diagnose_incident.yaml` e `list_connectors.yaml`.
+- `app/agent/supervisor.py` — `_DOMAIN_INDEX` derivado, sets compatíveis.
+- `app/mcp/policy.py` — CAPABILITY_REGISTRY com fallback YAML→static.
+- `app/evaluation/gates.py` — gate reconhece padrao declarativo + fallback.
+- `tests/test_quality_gate.py` — 3 novos testes para padrao DA-63.
+
+**Atualização (2026-10-14) — índice vazio fora da raiz do repo.** A primeira
+versão lia `data/skills` relativo ao diretório corrente, e o `Dockerfile` só
+copiava `data/sample_docs/`. Na imagem, e em qualquer processo iniciado fora
+da raiz, `_DOMAIN_INDEX` ficava `{}` e **todo** `interface_type` caía em
+`generic`, sem erro (reproduzido: `rfc`, `odata`, `servicenow`,
+`successfactors` e `po` → `generic`). Os testes não pegavam porque rodam com
+cwd na raiz. Correções:
+
+- `app/mcp/skill_registry.py::DEFAULT_SKILLS_DIR` ancorado no pacote;
+  `SKILLS_DIR` segue como override.
+- Um só parser: `policy.py` e o gate `connector_reachable` usam
+  `load_skills`/`build_domain_index` (havia uma cópia do loader em
+  `policy.py` e outra leitura de YAML no gate, que buscava também em
+  `root.parent` e não capturava `yaml.YAMLError`).
+- Schema validado (`validate_skill`): `risk_level`, `data_sensitivity` e
+  domínio fora de `sap`/`saas` fazem a skill ser pulada com warning, nunca
+  recebem default permissivo; `interface_type` em dois domínios levanta
+  `ValueError` (antes "o último vencia" por ordem de arquivo).
+- `app/agent/supervisor.py` falha no import com índice vazio.
+- `Dockerfile` copia `data/skills/`, e o gate reprova se o `COPY` sumir.
+- `pyyaml` declarado em `pyproject.toml` (chegava só como transitiva).
+- `tests/test_skill_registry.py`: roteamento com cwd fora do repo, import sem
+  skills, schema inválido, ambiguidade, índice = conectores registrados menos
+  `apim`, e `CAPABILITY_REGISTRY` igual ao fallback estático.
+
+---
+
+### 55. Degradação graciosa do RAG quando Qdrant cai (DA-65)
+
+**O problema.** Sem a degradação, um outage do Qdrant faria `/diagnose` retornar 500 mesmo quando o rule engine poderia responder com uma regra conhecida — o usuário final vê erro de servidor para um incidente que tem diagnóstico determinístico.
+
+**A solução.** `_retrieve_hybrid` e `_retrieve_dense_only` (app/rag/retriever.py) capturam `ResponseHandlingException` e `UnexpectedResponse`, logam WARNING e retornam lista vazia. A lista vazia significa "sem contexto RAG", não "erro". O pipeline continua:
+
+1. **Rule engine** — se a descrição casa uma regra de `KNOWN_ERROR_RULES`, o diagnóstico é respondido imediatamente, sem LLM.
+2. **LLM fallback** — se nenhuma regra casa, o LLM recebe o prompt sem chunks RAG (contexto vazio). O modelo ainda produz diagnóstico, apenas com menos evidência contextual.
+
+**Limitações.** A degradação protege contra Qdrant indisponível, não contra Ollama/LLM indisponível. Se ambos Qdrant e o LLM caírem, `/diagnose` falha — mas isso é esperado: sem regra conhecida e sem modelo, não há diagnóstico possível.
+
+**Testes.** `tests/test_da65_rag_degradation.py`: 2 testes verificam que `_retrieve_hybrid` e `_retrieve_dense_only` retornam `[]` quando Qdrant lança exceção (não propagam). Não testam o fluxo completo `/diagnose → run_diagnosis` — isso exigiria fixture com servidor FastAPI.
+
+---
+
+### 56. Policy Engine puro para roteamento LLM (DA-66)
+
+**O problema.** O AI Gateway v1 (DA-26) misturava a lógica de roteamento com a chamada ao LLM, tornando a decisão de provider não auditável e não testável isoladamente. A policy de soberania (DA-39/DA-43) era avaliada dentro de `invoke_via_gateway`, sem separação clara entre "quais providers são permitidos" e "como chamar o provider escolhido".
+
+**O caso de uso.** Um auditor de segurança ou um operador quer saber:
+- Por que um provider foi escolhido ou rejeitado?
+- Qual a política efetiva em vigor para dado confidencial?
+- O gateway está respeitando a soberania de dados?
+
+A resposta atual exigia ler código e inferir — não havia uma decisão explícita, auditável e testável.
+
+**A solução.** `app/llm/routing.py` extrai um **Policy Engine puro** com duas fases:
+
+1. **Elegibilidade rígida** (rejeita se faltar algo):
+   - Soberania/origin: provider local ou origin em `CONFIDENTIAL_ALLOWED_ORIGINS` (DA-43)
+   - Capacidades exigidas: `seed`, `response_format`, `tools`
+   - Circuit breaker: não tentar provider com circuito aberto
+   - Orçamento: custo estimado ≤ orçamento restante
+
+2. **Scoring de preferências** (ordena os elegíveis):
+   - Custo estimado (menor primeiro)
+   - Latência observada (quando disponível)
+
+A função `evaluate_routing()` aceita `RoutingRequest` e devolve `RoutingDecision` com:
+- Lista de candidatos ordenados
+- Motivo de rejeição para cada provider rejeitado
+- Provider selecionado e motivo da seleção
+
+A decisão é logada em audit log estruturado e exposta via `GET /llm/policy` (DA-43).
+
+**Implementação.**
+- `app/llm/routing.py`: Policy Engine puro com `RoutingRequest`, `RoutingDecision`, `RejectionReason` (enum)
+- `app/llm/gateway.py`: `invoke_via_gateway()` usa o engine, mantém backward compatibility com `_select_allowed_providers()` e `_provider_allows_sensitivity()`
+- `app/llm/capabilities.py`: `ProviderCapabilities` dataclass (reutilizado)
+
+**Validação.**
+- `tests/test_llm_gateway.py`: 31 testes passando (incluindo 5 novos para o Policy Engine)
+- Quality gate: `da_registered` e `docs_code_references` validam a DA
+
+**Limitações (registradas de propósito).**
+- Os candidatos são só o provider primário e o de fallback (`LLM_PROVIDER`, `LLM_FALLBACK_PROVIDER`); os modelos cadastrados em `/admin/models` definem **qual modelo** cada provider chama (DA-46), não entram na escolha. **Resolvido pela DA-72** no modo gerenciado; o modo `.env` mantém este comportamento.
+- No modo `.env` a ordenação é só por custo estimado e a janela de contexto não é verificada. No modo gerenciado, a DA-72 mede latência, aplica os pesos (`LLM_ROUTING_*_WEIGHT`) e verifica a janela.
+- Orçamento é estimado por heurística (substituído por contagem por família na DA-67)
+- Circuit breaker compartilhado entre réplicas requer Redis (DA-41)
+
+**Próximos passos.**
+- DA-67: Token budgeting com contagem por família e preço real do registry
+- DA-68: Matriz de falhas e failover tipado
+- DA-69: Checkpointing e execução resumível
+- DA-70: Métricas FinOps e dashboards
+
+---
+
+### 57. Token budgeting e orçamento por tarefa (DA-67)
+
+**O problema.** O AI Gateway v1 (DA-26) estimava tokens com `len(text) // 4` e comparava o custo de **cada chamada** com um teto fixo (`llm_gateway_max_cost_usd`). Um diagnóstico com várias chamadas LLM (ReAct, retry, failover) nunca acumulava consumo: o "orçamento" era por chamada, não por tarefa.
+
+**A solução.**
+
+1. **Tokenizer aproximado** (`app/llm/gateway.py::_estimate_tokens`): `tiktoken` com `cl100k_base`, carregado de forma lazy e em cache. Qualquer falha de carga (tiktoken ausente, BPE sem rede em container/Kyma) cai na heurística `len//4`, é lembrada (`_encoding_failed`, sem nova tentativa a cada chamada) e logada uma vez. Nunca propaga exceção.
+2. **Preços do registry** (`app/llm/routing.py::_estimate_cost_usd`): `registry_prices()` quando há `DATABASE_URL`; senão, a tabela interna.
+3. **Orçamento por diagnóstico** (`app/llm/budget.py`): ledger em memória por `incident_id`, aberto em `run_diagnosis` com `DIAGNOSIS_BUDGET_USD` (default 1.00) e fechado no `finally`, mesmo em erro ou timeout.
+   - Teto efetivo de cada chamada = `min(llm_gateway_max_cost_usd, restante / (1 + LLM_BUDGET_RESERVE_RATIO))`. A reserva (default 0.25) cobre o erro do tokenizer aproximado e saída maior que a prevista.
+   - Após sucesso, o gateway debita o custo **real** (metering DA-48) ou, sem ele, o estimado. Chamada que falhou não é debitada.
+   - **Degradação:** o Policy Engine (DA-66) rejeita com `orcamento_excedido` os candidatos que não cabem; um candidato mais barato que ainda caiba (ex.: Ollama local) segue elegível.
+   - **Esgotamento:** se o orçamento do diagnóstico barra todos os candidatos, o gateway levanta `BudgetExhaustedError`, classificada como `FailureClass.BUDGET_EXHAUSTED` (DA-68: sem retry, sem failover). Se quem barra é o teto por chamada, segue `PolicyViolationError` (comportamento DA-26).
+4. **Ledger persistente** (`record_budget_ledger`, migration `018_create_llm_budget_ledger.py`): estimado × real por chamada, best-effort.
+5. **Preço do modelo efetivo** (correção de 2026-10-18): a estimativa do roteamento consultava o registro com o **rótulo** do provider (`"openai"`) como `model_id`; nenhum registro casa com isso, e a estimativa caía sempre na tabela interna. Para `gpt-4o-mini` (US$ 0,15/0,60 por 1M) a tabela dava ~33× o preço real: 10 mil tokens estimados em US$ 0,15 contra US$ 0,0045, e um contexto acima de ~34 mil tokens era barrado pelo teto de US$ 0,50 custando ~US$ 0,015. Agora `app/llm/routing.py::_registry_prices_for` consulta pelo modelo que o provider vai chamar (`llm_model`, o `model_name` do caller ou o deployment do Azure) e, no modo gerenciado, cai no default habilitado da origem — a mesma regra de `app/admin/runtime.py::resolve_runtime_model`. Testes em `tests/test_llm_routing.py::TestCostEstimation` (o teste anterior mockava o preço pelo rótulo e escondia o bug).
+6. **Borda HTTP e registro do incidente** (2026-10-18): `BudgetExhaustedError` vira 503 com `code: budget_exhausted` e `error_id` (`app/main.py`), em vez do 500 genérico; `PolicyViolationError` vira 503 `policy_violation`. O motivo completo vai só para o log. O total debitado e o número de chamadas são gravados no incidente (`cost_usd`, `llm_calls`, migration `019_incidents_escalation_and_cost.py`) e aparecem na Admin UI. Testes: `tests/test_gateway_refusal_http.py`, `tests/test_incident_escalation_cost.py`.
+
+**Validação.** `tests/test_budget_ledger.py` (aritmética e reserva, acúmulo e esgotamento, degradação para candidato mais barato, teto por chamada continua valendo, chamada com falha não é debitada, mapeamento para `BUDGET_EXHAUSTED`, abertura e fechamento em `run_diagnosis` mesmo com erro); `tests/test_tokenizer_offline.py` (fallback para `ConnectionError`/`OSError`/`ImportError`, sem retentativa, um único aviso).
+
+**Limitações (registradas de propósito).**
+- `cl100k_base` é o tokenizer da OpenAI: para Qwen/Ollama é uma **aproximação**. A contagem real vem de `prompt_eval_count` no metering (DA-48), usada no débito quando disponível.
+- O ledger por diagnóstico é **em memória, por processo**. O diagnóstico roda inteiro numa réplica, então basta na prática; não há orçamento agregado entre réplicas.
+- Após um timeout do watchdog (`diagnosis_timeout_seconds`), o orçamento já foi fechado; chamadas que a thread ainda em execução fizer valem só pelo teto por chamada.
+- Escalonamento humano (DA-44) ao esgotar o orçamento não foi ligado: o erro tipado sobe para o caller (na API, 503 `budget_exhausted`).
+- A tabela de preços interna é aproximada; não é cobrança real.
+
+---
+
+### 58. Matriz de falhas e failover tipado (DA-68)
+
+**O problema.** O AI Gateway v1 (DA-26) não tem uma taxonomia de falhas tipada. Quando um provider falha, o gateway não sabe se é transitório, rate-limited, ou fatal. A DA-68 estabelece uma taxonomia de falhas e como o gateway deve reagir.
+
+**O caso de uso.** Um operador quer saber se o gateway deve retryar uma chamada que falhou por timeout. A resposta deve ser clara: sim, se for `transient` ou `timeout`, não se for `quota_exceeded` ou `context_limit`.
+
+**A solução.** Definir uma taxonomia de falhas fechada:
+
+- `transient`: retry com backoff
+- `rate_limited/quota`: retry com backoff + redução de carga
+- `unavailable`: retry com backoff
+- `timeout`: retry com backoff
+- `context_limit`: não retry (reduzir contexto)
+- `output_limit`: não retry (reduzir output)
+- `budget_exhausted`: não retry (parar)
+- `validation_error`: não retry (corrigir input)
+- `quality_failure`: não retry (revisar prompt)
+
+Cada classe define: retry? backoff? abre circuito? failover? escala?
+
+**Implementação.**
+- `app/llm/factory.py`: mapear exceções reais → classe
+- `app/llm/gateway.py`: definir política por classe
+- `tests/test_llm_gateway.py`: testes parametrizados por classe
+
+**Validação.**
+- `tests/test_llm_gateway.py`: testes parametrizados para cada classe
+- Quality gate: `docs_code_references` valida que matriz está documentada
+
+**Limitações (registradas de propósito).**
+- Mapeamento de exceções pode ser provider-specific
+- Backoff requer configuração (não hardcoded)
+
+**Próximos passos.**
+- DA-69: Checkpointing e execução resumível
+- DA-70: Métricas FinOps e dashboards
+
+---
+
+### 59. Checkpointing e execução resumível (DA-69)
+
+**O problema.** O grafo LangGraph (`app/agent/graph.py`) não tinha checkpointing: uma falha no meio do pipeline perdia o trabalho já feito (conector, RAG).
+
+**A solução.** Checkpointing **opt-in** (`CHECKPOINTING_ENABLED=false` por default):
+
+- `build_graph(checkpointer=...)` compila o grafo com o checkpointer; `get_graph()` usa `build_postgres_checkpointer(DATABASE_URL)` quando a flag está ligada (exige `DATABASE_URL`; ver correção abaixo).
+- `thread_id` = `incident_id`, passado por `run_diagnosis` só com a flag ligada.
+- O import de `langgraph.checkpoint.postgres` é condicional: quem não liga a flag não precisa de libpq. Com a flag, o driver vem de `psycopg[binary]` (a imagem não instala libpq).
+- Retomada é a semântica nativa do LangGraph: `invoke(None, {"configurable": {"thread_id": ...}})` continua do último checkpoint, sem reexecutar nós concluídos. Não há retomada de geração parcial.
+
+**Correção aplicada.** `run_diagnosis` passava `thread_id` posicional e, com `timeout_seconds=None`, ele caía no parâmetro `timeout_seconds`: o checkpointer nunca recebia o `thread_id` e `min(limit, dict)` quebrava com a flag ligada. Agora é passado por nome.
+
+**Validação.** `tests/test_checkpointing.py`, com o grafo real e nós fake com contador (sem Qdrant/Ollama/Postgres): retomada após falha num nó intermediário sem reexecutar `supervisor`/`connector`/`retrieve`; controle sem checkpointer (tudo roda de novo); isolamento entre `thread_id`; `thread_id` só com a flag ligada e nunca em `timeout_seconds`; default sem import do Postgres; `get_graph` usa o builder com redação; normalização da URL; checkpoint sem e-mail/CPF (com controle provando o vazamento sem a redação); retomada lê estado redigido com os tipos originais. `tests/test_checkpointing_postgres.py` repete retomada + ausência de PII contra Postgres real.
+
+**PII no checkpoint (fechado).** O estado do grafo guarda `description`/`logs`/`payload`/`connector_data` crus, porque o conector e o RAG precisam do texto original e a redação (DA-30) só acontece ao montar o prompt. Em vez de redigir a entrada (o que mudaria o diagnóstico), `app/agent/checkpointing.py::RedactingCheckpointMixin` redige **só o que o checkpointer grava**: cada valor de canal passa por `redact_preserving_types` em `put`/`put_writes` (e variantes async).
+
+- A redação é no saver, não no serializer: o `PostgresSaver` grava `str`/`int`/`bool`/`None` **inline** no jsonb do checkpoint, sem passar pelo serde. Um serializer com redação deixaria `description` em claro no banco.
+- A estrutura de controle (`channel_versions`, ids) nunca é tocada: as versões têm sequências longas de dígitos que a regra de número de IDoc reescreveria, corrompendo o checkpoint (o estado retomado vinha vazio).
+- `redact_preserving_types` preserva o tipo de dataclasses e modelos Pydantic (diferente de `redact_pii_deep`, que os converte em dict): na retomada, `ConnectorResult.is_mock` continua acessível.
+
+**Construção do PostgresSaver (corrigido).** `get_graph()` chamava `PostgresSaver.from_conn_string(...)` e depois `.setup()` no resultado, mas `from_conn_string` é um context manager: com a flag ligada o app falhava ao montar o grafo. Além disso, `DATABASE_URL` usa o dialeto SQLAlchemy (`postgresql+asyncpg://`), que a libpq não aceita. `build_postgres_checkpointer` normaliza a URL (`libpq_url`), abre uma conexão de vida longa e usa o saver com redação.
+
+**Limitações (registradas de propósito).**
+- Um diagnóstico **retomado** lê o estado redigido (e-mail/CPF já substituídos): é o preço de nunca gravar PII. A redação cobre o que a DA-30 reconhece (e-mail, CPF, CNPJ, número de IDoc, tokens, senhas); nomes próprios e endereços não.
+- `tests/test_checkpointing_postgres.py` (marker `postgres_smoke`; usa `IIC_TEST_DATABASE_URL` e pula sem ela) valida retomada e ausência de PII nas tabelas do checkpointer contra Postgres real; os testes unitários usam `RedactingMemorySaver`.
+- Conexão única compartilhada pelas threads do pool do grafo (o `PostgresSaver` serializa com lock), sem reconexão automática.
+- Não existe endpoint/API de retomada: a retomada só é possível chamando o grafo com o mesmo `thread_id`. `run_diagnosis` sempre gera um `incident_id` novo.
+- Fernet de `evidence_json` (DA-60) protege a tabela `incidents`, não as tabelas do checkpointer; nelas o texto fica redigido, não cifrado.
+- O LangGraph avisa ao desserializar `ConnectorResult` (tipo não registrado no allowlist do msgpack); com o modo estrito de desserialização do LangGraph ligado, seria bloqueado.
+
+---
+
+### 60. Métricas e FinOps (DA-70)
+
+**O problema.** O Copilot precisa de métricas FinOps para monitorar custos e otimizar uso. A DA-70 estabelece quais métricas são viáveis e como expô-las.
+
+**O caso de uso.** Um operador quer saber o custo total de diagnósticos por dia, por provider, por dominínio. A resposta deve ser clara: usar Prometheus + métricas do metering (DA-48).
+
+**A solução.** Métricas FinOps viáveis com o que existe:
+
+- `llm_requests_total`: contagem de chamadas LLM por provider
+- `llm_tokens_total`: tokens (in/out) por provider
+- `llm_cost_usd_total`: custo em USD por provider
+- `llm_budget_deviation_ratio`: desvio estimado/real
+- `diagnosis_duration_seconds`: duração por dominínio
+
+Dashboards: estender os existentes e passar em `scripts/validate_dashboards.py`.
+
+**Implementação.**
+- `app/metrics.py`: métricas Prometheus
+- `app/admin/metering.py`: já tem `record_usage_observed()`
+- `grafana/dashboards/`: dashboards FinOps
+
+**Validação.**
+- `tests/test_metrics_finops.py`: testes de métricas
+- `scripts/validate_dashboards.py`: 45 queries passando
+
+**Limitações (registradas de propósito).**
+- Métricas FinOps requerem `PROMETHEUS_ENABLED=true`
+- Alguns dados (ex: custo real) só estão disponíveis após o diagnóstico
+
+---
+
+### 66. Sanitização do resultado de busca web devolvido ao LLM (DA-71)
+
+**O problema.** O resultado da busca web era a única entrada não confiável que voltava ao LLM sem `sanitize_untrusted_input`. O tool do agente ReAct (`_make_web_search_tool`) devolvia título, URL e resumo crus do DuckDuckGo como observação. Uma página indexada com "ignore as instruções anteriores…" entrava no raciocínio do agente. A consulta de saída já era sanitizada (egress); a volta não. O limite estava declarado no README.
+
+**A solução.** `app/agent/nodes.py::format_untrusted_web_hits`, usada pelo tool do ReAct **e** pelo `web_search_node` (que alimenta prompt, evidência `web_untrusted` e relatório):
+
+- título e resumo passam por `sanitize_untrusted_input` (neutralização de injection em inglês, português e espanhol, normalização Unicode e caracteres invisíveis, redação de PII), com limite de tamanho por campo (200/800) e total (1800);
+- URL reduzida a esquema + host + caminho, só `http`/`https` (query e fragmento podem carregar texto do atacante; `javascript:`/`data:` somem);
+- o bloco vai entre delimitadores (`<<<DADOS_WEB_NAO_CONFIAVEIS>>>` … `<<<FIM_DADOS_WEB>>>`) com aviso de que é dado, não instrução; o delimitador é removido do conteúdo antes, para que o texto externo não consiga "fechar" o bloco;
+- mensagens de erro da busca também são sanitizadas.
+
+**Validação.** `tests/test_web_search_injection.py` (16 testes): injeção no resumo e no título (EN/PT/ES e com caractere de largura zero), PII, delimitador forjado, URL maliciosa, limites de tamanho, observação do tool do ReAct, erro da busca e texto gravado pelo `web_search_node`.
+
+**Limitações (registradas de propósito).**
+- Neutralização por padrões: reduz o risco, não o elimina. Paráfrases que não casem com `_INJECTION_PATTERNS` passam; o delimitador e o aviso são a segunda camada, não garantia.
+- O agente segue sem ferramenta de escrita (DA-27): uma injeção bem-sucedida afeta a qualidade do diagnóstico, não executa ação.
+
+---
+
+### 67. Roteamento por registro de modelos (DA-72)
+
+**O problema.** A DA-66 define que o agente escolhe o destino por elegibilidade (soberania, capacidade, janela de contexto, circuito, orçamento) e depois por preferência (custo × latência). O código fazia menos: os candidatos eram só `LLM_PROVIDER` e `LLM_FALLBACK_PROVIDER`; os modelos cadastrados em `/admin/models` diziam apenas **qual modelo** cada provider chamava (DA-46); capacidade vinha de tabela fixa; janela de contexto e latência não existiam; o limite mensal só era exibido; e o preço registrado não chegava à estimativa (corrigido antes, ver DA-67 item 5). Cadastrar um modelo não mudava a decisão do agente.
+
+**A decisão** (aprovada em 2026-10-18). No modo gerenciado (`LLM_REGISTRY_DB=true`), **cada modelo habilitado do registro é um candidato**. O Policy Engine avalia todos com as mesmas regras e devolve uma lista ordenada; o failover (DA-68) percorre essa lista. Fora do modo gerenciado nada muda.
+
+**Parâmetros por modelo** (migration `020_registry_routing.py`, `llm_models`; nulo = derivado ou herdado):
+
+| Coluna | Uso |
+|---|---|
+| `transport` (`ollama` · `openai_compatible` · `azure_openai`) | Cliente da chamada; nulo = derivado da origem |
+| `context_window_tokens` | Rejeita se contexto estimado + completion (×1,5) não couber |
+| `supports_tools` / `supports_response_format` / `supports_seed` | Só restringem a capacidade da origem |
+| `domains` (`sap`, `saas`, `generic`) | Rejeita se o domínio do supervisor não estiver na lista; nulo = todos |
+| `tier` (`local` · `standard` · `premium`) | `premium` é cadastrado e bloqueado (tier 3 da DA-44 exige decisão própria); nulo = `local` se loopback, senão `standard` |
+| `priority` | Desempate depois do score (menor primeiro) |
+| `monthly_limit_tokens` (já existia) | Passa a **bloquear** ao atingir 100% do período aberto |
+
+**Regras do engine** (`app/llm/routing.py::evaluate_routing`, ramo de registro). Fase 1 rejeita com motivo enumerado: `destino_fora_da_origem` (o `base_url` aponta para outro host que não a origem cadastrada), `soberania_bloqueada` (DA-43, avaliada sobre o destino final), `credencial_ausente` (origem cloud sem credencial cifrada, DA-47), `capability_faltando` (capacidade efetiva = origem ∩ modelo), `janela_insuficiente`, `dominio_nao_atendido`, `nivel_nao_autorizado`, `limite_mensal_atingido`, `circuito_aberto` (por **origem**) e `orcamento_excedido` (preço registrado do modelo). Fase 2 ordena os elegíveis por `w_custo·custo_norm + w_lat·latência_norm` (normalizados entre os elegíveis; `LLM_ROUTING_COST_WEIGHT`=0,7 e `LLM_ROUTING_LATENCY_WEIGHT`=0,3), depois `priority`, depois o default da origem. Sem latência medida o termo é zero: modelo novo não é penalizado.
+
+**Gateway.** `app/llm/gateway.py::invoke_via_gateway` aplica os overrides da Admin UI (`app/llm/registry_routing.py::effective_settings`, antes ignorados na decisão), lê o registro (`app/llm/registry_routing.py::load_registry_snapshot`; ilegível = nenhum candidato, fail-closed), decifra a credencial **só do modelo escolhido**, grava a latência de cada chamada bem-sucedida (`llm_call_latency`, mediana de 7 dias) e registra o modelo que respondeu (`app/llm/gateway.py::consume_last_selection`), que vai para `DiagnosisResponse.llm_model` e para `incidents` (DA-53).
+
+**Superfícies.** `/admin/models`: parâmetros por modelo no cadastro e na edição; orçamento e pesos (`DIAGNOSIS_BUDGET_USD`, `LLM_BUDGET_RESERVE_RATIO`, `LLM_GATEWAY_MAX_COST_USD`, pesos) como overrides de runtime; e o simulador `GET /admin/api/routing/preview`, que roda a mesma decisão sem chamar o LLM.
+
+**Invariantes.** A 3 (gateway é a única entrada) e a 8 (modelo nunca entra na tabela de rotas: o candidato vem de `llm_models`, dado do operador) se mantêm. A 9 foi **emendada**: a capacidade continua por origem, que é o teto; o modelo só restringe.
+
+**Validação.** `tests/test_registry_routing.py` (um teste por critério de aceite: todos os habilitados aparecem com posição ou motivo; `confidential` em `strict` só local; janela; domínio; limite mensal; failover pela lista com o modelo efetivo registrado; modo `.env` sem ler o registro — mais invariante 9, credencial, destino, premium, score, prioridade, preview e validação da API); `tests/test_registry_routing_repository.py` (leituras do registro, consumo aberto, credenciais, mediana de latência e chaves de runtime contra SQLite). `tests/test_llm_gateway.py::test_registry_com_destino_remoto_e_barrado_para_confidential` passou a exercitar o mecanismo novo (GOV-01).
+
+**Limitações (registradas de propósito).**
+- No modo gerenciado o `model_name` do caller (`llm_model` do state) não restringe os candidatos: quem escolhe é o engine.
+- Latência é medida por réplica e gravada no banco; sem `DATABASE_URL` o score usa só custo.
+- O circuito do modo `.env` continua por rótulo de provider (comportamento da DA-66 preservado).
+- Escalonamento automático para `premium` e roteamento por qualidade medida ficam fora (exigem decisão e baseline por modelo).
+
+---
+
+### 68. Interfaces no idioma do navegador (DA-73)
+
+**O problema.** As duas interfaces tinham texto fixo em português: cerca de 175 textos no React (`frontend/src`) e cerca de 365 nos templates e no JS da Admin UI. A página React declarava `<html lang="en">` com conteúdo em pt-BR, a hora era formatada sempre como `pt-BR` e dinheiro com `toFixed`. As mensagens de erro exibidas vinham do `detail` do backend, em português.
+
+**A decisão** (aprovada em 2026-10-18). Idioma resolvido nesta ordem: `?lng=` na URL (revisão) → cookie `iic_locale` (escolha explícita, compartilhada pelas duas UIs) → idioma do navegador pelo idioma base (`pt-PT` → `pt-BR`) → fallback `en`. Locales: `pt-BR` e `en`. O conteúdo gerado pelo LLM fica fora: mudar o idioma do prompt altera o `prompt_digest` (DA-53) e exige nova medição.
+
+**UI web.** `react-i18next` com `i18next-browser-languagedetector` (`frontend/src/i18n/index.ts`), catálogos `frontend/src/i18n/locales/{pt-BR,en}.json`, seletor de idioma (`frontend/src/components/LanguageSelect.tsx`), `<html lang>` sincronizado, e formatação por `Intl` (`frontend/src/i18n/format.ts`). Códigos estáveis do backend (`trust_level`, motivo de escalonamento, `code` de erro) são traduzidos pelo código, nunca pelo texto.
+
+**Admin UI.** Negociação no servidor (`app/i18n/__init__.py::negotiate`, `Accept-Language` com pesos `q`), `t()`/`t_html()` nos templates Jinja e o catálogo do idioma embutido na página como `<script type="application/json">` — dado, não script, então a CSP `script-src 'self'` continua valendo; `<`, `>` e `&` vão escapados para o conteúdo não fechar a tag (`app/i18n/__init__.py::embed_json`). O JS do admin usa o mesmo catálogo e a mesma sintaxe do i18next (`{{x}}`, plural `_zero/_one/_other`). Respostas com `Vary: Accept-Language, Cookie` e `Content-Language`.
+
+**Erros por código.** `app/api_errors.py::CodedHTTPException`: erros de auth e da API admin passam a trazer `code` e `params` além do `detail` (mantido para clientes existentes). As UIs mostram o texto do catálogo para o `code`; sem código conhecido, o `detail`.
+
+**Pseudo-locale.** `?lng=xx` mostra todo texto do catálogo entre `⟦ ⟧`; o que aparece sem marca é texto fixo.
+
+**Garantia automática.** Gate `ui_i18n` (`app/i18n/checks.py`): paridade de chaves e de variáveis entre os locales; toda chave usada existe (estáticas e grupos dinâmicos); nenhum texto visível fora do catálogo (`app/i18n/inventory.py`, também em `scripts/i18n_inventory.py`).
+
+**Validação.** `tests/test_i18n.py` (negociação, interpolação e fallback, escape do catálogo embutido, catálogos reais consistentes, detecção de chave faltando/variável divergente/texto fixo, Admin UI em en e pt-BR pelo `Accept-Language`, cookie vencendo o navegador, pseudo-locale, erros com `code`, todo `code` com texto nos dois idiomas). Os testes de tela que conferem texto em português passam a fixar `Accept-Language: pt-BR`. Capturas Playwright das duas UIs em en, pt-BR e `xx`.
+
+**Limitações (registradas de propósito).**
+- O texto gerado pelo LLM e o relatório (`report_markdown`) seguiam em português — resolvido pela DA-74 (§69).
+- Textos livres do backend (motivos do simulador de roteamento, nota dos conectores no `/health`) — resolvido pela DA-74 com códigos estáveis. Os dados do usuário seguem no idioma em que foram escritos.
+- O inventário é heurístico: texto montado concatenando fragmentos de uma palavra escapa. O catálogo proíbe concatenar frases.
+- O e-mail de ativação (DA-55) não tinha idioma por usuário — resolvido pela DA-74.
+
+---
+
+### 69. Conteúdo do diagnóstico no idioma pedido (DA-74)
+
+**O problema.** Com a DA-73 as telas passaram a seguir o idioma do navegador, mas o que o backend escreve continuava em português: causa raiz e passos do rule engine, avisos acrescentados pelos guardrails de confiança (`[confianca limitada - ...]`), o relatório Markdown, o texto do LLM, o e-mail/SMS de ativação e os motivos que as telas exibem (simulador de roteamento, notas dos conectores no `/health`, motivo de soberania). Um usuário em inglês via a tela em inglês e o diagnóstico em português.
+
+Na mesma investigação apareceram dois defeitos do rule engine: (1) a regra do TTL tem precedência sobre a regra em código de mesma categoria, e a do TTL sem `ex:probableRootCause` devolvia o texto genérico "Erro conhecido detectado via taxonomia SKOS." — a causa curada de `rules.py` (ex.: IDoc status 51) nunca chegava ao usuário (a evidência do k3d de 2026-10-18 mostra o texto genérico); (2) os passos do TTL eram separados por vírgula, e "Validar credenciais (token, API key, Basic Auth)" virava três passos.
+
+**A decisão** (2026-10-18, pedido "efetivar o i18n"). O idioma do conteúdo é um campo do pedido, não do servidor:
+
+- `IncidentRequest.locale` (também em `IncidentEventData`, A2A e na tool MCP): `pt-BR` (default, ausente = comportamento anterior) ou `en`; a tag do navegador é normalizada (`en-US` → `en`, `pt-PT` → `pt-BR`); outro idioma = 422 (`app/models/models.py::_coerce_locale`). O idioma vai ao estado do grafo, à resposta (`DiagnosisResponse.locale`) e a `incidents.locale` (migration `021_locale.py`). A UI web envia o idioma da tela (`frontend/src/i18n/index.ts::diagnosisLocale`; o pseudo-locale pede `en`).
+- **Rule engine:** os padrões casam em qualquer idioma; só o texto devolvido muda. pt-BR é o texto da própria regra (TTL/`rules.py`); `en` vem de `rules.<categoria>` em `app/i18n/locales/content.en.json` (`app/i18n/content.py::localize_rule`). O loader preenche causa e passos ausentes no TTL com a regra em código de mesma categoria (`app/agent/ontology_loader.py::_fill_from_hardcoded`) e separa passos por `;`.
+- **Avisos e relatório:** `content.<idioma>.json` (`diagnosis.*`, `report.*`); o `pt-BR` reproduz byte a byte os textos de antes (teste dourado do relatório). Valor interpolado não é reinterpretado.
+- **Prompt:** o pt-BR é o prompt medido e o digest dele não muda (o payload canônico do default não ganhou chave). Para `en`, o prompt medido recebe ao fim uma instrução de idioma (`app/agent/prompts.py::OUTPUT_LANGUAGE_INSTRUCTIONS`) e tem digest próprio, gravado na resposta. O gate `prompt_digest_measured` avisa (WARN) enquanto o digest `en` não estiver em `locales.en` do baseline e reprova se um digest medido divergir; `--write-prompt-baseline --prompt-locale en` grava depois de medir (o provider do promptfoo aceita o idioma como 4ª parte do prompt).
+- **Ativação:** `web_users.locale` guarda o idioma da Admin UI de quem cadastrou (ou o `locale` do payload); e-mail e SMS saem nesse idioma; linha antiga (nulo) = pt-BR.
+- **Textos que as telas exibem:** `app/llm/routing.py::sovereignty_decision` devolve código e parâmetros (o texto em pt continua no audit log e no `/llm/policy`), os candidatos do simulador trazem `detail_items` (motivo + parâmetros) e o `/health` traz a variável de cada conector (`setting`). As UIs montam o texto (`sovereigntyReason.*`, `reasonDetail.*`, `status.connectorNote.*`).
+
+**Garantia automática.** Gate `content_i18n` (`app/i18n/checks.py::content_i18n_problems`): paridade de chaves e variáveis entre os catálogos de conteúdo; toda categoria do rule engine (TTL + código) com causa e passos em cada idioma não-default, e nenhuma categoria órfã; todo idioma de conteúdo com instrução de idioma no prompt e presente nas interfaces.
+
+**Validação.** `tests/test_i18n_content.py` (34): normalização e 422 do `locale`; estado e resposta; digest pt-BR igual ao medido e `en` próprio; regra com causa curada (não mais genérica) e passo com vírgula inteiro; regra em pt-BR e en com a mesma decisão; aviso de guardrail e relatório em en; relatório pt-BR idêntico ao de antes; ativação pt-BR igual à de antes e en; motivos de soberania com código e o mesmo texto; gate reprovando regra sem tradução e variável divergente. Suítes existentes ajustadas onde o contrato mudou de propósito (dublês de `match_known_error`/`deliver_email`, gate do prompt com idiomas).
+
+**Limitações (registradas de propósito).**
+- O prompt `en` foi medido em 2026-10-20 com `qwen3.6:35b-a3b` (17 casos: 12 via LLM + 5 via rule engine, 0 falhas); o digest está em `locales.en`. O placar continua separado do pt-BR porque são prompts distintos.
+- O LLM recebe o contexto (documentos da base, persona, schema) em português e escreve em inglês por instrução: qualidade da tradução técnica depende do modelo.
+- Documentos da base de conhecimento e dados do usuário não são traduzidos; `matched_source` e identificadores técnicos ficam como estão.
+- Um diagnóstico já exibido não muda ao trocar o idioma da tela.
+---
+
+### 70. Aprovação humana no grafo (Human-in-the-Loop) (DA-75)
+
+**O problema.** Quando o sinal de escalonamento (`escalation.should_escalate == True`) pede revisão humana, o grafo LangGraph continuava executando até o fim, chamando o LLM mesmo quando o resultado seria descartado. Não havia forma de pausar o grafo e retomar após a aprovação humana.
+
+**O caso de uso.** Um operador quer revisar um diagnóstico quando o escalonamento detecta baixa evidência (`grounded_tier_weak` ou `curated_tier_weak`) ou conector mock/fallback (`mock_tier_weak`). A resposta deve ser clara: o grafo pausa, o operador aprova/edita/rejeita, e o grafo retoma com a nova informação.
+
+**A solução.** Interrupt no node de diagnóstico (`_run_diagnosis_agent`), com checkpointing (DA-69) para retomada:
+
+- **Interrupt no node:** `_run_diagnosis_agent` verifica `escalation.should_escalate` **antes** de chamar o LLM. Quando verdadeiro, chama `interrupt(hitl_request)`; o payload fica no checkpoint e **o LLM não é chamado**. Sem checkpointer (`CHECKPOINTING_ENABLED=false`), o node devolve `hitl_request` no topo do estado e o diagnóstico fica pendente, sem retomada.
+- **Endpoint de revisão:** `POST /incidents/{id}/review` recupera o checkpoint com `graph.get_state(thread_id)`, valida que há um `interrupt` pendente e retoma o grafo com `Command(resume={"action": ..., "edited_cause": ..., "reviewed_by": ..., "reviewed_at": ...})`.
+- **Report especial:** `report_node` verifica `hitl_request` **sem** `hitl_response` e devolve `report_markdown` indicando que o diagnóstico está pendente de aprovação humana; depois da retomada, renderiza o relatório final.
+- **Modelo de requisição:** `ReviewIncidentRequest` com `action` (`approve`/`edit`/`reject`), `edit` (nova causa raiz quando `action='edit'`) e `reviewed_by` (`human`/`system`).
+
+**Implementação.**
+- `app/agent/nodes.py::_run_diagnosis_agent`: verifica `escalation.should_escalate` antes de chamar LLM; com `hitl_interrupt_enabled` chama `interrupt()` com `incident_id`, `escalation.as_log_fields()`, `prompt`, `locale`, `probable_root_cause`, `matched_source` e `evidence_strength`. A retomada reentra no node, consome o `Command(resume=...)` e aplica approve/edit/reject sem chamar o LLM.
+- `app/agent/nodes.py::_wrap_diagnosis_result`: promove `hitl_request`/`hitl_response` ao TOPO do `CopilotState` (antes ficavam aninhados em `diagnosis` e o `report_node` nunca os via).
+- `app/agent/nodes.py::report_node`: devolve o relatório pendente somente quando há `hitl_request` e ainda não há `hitl_response`.
+- `app/main.py::review_incident_endpoint`: valida `CHECKPOINTING_ENABLED`, usa `graph.get_state()`/`snapshot.interrupts` e retoma com `Command(resume=...)` — sem abrir uma conexão `psycopg` própria por requisição.
+- `app/models/models.py::ReviewIncidentRequest`: modelo Pydantic com `action`, `edit` e `reviewed_by`.
+
+**Validação.**
+- `tests/test_hitl.py` (novo): escalonamento antes do LLM, `hitl_request` no topo, `interrupt()`/`Command(resume=...)`, endpoint de revisão e ausência de chamada ao LLM.
+- Quality gate: `da_registered` e `docs_code_references` validam a DA.
+
+**Limitações (registradas de propósito).**
+- No caminho com checkpointer, o `hitl_request` fica no payload do `interrupt` até a retomada; depois dela, `hitl_request` e `hitl_response` ficam no estado. O `report_markdown` pendente é montado por `run_diagnosis` a partir do payload.
+- O `hitl_request` não é gravado na tabela `incidents`. A tabela só recebe o resultado final (pendente ou revisado).
+- O endpoint `/incidents/{id}/review` usa o mesmo `thread_id` (incident_id) do checkpoint. Não há suporte para retomada com novo `incident_id`.
+- Com `CHECKPOINTING_ENABLED=false` não há `interrupt()`: o diagnóstico fica pendente e o endpoint devolve 400, porque não existe checkpoint para retomar.
+
+**Próximos passos.**
+- DA-76 implementada → ver §71 abaixo (aviso de IA, não escalonamento tier 3).
+- DA-77: Dashboard de incidentes em revisão (histórico de `hitl_request`/`hitl_response`).
+
+### 71. Aviso de IA no relatório e API (DA-76)
+
+**Motivo.** Atender a requisitos mínimos de transparência regulatória: o usuário deve saber
+que um diagnóstico foi gerado automaticamente por IA, sem depender de documentação separada.
+
+**Decisão.** O aviso fica em dois lugares:
+- **Catálogo de conteúdo:** chave `ai_warning` em `content.pt-BR.json` e `content.en.json`.
+  pt-BR (default) e en têm textos equivalentes; mudar um ou outro não altera o digest
+  porque o template é a fonte do markdown.
+- **Template Markdown:** `report.template` inclui `**Aviso de IA:** ...` embutido no final.
+  `report_node()` **não** adiciona novamente (evita duplicação).
+- **Camada API:** `DiagnosisResponse.ai_warning` campo obrigatório (`str`, default `""`).
+  Preenchido com o valor do catálogo baseado no locale da requisição.
+
+**O que NÃO foi feito.**
+- Nenhuma configuração de feature flag: aviso sempre presente quando o diagnóstico retorna.
+- Não há versão/idioma separado por `diagnosis_response` — a string vem diretamente do
+  catálogo (`content_text(locale, "ai_warning")`).
+
+---
+
+### 72. Rollback de deployment (DA-82)
+
+**Motivo.** Em produção, é essencial poder reverter para uma versão anterior do
+schema em caso de falha no deploy. O snapshot do schema permite rollback rápido
+e seguro.
+
+**Decisão.**
+- Tabela `snapshot_table`: registra versão do schema antes de cada deploy
+- Tabela `rollback_log`: registro de todos os rollbacks com timestamp, hash e status
+- Endpoint `/admin/deploy/rollback`: removido em 2026-10-20 (importava funções
+  inexistentes e usava autenticação de usuário final). Será reintroduzido no
+  `admin_router`, com chave de admin e repositório real, quando o mecanismo de
+  rollback existir.
+
+**O que NÃO foi feito.**
+- Endpoint de rollback (removido; ver acima)
+- Auto-rollback em caso de falha (só manual via API)
+- Histórico de schema completo (apenas hash para identificação)
+
+---
+
+### 73. Multi-tenancy (DA-79 — candidata; histórico)
+
+> **Status (2026-11-11): candidata, com o gap A5 parcialmente corrigido.**
+> O schema (`tenant_id`) e os filtros de repositório existem, mas o isolamento
+> não é fail-closed em todos os caminhos. O gap A5 do estudo IIC→SAP AMS/DF-e
+> (*"tenant_id não chega ao grafo"*) foi reproduzido e corrigido nesta data:
+> `run_diagnosis()` propaga `request.tenant_id` para o `CopilotState` e
+> `build_incident_row()` grava a coluna. Antes, todo incidente diagnosticado
+> era persistido com `tenant_id=NULL`. A pendência remanescente (tenant
+> derivado da identidade, não do corpo da requisição) continua registrada em
+> `CLAUDE.md` (DAs candidatas) e `docs/DIVIDAS_TECNICAS.md`.
+
+**Motivo.** Isolamento de tenants é essencial para produtos SaaS multi-tenant. Sem
+tenant_id em incidents e queries filtradas por tenant, dados de um cliente podem
+vazar para outro.
+
+**Decisão.**
+- Campo `tenant_id` em `IncidentRequest` e `IncidentEventData`.
+- Migration `022_add_tenant_id_to_incidents.py` cria índice no DB.
+- Consultas ao repository devem filtrar por `tenant_id` do usuário autenticado.
+- Credenciais LLM devem ser isoladas por tenant (não compartilhadas).
+
+**Implementação.**
+- `app/services/incident_repository.py::filter_by_tenant_id()`: filtra incidentes por tenant_id com ordenação por tempo.
+- `app/services/incident_repository.py::get_by_id_and_tenant()`: busca incidente específico de um tenant específico (fail-closed).
+- `app/services/incident_repository.py::list_recent()` agora aceita filtro por tenant_id.
+- `app/services/incident_repository.py::create()` grava tenant_id.
+- `app/services/incident_recorder.py::build_incident_row()` inclui tenant_id.
+- `app/admin/repository.py::set_credential()`, `get_credential()`, `decrypt_credential()`: aceitam tenant_id para isolamento.
+- `app/admin/models.py::LlmCredential` tem coluna tenant_id com restrição única por (tenant_id, provider_origin) quando tenant_id não é NULL.
+
+**Validação.** Testes unitários verificam:
+- `filter_by_tenant_id()` devolve só incidentes do tenant especificado.
+- `get_by_id_and_tenant()` falha silenciosamente se tenant_id não bater.
+- Tenant_id é gravado e recuperado com o incidente.
+- `tests/test_gap_a5_multitenancy.py` (gap A5): `tenant_id` da requisição chega
+  ao estado inicial do grafo (`app/agent/graph.py`), o `CopilotState` declara a
+  chave (`app/agent/state.py`) e `build_incident_row()` persiste o valor —
+  com teste de fallback para a requisição e de `None` sem tenant. Os filtros de
+  leitura por tenant são verificados no SQL gerado, não por filtragem em Python.
+
+**Limitações (registradas de propósito).**
+- Tenant_id não é obrigatório: quando None, o incidente é gravado com
+  `tenant_id=NULL` (comportamento anterior preservado — não se inventa escopo).
+- **O tenant ainda vem do corpo da requisição**, não da identidade
+  autenticada. Um chamador autenticado pode informar o tenant que quiser, e as
+  rotas de verificação/listagem da API pública não filtram por tenant. Por
+  isso o isolamento não pode ser alegado: em piloto com dados reais, usar
+  instância dedicada por cliente até que a identidade carregue o tenant
+  (G4 do estudo).
+
+---
+
+### 75. Controle de Versão de Prompt (DA-84 — candidata; histórico)
+
+> **Status (2026-10-20): candidata.** Tabela, ORM e repositório existem; os
+> endpoints de listagem/rollback não foram implementados. O texto abaixo é o
+> registro histórico da decisão original; a pendência vive em `CLAUDE.md`
+> (lista de DAs candidatas) e `docs/DIVIDAS_TECNICAS.md`.
+
+**Motivo.** Para correlacionar regressões de qualidade com versões de prompt, é essencial
+ter versionamento de artefatos e capacidade de fazer rollback.
+
+**Decisão.**
+- Tabela `prompt_versions` com campos: prompt_id, version, digest, content, created_at, is_current
+- Endpoint `/admin/prompt/{id}/versions` para listagem de versões
+- Endpoint `/admin/prompt/{id}/rollback/{version}` para rollback para versão específica
+- Modelos Pydantic `PromptVersion` e `PromptRollbackRequest`
+
+**Implementação.**
+- Migration `024_add_prompt_versions_table.py`
+- `app/models/prompt_versioning_orm.py`: modelo ORM
+- `app/services/prompt_version_repository.py`: CRUD operations
+- Endpoints `/admin/api/prompt/versions`, `/admin/api/prompt/{id}/versions/{version}` e `/admin/api/prompt/{id}/rollback/{version}`: **não implementados**.
+
+**Validação.**
+- `tests/test_prompt_versioning.py` (contagem via `pytest --collect-only`)
+
+---
+
+### 76. Pipeline A/B Testing (DA-85 — candidata; histórico)
+
+> **Status (2026-10-20): candidata.** Tabela, ORM e repositório existem; não há
+> endpoint de experimentos nem `_run_ab_test()`. O texto abaixo é o registro
+> histórico da decisão original; a pendência vive em `CLAUDE.md` (lista de DAs
+> candidatas) e `docs/DIVIDAS_TECNICAS.md`.
+
+**Motivo.** Para validar melhorias em prompts ou pipeline, é necessário poder comparar
+variantes de forma sistemática com métricas quantitativas.
+
+**Decisão.**
+- Tabela `ab_experiments` com campos: experiment_id, name, description, variant_a_prompt, variant_b_prompt, starting_at, ending_at, is_active
+- Endpoint `/admin/ab/experiments` para CRUD de experimentos
+- Endpoint `/diagnose/ab/{experiment_id}` para rodar diagnóstico com variante
+
+**Implementação.**
+- Migration `025_add_ab_experiments_table.py`
+- `app/models/ab_testing_orm.py`: modelo ORM
+- `app/services/ab_test_repository.py`: CRUD operations
+- Endpoints `/admin/api/ab/experiments`, `/admin/api/ab/experiments/{id}` e `/diagnose/ab/{id}`: **não implementados**.
+
+**Validação.**
+- Endpoints e `_run_ab_test()` não implementados; o teste citado no plano nunca existiu.
+
+---
+
+### 77. UI versionamento RAG (DA-86)
+
+**Motivo.** O histórico de versões de documentos de conhecimento (RAG) permite
+reverter para versões anteriores em caso de degradação ou erro introduzido.
+
+**Decisão.**
+- Tabela `knowledge_document_versions`: armazena versões de documentos com `is_current`
+- Endpoints: `/admin/knowledge/documents/{id}/versions`, `/rollback/{version}`, `/history/{id}`
+- UI: visualização de histórico e botão de rollback
+
+**O que NÃO foi feito.**
+- UI implementada (falta em `frontend/src/admin/knowledge/`)
+
+### 78. Testes de Escalonamento (DA-88)
+
+**Motivo.** Para garantir performance sob carga e evitar falhas em pico, é necessário
+testes de load e stress régulares.
+
+**Decisão.**
+- Script `app/scripts/load_test.py` que gera requisições simultâneas e mede latência (p50, p95, p99) e taxa de sucesso
+- Config `tests/load_test_config.py` com variáveis TPS_TARGET, TOTAL_REQUESTS
+- Testes em `tests/test_load_testing.py`
+
+**Implementação.**
+- `app/scripts/load_test.py`: script principal com métricas p50/p95/p99, TPS, success rate
+- `tests/load_test_config.py`: configuração de TPS_TARGET, TOTAL_REQUESTS, CONCURRENT_REQUESTS
+- `tests/test_load_testing.py`: 3 testes (test_positive, test_timeout_handling, test_rate_limiting)
+
+**Validação.**
+- `tests/test_load_testing.py` (3 testes)
+
+**O que NÃO foi feito.**
+- Load test contínuo em produção (só tests de regressão)
+- Integração com ferramentas externas (k6, Locust)
+
+---
+
+### 74. Explicabilidade XAI (DA-83)
+
+**Motivo.** O usuário final precisa entender **por que** o modelo chegou àquela conclusão,
+não apenas o resultado. Isso é fundamental para confiança e validação humana do diagnóstico.
+
+**Decisão.** Campo `explanation` em `DiagnosisResponse` (da-73, `DiagnosisResponse`)
+contém texto em markdown com:
+- **Highlight do documento base:** `**{matched_source}**` em negrito
+- **Força de evidência:** `{evidence_strength:.0%}`
+- **Localização do chunk principal:** `locator` doretrieve_context[0] se disponível
+
+A função `_build_xai_explanation()` constroída em `app/agent/nodes.py`
+
+**O que NÃO foi feito.**
+- Não há extração automática de trechos específicos do documento (requer NER adicional)
+- Não há visualização interativa de highlights (deixado para UI futura)
+
+### 79. Dashboard por Domínio (DA-87)
+
+**Motivo.** Para identificar regiões de baixa qualidade e otimizar recursos,
+necessário visualizar métricas por domínio (sap/saas/generic) de forma isolada.
+
+**Decisão.** Implementação do endpoint `/admin/metrics/domains` (JSON com métricas count/hit@1/latência/custo por domínio, janela `days`, default 30). A rota duplicada `/admin/dashboard/domains` foi removida em 2026-10-20 (IIC-AUD-021).
+
+Implementada em `app/admin/metrics.py` com funções:
+- `count_incidents_by_domain()`: Contagem por domínio
+- `calculate_domain_hit1()`: Hit@1 (precisão de diagnósticos corretos)
+- `calculate_domain_latency()`: Tempo médio por domínio
+- `calculate_cost_by_domain()`: Custo total por domínio
+
+**O que NÃO foi feito.**
+- Não há gráfico visual HTML renderizado no servidor (dados em JSON, frontend renderiza)
+- Não há persistência de métricas (usado memória para cálculo em tempo real)
+
+### 80. Relatórios Compliance (DA-89)
+
+**Motivo.** Setores regulamentados exigem relatórios de conformidade para auditoria,
+incluindo resumo de incidentes, métricas de qualidade e eventos auditáveis.
+
+**Decisão.** Endpoint `/admin/reports/compliance/export?format=pdf|xlsx` com:
+- Resumo de incidentes (total, verificados, custo)
+- Métricas de qualidade (Hit@1, accuracy por domínio)
+- Eventos auditáveis (diagnósticos e verificações)
+- Export para PDF e XLSX
+
+Implementada em `app/admin/reports.py` com funções:
+- `build_compliance_summary()`: Resumo consolidado
+- `calculate_quality_metrics()`: Métricas de qualidade
+- `extract_auditable_events()`: Eventos para auditoria
+- `export_pdf()`: Geração de PDF (reportlab)
+- `export_xlsx()`: Geração de planilha XLSX (openpyxl)
+
+**O que NÃO foi feito.**
+- Relatórios agendados automatiamente (apenas export manual)
+- Assinatura digital dos relatórios (padrão PDF/XLSX não inclui)
+
+### 81. Documentação GRC (DA-90)
+
+**Motivo.** Para obtenção de certificações (ISO 27001, SOC2), é essencial
+documentar o mapeamento de controles, guias de auditoria e checklists.
+
+**Decisão.** Criação de três documentos:
+- `docs/GRM_MAPPING.md`: Mapeamento completo ISO 27001 + SOC2
+- `docs/GRM_AUDIT.md`: Guia de auditoria com cronograma e procedimentos
+- `docs/GRM_CHECKLIST.md`: Checklist de verificação pré-auditoria
+
+Ambiente: `tests/test_grm_documentation.py` com 18 testes para validar:
+
+**O que NÃO foi feito.**
+- Integração com ferramentas de compliance (ex: ServiceNow GRC)
+- Relatórios automáticos para registro externo
+
+### 82. Testes RBAC Completos (DA-91)
+
+**Motivo.** Para garantir isolation de permissões e segurança, todos os endpoints
+devem ser testados com diferentes níveis de acesso (admin, usuário comum, não autenticado).
+
+**Decisão.** Escrita de testes abrangentes em `tests/test_rbac_comprehensive.py`:
+- Endpoint `/diagnose`: admin e usuário autenticado aceitam, não autenticado rejeita
+- Endpoints `/admin/*`: só admin aceita, usuário comum e não autenticado rejeitam
+- Endpoints `/a2a` e `/mcp`: autenticação obrigatória com chaves dedicadas
+
+**O que NÃO foi feito.**
+- Testes de RBAC em todos os endpoints internos (só endpoints HTTP)
+
+### 83. Modelo canônico qwen3.6:35b-a3b (DA-92)
+
+**Motivo.** A troca de 2026-10-13 precedeu o registro formal: a linha "Modelo
+canônico" do `CLAUDE.md` já apontava para `qwen3.6:35b-a3b`, mas a DA-12 ainda
+descrevia `qwen3-coder-next:latest` como o modelo final. Sem uma DA própria, a
+mudança não tinha rastro no livro-razão.
+
+**Decisão.**
+- `qwen3.6:35b-a3b` (35B MoE, 128k ctx) é o default em `app/config.py`,
+  `.env.example`, `docker-compose.yml` e `promptfooconfig.yaml`.
+- `qwen3-coder-next:latest` permanece registrado como histórico em DA-4/8 e
+  DA-12; não é mais o default.
+- A DA-51 exige revalidação quando modelo, prompt ou contexto de execução
+  mudam. A baseline versionada do promptfoo registra o Qwen em
+  13/10/2026. O gate compara esse artefato também com o modelo declarado
+  para implantação. O manifesto Kyma declara `gpt-4o-mini`.
+
+**Validação.** `tests/test_model_harness.py` cobre o harness de medição;
+`promptfooconfig.yaml` e `app/config.py` são a fonte do default. O gate
+`deployed_model_evaluated` é o lembrete de que a qualidade só está medida
+para o modelo que o baseline registra.
+
+---
+
+### 84. Ontologia quebrada (correção de bug em `retrieve_node`) (DA-64)
+
+**O problema.** O nó `retrieve_node` (`app/agent/nodes.py:164`) tentava acessar
+`error_code` de `connector_data` usando `state.get("connector_data", {}).get("error_code")`,
+mas `connector_data` é um `ConnectorResult` (dataclass), não um dicionário. Dataclasses
+não têm o método `.get()`, então quando `ontology_enrichment_enabled=true` e
+`connector_data` tem valor, isso causava `AttributeError: 'ConnectorResult' object has no attribute 'get'`.
+
+**O caso de uso.** Quando a flag `ONTOLOGY_ENRICHMENT_ENABLED=true`, o pipeline
+tenta extrair a categoria de erro do resultado do conector para enriquecer a
+recuperação com a ontologia SKOS (error_codes.ttl). Sem essa correção, qualquer
+incidente com dados reais do conector e ontologia ativada falhava com erro
+indefinido.
+
+**A solução.** Substituir o acesso por dicionário por `getattr(connector_data, "error_code", None)`:
+
+```python
+# Antes (quebrado):
+category = state.get("connector_data", {}).get("error_code")
+
+# Depois (corrigido):
+connector_data = state.get("connector_data")
+if connector_data is not None:
+    category = getattr(connector_data, "error_code", None)
+else:
+    category = None
+```
+
+**Validação.**
+- `tests/test_gap_a4_ontology_broken.py`: 8 testes passando (incluindo reprodução
+  do bug com `ConnectorResult` e validação da correção)
+- Quality gate: `da_registered` e `docs_code_references` validam a DA
+
+**Limitações (registradas de propósito).**
+- A correção não altera o comportamento funcional: `error_code=None` continua
+  levando ao `ontology_category=None` e ao uso do retrieval base.
+- O `ConnectorResult` já tem `error_code: str | None` no seu schema, então o
+  acesso direto é seguro e consistente com o resto do código (outros nós já
+  usam `connector_data.error_code` diretamente).
+
+**Complemento (2026-11-11, restante do gap A4).**
+- `ontology_inference` e `ontology_next_steps` passaram a ser declarados no
+  `CopilotState` (`app/agent/state.py`): antes o `StateGraph` descartava o
+  retorno do `ontology_enrich_node`.
+- O nó (renomeado `ontology_debug` → `ontology_enrich` em `app/agent/graph.py`)
+  roda **entre** o diagnóstico (de onde lê `rule_engine_category`) e o
+  `report`, nos dois caminhos (com e sem GraphRAG). Antes ele era ligado
+  depois do `report`, em paralelo ao `END`, e nunca influenciava o resultado.
+- Testes: `tests/test_gap_a4_a1_wiring.py` confere as arestas do grafo
+  compilado com a flag ligada e desligada.
+- **Ainda aberto:** o `report_node` e o prompt não consomem essas chaves (isso
+  mudaria o digest do prompt, invariante 20), e `retrieve_node` continua
+  tratando `error_code` de transporte como categoria SKOS sem mapeamento
+  explícito — código sem correspondência apenas cai no retrieval base.
+
+---
+
+### 85. Fatos × hipóteses e domínio fiscal (DA-93)
+
+**Origem.** O estudo IIC → SAP AMS/DF-e propôs especializar o copiloto em
+documentos fiscais eletrônicos. As fases 1–3 (contrato fiscal, ferramentas
+XML/XSD e regras de correlação) foram construídas no core e, pela **DA-94**,
+movidas para o produto independente **DF-e Copilot** (`packages/dfe/`); a
+decisão completa e o histórico estão em `packages/dfe/docs/DECISOES.md`.
+
+**O que fica no core (fase 4, genérico a qualquer domínio).**
+- `DiagnosisResponse.findings` (`Finding`: `fact`/`hypothesis`, fonte,
+  evidências, teste de confirmação, alternativas) e `cause_status`
+  (`hypothesis`/`inconclusive`; `confirmed` só por revisão humana).
+- `app/agent/findings.py::build_findings`: fatos dos plugins de domínio
+  (`CopilotState.domain_findings`) e a causa proposta como `hypothesis`; um
+  `fact` sem fonte determinística é rebaixado.
+- O `DiagnosisModel` (saída estruturada do LLM) não mudou: o LLM não declara
+  fatos e o digest do prompt fica igual (invariante 20).
+- `trust_level` **`rule_reference`**: a evidência do rule engine deixa de ser
+  `system_observed` (regra publicada não prova que o incidente a violou). No
+  relatório continua entre as evidências primárias; UI e catálogos pt-BR/en
+  ganharam o rótulo.
+- Testes: `tests/test_da93_findings.py`.
+
+---
+
+### 86. Separação de produto: core compartilhado e DF-e Copilot (DA-94)
+
+**O problema.** O domínio fiscal dentro do Integration Incident Copilot,
+mesmo atrás de flag, misturava dois produtos: um copiloto de incidentes de
+integração multi-vendor e um copiloto de documentos fiscais. Para o
+comprador e para a documentação, são soluções diferentes; tecnicamente,
+compartilham o mesmo core (gateway LLM, RAG, evidência, HITL, auth,
+observabilidade, gates).
+
+**A solução: monorepo com plugin de domínio.**
+- `app/` continua sendo o core **e** o produto IIC. O core não conhece
+  nenhum domínio: `app/agent/domain_plugins.py` define o protocolo
+  `DomainPlugin` (`validate_context`, `run`) e carrega plugins por
+  `DOMAIN_PLUGINS` (vazio por default; plugin que não carrega derruba o
+  build do grafo, fail-closed).
+- `IncidentRequest.domain_context` (opaco para o core) é validado pelo
+  plugin em `run_diagnosis()`; contexto recusado vira 422
+  `domain_context_invalid` em `/diagnose`. Sem plugin, é descartado.
+- Com plugin, o nó `domain_tools` roda entre `connector` e `retrieve` (antes
+  do RAG, resiliência A7) e escreve `domain_findings`. Falha do plugin vira
+  finding de lacuna, nunca exceção no grafo. Sem plugin, o grafo é idêntico.
+- O produto **DF-e Copilot** vive em `packages/dfe/` (pacote `dfe_copilot`,
+  `pyproject.toml` próprio, testes em `packages/dfe/tests`, documentação em
+  `packages/dfe/docs/`) e sobe com `uvicorn dfe_copilot.main:app`, que liga
+  `DOMAIN_PLUGINS=dfe_copilot.plugin`.
+- **Prompt de domínio (opcional, P8 do DF-e).** Um plugin pode expor
+  `prompt` (`DomainPrompt`: `name`, `version`, `persona`). Com ele, o
+  especialista usa a persona do plugin e recebe os `domain_findings` como bloco
+  delimitado e sanitizado no slot `extras` (`render_domain_block`); a
+  proveniência vira `prompt_version=<plugin>-<versão>` com digest próprio
+  (`domain_prompt_digest`: digest do core + persona + template do bloco). O
+  template do core não muda, então o `prompt_digest_measured` (invariante 20)
+  continua valendo para o caminho sem plugin; o produto mede e confere o
+  próprio digest.
+- Substitui a flag `FISCAL_DOMAIN_ENABLED` e o `FiscalContext` no core
+  (DA-93 fase 1), que deixaram de existir.
+
+**Validação.** `tests/test_da94_domain_plugins.py` (plugin falso: default
+vazio, fail-closed, contexto aceito/recusado, isolamento de falha, grafo
+inalterado sem plugin, nó antes do retrieve, propagação em `run_diagnosis`,
+core sem import do produto) e `packages/dfe/tests/` (plugin real).
+
+**Limitações (registradas de propósito).**
+- O core ainda não foi movido para `packages/core`: `app/` acumula core e
+  IIC. A separação física é etapa posterior (`packages/dfe/docs/PENDENCIAS.md`).
+- Os dois produtos compartilham o `uv.lock` da raiz e o mesmo workflow de CI,
+  mas cada um roda a própria suíte com a própria config de pytest (o DF-e em
+  `packages/dfe/pyproject.toml`, `cd packages/dfe && pytest`). A
+  imagem Docker atual é só do IIC (`packages/` não é copiado).
+- Um plugin por requisição: o primeiro que aceitar o contexto.
+
+---
+
+### 87. Fronteiras de produto: app.sdk, core-ui e shells (DA-95)
+
+**O problema.** A DA-94 separou o DF-e Copilot como plugin, mas faltavam
+duas coisas para que ele pudesse virar outra solução sem reescrita. Primeiro,
+o produto importava internos do core (`app.rag.retriever._get_qdrant_client`,
+`app.agent.graph`, `app.agent.prompts`). Segundo, não havia interface: o
+único frontend era o do IIC, com conector, interface e identificador, campos
+que não fazem sentido para o usuário fiscal. Pôr a tela fiscal ali faria os
+dois produtos parecerem um só e acoplaria o domínio fiscal à UI do IIC.
+
+**A solução: superfícies públicas e shells por produto.**
+- **Backend, `app/sdk`:** fachada pública do core para produtos (diagnóstico,
+  catálogo de plugins, proveniência de prompt, backends de busca) e
+  `app/sdk/testing.py` para testes de produto sem tocar internos. Os imports
+  pesados são feitos sob demanda: importar `app.sdk` não carrega o grafo nem
+  a API.
+- **Contrato de UI do plugin:** `DomainPlugin.context_schema()` passa a ser
+  obrigatório (o JSON Schema do `domain_context`). `GET /domain-plugins`
+  publica nome, schema e versão do prompt de cada plugin carregado; o core
+  publica o schema sem interpretá-lo. `UI_DIST_DIR` escolhe o bundle servido
+  em `/`, e cada produto aponta para o próprio shell.
+- **UI, npm workspaces na raiz:** `@copilot/core-ui` (`packages/core-ui`)
+  tem cliente da API, sessão, i18n (textos comuns em `core.*`), design system e
+  componentes neutros: `SessionGate`, `LoginView`, `DiagnosisResult`,
+  `FindingsPanel` (fatos × hipóteses) e `SchemaForm` (formulário gerado do
+  schema do plugin). O IIC (`frontend/`, `@copilot/iic-ui`) virou shell sobre
+  ele, sem mudança funcional. O DF-e Copilot ganhou o próprio shell
+  (`packages/dfe/frontend`, `@copilot/dfe-ui`), com marca, idioma e tela
+  fiscal próprios.
+- **Fronteiras verificadas por máquina:** `architecture/boundaries.toml`
+  declara as regras e o gate `import_boundaries`
+  (`app/evaluation/boundaries.py`) as aplica em Python (ast) e TypeScript:
+  - o core não importa produto;
+  - o DF-e usa o core só por `app.sdk`;
+  - o `core-ui` não importa shell;
+  - um shell não importa o outro e usa o `core-ui` só pelo índice
+    (mais `styles.css`).
+- **i18n por superfície:** os gates `ui_i18n` e o inventário de texto
+  descobrem toda UI do monorepo (`frontend/src`, `packages/*/src`,
+  `packages/*/frontend/src`). Chave `core.*` resolve no catálogo do core-ui, e
+  catálogo de produto que define `core` reprova.
+
+**Validação.**
+- `tests/test_da95_sdk.py`: endpoint, plugin sem schema recusado, `app.sdk`
+  sem carregar o grafo, proveniência, hook de prompt movido do produto para o
+  core.
+- `tests/test_da95_boundaries.py`: as regras com violações sintéticas, o
+  repositório real limpo e o i18n das três superfícies.
+- `packages/dfe/tests` passa só com `app.sdk`.
+- CI de frontend: typecheck, lint e build do core-ui e dos dois shells.
+
+**Limitações (registradas de propósito).**
+- O backend do core continua em `app/` junto com o IIC; mover para
+  `packages/core` é a P1, agora mecânica: os produtos só enxergam `app.sdk`.
+- O `@copilot/core-ui` é pacote de código-fonte (TypeScript compilado pelo
+  shell). Publicar fora do monorepo exige um build de biblioteca, sem mudar
+  os imports.
+- A imagem Docker continua sendo do IIC. O DF-e Copilot tem shell e entrada
+  próprios, mas a imagem e o pipeline de release dele são a P2.
+- O cookie de idioma segue `iic_locale`, compartilhado com a Admin UI.
+
+---
+
+**Fim do documento.**

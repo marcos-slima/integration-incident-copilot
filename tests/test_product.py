@@ -1,4 +1,5 @@
 import importlib.util
+import os
 import json
 import re
 import sys
@@ -47,6 +48,8 @@ def test_http_and_ui():
         assert client.get("/health").json() == {"status": "ok"}
         assert client.get("/").status_code == 200
         response = client.post(
-            "/diagnose", json={"description": "contract probe", "interface_type": "not-supported"}
+            "/diagnose",
+            headers={"X-API-Key": os.environ["API_KEY"]},
+            json={"description": "contract probe", "interface_type": "not-supported"},
         )
         assert response.status_code == 422

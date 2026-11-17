@@ -12,8 +12,9 @@
     "sha256": "0f159aa51bd6d7ec50c58c3b402df927d264db08756fbe2ad252cafa3428ee0f"
   },
   "operations": {
-    "version": "1.0.0",
-    "url": "https://github.com/marcos-slima/copilot-platform/releases/download/operations%2Fv1.0.0/copilot-operations-1.0.0.tar.gz",
-    "sha256": "ff901395b4a22ea5862fdb74aeb74e8e812cf14ad36dc5bf28cd1ba96d71dabe"
+    "version": "1.0.1",
+    "url": "https://github.com/marcos-slima/copilot-platform/releases/download/operations%2Fv1.0.1/copilot-operations-1.0.1.tar.gz",
+    "sha256": "0902a42ec99accdcb37cac9f5dab9d4fe3ae68d994c62020297356438364d8d2",
+    "source_commit": "48f1f02e1c94668805496b8e6b1b9aa09e61ef81"
   }
 }

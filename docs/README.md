@@ -1,3 +1,8 @@
+> Após a adoção da plataforma neutra, instruções atuais do consumidor estão em
+> [PLATFORM_CONSUMPTION.md](PLATFORM_CONSUMPTION.md). Arquitetura, DAs, gates e
+> operação compartilhada pertencem a [copilot-platform](https://github.com/marcos-slima/copilot-platform).
+> Seções herdadas abaixo preservam o histórico do monorepo e podem citar caminhos antigos.
+
 # Documentação — Integration Incident Copilot
 
 Índice de `docs/`. O [`README.md` da raiz](../README.md) apresenta o projeto;

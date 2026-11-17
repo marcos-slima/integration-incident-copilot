@@ -179,7 +179,7 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
       - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./deploy/grafana/dashboards:/etc/grafana/dashboards:ro
+      - ./.operations/deploy/grafana/dashboards:/etc/grafana/dashboards:ro
     depends_on:
       postgres:
         condition: service_healthy

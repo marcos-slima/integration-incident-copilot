@@ -1,0 +1,69 @@
+name: IIC CI
+'on':
+  push:
+    branches:
+    - main
+  pull_request: null
+  workflow_dispatch: null
+permissions:
+  contents: read
+concurrency:
+  group: iic-ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  product:
+    name: "IIC \u2014 installed consumer and image"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+    - uses: actions/checkout@v4
+    - name: Secret scanning
+      run: 'curl -fsSL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz
+        -o /tmp/gitleaks.tar.gz
+
+        tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+
+        /tmp/gitleaks detect --no-git --source . --config .gitleaks.toml --redact
+        --exit-code 1
+
+        '
+    - uses: astral-sh/setup-uv@v5
+      with:
+        version: 0.13.4
+        enable-cache: true
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: npm
+        cache-dependency-path: frontend/package-lock.json
+    - run: 'sudo apt-get update -qq
+
+        sudo apt-get install -y --no-install-recommends cmake make gcc libssl-dev
+        libffi-dev libsasl2-dev libsasl2-2 pkg-config
+
+        '
+    - run: uv sync --locked --python 3.12 --no-install-project
+    - run: npm ci --prefix frontend --ignore-scripts
+    - run: npm run lint --prefix frontend
+    - run: npm run typecheck --prefix frontend
+    - run: npm run build --prefix frontend
+    - run: uv run --no-sync ruff check iic_copilot tests scripts/quality_gate.py scripts/fetch_operations.py
+        scripts/smoke_image.py hatch_build.py
+    - run: IIC_BUILD_REQUIRE_UI=1 uv build --wheel --no-sources --out-dir dist
+    - run: uv pip install --python .venv/bin/python --no-deps dist/integration_incident_copilot-*.whl
+    - run: uv run --no-sync python -I scripts/quality_gate.py
+    - run: uv run --no-sync python -I -m pytest -c pyproject.toml -o pythonpath= tests
+        -q --tb=short --junitxml=dist/pytest.xml
+    - name: Compose configuration
+      run: |
+        export NEO4J_PASSWORD="$(openssl rand -hex 24)"
+        export POSTGRES_PASSWORD="$(openssl rand -hex 24)"
+        export GRAFANA_PASSWORD="$(openssl rand -hex 24)"
+        docker compose config --quiet
+    - run: docker build --build-arg PRELOAD_MODELS=0 -t iic-copilot:ci .
+    - run: uv run --no-sync python -I scripts/smoke_image.py iic-copilot:ci
+    - uses: actions/upload-artifact@v4
+      with:
+        name: iic-wheels-${{ github.sha }}
+        path: dist/
+        retention-days: 30

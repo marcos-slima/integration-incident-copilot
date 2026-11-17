@@ -2,25 +2,10 @@ FROM node:22-slim AS frontend-build
 
 WORKDIR /ui
 
-# DA-24-fix: build do frontend a partir do codigo-fonte dentro do
-# Dockerfile (multi-stage) - antes disso, static/dist/ precisava ser
-# gerado manualmente (npm run build + cp) antes de "docker build",
-# passo documentado (e autodenomiado como pendente) em
-# docs/DEPLOY.md secao 2. Um "git clone" limpo seguido de
-# "docker build" falhava ou gerava imagem sem frontend, pois
-# static/dist/ esta no .gitignore.
-# DA-95: npm workspaces. O lock e' da raiz e o `npm ci` precisa do
-# package.json de todo workspace; so o core-ui e o shell do IIC entram com
-# fonte (esta imagem e' do IIC; o DF-e Copilot ganha imagem propria na P2).
-COPY package.json package-lock.json ./
-COPY packages/core-ui/package.json packages/core-ui/
-COPY frontend/package.json frontend/
-COPY packages/dfe/frontend/package.json packages/dfe/frontend/
-RUN npm ci
-
-COPY packages/core-ui/ packages/core-ui/
-COPY frontend/ frontend/
-RUN npm run build -w @copilot/iic-ui
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --ignore-scripts
+COPY frontend/ ./
+RUN npm run build
 
 # Validacao 2026-10-07 (DEP-01): o stage Python foi dividido em
 # "builder" (compiladores, uv, download de modelos) e "app" (runtime).
@@ -45,7 +30,7 @@ RUN apt-get update \
 
 # Versao do uv fixada: o mesmo uv.lock com outra versao do uv pode
 # resolver/instalar diferente.
-RUN pip install --no-cache-dir uv==0.11.32
+COPY --from=ghcr.io/astral-sh/uv:0.13.4 /uv /usr/local/bin/uv
 
 ENV UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1 \
@@ -56,7 +41,16 @@ ENV UV_LINK_MODE=copy \
 # fallback azure_openai; sem o extra, langchain-openai nao existia na
 # imagem e o primeiro diagnostico falhava com ImportError.
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project --extra openai
+RUN uv sync --locked --no-dev --no-install-project --extra openai
+
+COPY iic_copilot/ iic_copilot/
+COPY hatch_build.py ./
+COPY --from=frontend-build /ui/dist frontend/dist
+RUN IIC_BUILD_REQUIRE_UI=1 uv build --wheel --no-sources --out-dir /wheels \
+    && uv pip install --python .venv/bin/python --no-deps /wheels/*.whl
+COPY shared-libraries.json ./
+COPY scripts/fetch_operations.py scripts/fetch_operations.py
+RUN python scripts/fetch_operations.py /operations
 
 # DEP-01: modelos baixados no build, nao no primeiro request. Antes o
 # primeiro /diagnose de cada pod baixava ~120 MB do reranker e os modelos
@@ -120,12 +114,8 @@ COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
 COPY --from=builder --chown=appuser:appuser /app/.cache /app/.cache
 
 COPY --chown=appuser:appuser pyproject.toml ./
-COPY --chown=appuser:appuser app/ app/
 COPY --chown=appuser:appuser scripts/ scripts/
-# DEP-01: migrations dentro da imagem - sem isso `alembic upgrade head`
-# so rodava de um checkout local, nunca como Job/initContainer no cluster.
-COPY --chown=appuser:appuser alembic/ alembic/
-COPY --chown=appuser:appuser alembic.ini ./
+COPY --from=builder --chown=appuser:appuser /operations/ /app/
 
 # /app/data precisa ser do appuser: o ingest grava ali o estado
 # (.ingest_state_*.json) e o manifesto do indice (index_manifest.json).
@@ -134,22 +124,11 @@ COPY --chown=appuser:appuser alembic.ini ./
 # validacao em k3d, cenario G).
 RUN install -d -o appuser -g appuser /app/data
 COPY --chown=appuser:appuser data/sample_docs/ data/sample_docs/
-# DA-63: skills declarativas (roteamento do supervisor + Capability Registry).
-# Sem elas o supervisor nao sobe (indice de dominios vazio).
-COPY --chown=appuser:appuser data/skills/ data/skills/
-
-# DA-24: static/ nao e versionado; o stage "frontend-build" gera o dist/
-# e o stage "final" copia para static/dist.
-
 USER appuser
 
 # Stage final — adiciona o frontend compilado ao stage "app".
 # Este e o stage padrao (sem "target") usado pela API e pelo worker.
 FROM app AS final
-
-# DA-24-fix: copia o frontend buildado no estagio anterior em vez de
-# exigir que static/dist/ ja exista no contexto de build.
-COPY --from=frontend-build --chown=appuser:appuser /ui/static/dist static/dist
 
 EXPOSE 8000
 
@@ -179,4 +158,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
 # PRIMEIRO item do X-Forwarded-For, que o cliente controla - qualquer um
 # trocaria de "IP" a cada tentativa. Use as faixas internas do cluster
 # (ver deploy/kyma/configmap.yaml).
-CMD ["/app/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+CMD ["/app/.venv/bin/uvicorn", "iic_copilot.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]

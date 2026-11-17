@@ -2,8 +2,8 @@
 
 **Agente de IA que diagnostica incidentes de integração corporativa, SAP e não-SAP, e mostra a evidência por trás de cada resposta.**
 
-[![tests](https://github.com/marcos-slima/integration-incident-copilot/actions/workflows/tests.yml/badge.svg)](https://github.com/marcos-slima/integration-incident-copilot/actions/workflows/tests.yml)
-[![quality gates](https://github.com/marcos-slima/integration-incident-copilot/actions/workflows/quality.yml/badge.svg)](https://github.com/marcos-slima/integration-incident-copilot/actions/workflows/quality.yml)
+[![tests](https://github.com/marcos-slima/integration-incident-copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/marcos-slima/integration-incident-copilot/actions/workflows/ci.yml)
+[![quality gates](https://github.com/marcos-slima/integration-incident-copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/marcos-slima/integration-incident-copilot/actions/workflows/ci.yml)
 [![python](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml)
 [![license](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -23,30 +23,14 @@ fontes em que se apoiou**, cada uma marcada com o quanto merece confiança.
 
 <p align="center"><sub>Execução real do início rápido abaixo: o rule engine responde a um erro conhecido sem chamar o LLM.</sub></p>
 
-## IIC, FISC e o core compartilhado
+## IIC, FISC e Copilot Platform
 
-**Procura suporte a incidentes fiscais? Conheça o [FISC — Fiscal Incident Support Copilot](https://github.com/marcos-slima/fiscal-incident-support-copilot).**
-
-| Componente | Escopo | Local oficial |
-|---|---|---|
-| **IIC** | Diagnóstico de incidentes de integração empresarial, SAP e outros fornecedores | Este repositório |
-| **FISC** | Investigação de NF-e modelo 55, leiaute 4.00, para SAP AMS N2/N3 | [Código, documentação e CI do FISC](https://github.com/marcos-slima/fiscal-incident-support-copilot) |
-| **Bibliotecas compartilhadas** | SDK/infraestrutura Python e componentes neutros de UI | [Core 1.4.0](https://github.com/marcos-slima/integration-incident-copilot/releases/tag/core/v1.4.0) e [core-ui 0.1.0](https://github.com/marcos-slima/integration-incident-copilot/releases/tag/core-ui/v0.1.0) |
-
-O FISC mantém backend, frontend, testes e pipeline próprios. Consome bibliotecas
-versionadas mantidas aqui, sem copiar fontes do core para o produto.
-Veja a [extração e o histórico preservado](https://github.com/marcos-slima/fiscal-incident-support-copilot/blob/main/docs/EXTRACAO_CODIGO.md).
-
-O diretório packages/dfe nas branches de preparação do IIC permanece como
-snapshot histórico de compatibilidade enquanto suas dependências de workspace
-e CI são retiradas. Novas issues e PRs fiscais vão ao FISC. Alterações do core
-continuam no IIC e são adotadas por atualização explícita de dependências.
-Esta transição não altera instalações IIC existentes nem integra seus PRs de preparação.
-
-**Maturidade do FISC:** análise fiscal read-only, avaliação sintética e revisão
-humana; isso não implica homologação fiscal ou validação operacional SAP/SEFAZ.
-Consulte a [contribuição](https://github.com/marcos-slima/fiscal-incident-support-copilot/blob/main/CONTRIBUTING.md) e o
-[mapa documental](https://github.com/marcos-slima/fiscal-incident-support-copilot/blob/main/docs/ORGANIZACAO_DOCUMENTACAO.md).
+O IIC mantém o produto de diagnóstico de integrações empresariais.
+[FISC](https://github.com/marcos-slima/fiscal-incident-support-copilot) mantém seu domínio fiscal.
+[Copilot Platform](https://github.com/marcos-slima/copilot-platform) mantém core Python,
+core-ui e operações, com versões independentes. O IIC consome artefatos por versão e hash.
+As releases antigas permanecem disponíveis para instalações anteriores.
+Consulte [a adoção da plataforma](docs/PLATFORM_CONSUMPTION.md).
 
 ## Por que existe
 
@@ -131,7 +115,7 @@ docker compose up -d qdrant
 uv run python -m app.rag.ingest --target incidents
 
 # API
-uv run uvicorn app.main:app
+uv run uvicorn iic_copilot.main:app
 ```
 
 Em outro terminal, diagnostique um IDoc travado em status 51 com o cenário de

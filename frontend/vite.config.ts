@@ -15,8 +15,8 @@ export default defineConfig({
     },
   },
   build: {
-    // Gera os arquivos em ../static/dist para o FastAPI servir
-    outDir: '../static/dist',
+    // O wheel do IIC inclui frontend/dist como recurso do produto
+    outDir: 'dist',
     emptyOutDir: true,
   },
 });

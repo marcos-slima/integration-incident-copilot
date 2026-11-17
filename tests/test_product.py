@@ -1,6 +1,6 @@
 import importlib.util
-import os
 import json
+import os
 import re
 import sys
 from importlib.metadata import distribution

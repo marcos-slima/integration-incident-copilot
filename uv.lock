@@ -540,8 +540,8 @@ wheels = [
 
 [[package]]
 name = "copilot-core"
-version = "1.4.1"
-source = { url = "https://github.com/marcos-slima/copilot-platform/releases/download/core%2Fv1.4.1/copilot_core-1.4.1-py3-none-any.whl" }
+version = "1.5.0"
+source = { url = "https://github.com/marcos-slima/copilot-platform/releases/download/core%2Fv1.5.0/copilot_core-1.5.0-py3-none-any.whl" }
 dependencies = [
     { name = "aiofiles" },
     { name = "alembic" },
@@ -588,7 +588,7 @@ dependencies = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 wheels = [
-    { url = "https://github.com/marcos-slima/copilot-platform/releases/download/core%2Fv1.4.1/copilot_core-1.4.1-py3-none-any.whl", hash = "sha256:733629b8c470874ff8db5ceed3de73b62ff0b93fbbba72d21c722748cb5f9c61" },
+    { url = "https://github.com/marcos-slima/copilot-platform/releases/download/core%2Fv1.5.0/copilot_core-1.5.0-py3-none-any.whl", hash = "sha256:136a2596152ea682c6b6d7f4c660dfb01ab43ad81b8f5753f5394fd8110129df" },
 ]
 
 [package.optional-dependencies]
@@ -1405,9 +1405,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "copilot-core", url = "https://github.com/marcos-slima/copilot-platform/releases/download/core%2Fv1.4.1/copilot_core-1.4.1-py3-none-any.whl" },
-    { name = "copilot-core", extras = ["openai"], marker = "extra == 'openai'", url = "https://github.com/marcos-slima/copilot-platform/releases/download/core%2Fv1.4.1/copilot_core-1.4.1-py3-none-any.whl" },
-    { name = "copilot-core", extras = ["prometheus"], marker = "extra == 'prometheus'", url = "https://github.com/marcos-slima/copilot-platform/releases/download/core%2Fv1.4.1/copilot_core-1.4.1-py3-none-any.whl" },
+    { name = "copilot-core", url = "https://github.com/marcos-slima/copilot-platform/releases/download/core%2Fv1.5.0/copilot_core-1.5.0-py3-none-any.whl" },
+    { name = "copilot-core", extras = ["openai"], marker = "extra == 'openai'", url = "https://github.com/marcos-slima/copilot-platform/releases/download/core%2Fv1.5.0/copilot_core-1.5.0-py3-none-any.whl" },
+    { name = "copilot-core", extras = ["prometheus"], marker = "extra == 'prometheus'", url = "https://github.com/marcos-slima/copilot-platform/releases/download/core%2Fv1.5.0/copilot_core-1.5.0-py3-none-any.whl" },
     { name = "torch", marker = "sys_platform != 'linux'", specifier = ">=2.14.1" },
     { name = "torch", marker = "sys_platform == 'linux'", specifier = ">=2.14.1", index = "https://download.pytorch.org/whl/cpu" },
 ]

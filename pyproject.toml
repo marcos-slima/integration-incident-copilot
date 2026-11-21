@@ -5,14 +5,14 @@ description = "Produto IIC sobre Copilot Platform"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.12"
-dependencies = ["copilot-core==1.4.1", "torch>=2.14.1"]
+dependencies = ["copilot-core==1.5.0", "torch>=2.14.1"]
 
 [project.optional-dependencies]
-openai = ["copilot-core[openai]==1.4.1"]
-prometheus = ["copilot-core[prometheus]==1.4.1"]
+openai = ["copilot-core[openai]==1.5.0"]
+prometheus = ["copilot-core[prometheus]==1.5.0"]
 
 [tool.uv.sources]
-copilot-core = { url = "https://github.com/marcos-slima/copilot-platform/releases/download/core%2Fv1.4.1/copilot_core-1.4.1-py3-none-any.whl" }
+copilot-core = { url = "https://github.com/marcos-slima/copilot-platform/releases/download/core%2Fv1.5.0/copilot_core-1.5.0-py3-none-any.whl" }
 torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 
 [[tool.uv.index]]

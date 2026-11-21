@@ -8,4 +8,6 @@ os.environ.setdefault("SESSION_COOKIE_NAME", "iic_session")
 
 from app.sdk import asgi_app
 
-app = asgi_app()
+from iic_copilot.agent_interfaces import agent_interfaces
+
+app = asgi_app(interfaces=agent_interfaces())

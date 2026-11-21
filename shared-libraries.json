@@ -1,20 +1,22 @@
 {
   "source_repository": "https://github.com/marcos-slima/copilot-platform",
-  "source_commit": "e8bb9e2cdca2b84e98e7abf63d73112eac947464",
+  "source_commit": "eef5b61c65bdd6892eea6d707062ac2734efd953",
   "core": {
-    "version": "1.4.1",
-    "url": "https://github.com/marcos-slima/copilot-platform/releases/download/core%2Fv1.4.1/copilot_core-1.4.1-py3-none-any.whl",
-    "sha256": "733629b8c470874ff8db5ceed3de73b62ff0b93fbbba72d21c722748cb5f9c61"
+    "version": "1.5.0",
+    "url": "https://github.com/marcos-slima/copilot-platform/releases/download/core%2Fv1.5.0/copilot_core-1.5.0-py3-none-any.whl",
+    "sha256": "136a2596152ea682c6b6d7f4c660dfb01ab43ad81b8f5753f5394fd8110129df",
+    "source_commit": "eef5b61c65bdd6892eea6d707062ac2734efd953"
   },
   "core_ui": {
     "version": "0.1.1",
     "url": "https://github.com/marcos-slima/copilot-platform/releases/download/core-ui%2Fv0.1.1/copilot-core-ui-0.1.1.tgz",
-    "sha256": "0f159aa51bd6d7ec50c58c3b402df927d264db08756fbe2ad252cafa3428ee0f"
+    "sha256": "0f159aa51bd6d7ec50c58c3b402df927d264db08756fbe2ad252cafa3428ee0f",
+    "source_commit": "e8bb9e2cdca2b84e98e7abf63d73112eac947464"
   },
   "operations": {
-    "version": "1.0.1",
-    "url": "https://github.com/marcos-slima/copilot-platform/releases/download/operations%2Fv1.0.1/copilot-operations-1.0.1.tar.gz",
-    "sha256": "0902a42ec99accdcb37cac9f5dab9d4fe3ae68d994c62020297356438364d8d2",
-    "source_commit": "48f1f02e1c94668805496b8e6b1b9aa09e61ef81"
+    "version": "1.0.2",
+    "url": "https://github.com/marcos-slima/copilot-platform/releases/download/operations%2Fv1.0.2/copilot-operations-1.0.2.tar.gz",
+    "sha256": "24e55a06c20c5199fa483ae879732046b7a8053479ee224ea16cd00dd967cf96",
+    "source_commit": "eef5b61c65bdd6892eea6d707062ac2734efd953"
   }
 }
